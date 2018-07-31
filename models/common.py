@@ -56,10 +56,10 @@ def positional_encodings_like(x, t=None):
     for channel in range(x.size(-1)):
         if channel % 2 == 0:
             encodings[:, channel] = torch.sin(
-                positions / 10000 ** (channel / x.size(2)))
+                positions.float() / 10000 ** (float(channel) / x.size(2)))
         else:
             encodings[:, channel] = torch.cos(
-                positions / 10000 ** ((channel - 1) / x.size(2)))
+                positions.float() / 10000 ** ((float(channel) - 1) / x.size(2)))
     return Variable(encodings)
 
 

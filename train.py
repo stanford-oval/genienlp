@@ -59,11 +59,13 @@ def prepare_data(args, field, logger):
 
     train_sets, val_sets, vocab_sets = [], [], []
     for task in args.train_tasks:
+        
         logger.info(f'Loading {task}')
         kwargs = {'test': None}
         kwargs['subsample'] = args.subsample
         kwargs['validation'] = None
         logger.info(f'Adding {task} to training datasets')
+        print('****', task)
         split = get_splits(args, task, FIELD, **kwargs)[0]
         logger.info(f'{task} has {len(split)} training examples')
         train_sets.append(split)
@@ -132,9 +134,9 @@ def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, wri
     if lr is not None:
         opt.param_groups[0]['lr'] = lr
     if grad_clip > 0.0:
-        torch.nn.utils.clip_grad_norm(model.params, grad_clip)
+        torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
     opt.step()
-    return loss.data[0], {}
+    return loss.data.item(), {}
 
 
 def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_size=1, 
@@ -349,6 +351,7 @@ def main():
         logger.info(f'Loading field from {os.path.join(args.save, args.load)}')
         save_dict = torch.load(os.path.join(args.save, args.load))
         field = save_dict['field']
+
     field, train_sets, val_sets = prepare_data(args, field, logger)
 
     run_args = (field, train_sets, val_sets, save_dict)

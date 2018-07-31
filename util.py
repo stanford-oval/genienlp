@@ -121,6 +121,10 @@ def get_splits(args, task, FIELD, **kwargs):
         src, trg = ['.'+x for x in task.split('.')[1:]]
         split = torchtext.datasets.generic.IWSLT.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)
+    if task == 'almond':
+        src, trg = '.en', '.tt'
+        split = torchtext.datasets.generic.Almond.splits(exts=(src, trg), 
+            fields=FIELD, root=args.data, **kwargs)
     if 'squad' in task:
         split = torchtext.datasets.generic.SQuAD.splits(
             fields=FIELD, root=args.data, **kwargs)

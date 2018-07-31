@@ -161,10 +161,11 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
     def greedy(self, self_attended_context, context, question, context_indices, question_indices, oov_to_limited_idx, rnn_state=None):
         B, TC, C = context.size()
         T = self.args.max_output_length
-        outs = Variable(context.data.new(B, T).long().fill_(
-            self.field.decoder_stoi['<pad>']), volatile=True)
-        hiddens = [Variable(self_attended_context[0].data.new(B, T, C).zero_(), volatile=True)
-                   for l in range(len(self.self_attentive_decoder.layers) + 1)]
+        with torch.no_grad():
+            outs = Variable(context.data.new(B, T).long().fill_(
+                self.field.decoder_stoi['<pad>']))
+            hiddens = [Variable(self_attended_context[0].data.new(B, T, C).zero_())
+                       for l in range(len(self.self_attentive_decoder.layers) + 1)]
         hiddens[0] = hiddens[0] + positional_encodings_like(hiddens[0])
         eos_yet = context.data.new(B).byte().zero_()
 
@@ -193,7 +194,9 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 oov_to_limited_idx)
             pred_probs, preds = probs.max(-1)
             eos_yet = eos_yet | (preds.data == self.field.decoder_stoi['<eos>'])
-            outs[:, t] = Variable(preds.data.cpu().apply_(self.map_to_full), volatile=True)
+            with torch.no_grad():
+                #print('preds.data:', preds.data.shape)
+                outs[:, t] = Variable(preds.data.cpu().squeeze().apply_(self.map_to_full))
             if eos_yet.all():
                 break
         return outs
