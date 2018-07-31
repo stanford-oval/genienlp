@@ -36,6 +36,7 @@ class CQA(data.Dataset):
         return data.interleave_keys(len(ex.context), len(ex.answer))
  
 
+
 class IMDb(CQA, imdb.IMDb):
 
     @staticmethod
@@ -157,7 +158,7 @@ class TranslationDataset(translation.TranslationDataset):
         if os.path.exists(cache_name):
             examples = torch.load(cache_name)
         else:
-            langs = {'.de': 'German', '.en': 'English', '.fr': 'French', '.ar': 'Arabic', '.cs': 'Czech'}
+            langs = {'.de': 'German', '.en': 'English', '.fr': 'French', '.ar': 'Arabic', '.cs': 'Czech', '.tt': 'ThingTalk'}
             source, target = langs[exts[0]], langs[exts[1]]
             src_path, trg_path = tuple(os.path.expanduser(path + x) for x in exts)
             question = f'Translate from {source} to {target}'
@@ -186,6 +187,68 @@ class Multi30k(TranslationDataset, CQA, translation.Multi30k):
 
 class IWSLT(TranslationDataset, CQA, translation.IWSLT):
     pass
+
+
+
+class Almond(TranslationDataset, CQA):
+    """The Almond translation task"""
+
+    base_url = None
+    name = 'almond'
+    base_dirname = '{}-{}'
+
+    @classmethod
+    def splits(cls, exts, fields, root='.data',
+               train='train', validation='eval',
+               test='test', **kwargs):
+        """Create dataset objects for splits of the ThingTalk dataset.
+
+        Arguments:
+
+            root: Root dataset storage directory. Default is '.data'.
+            exts: A tuple containing the extension to path for each language.
+            fields: A tuple containing the fields that will be used for data
+                in each language.
+            train: The prefix of the train data. Default: 'train'.
+            validation: The prefix of the validation data. Default: 'val'.
+            test: The prefix of the test data. Default: 'test'.
+            Remaining keyword arguments: Passed to the splits method of
+                Dataset.
+        """
+        cls.dirname = cls.base_dirname.format(exts[0][1:], exts[1][1:])
+        #cls.urls = [cls.base_url.format(exts[0][1:], exts[1][1:], cls.dirname)]
+        check = os.path.join(root, cls.name, cls.dirname)
+        #path = cls.download(root, check=check)
+        path = check
+
+        if train is not None:
+            train = '.'.join([train, cls.dirname])
+        if validation is not None:
+            validation = '.'.join([validation, cls.dirname])
+        if test is not None:
+            test = '.'.join([test, cls.dirname])
+
+
+        # if not os.path.exists(os.path.join(path, '.'.join(['train', cls.dirname])) + exts[0]):
+        #     cls.clean(path)
+
+        train_data = None if train is None else cls(
+            os.path.join(path, train), exts, fields, **kwargs)
+        val_data = None if validation is None else cls(
+            os.path.join(path, validation), exts, fields, **kwargs)
+        test_data = None if test is None else cls(
+            os.path.join(path, test), exts, fields, **kwargs)
+        return tuple(d for d in (train_data, val_data, test_data)
+                     if d is not None)
+
+
+    @staticmethod
+    def clean(path):
+        pass
+
+
+
+
 
 
 class SQuAD(CQA, data.Dataset):
