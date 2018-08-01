@@ -369,9 +369,10 @@ class Field(RawField):
             lim_arr = lim_arr.cuda(device)
 #            if self.include_lengths:
 #                lengths = lengths.cuda(device)
-        if self.include_lengths:
-            return Variable(arr, volatile=not train), lengths, Variable(lim_arr, volatile=not train)
-        return Variable(arr, volatile=not train)
+        with torch.no_grad():
+            if self.include_lengths:
+                return Variable(arr), lengths, Variable(lim_arr)
+            return Variable(arr)
 
 
 class ReversibleField(Field):

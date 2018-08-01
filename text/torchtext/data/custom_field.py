@@ -2,6 +2,8 @@
 import torch
 from .field import Field
 
+def tokenizer(s):
+    return s.split()
 
 class SimpleReversibleField(Field):
     def __init__(self, **kwargs):
@@ -9,11 +11,12 @@ class SimpleReversibleField(Field):
         #     self.use_revtok = False
         # else:
         #     self.use_revtok = True
-        if kwargs.get('tokenize') is None:
-            kwargs['tokenize'] = 'revtok'
+        # if kwargs.get('tokenize') is None:
+        #     kwargs['tokenize'] = 'revtok'
         if 'unk_token' not in kwargs:
             kwargs['unk_token'] = ' UNK '
         self.use_revtok = False
+        kwargs['tokenize'] = tokenizer
         super(SimpleReversibleField, self).__init__(**kwargs)
 
     def reverse(self, batch, limited=False):
@@ -37,7 +40,7 @@ class SimpleReversibleField(Field):
                 sentence.append(w)
             return sentence
 
-        batch = [trim(ex, self.eos_token) for ex in batch]  # trim past frst eos
+        batch = [trim(ex, self.eos_token) for ex in batch]  # trim past first eos
 
         def filter_special(tok):
             return tok not in (self.init_token, self.pad_token)

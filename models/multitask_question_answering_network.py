@@ -172,9 +172,10 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         rnn_output, context_alignment, question_alignment = None, None, None
         for t in range(T):
             if t == 0:
-                embedding = self.decoder_embeddings(Variable(
-                    self_attended_context[-1].data.new(B).long().fill_(
-                        self.field.vocab.stoi['<init>']), volatile=True).unsqueeze(1), [1]*B)
+                with torch.no_grad():
+                    embedding = self.decoder_embeddings(Variable(
+                        self_attended_context[-1].data.new(B).long().fill_(
+                            self.field.vocab.stoi['<init>'])).unsqueeze(1), [1]*B)
             else:
                 embedding = self.decoder_embeddings(outs[:, t - 1].unsqueeze(1), [1]*B)
             hiddens[0][:, t] = hiddens[0][:, t] + (math.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)

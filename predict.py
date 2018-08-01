@@ -20,11 +20,11 @@ def get_all_splits(args, new_vocab):
         print(f'Loading {task}')
         kwargs = {}
         if not 'train' in args.evaluate:
-            kwargs['train'] =  None
+            kwargs['train'] = None
         if not 'valid' in  args.evaluate:
-            kwargs['validation'] =  None
+            kwargs['validation'] = None
         if not 'test' in args.evaluate:
-            kwargs['test'] =  None
+            kwargs['test'] = None
         s = get_splits(args, task, new_vocab, **kwargs)[0]
         preprocess_examples(args, [task], [s], new_vocab, train=False)
         splits.append(s)
@@ -32,7 +32,7 @@ def get_all_splits(args, new_vocab):
 
 
 def prepare_data(args, FIELD):
-    new_vocab = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+    new_vocab = torchtext.data.SimpleReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     splits = get_all_splits(args, new_vocab)
     new_vocab.build_vocab(*splits)
     print(f'Vocabulary has {len(FIELD.vocab)} tokens from training')
@@ -51,10 +51,10 @@ def prepare_data(args, FIELD):
     return FIELD, splits
 
 
-def to_iter(data, bs):
+def to_iter(data, bs, device):
     Iterator = torchtext.data.Iterator
     it = Iterator(data, batch_size=bs, 
-       device=0, batch_size_fn=None, 
+       device=device, batch_size_fn=None,
        train=False, repeat=False, sort=None, 
        shuffle=None, reverse=False)
 
@@ -64,7 +64,7 @@ def to_iter(data, bs):
 def run(args, field, val_sets, model):
     set_seed(args)
     print(f'Preparing iterators')
-    iters = [(name, to_iter(x, bs)) for name, x, bs in zip(args.tasks, val_sets, args.val_batch_size)]
+    iters = [(name, to_iter(x, bs, args.gpus)) for name, x, bs in zip(args.tasks, val_sets, args.val_batch_size)]
  
     def mult(ps):
         r = 0

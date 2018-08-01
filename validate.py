@@ -17,7 +17,7 @@ def compute_validation_outputs(model, val_iter, field, optional_names=[]):
         elif hasattr(batch, 'woz_id'):
             a = batch.woz_id.data.cpu()
         else:
-            a = pad(batch.answer.data.cpu(), 150, dim=-1, val=field.vocab.stoi['<pad>'])
+            a =  pad(batch.answer.data.cpu(), 150, dim=-1, val=field.vocab.stoi['<pad>'])
         answers.append(a)
         for opt_idx, optional_name in enumerate(optional_names):
             outputs[opt_idx].append(getattr(batch, optional_name).data.cpu()) 
