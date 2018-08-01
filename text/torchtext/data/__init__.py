@@ -2,6 +2,7 @@ from .batch import Batch
 from .dataset import Dataset, TabularDataset
 from .example import Example
 from .field import RawField, Field, ReversibleField, SubwordField
+from .custom_field import SimpleReversibleField
 from .iterator import (batch, BucketIterator, Iterator, BPTTIterator,
                        pool)
 from .pipeline import Pipeline

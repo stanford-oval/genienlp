@@ -29,6 +29,7 @@ from metrics import compute_metrics
 from util import elapsed_time, get_splits, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
 
 
+
 def initialize_logger(args, rank='main'):
     # set up file logger
     logger = logging.getLogger(f'process_{rank}')
@@ -53,12 +54,11 @@ def log(rank='main'):
 def tokenizer(s):
     return s.split()
 
-
 def prepare_data(args, field, logger):
 
     if field is None: 
         logger.info(f'Constructing field')
-        FIELD = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True, tokenize=tokenizer)
+        FIELD = torchtext.data.SimpleReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True, tokenize=tokenizer)
     else:
         FIELD = field
 

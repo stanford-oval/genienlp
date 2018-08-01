@@ -134,7 +134,7 @@ def run(args, field, val_sets, model):
                 answers = [json.loads(x.strip()) for x in answer_file.readlines()] 
 
         if len(answers) > 0:
-            metrics, answers = compute_metrics(predictions, answers, bleu='iwslt' in task or 'multi30k' in task, dialogue='woz' in task,
+            metrics, answers = compute_metrics(predictions, answers, bleu='iwslt' in task or 'multi30k' in task or 'almond' in task, dialogue='woz' in task,
                 rouge='cnn' in task, logical_form='sql' in task, corpus_f1='zre' in task, args=args)
 
             print(metrics)
@@ -146,7 +146,7 @@ def get_args():
     parser = ArgumentParser()
     parser.add_argument('--path', required=True)
     parser.add_argument('--evaluate', type=str, required=True)
-    parser.add_argument('--tasks', default=['wikisql', 'woz.en', 'cnn_dailymail', 'iwslt.en.de', 'zre', 'srl', 'squad', 'sst', 'multinli.in.out'], nargs='+')
+    parser.add_argument('--tasks', default=['almond', 'wikisql', 'woz.en', 'cnn_dailymail', 'iwslt.en.de', 'zre', 'srl', 'squad', 'sst', 'multinli.in.out'], nargs='+')
     parser.add_argument('--gpus', type=int, help='gpus to use', required=True)
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--data', default='./decaNLP/.data/', type=str, help='where to load data from.')
@@ -169,6 +169,7 @@ def get_args():
 #    args.deca_metrics = ['lfem', 'joint_goal_em', 'avg_rouge', 'bleu', 'corpus_f1', 'nf1', 'nf1', 'em', 'em']
     args.task_to_metric = {'cnn_dailymail': 'avg_rouge',
         'iwslt.en.de': 'bleu',
+        'almond': 'bleu',
         'multinli.in.out': 'nem',
         'squad': 'nf1',
         'srl': 'nf1',
