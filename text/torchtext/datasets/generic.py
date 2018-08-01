@@ -201,7 +201,9 @@ class Almond(TranslationDataset, CQA):
     def splits(cls, exts, fields, root='.data',
                train='train', validation='eval',
                test='test', **kwargs):
+
         """Create dataset objects for splits of the ThingTalk dataset.
+
 
         Arguments:
 
@@ -218,6 +220,7 @@ class Almond(TranslationDataset, CQA):
         cls.dirname = cls.base_dirname.format(exts[0][1:], exts[1][1:])
         #cls.urls = [cls.base_url.format(exts[0][1:], exts[1][1:], cls.dirname)]
         check = os.path.join(root, cls.name, cls.dirname)
+
         #path = cls.download(root, check=check)
         path = check
 
