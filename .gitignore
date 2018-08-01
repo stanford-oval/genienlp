@@ -11,6 +11,14 @@ models/__pycache__/
 multiprocess/__pycache__/
 results/
 
+.DS_Store
+.idea/
+models/.DS_Store
+multiprocess/.DS_Store
+text/.DS_Store
+
+
+
 # C extensions
 *.so
 

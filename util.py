@@ -122,6 +122,7 @@ def get_splits(args, task, FIELD, **kwargs):
         split = torchtext.datasets.generic.IWSLT.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)
     if task == 'almond':
+        #setattr(FIELD, 'tokenize', lambda s: s.split())
         src, trg = '.en', '.tt'
         split = torchtext.datasets.generic.Almond.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)

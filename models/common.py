@@ -335,7 +335,10 @@ class Embedding(nn.Module):
         self.dimension = dimension
 
     def forward(self, x, lengths=None):
-        pretrained_embeddings = self.pretrained_embeddings[0](x.cpu()).cuda().detach()
+        if x.is_cuda:
+            pretrained_embeddings = self.pretrained_embeddings[0](x.cpu()).cuda().detach()
+        else:
+            pretrained_embeddings = self.pretrained_embeddings[0](x.cpu()).detach()
         return self.projection(pretrained_embeddings)
 
     def set_embeddings(self, w):

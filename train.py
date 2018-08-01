@@ -11,6 +11,7 @@ import logging
 from pprint import pformat
 from logging import handlers
 import ujson as json
+import dill
 
 import torch
 import numpy as np
@@ -48,29 +49,34 @@ def initialize_logger(args, rank='main'):
 def log(rank='main'):
     return logging.getLogger(f'process_{rank}')
 
+# torch can't pickle lambda functions so we define one!
+def tokenizer(s):
+    return s.split()
+
 
 def prepare_data(args, field, logger):
 
     if field is None: 
         logger.info(f'Constructing field')
-        FIELD = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+        FIELD = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True, tokenize=tokenizer)
     else:
         FIELD = field
 
     train_sets, val_sets, vocab_sets = [], [], []
+    #setattr(FIELD, 'tokenize', lambda s: s.split())
+
     for task in args.train_tasks:
-        
         logger.info(f'Loading {task}')
         kwargs = {'test': None}
         kwargs['subsample'] = args.subsample
         kwargs['validation'] = None
         logger.info(f'Adding {task} to training datasets')
-        print('****', task)
         split = get_splits(args, task, FIELD, **kwargs)[0]
         logger.info(f'{task} has {len(split)} training examples')
         train_sets.append(split)
         if args.vocab_tasks is not None and task in args.vocab_tasks:
             vocab_sets.extend(split)
+
 
     for task in args.val_tasks:
         logger.info(f'Loading {task}')
@@ -83,6 +89,12 @@ def prepare_data(args, field, logger):
         val_sets.append(split)
         if args.vocab_tasks is not None and task in args.vocab_tasks:
             vocab_sets.extend(split) 
+
+
+
+    for task, s in zip(args.train_tasks, train_sets):
+        for ex in s.examples[:10]:
+            print('examples***:', ex.context)
 
     if args.load is None:
         logger.info(f'Building vocabulary')
@@ -99,7 +111,7 @@ def prepare_data(args, field, logger):
 
     logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens')
     logger.info(f'The first 500 tokens:')
-    print(FIELD.vocab.itos[:500])
+    print(FIELD.vocab.itos[:4])
 
     logger.info('Preprocessing training data')
     preprocess_examples(args, args.train_tasks, train_sets, FIELD, logger, train=True) 
