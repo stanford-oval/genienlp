@@ -64,8 +64,8 @@ def prepare_data(args, field, logger):
 
     train_sets, val_sets, vocab_sets = [], [], []
     #setattr(FIELD, 'tokenize', lambda s: s.split())
-
     for task in args.train_tasks:
+
         logger.info(f'Loading {task}')
         kwargs = {'test': None}
         kwargs['subsample'] = args.subsample
