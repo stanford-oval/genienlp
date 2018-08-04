@@ -9,7 +9,7 @@ import numpy as np
 import random
 from pprint import pformat
 
-from util import get_splits, set_seed, preprocess_examples
+from util import get_splits, set_seed, preprocess_examples, tokenizer
 from metrics import compute_metrics
 import models
 
@@ -21,7 +21,7 @@ def get_all_splits(args, new_vocab):
         kwargs = {}
         if not 'train' in args.evaluate:
             kwargs['train'] = None
-        if not 'valid' in  args.evaluate:
+        if not 'valid' in args.evaluate:
             kwargs['validation'] = None
         if not 'test' in args.evaluate:
             kwargs['test'] = None
@@ -103,7 +103,15 @@ def run(args, field, val_sets, model):
                 predictions = []
                 for batch_idx, batch in enumerate(it):
                     _, p = model(batch)
-                    p = field.reverse(p)
+                    if task == 'almond':
+                        setattr(field, 'use_revtok', False)
+                        setattr(field, 'tokenize', tokenizer)
+                        p = field.reverse_almond(p)
+                        setattr(field, 'use_revtok', True)
+                        setattr(field, 'tokenize', 'revtok')
+
+                    else:
+                        p = field.reverse(p)
                     for pp in p:
                         prediction_file.write(pp + '\n')
                         predictions.append(pp) 
@@ -125,7 +133,14 @@ def run(args, field, val_sets, model):
                     elif hasattr(batch, 'woz_id'):
                         a = from_all_answers(batch.woz_id.data.cpu())
                     else:
-                        a = field.reverse(batch.answer.data)
+                        if task == 'almond':
+                            setattr(field, 'use_revtok', False)
+                            setattr(field, 'tokenize', tokenizer)
+                            a = field.reverse_almond(batch.answer.data)
+                            setattr(field, 'use_revtok', True)
+                            setattr(field, 'tokenize', 'revtok')
+                        else:
+                            a = field.reverse(batch.answer.data)
                     for aa in a:
                         answers.append(aa) 
                         answer_file.write(json.dumps(aa) + '\n')

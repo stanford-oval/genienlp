@@ -5,6 +5,9 @@ import sys
 import torch
 import random
 import numpy as np
+from copy import deepcopy
+import revtok
+
 
 
 def get_context_question(ex, context, question, field):
@@ -14,9 +17,9 @@ def get_context_question(ex, context, question, field):
 def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
     min_length = 1
     max_context_length = args.max_train_context_length if train else args.max_val_context_length
-    is_too_long = lambda ex: (len(ex.answer)>args.max_answer_length or
+    is_too_long = lambda ex: (len(ex.answer) > args.max_answer_length or
         len(ex.context)>max_context_length)
-    is_too_short = lambda ex: (len(ex.answer)<min_length or 
+    is_too_short = lambda ex: (len(ex.answer) < min_length or
         len(ex.context)<min_length)
 
     for task, s in zip(tasks, splits):
@@ -111,6 +114,8 @@ def elapsed_time(log):
     seconds = int(t)
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
+def tokenizer(s):
+    return s.split()
 
 def get_splits(args, task, FIELD, **kwargs):
     if 'multi30k' in task:
@@ -122,10 +127,13 @@ def get_splits(args, task, FIELD, **kwargs):
         split = torchtext.datasets.generic.IWSLT.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)
     if task == 'almond':
-        #setattr(FIELD, 'tokenize', lambda s: s.split())
+        setattr(FIELD, 'use_revtok', False)
+        setattr(FIELD, 'tokenize', tokenizer)
         src, trg = '.en', '.tt'
         split = torchtext.datasets.generic.Almond.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)
+        setattr(FIELD, 'use_revtok', True)
+        setattr(FIELD, 'tokenize', 'revtok')
     if 'squad' in task:
         split = torchtext.datasets.generic.SQuAD.splits(
             fields=FIELD, root=args.data, **kwargs)
@@ -196,3 +204,4 @@ def pad(x, new_channel, dim, val=None):
     size[dim] = new_channel - size[dim]
     padding = x.new(*size).fill_(val)
     return torch.cat([x, padding], dim)
+

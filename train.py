@@ -111,7 +111,7 @@ def prepare_data(args, field, logger):
 
     logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens')
     logger.info(f'The first 500 tokens:')
-    print(FIELD.vocab.itos[:4])
+    print(FIELD.vocab.itos[:500])
 
     logger.info('Preprocessing training data')
     preprocess_examples(args, args.train_tasks, train_sets, FIELD, logger, train=True) 
