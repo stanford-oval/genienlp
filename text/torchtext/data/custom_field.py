@@ -17,12 +17,12 @@ class SimpleReversibleField(Field):
         super(SimpleReversibleField, self).__init__(**kwargs)
 
     def _reverse_base(self, batch, limited=False):
-        # if self.use_revtok:
-        #     try:
-        #         import revtok
-        #     except ImportError:
-        #         print("Please install revtok.")
-        #         raise
+        if self.use_revtok:
+            try:
+                import revtok
+            except ImportError:
+                print("Please install revtok.")
+                raise
         if not self.batch_first:
             batch = batch.t()
         with torch.cuda.device_of(batch):

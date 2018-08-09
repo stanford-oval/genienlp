@@ -11,6 +11,8 @@ from .pipeline import Pipeline
 from .utils import get_tokenizer
 from ..vocab import Vocab, SubwordVocab
 
+import revtok
+
 
 class RawField(object):
     """ Defines a general datatype.

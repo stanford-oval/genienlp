@@ -12,6 +12,7 @@ from pprint import pformat
 from util import get_splits, set_seed, preprocess_examples, tokenizer
 from metrics import compute_metrics
 import models
+from text.torchtext.data.utils import get_tokenizer
 
 
 def get_all_splits(args, new_vocab):
@@ -108,7 +109,7 @@ def run(args, field, val_sets, model):
                         setattr(field, 'tokenize', tokenizer)
                         p = field.reverse_almond(p)
                         setattr(field, 'use_revtok', True)
-                        setattr(field, 'tokenize', 'revtok')
+                        setattr(field, 'tokenize', get_tokenizer('revtok'))
 
                     else:
                         p = field.reverse(p)

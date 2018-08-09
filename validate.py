@@ -1,7 +1,8 @@
 import torch
 from util import pad, tokenizer
 from metrics import compute_metrics
-import revtok
+from text.torchtext.data.utils import get_tokenizer
+
 
 def compute_validation_outputs(model, val_iter, field, optional_names=[]):
     loss, predictions, answers = [], [], []
@@ -47,7 +48,7 @@ def all_reverse(tensor, world_size, task, field, clip, dim=0):
         setattr(field, 'tokenize', tokenizer)
         value = field.reverse_almond(tensor)[:clip]
         setattr(field, 'use_revtok', True)
-        setattr(field, 'tokenize', 'revtok')
+        setattr(field, 'tokenize', get_tokenizer('revtok'))
         return value
     else:
         return field.reverse(tensor)[:clip]

@@ -6,13 +6,13 @@ import torch
 import random
 import numpy as np
 from copy import deepcopy
-import revtok
+
+from text.torchtext.data.utils import get_tokenizer
 
 
 
 def get_context_question(ex, context, question, field):
     return ex.context_special + ex.context + ex.question_special + ex.question
-
 
 def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
     min_length = 1
@@ -133,7 +133,7 @@ def get_splits(args, task, FIELD, **kwargs):
         split = torchtext.datasets.generic.Almond.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)
         setattr(FIELD, 'use_revtok', True)
-        setattr(FIELD, 'tokenize', 'revtok')
+        setattr(FIELD, 'tokenize', get_tokenizer('revtok'))
     if 'squad' in task:
         split = torchtext.datasets.generic.SQuAD.splits(
             fields=FIELD, root=args.data, **kwargs)
