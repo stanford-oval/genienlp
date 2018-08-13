@@ -1,6 +1,5 @@
 import os
 from copy import deepcopy
-import types
 import sys
 from argparse import ArgumentParser
 import subprocess
@@ -61,7 +60,8 @@ def parse():
     parser.add_argument('--transformer_hidden', default=150, type=int, help='hidden size of the transformer modules')
     parser.add_argument('--transformer_heads', default=3, type=int, help='number of heads for transformer modules')
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
-    parser.add_argument('--no_transformer_lr', action='store_false', dest='transformer_lr', help='turns off the transformer learning rate strategy') 
+    parser.add_argument('--no_transformer_lr', action='store_false', dest='transformer_lr', help='turns off the transformer learning rate strategy')
+    parser.add_argument('--lr_rate', default=0.001, type=float, help='initial_learning_rate')
 
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')

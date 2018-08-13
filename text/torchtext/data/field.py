@@ -11,8 +11,6 @@ from .pipeline import Pipeline
 from .utils import get_tokenizer
 from ..vocab import Vocab, SubwordVocab
 
-import revtok
-
 
 class RawField(object):
     """ Defines a general datatype.
@@ -203,7 +201,12 @@ class Field(RawField):
             tensor = torch.LongTensor(batch)
             if device != -1:
                 tensor = tensor.cuda(device)
-            tensor = Variable(tensor, volatile=not train)
+            if not train:
+                with torch.no_grad():
+                    tensor = Variable(tensor)
+            else:
+                tensor = Variable(tensor)
+
         else:
             padded = self.pad(batch)
             tensor = self.numericalize(padded, device=device, train=train, **kwargs)

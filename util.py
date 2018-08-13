@@ -1,11 +1,9 @@
 from text import torchtext
 import time
 import os
-import sys
 import torch
 import random
 import numpy as np
-from copy import deepcopy
 
 from text.torchtext.data.utils import get_tokenizer
 

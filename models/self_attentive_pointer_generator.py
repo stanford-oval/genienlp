@@ -1,7 +1,4 @@
-import os
 import math
-import numpy as np
-
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -135,8 +132,9 @@ class SelfAttentivePointerGenerator(nn.Module):
     def greedy(self, self_attended_context, context, context_indices, oov_to_limited_idx, rnn_state=None):
         B, TC, C = context.size()
         T = self.args.max_output_length
-        outs = Variable(context.data.new(B, T).long().fill_(
-            self.field.decoder_stoi['<pad>']), volatile=True)
+        with torch.no_grad():
+            outs = Variable(context.data.new(B, T).long().fill_(
+                self.field.decoder_stoi['<pad>']), volatile=True)
         hiddens = [Variable(self_attended_context[0].data.new(B, T, C).zero_(), volatile=True)
                    for l in range(len(self.self_attentive_decoder.layers) + 1)]
         hiddens[0] = hiddens[0] + positional_encodings_like(hiddens[0])
@@ -145,9 +143,8 @@ class SelfAttentivePointerGenerator(nn.Module):
         rnn_output, context_alignment = None, None
         for t in range(T):
             if t == 0:
-                embedding = self.decoder_embeddings(Variable(
-                    self_attended_context[-1].data.new(B).long().fill_(
-                        self.field.vocab.stoi['<init>']), volatile=True).unsqueeze(1), [1]*B)
+                outs_0 = Variable(self_attended_context[-1].data.new(B).long().fill_(self.field.vocab.stoi['<init>']), volatile=True)
+                embedding = self.decoder_embeddings(outs_0.unsqueeze(1), [1]*B)
             else:
                 embedding = self.decoder_embeddings(outs[:, t - 1].unsqueeze(1), [1]*B)
             hiddens[0][:, t] = hiddens[0][:, t] + (math.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)
@@ -168,7 +165,8 @@ class SelfAttentivePointerGenerator(nn.Module):
                 oov_to_limited_idx)
             pred_probs, preds = probs.max(-1)
             eos_yet = eos_yet | (preds.data == self.field.decoder_stoi['<eos>'])
-            outs[:, t] = Variable(preds.data.cpu().apply_(self.map_to_full), volatile=True)
+            with torch.no_grad():
+                outs[:, t] = Variable(preds.data.cpu().apply_(self.map_to_full))
             if eos_yet.all():
                 break
         return outs
@@ -191,7 +189,7 @@ class CoattentiveLayer(nn.Module):
 
         question_sentinel = self.embed_sentinel(Variable(question.data.new(question.size(0)).long().fill_(1)))
         question = torch.cat([question_sentinel.unsqueeze(1), question], 1) # batch_size x (question_length + 1) x features
-        question = F.tanh(self.proj(question)) # batch_size x (question_length + 1) x features
+        question = torch.tanh(self.proj(question)) # batch_size x (question_length + 1) x features
 
         affinity = context.bmm(question.transpose(1,2)) # batch_size x (context_length + 1) x (question_length + 1)
         attn_over_context = self.normalize(affinity, context_padding) # batch_size x (context_length + 1) x 1

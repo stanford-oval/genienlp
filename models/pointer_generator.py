@@ -1,13 +1,9 @@
-import os
-import math
-import numpy as np
-
 import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.autograd import Variable
 
-from .common import positional_encodings_like, INF, EPSILON, TransformerEncoder, TransformerDecoder, PackedLSTM, LSTMDecoderAttention, LSTMDecoder, Embedding, Feedforward, mask
+from .common import EPSILON, PackedLSTM, LSTMDecoderAttention, LSTMDecoder, Embedding, Feedforward, mask
 
 
 class PointerGenerator(nn.Module):
@@ -115,16 +111,17 @@ class PointerGenerator(nn.Module):
     def greedy(self, context, context_indices, oov_to_limited_idx, rnn_state=None):
         B, TC, C = context.size()
         T = self.args.max_output_length
-        outs = Variable(context.data.new(B, T).long().fill_(
-            self.field.decoder_stoi['<pad>']), volatile=True)
+        with torch.no_grad():
+            outs = Variable(context.data.new(B, T).long().fill_(
+                self.field.decoder_stoi['<pad>']))
         eos_yet = context.data.new(B).byte().zero_()
 
         rnn_output, context_alignment = None, None
         for t in range(T):
             if t == 0:
-                embedding = self.decoder_embeddings(Variable(
-                    context[-1].data.new(B).long().fill_(
-                        self.field.vocab.stoi['<init>']), volatile=True).unsqueeze(1), [1]*B)
+                with torch.no_grad():
+                    outs_0 = Variable(context[-1].data.new(B).long().fill_(self.field.vocab.stoi['<init>']))
+                embedding = self.decoder_embeddings(outs_0.unsqueeze(1), [1]*B)
             else:
                 embedding = self.decoder_embeddings(outs[:, t - 1].unsqueeze(1), [1]*B)
             decoder_outputs = self.dual_ptr_rnn_decoder(embedding, #hiddens[-1][:, t].unsqueeze(1),
@@ -139,7 +136,8 @@ class PointerGenerator(nn.Module):
                 oov_to_limited_idx)
             pred_probs, preds = probs.max(-1)
             eos_yet = eos_yet | (preds.data == self.field.decoder_stoi['<eos>'])
-            outs[:, t] = Variable(preds.data.cpu().apply_(self.map_to_full), volatile=True)
+            with torch.no_grad():
+                outs[:, t] = Variable(preds.data.cpu().apply_(self.map_to_full))
             if eos_yet.all():
                 break
         return outs

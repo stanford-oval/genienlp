@@ -1,6 +1,4 @@
-import os
 import math
-import numpy as np
 
 import torch
 from torch import nn
@@ -220,7 +218,7 @@ class CoattentiveLayer(nn.Module):
 
         question_sentinel = self.embed_sentinel(Variable(question.data.new(question.size(0)).long().fill_(1)))
         question = torch.cat([question_sentinel.unsqueeze(1), question], 1) # batch_size x (question_length + 1) x features
-        question = F.tanh(self.proj(question)) # batch_size x (question_length + 1) x features
+        question = torch.tanh(self.proj(question)) # batch_size x (question_length + 1) x features
 
         affinity = context.bmm(question.transpose(1,2)) # batch_size x (context_length + 1) x (question_length + 1)
         attn_over_context = self.normalize(affinity, context_padding) # batch_size x (context_length + 1) x 1

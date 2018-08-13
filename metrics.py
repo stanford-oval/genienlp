@@ -1,5 +1,4 @@
-from subprocess import Popen, PIPE, CalledProcessError
-import json
+from subprocess import Popen, PIPE
 from text.torchtext.datasets.generic import Query
 import logging
 import os

@@ -1,7 +1,5 @@
 import os
 import re
-import zipfile
-import revtok
 import torch
 import io
 import csv
@@ -11,9 +9,7 @@ import hashlib
 import unicodedata
 
 
-from . import sst
 from . import imdb
-from . import snli
 from . import translation
 
 from .. import data
