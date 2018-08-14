@@ -1,8 +1,8 @@
 import math
 
 import torch
-from torch import nn
-from torch.nn import functional as F
+import nn
+from nn import functional as F
 from torch.autograd import Variable
 
 from .common import positional_encodings_like, INF, EPSILON, TransformerEncoder, TransformerDecoder, PackedLSTM, LSTMDecoderAttention, LSTMDecoder, Embedding, Feedforward, mask
@@ -154,6 +154,9 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
 
         probs = scaled_p_vocab + scaled_p_context_ptr + scaled_p_question_ptr
         return probs
+
+
+
 
 
     def greedy(self, self_attended_context, context, question, context_indices, question_indices, oov_to_limited_idx, rnn_state=None):

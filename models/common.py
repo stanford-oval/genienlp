@@ -1,12 +1,11 @@
-import torch
-from torch.nn import functional as F
-from torch.autograd import Variable
 import math
-import torch.nn as nn
 
-from torch.nn.utils.rnn import pad_packed_sequence as unpack
-from torch.nn.utils.rnn import pack_padded_sequence as pack
-
+import torch
+import nn
+from torch.autograd import Variable
+from nn import functional as F
+from nn.utils.rnn import pack_padded_sequence as pack
+from nn.utils.rnn import pad_packed_sequence as unpack
 
 INF = 1e10
 EPSILON = 1e-10
@@ -20,7 +19,7 @@ class LSTMDecoder(nn.Module):
         self.layers = nn.ModuleList()
 
         for i in range(num_layers):
-            self.layers.append(nn.LSTMCell(input_size, rnn_size))
+            self.layers.append(nn.IndyLSTMCell(input_size, rnn_size))
             input_size = rnn_size
 
     def forward(self, input, hidden):
@@ -272,7 +271,8 @@ class PackedLSTM(nn.Module):
         super().__init__()
         if bidirectional:
             d_out = d_out // 2
-        self.rnn = nn.LSTM(d_in, d_out,
+
+        self.rnn = nn.IndyLSTM(d_in, d_out,
                            num_layers=num_layers,
                            dropout=dropout,
                            bidirectional=bidirectional,
