@@ -240,7 +240,10 @@ if __name__ == '__main__':
     torch.cuda.manual_seed(args.seed)
 
     print(f'Loading from {args.best_checkpoint}')
-    save_dict = torch.load(args.best_checkpoint)
+    if torch.cuda.is_available():
+        save_dict = torch.load(args.best_checkpoint)
+    else:
+        save_dict = torch.load(args.best_checkpoint, map_location='cpu')
     field = save_dict['field']
     print(f'Initializing Model')
     Model = getattr(models, args.model) 
