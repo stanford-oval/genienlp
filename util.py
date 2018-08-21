@@ -127,7 +127,10 @@ def get_splits(args, task, FIELD, **kwargs):
     if task == 'almond':
         setattr(FIELD, 'use_revtok', False)
         setattr(FIELD, 'tokenize', tokenizer)
-        src, trg = '.en', '.tt'
+        if args.reverse_task_bool:
+            src, trg = '.tt', '.en'  # for the reverse task
+        else:
+            src, trg = '.en', '.tt'
         split = torchtext.datasets.generic.Almond.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)
         setattr(FIELD, 'use_revtok', True)
