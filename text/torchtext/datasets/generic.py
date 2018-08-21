@@ -20,7 +20,7 @@ QUESTION_SPECIAL = 'Question:'
 
 
 def get_context_question(context, question):
-    return CONTEXT_SPECIAL +  ' ' + context + ' ' + QUESTION_SPECIAL + ' ' + question
+    return CONTEXT_SPECIAL + ' ' + context + ' ' + QUESTION_SPECIAL + ' ' + question
 
 
 class CQA(data.Dataset):
@@ -46,7 +46,9 @@ class IMDb(CQA, imdb.IMDb):
         question = 'Is this review negative or positive?'
 
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop(['skip_cache_bool'])
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples = torch.load(cache_name)
         else:
             for label in ['pos', 'neg']:
@@ -93,7 +95,9 @@ class SST(CQA):
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
 
         examples = []
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop(['skip_cache_bool'])
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples = torch.load(cache_name)
         else:
             labels = ['negative', 'positive']
@@ -151,7 +155,8 @@ class TranslationDataset(translation.TranslationDataset):
         fields = [(x, field) for x in self.fields]
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
 
-        if os.path.exists(cache_name):
+        skip_cache_bool = kwargs.pop('skip_cache_bool')
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples = torch.load(cache_name)
         else:
             langs = {'.de': 'German', '.en': 'English', '.fr': 'French', '.ar': 'Arabic', '.cs': 'Czech', '.tt': 'ThingTalk'}
@@ -246,10 +251,6 @@ class Almond(TranslationDataset, CQA):
         pass
 
 
-
-
-
-
 class SQuAD(CQA, data.Dataset):
 
     @staticmethod
@@ -266,7 +267,9 @@ class SQuAD(CQA, data.Dataset):
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
 
         examples, all_answers = [], []
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop('skip_cache_bool')
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples, all_answers = torch.load(cache_name)
         else:
             with open(os.path.expanduser(path)) as f:
@@ -411,7 +414,9 @@ class Summarization(CQA, data.Dataset):
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
 
         examples = []
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop(['skip_cache_bool'])
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples = torch.load(cache_name)
         else:
             with open(os.path.expanduser(path)) as f:
@@ -532,7 +537,7 @@ class Query:
             sel= self.columns[self.sel_index] if self.columns is not None else 'col{}'.format(self.sel_index),
         )
         if self.conditions:
-            rep +=  ' WHERE ' + ' AND '.join(['{} {} {}'.format(self.columns[i], self.cond_ops[o], v) for i, o, v in self.conditions])
+            rep += ' WHERE ' + ' AND '.join(['{} {} {}'.format(self.columns[i], self.cond_ops[o], v) for i, o, v in self.conditions])
         return ' '.join(rep.split())
 
     @classmethod
@@ -558,7 +563,9 @@ class WikiSQL(CQA, data.Dataset):
 
 
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop(['skip_cache_bool'])
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples, all_answers = torch.load(cache_name)
         else:
 
@@ -670,7 +677,9 @@ class SRL(CQA, data.Dataset):
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
 
         examples, all_answers = [], []
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop(['skip_cache_bool'])
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples, all_answers = torch.load(cache_name)
         else:
             with open(os.path.expanduser(path)) as f:
@@ -820,7 +829,9 @@ class WinogradSchema(CQA, data.Dataset):
         fields = [(x, field) for x in self.fields]
 
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop(['skip_cache_bool'])
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples = torch.load(cache_name)
         else:
             examples = []
@@ -935,7 +946,9 @@ class WOZ(CQA, data.Dataset):
 
         examples, all_answers = [], []
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample), description)
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop(['skip_cache_bool'])
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples, all_answers = torch.load(cache_name)
         else:
             with open(os.path.expanduser(path)) as f:
@@ -1048,7 +1061,9 @@ class MultiNLI(CQA, data.Dataset):
         fields = [(x, field) for x in self.fields]
 
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample), description)
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop(['skip_cache_bool'])
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples = torch.load(cache_name)
         else:
             examples = []
@@ -1125,7 +1140,9 @@ class ZeroShotRE(CQA, data.Dataset):
         fields = [(x, field) for x in self.fields]
 
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop(['skip_cache_bool'])
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples = torch.load(cache_name)
         else:
             examples = []
@@ -1250,7 +1267,9 @@ class OntoNotesNER(CQA, data.Dataset):
         fields = [(x, field) for x in self.fields]
 
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample), subtask, str(nones))
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop(['skip_cache_bool'])
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples = torch.load(cache_name)
         else:
             examples = []
@@ -1433,7 +1452,9 @@ class SNLI(CQA, data.Dataset):
         fields = [(x, field) for x in self.fields]
 
         cache_name = os.path.join(os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
-        if os.path.exists(cache_name):
+
+        skip_cache_bool = kwargs.pop(['skip_cache_bool'])
+        if os.path.exists(cache_name) and not skip_cache_bool:
             examples = torch.load(cache_name)
         else:
             examples = []

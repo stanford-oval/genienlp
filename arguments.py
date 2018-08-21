@@ -28,6 +28,7 @@ def parse():
     parser.add_argument('--save', default='./decaNLP/results', type=str, help='where to save results.')
     parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--reverse_task', action='store_true', dest='reverse_task_bool', help='whether to translate english to code or the other way around')
+    parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether use exisiting cached splits or generate new ones')
 
     parser.add_argument('--train_tasks', nargs='+', type=str, help='tasks to use for training', required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')

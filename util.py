@@ -116,6 +116,7 @@ def tokenizer(s):
     return s.split()
 
 def get_splits(args, task, FIELD, **kwargs):
+    kwargs['skip_cache_bool'] = args.skip_cache_bool
     if 'multi30k' in task:
         src, trg = ['.'+x for x in task.split('.')[1:]]
         split = torchtext.datasets.generic.Multi30k.splits(exts=(src, trg), 
