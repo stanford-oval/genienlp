@@ -116,6 +116,7 @@ def tokenizer(s):
     return s.split()
 
 def get_splits(args, task, FIELD, **kwargs):
+    kwargs['skip_cache_bool'] = args.skip_cache_bool
     if 'multi30k' in task:
         src, trg = ['.'+x for x in task.split('.')[1:]]
         split = torchtext.datasets.generic.Multi30k.splits(exts=(src, trg), 
@@ -127,7 +128,10 @@ def get_splits(args, task, FIELD, **kwargs):
     if task == 'almond':
         setattr(FIELD, 'use_revtok', False)
         setattr(FIELD, 'tokenize', tokenizer)
-        src, trg = '.en', '.tt'
+        if args.reverse_task_bool:
+            src, trg = '.tt', '.en'  # for the reverse task
+        else:
+            src, trg = '.en', '.tt'
         split = torchtext.datasets.generic.Almond.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)
         setattr(FIELD, 'use_revtok', True)
