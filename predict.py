@@ -85,6 +85,8 @@ def run(args, field, val_sets, model):
         prediction_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.txt')
         answer_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.gold.txt')
         results_file_name = answer_file_name.replace('gold', 'results')
+        if 'sql' in task:
+            ids_file_name = answer_file_name.replace('gold', 'ids')
         if os.path.exists(prediction_file_name):
             print('** ', prediction_file_name, ' already exists**')
         if os.path.exists(answer_file_name):
@@ -94,30 +96,41 @@ def run(args, field, val_sets, model):
             with open(results_file_name) as results_file:
               for l in results_file:
                   print(l)
-            continue
+            if not 'schema' in task:
+                continue
         for x in [prediction_file_name, answer_file_name, results_file_name]:
             os.makedirs(os.path.dirname(x), exist_ok=True)
 
         if not os.path.exists(prediction_file_name):
             with open(prediction_file_name, 'a') as prediction_file:
                 predictions = []
+                wikisql_ids = []
                 for batch_idx, batch in enumerate(it):
                     _, p = model(batch)
+
                     if task == 'almond':
                         setattr(field, 'use_revtok', False)
                         setattr(field, 'tokenize', tokenizer)
                         p = field.reverse_almond(p)
                         setattr(field, 'use_revtok', True)
                         setattr(field, 'tokenize', get_tokenizer('revtok'))
-
                     else:
                         p = field.reverse(p)
-                    for pp in p:
+
+                    for i, pp in enumerate(p):
+                        if 'sql' in task:
+                            wikisql_id = int(batch.wikisql_id[i])
+                            wikisql_ids.append(wikisql_id)
                         prediction_file.write(pp + '\n')
                         predictions.append(pp) 
         else:
             with open(prediction_file_name) as prediction_file:
                 predictions = [x.strip() for x in prediction_file.readlines()] 
+
+        if 'sql' in task:
+            with open(ids_file_name, 'w') as id_file:
+                for i in wikisql_ids:
+                    id_file.write(json.dumps(i) + '\n')
 
         def from_all_answers(an):
             return [it.dataset.all_answers[sid] for sid in an.tolist()] 
@@ -161,11 +174,12 @@ def get_args():
     parser = ArgumentParser()
     parser.add_argument('--path', required=True)
     parser.add_argument('--evaluate', type=str, required=True)
-    parser.add_argument('--tasks', default=['almond', 'wikisql', 'woz.en', 'cnn_dailymail', 'iwslt.en.de', 'zre', 'srl', 'squad', 'sst', 'multinli.in.out'], nargs='+')
+    parser.add_argument('--tasks', default=['almond', 'wikisql', 'woz.en', 'cnn_dailymail', 'iwslt.en.de', 'zre', 'srl', 'squad', 'sst', 'multinli.in.out', 'schema'], nargs='+')
     parser.add_argument('--gpus', type=int, help='gpus to use', required=True)
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    parser.add_argument('--data', default='./decaNLP/.data/', type=str, help='where to load data from.')
-    parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--data', default='/decaNLP/.data/', type=str, help='where to load data from.')
+    parser.add_argument('--embeddings', default='/decaNLP/.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--checkpoint_name')
 
     args = parser.parse_args()
 
@@ -180,20 +194,23 @@ def get_args():
             setattr(args, r,  config[r])
         args.dropout_ratio = 0.0
 
-#    args.metrics = ['lfem', 'joint_goal_em', 'turn_request_em', 'turn_goal_em', 'rouge_1', 'rouge_2', 'rougeL', 'avg_rouge', 'nf1', 'nem', 'bleu', 'corpus_f1', 'precision', 'recall']
-#    args.deca_metrics = ['lfem', 'joint_goal_em', 'avg_rouge', 'bleu', 'corpus_f1', 'nf1', 'nf1', 'em', 'em']
     args.task_to_metric = {'cnn_dailymail': 'avg_rouge',
         'iwslt.en.de': 'bleu',
         'almond': 'bleu',
-        'multinli.in.out': 'nem',
+        'multinli.in.out': 'em',
         'squad': 'nf1',
         'srl': 'nf1',
-        'sst': 'nf1',
+        'sst': 'em',
         'wikisql': 'lfem',
         'woz.en': 'joint_goal_em',
         'zre': 'corpus_f1',
-        'schema': 'nf1'}
-    args.best_checkpoint = get_best(args)
+        'schema': 'em'}
+
+    if os.path.exists(os.path.join(args.path, 'process_0.log')):
+        args.best_checkpoint = get_best(args)
+    else:
+        args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
+           
     return args
 
 

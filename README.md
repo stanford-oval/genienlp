@@ -5,13 +5,13 @@
 The Natural Language Decathlon is a multitask challenge that spans ten tasks:
 question answering, machine translation, summarization, natural language inference, sentiment analysis, semantic role labeling, zero-shot relation extraction, goal-oriented dialogue, semantic parsing, and commonsense pronoun resolution.
 Each task is cast as question answering, which makes it possible to use our new Multitask Question Answering Network (MQAN).
-This model jointly learns all tasks in decaNLP without any task-specific modules or parameters in the multitask setting. For a more thorough introduction to decaNLP, see our [blog post](https://einstein.ai/research/the-natural-language-decathlon) or [paper](https://arxiv.org/abs/1806.08730).
+This model jointly learns all tasks in decaNLP without any task-specific modules or parameters in the multitask setting. For a more thorough introduction to decaNLP, see the main [website](http://decanlp.com/), our [blog post](https://einstein.ai/research/the-natural-language-decathlon), or the [paper](https://arxiv.org/abs/1806.08730).
 
 ## Leaderboard
 
 | Model | decaNLP | SQuAD | IWSLT | CNN/DM | MNLI | SST | QA&#8209;SRL | QA&#8209;ZRE | WOZ | WikiSQL | MWSC |
 | --- | --- | --- | --- | --- | --- | --- | ---- | ---- | --- | --- |--- | 
-| [MQAN](https://einstein.ai/static/images/pages/research/decaNLP/decaNLP.pdf) | 571.7 | 74.3 | 13.7 | 24.6 | 69.2 | 86.4 | 77.6 | 34.7 | 84.1 | 58.7 | 48.4 |
+| [MQAN](https://einstein.ai/static/images/pages/research/decaNLP/decaNLP.pdf) | 590.5 | 74.4 | 18.6 | 24.3 | 71.5 | 87.4 | 78.4 | 37.6 | 84.8 | 64.8 | 48.7 |
 | [S2S](https://einstein.ai/static/images/pages/research/decaNLP/decaNLP.pdf) | 513.6 | 47.5 | 14.2 | 25.7 | 60.9 | 85.9 | 68.7 | 28.5 | 84.0 | 45.8 | 52.4 |
 
 ## Getting Started
@@ -50,8 +50,6 @@ To train on the entire Natural Language Decathlon:
 nvidia-docker run -it --rm -v `pwd`:/decaNLP/ -u $(id -u):$(id -g) decanlp bash -c "python /decaNLP/train.py --train_tasks squad iwslt.en.de cnn_dailymail multinli.in.out sst srl zre woz.en wikisql schema --train_iterations 1 --gpu DEVICE_ID"
 ```
 
-You can find a list of commands in `experiments.sh` that correspond to each trained model that we used to report validation results comparing models and training strategies in the paper.
-
 ### Tensorboard
 
 If you would like to make use of tensorboard, run (typically in a `tmux` pane or equivalent):
@@ -70,7 +68,7 @@ If you are having trouble with the specified port on either machine, run `lsof -
 
 ### Caveats During Training
 
-- On a single NVIDIA Volta GPU, the code should take about 3 days to complete 500k iterations. These should be sufficient to approximately reproduce the experiments in the paper. 
+- On a single NVIDIA Volta GPU, the code should take about 3 days to complete 500k iterations. These should be sufficient to approximately reproduce the experiments in the paper. Training for about 7 days should be enough to fully replicate those scores.
 - The model can be resumed using stored checkpoints using `--load <PATH_TO_CHECKPOINT>` and `--resume`. By default, models are stored every `--save_every` iterations in the `results/` folder tree. 
 - During training, validation can be slow! Especially when computing ROUGE scores. Use the `--val_every` flag to change the frequency of validation. 
 - If you run out of memory, reduce `--train_batch_tokens` and `--val_batch_size`.
@@ -92,6 +90,44 @@ nvidia-docker run -it --rm -v `pwd`:/decaNLP/ -u $(id -u):$(id -g) decanlp bash 
 ```
 
 For test performance, please use the original [SQuAD](https://rajpurkar.github.io/SQuAD-explorer/), [MultiNLI](https://www.nyu.edu/projects/bowman/multinli/), and [WikiSQL](https://github.com/salesforce/WikiSQL) evaluation systems.
+
+## Pretrained Models
+
+This model is the best MQAN trained on decaNLP so far. It was trained first on SQuAD and then on all of decaNLP. You can obtain this model and run it on the validation sets with the following.
+
+```bash
+wget https://s3.amazonaws.com/research.metamind.io/decaNLP/pretrained/mqan_decanlp_qa_first.tar.gz
+tar -xvzf mqan_decanlp_qa_first.tar.gz
+nvidia-docker run -it --rm -v `pwd`:/decaNLP/  decanlp bash -c "python /decaNLP/predict.py --evaluate validation --path /decaNLP/mqan_decanlp_qa_first --checkpoint_name model.pth --gpu 0"
+```
+
+This model is the best MQAN trained on WikiSQL alone. It surpassed the previous state-of-the-art performance by several points on that task.
+
+```bash
+wget https://s3.amazonaws.com/research.metamind.io/decaNLP/pretrained/mqan_wikisql.tar.gz
+tar -xvzf mqan_wikisql.tar.gz
+nvidia-docker run -it --rm -v `pwd`:/decaNLP/  decanlp bash -c "python /decaNLP/predict.py --evaluate validation --path /decaNLP/mqan_wikisql --checkpoint_name model.pth --gpu 0 --tasks wikisql"
+nvidia-docker run -it --rm -v `pwd`:/decaNLP/  decanlp bash -c "python /decaNLP/predict.py --evaluate test --path /decaNLP/mqan_wikisql --checkpoint_name model.pth --gpu 0 --tasks wikisql"
+docker run -it --rm -v `pwd`:/decaNLP/  decanlp bash -c "python /decaNLP/convert_to_logical_forms.py /decaNLP/.data/ /decaNLP/mqan_wikisql/model/validation/wikisql.txt /decaNLP/mqan_wikisql/model/validation/wikisql.ids.txt /decaNLP/mqan_wikisql/model/validation/wikisql_logical_forms.jsonl valid"
+docker run -it --rm -v `pwd`:/decaNLP/  decanlp bash -c "python /decaNLP/convert_to_logical_forms.py /decaNLP/.data/ /decaNLP/mqan_wikisql/model/test/wikisql.txt /decaNLP/mqan_wikisql/model/test/wikisql.ids.txt /decaNLP/mqan_wikisql/model/test/wikisql_logical_forms.jsonl test"
+git clone https://github.com/salesforce/WikiSQL.git #git@github.com:salesforce/WikiSQL.git for ssh
+cd WikiSQL
+git checkout decanlp_single_model  # necessary until https://github.com/salesforce/WikiSQL/pull/23 is merged
+cd ..
+docker run -it --rm -v `pwd`:/decaNLP/  decanlp bash -c "python /decaNLP/WikiSQL/evaluate.py /decaNLP/.data/wikisql/data/dev.jsonl /decaNLP/.data/wikisql/data/dev.db /decaNLP/mqan_wikisql/model/validation/wikisql_logical_forms.jsonl" # assumes that you have data stored in .data
+docker run -it --rm -v `pwd`:/decaNLP/  decanlp bash -c "python /decaNLP/WikiSQL/evaluate.py /decaNLP/.data/wikisql/data/dev.jsonl /decaNLP/.data/wikisql/data/dev.db /decaNLP/mqan_wikisql/model/test/wikisql_logical_forms.jsonl" # assumes that you have data stored in .data
+```
+
+## Inference on a Custom Dataset
+
+Using a pretrained model or a model you have trained yourself, you can run on new, custom datasets easily by following the instructions below. In this example, we use the checkpoint for the best MQAN trained on the entirety of decaNLP (see the section on Pretrained Models to see how to get this checkpoint) to run on my_custom_dataset.
+
+```bash
+mkdir .data/my_custom_dataset/
+touch .datda/my_custom_dataset/val.jsonl
+#TODO add examples line by line to val.jsonl in the form of a JSON dict: {"context": "The answer is answer.", "question": "What is the answer?", "answer": "answer"}
+nvidia-docker run -it --rm -v `pwd`:/decaNLP/  decanlp bash -c "python /decaNLP/predict.py --evaluate valid --path /decaNLP/mqan_decanlp_qa_first --checkpoint_name model.pth --gpu 0 --tasks my_custom_dataset"
+```
 
 ## Citation
 
