@@ -138,7 +138,7 @@ def get_splits(args, task, FIELD, **kwargs):
         setattr(FIELD, 'tokenize', get_tokenizer('revtok'))
     elif 'squad' in task:
         split = torchtext.datasets.generic.SQuAD.splits(
-            fields=FIELD, root=args.data, **kwargs)
+            fields=FIELD, root=args.data, description=task, **kwargs)
     elif task == 'wikisql':
         split = torchtext.datasets.generic.WikiSQL.splits(
             fields=FIELD, root=args.data, **kwargs)
