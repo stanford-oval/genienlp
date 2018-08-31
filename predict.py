@@ -163,7 +163,7 @@ def run(args, field, val_sets, model):
 
         if len(answers) > 0:
             metrics, answers = compute_metrics(predictions, answers, bleu='iwslt' in task or 'multi30k' in task or 'almond' in task, dialogue='woz' in task,
-                rouge='cnn' in task, logical_form='sql' in task, corpus_f1='zre' in task, args=args)
+                rouge='cnn' in task, logical_form='sql' in task, corpus_f1='zre' in task, func_accuracy='almond' in task, args=args)
 
             print(metrics)
             with open(results_file_name, 'w') as results_file:

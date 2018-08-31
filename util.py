@@ -8,7 +8,6 @@ import numpy as np
 from text.torchtext.data.utils import get_tokenizer
 
 
-
 def get_context_question(ex, context, question, field):
     return ex.context_special + ex.context + ex.question_special + ex.question
 

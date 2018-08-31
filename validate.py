@@ -87,7 +87,7 @@ def validate(task, val_iter, model, logger, field, world_size, rank, num_print=1
     if hasattr(val_iter.dataset.examples[0], 'wikisql_id') or hasattr(val_iter.dataset.examples[0], 'squad_id') or hasattr(val_iter.dataset.examples[0], 'woz_id'):
         answers = [val_iter.dataset.all_answers[sid] for sid in answers.tolist()]
     metrics, answers = compute_metrics(predictions, answers, bleu='iwslt' in task or 'multi30k' in task or 'almond' in task, dialogue='woz' in task,
-        rouge='cnn' in task, logical_form='sql' in task, corpus_f1='zre' in task, args=args)
+        rouge='cnn' in task, logical_form='sql' in task, corpus_f1='zre' in task,func_accuracy='almond' in task, args=args)
     results = [predictions, answers] + results
     print_results(names, results, rank=rank, num_print=num_print)
 

@@ -8,6 +8,8 @@ import numpy as np
 import collections
 from multiprocessing import Pool, cpu_count
 from contextlib import closing
+from lang_utils import *
+
 
 from pyrouge import Rouge155
 from sacrebleu import corpus_bleu
@@ -180,6 +182,13 @@ def f1_score(prediction, ground_truth):
     f1 = (2 * precision * recall) / (precision + recall)
     return f1
 
+def fm_score(prediction, ground_truth):
+    pred_funcs = get_functions(prediction)
+    ground_truth = get_functions(ground_truth)
+    common = collections.Counter(pred_funcs) & collections.Counter(ground_truth)
+
+    return len(common) / len(ground_truth)
+
 def exact_match(prediction, ground_truth):
     return prediction == ground_truth
 
@@ -196,6 +205,11 @@ def computeF1(outputs, targets):
 def computeEM(outputs, targets):
     outs = [metric_max_over_ground_truths(exact_match, o, t) for o, t in zip(outputs, targets)]
     return sum(outs)/len(outputs) * 100
+
+def computeFM(outputs, targets):
+    outs = [metric_max_over_ground_truths(fm_score, o, t) for o, t in zip(outputs, targets)]
+    return sum(outs) / len(outputs) * 100
+
 
 def computeBLEU(outputs, targets):
     targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
@@ -377,7 +391,7 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
         
 
-def compute_metrics(greedy, answer, rouge=False, bleu=False, corpus_f1=False, logical_form=False, args=None, dialogue=False):
+def compute_metrics(greedy, answer, rouge=False, bleu=False, corpus_f1=False, logical_form=False, dialogue=False, func_accuracy=False, args=None):
     metric_keys = []
     metric_values = []
     if not isinstance(answer[0], list):
@@ -409,6 +423,10 @@ def compute_metrics(greedy, answer, rouge=False, bleu=False, corpus_f1=False, lo
     nem = computeEM(norm_greedy, norm_answer)
     metric_keys.extend(['nf1', 'nem'])
     metric_values.extend([nf1, nem])
+    if func_accuracy:
+        func_accuracy = computeFM(greedy, answer)
+    metric_keys.append('fm')
+    metric_values.append(func_accuracy)
     if corpus_f1:
         corpus_f1, precision, recall = computeCF1(norm_greedy, norm_answer)
         metric_keys += ['corpus_f1', 'precision', 'recall']
