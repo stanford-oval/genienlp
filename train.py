@@ -161,7 +161,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
         # by training them and not others
         # once the specified number of rounds is completed, 
         # switch to normal round robin training
-        if rnd<args.jump_start:
+        if rnd < args.jump_start:
             train_iterations = [0]*len(train_iterations)
             for _ in range(args.n_jump_start): train_iterations[_] = 1
         else:

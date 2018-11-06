@@ -19,7 +19,7 @@ class LSTMDecoder(nn.Module):
         self.layers = nn.ModuleList()
 
         for i in range(num_layers):
-            self.layers.append(nn.IndyLSTMCell(input_size, rnn_size))
+            self.layers.append(nn.LSTMCell(input_size, rnn_size))
             input_size = rnn_size
 
     def forward(self, input, hidden):
@@ -272,7 +272,7 @@ class PackedLSTM(nn.Module):
         if bidirectional:
             d_out = d_out // 2
 
-        self.rnn = nn.IndyLSTM(d_in, d_out,
+        self.rnn = nn.LSTM(d_in, d_out,
                            num_layers=num_layers,
                            dropout=dropout,
                            bidirectional=bidirectional,
