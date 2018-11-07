@@ -9,9 +9,11 @@ import numpy as np
 import random
 from pprint import pformat
 
-from util import get_splits, set_seed, preprocess_examples
+from util import get_splits, set_seed, preprocess_examples, tokenizer
 from metrics import compute_metrics
 import models
+from text.torchtext.data.utils import get_tokenizer
+
 
 
 def get_all_splits(args, new_vocab):
@@ -20,11 +22,11 @@ def get_all_splits(args, new_vocab):
         print(f'Loading {task}')
         kwargs = {}
         if not 'train' in args.evaluate:
-            kwargs['train'] =  None
-        if not 'valid' in  args.evaluate:
-            kwargs['validation'] =  None
+            kwargs['train'] = None
+        if not 'valid' in args.evaluate:
+            kwargs['validation'] = None
         if not 'test' in args.evaluate:
-            kwargs['test'] =  None
+            kwargs['test'] = None
         s = get_splits(args, task, new_vocab, **kwargs)[0]
         preprocess_examples(args, [task], [s], new_vocab, train=False)
         splits.append(s)
@@ -32,7 +34,7 @@ def get_all_splits(args, new_vocab):
 
 
 def prepare_data(args, FIELD):
-    new_vocab = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+    new_vocab = torchtext.data.SimpleReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     splits = get_all_splits(args, new_vocab)
     new_vocab.build_vocab(*splits)
     print(f'Vocabulary has {len(FIELD.vocab)} tokens from training')
@@ -110,7 +112,16 @@ def run(args, field, val_sets, model):
                     ids = []
                     for batch_idx, batch in enumerate(it):
                         _, p = model(batch)
-                        p = field.reverse(p)
+
+                        if task == 'almond':
+                            setattr(field, 'use_revtok', False)
+                            setattr(field, 'tokenize', tokenizer)
+                            p = field.reverse_almond(p)
+                            setattr(field, 'use_revtok', True)
+                            setattr(field, 'tokenize', get_tokenizer('revtok'))
+                        else:
+                            p = field.reverse(p)
+
                         for i, pp in enumerate(p):
                             if 'sql' in task:
                                 ids.append(int(batch.wikisql_id[i]))
@@ -146,7 +157,14 @@ def run(args, field, val_sets, model):
                         elif hasattr(batch, 'woz_id'):
                             a = from_all_answers(batch.woz_id.data.cpu())
                         else:
-                            a = field.reverse(batch.answer.data)
+                            if task == 'almond':
+                                setattr(field, 'use_revtok', False)
+                                setattr(field, 'tokenize', tokenizer)
+                                a = field.reverse_almond(batch.answer.data)
+                                setattr(field, 'use_revtok', True)
+                                setattr(field, 'tokenize', 'revtok')
+                            else:
+                                a = field.reverse(batch.answer.data)
                         for aa in a:
                             answers.append(aa) 
                             answer_file.write(json.dumps(aa) + '\n')
@@ -174,16 +192,19 @@ def get_args():
     parser = ArgumentParser()
     parser.add_argument('--path', required=True)
     parser.add_argument('--evaluate', type=str, required=True)
-    parser.add_argument('--tasks', default=['squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl', 'zre', 'woz.en', 'wikisql', 'schema'], nargs='+')
+    parser.add_argument('--tasks', default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl', 'zre', 'woz.en', 'wikisql', 'schema'], nargs='+')
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    parser.add_argument('--data', default='/decaNLP/.data/', type=str, help='where to load data from.')
-    parser.add_argument('--embeddings', default='/decaNLP/.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--data', default='./decaNLP/.data/', type=str, help='where to load data from.')
+    parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--checkpoint_name')
     parser.add_argument('--bleu', action='store_true', help='whether to use the bleu metric (always on for iwslt)')
     parser.add_argument('--rouge', action='store_true', help='whether to use the bleu metric (always on for cnn, dailymail, and cnn_dailymail)')
     parser.add_argument('--overwrite_predictions', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
+
+    parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether use exisiting cached splits or generate new ones')
+    parser.add_argument('--reverse_task', action='store_true', dest='reverse_task_bool', help='whether to translate english to code or the other way around')
 
     args = parser.parse_args()
 
@@ -208,6 +229,7 @@ def get_args():
         'multinli.in.out': 'em',
         'squad': 'nf1',
         'srl': 'nf1',
+        'almond': 'bleu',
         'sst': 'em',
         'wikisql': 'lfem',
         'woz.en': 'joint_goal_em',
@@ -230,7 +252,7 @@ def get_best(args):
         lines = f.readlines()
 
     best_score = 0
-    best_it = 0
+    best_it = 10
     deca_scores = {}
     for l in lines:
         if 'val' in l:
@@ -265,7 +287,13 @@ if __name__ == '__main__':
     torch.cuda.manual_seed(args.seed)
 
     print(f'Loading from {args.best_checkpoint}')
-    save_dict = torch.load(args.best_checkpoint)
+
+    # save_dict = torch.load(args.best_checkpoint)
+    if torch.cuda.is_available():
+        save_dict = torch.load(args.best_checkpoint)
+    else:
+        save_dict = torch.load(args.best_checkpoint, map_location='cpu')
+
     field = save_dict['field']
     print(f'Initializing Model')
     Model = getattr(models, args.model) 

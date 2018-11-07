@@ -6,6 +6,10 @@ import torch
 import random
 import numpy as np
 
+from text.torchtext.data.utils import get_tokenizer
+
+def tokenizer(s):
+    return s.split()
 
 def get_context_question(ex, context, question, field):
     return ex.context_special + ex.context + ex.question_special + ex.question
@@ -14,9 +18,9 @@ def get_context_question(ex, context, question, field):
 def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
     min_length = 1
     max_context_length = args.max_train_context_length if train else args.max_val_context_length
-    is_too_long = lambda ex: (len(ex.answer)>args.max_answer_length or
+    is_too_long = lambda ex: (len(ex.answer) > args.max_answer_length or
         len(ex.context)>max_context_length)
-    is_too_short = lambda ex: (len(ex.answer)<min_length or 
+    is_too_short = lambda ex: (len(ex.answer) < min_length or
         len(ex.context)<min_length)
 
     for task, s in zip(tasks, splits):
@@ -111,6 +115,7 @@ def elapsed_time(log):
 
 
 def get_splits(args, task, FIELD, **kwargs):
+    kwargs['skip_cache_bool'] = args.skip_cache_bool
     if 'multi30k' in task:
         src, trg = ['.'+x for x in task.split('.')[1:]]
         split = torchtext.datasets.generic.Multi30k.splits(exts=(src, trg), 
@@ -119,6 +124,17 @@ def get_splits(args, task, FIELD, **kwargs):
         src, trg = ['.'+x for x in task.split('.')[1:]]
         split = torchtext.datasets.generic.IWSLT.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)
+    elif 'almond' in task:
+        setattr(FIELD, 'use_revtok', False)
+        setattr(FIELD, 'tokenize', tokenizer)
+        if args.reverse_task_bool:
+            src, trg = '.tt', '.en'  # for the reverse task
+        else:
+            src, trg = '.en', '.tt'
+        split = torchtext.datasets.generic.Almond.splits(exts=(src, trg),
+            fields=FIELD, root=args.data, **kwargs)
+        setattr(FIELD, 'use_revtok', True)
+        setattr(FIELD, 'tokenize', get_tokenizer('revtok'))
     elif 'squad' in task:
         split = torchtext.datasets.generic.SQuAD.splits(
             fields=FIELD, root=args.data, description=task, **kwargs)

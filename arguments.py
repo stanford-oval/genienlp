@@ -25,9 +25,9 @@ def parse():
     Returns the arguments from the command line.
     """
     parser = ArgumentParser()
-    parser.add_argument('--data', default='/decaNLP/.data/', type=str, help='where to load data from.')
-    parser.add_argument('--save', default='/decaNLP/results', type=str, help='where to save results.')
-    parser.add_argument('--embeddings', default='/decaNLP/.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--data', default='./decaNLP/.data/', type=str, help='where to load data from.')
+    parser.add_argument('--save', default='./decaNLP/results', type=str, help='where to save results.')
+    parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
 
     parser.add_argument('--train_tasks', nargs='+', type=str, help='tasks to use for training', required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
@@ -81,6 +81,12 @@ def parse():
     parser.add_argument('--exist_ok', action='store_true', help='Ok if the save directory already exists, i.e. overwrite is ok') 
     parser.add_argument('--token_testing', action='store_true', help='if true, sorts all iterators') 
     parser.add_argument('--reverse', action='store_true', help='if token_testing and true, sorts all iterators in reverse') 
+
+    parser.add_argument('--reverse_task', action='store_true', dest='reverse_task_bool', help='whether to translate english to code or the other way around')
+    parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether use exisiting cached splits or generate new ones')
+    parser.add_argument('--lr_rate', default=0.001, type=float, help='initial_learning_rate')
+
+
 
     args = parser.parse_args()
     if args.model is None:

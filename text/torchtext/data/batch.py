@@ -1,5 +1,3 @@
-from collections import defaultdict
-from torch.autograd import Variable
 from copy import deepcopy
 
 

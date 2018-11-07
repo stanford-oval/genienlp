@@ -53,7 +53,7 @@ def prepare_data(args, field, logger):
 
     if field is None: 
         logger.info(f'Constructing field')
-        FIELD = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+        FIELD = torchtext.data.SimpleReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     else:
         FIELD = field
 
@@ -80,7 +80,11 @@ def prepare_data(args, field, logger):
         logger.info(f'{task} has {len(split)} validation examples')
         val_sets.append(split)
         if args.vocab_tasks is not None and task in args.vocab_tasks:
-            vocab_sets.extend(split) 
+            vocab_sets.extend(split)
+
+    for task, s in zip(args.train_tasks, train_sets):
+        for ex in s.examples[:10]:
+            print('examples***:', ex.context)
 
     if args.load is None:
         logger.info(f'Getting pretrained word vectors')
@@ -155,7 +159,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
         # by training them and not others
         # once the specified number of rounds is completed, 
         # switch to normal round robin training
-        if rnd<args.jump_start:
+        if rnd < args.jump_start:
             train_iterations = [0]*len(train_iterations)
             for _ in range(args.n_jump_start): train_iterations[_] = 1
         else:
@@ -333,9 +337,9 @@ def init_model(args, field, logger, world_size, device):
 def init_opt(args, model):
     opt = None
     if args.transformer_lr:
-        opt = torch.optim.Adam(model.params, betas=(0.9, 0.98), eps=1e-9)
+        opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(0.9, 0.98), eps=1e-9)
     else:
-        opt = torch.optim.Adam(model.params, betas=(args.beta0, 0.999))
+        opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999))
     return opt
 
 
