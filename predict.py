@@ -112,6 +112,7 @@ def run(args, field, val_sets, model):
                 os.makedirs(os.path.dirname(x), exist_ok=True)
     
             if not os.path.exists(prediction_file_name) or args.overwrite_predictions:
+                print('** overwriting old results with new predictions **')
                 with open(prediction_file_name, 'w') as prediction_file:
                     predictions = []
                     ids = []
@@ -178,9 +179,12 @@ def run(args, field, val_sets, model):
                     answers = [json.loads(x.strip()) for x in answer_file.readlines()] 
     
             if len(answers) > 0:
-                if not os.path.exists(results_file_name):
-                    metrics, answers = compute_metrics(predictions, answers, bleu='iwslt' in task or 'multi30k' in task or args.bleu, dialogue='woz' in task,
-                        rouge='cnn' in task or 'dailymail' in task or args.rouge, logical_form='sql' in task, corpus_f1='zre' in task, args=args)
+                if not os.path.exists(results_file_name) or args.overwrite_predictions:
+                    metrics, answers = compute_metrics(predictions, answers,
+                                           bleu='iwslt' in task or 'multi30k' in task or 'almond' in task,
+                                           dialogue='woz' in task,
+                                           rouge='cnn' in task, logical_form='sql' in task, corpus_f1='zre' in task,
+                                           func_accuracy='almond' in task and not args.reverse_task_bool, args=args)
                     with open(results_file_name, 'w') as results_file:
                         results_file.write(json.dumps(metrics) + '\n')
                 else:

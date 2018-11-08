@@ -186,6 +186,8 @@ def fm_score(prediction, ground_truth):
     pred_funcs = get_functions(prediction)
     ground_truth = get_functions(ground_truth)
     common = collections.Counter(pred_funcs) & collections.Counter(ground_truth)
+    if not len(ground_truth):
+        return 1.0
     return len(common) / len(ground_truth)
 
 def exact_match(prediction, ground_truth):
@@ -424,8 +426,8 @@ def compute_metrics(greedy, answer, rouge=False, bleu=False, corpus_f1=False, lo
     metric_values.extend([nf1, nem])
     if func_accuracy:
         func_accuracy = computeFM(greedy, answer)
-    metric_keys.append('fm')
-    metric_values.append(func_accuracy)
+        metric_keys.append('fm')
+        metric_values.append(func_accuracy)
     if corpus_f1:
         corpus_f1, precision, recall = computeCF1(norm_greedy, norm_answer)
         metric_keys += ['corpus_f1', 'precision', 'recall']
