@@ -72,11 +72,14 @@ def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
 
 
 def set_seed(args, rank=None):
-    if rank is None and len(args.devices) > 0:
+    if not torch.cuda.is_available():
+        ordinal = -1
+    elif rank is None and len(args.devices) > 0:
         ordinal = args.devices[0]
     else:
         ordinal = args.devices[rank] 
     device = torch.device(f'cuda:{ordinal}' if ordinal > -1 else 'cpu')
+    # device = torch.device(f'cuda:{ordinal}' if ordinal > -1 else 'cpu')
     print(f'device: {device}')
     np.random.seed(args.seed)
     random.seed(args.seed)

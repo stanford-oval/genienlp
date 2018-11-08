@@ -87,9 +87,14 @@ def run(args, field, val_sets, model):
     with torch.no_grad():
         for task, it in iters:
             print(task)
-            prediction_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.txt')
-            answer_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.gold.txt')
-            results_file_name = answer_file_name.replace('gold', 'results')
+            if args.eval_dir:
+                prediction_file_name = os.path.join(args.eval_dir, os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.txt'))
+                answer_file_name = os.path.join(args.eval_dir, os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.gold.txt'))
+                results_file_name = answer_file_name.replace('gold', 'results')
+            else:
+                prediction_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.txt')
+                answer_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.gold.txt')
+                results_file_name = answer_file_name.replace('gold', 'results')
             if 'sql' in task or 'squad' in task:
                 ids_file_name = answer_file_name.replace('gold', 'ids')
             if os.path.exists(prediction_file_name):
@@ -205,6 +210,7 @@ def get_args():
 
     parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether use exisiting cached splits or generate new ones')
     parser.add_argument('--reverse_task', action='store_true', dest='reverse_task_bool', help='whether to translate english to code or the other way around')
+    parser.add_argument('--eval_dir', type=str, default=None, help='use this directory to store eval results')
 
     args = parser.parse_args()
 
@@ -252,7 +258,7 @@ def get_best(args):
         lines = f.readlines()
 
     best_score = 0
-    best_it = 10
+    best_it = 0
     deca_scores = {}
     for l in lines:
         if 'val' in l:
