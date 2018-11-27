@@ -132,7 +132,7 @@ def get_learning_rate(i, args):
 def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, writer=None, it=None):
     model.train()
     opt.zero_grad()
-    loss, predictions = model(batch)
+    loss, predictions = model(batch, iteration)
     loss.backward()
     if lr is not None:
         opt.param_groups[0]['lr'] = lr
@@ -182,7 +182,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                             (args.load and iteration == start_iteration + 1))):
                         train_task_val_metric = None
                         for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-                            val_loss, metric_dict = validate(val_task, val_iter, model, logger, field, world_size, rank, num_print=args.num_print, args=args)
+                            val_loss, metric_dict = validate(val_task, val_iter, model, logger, field, world_size, rank, iteration, num_print=args.num_print, args=args)
                             if val_loss is not None:
                                 log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}val_{val_task}:val_loss{val_loss.item():.4f}:'
                                 writer.add_scalars(f'loss/val', {val_task: val_loss.item()}, iteration)

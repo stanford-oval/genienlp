@@ -4,11 +4,11 @@ from metrics import compute_metrics
 from text.torchtext.data.utils import get_tokenizer
 
 
-def compute_validation_outputs(model, val_iter, field, optional_names=[]):
+def compute_validation_outputs(model, val_iter, field, iteration, optional_names=[]):
     loss, predictions, answers = [], [], []
     outputs = [[] for _ in range(len(optional_names))]
     for batch_idx, batch in enumerate(val_iter):
-        l, p = model(batch)
+        l, p = model(batch, iteration)
         loss.append(l)
         predictions.append(pad(p, 150, dim=-1, val=field.vocab.stoi['<pad>']))
         a = None
@@ -19,7 +19,7 @@ def compute_validation_outputs(model, val_iter, field, optional_names=[]):
         elif hasattr(batch, 'woz_id'):
             a = batch.woz_id.data.cpu()
         else:
-            a =  pad(batch.answer.data.cpu(), 150, dim=-1, val=field.vocab.stoi['<pad>'])
+            a = pad(batch.answer.data.cpu(), 150, dim=-1, val=field.vocab.stoi['<pad>'])
         answers.append(a)
         for opt_idx, optional_name in enumerate(optional_names):
             outputs[opt_idx].append(getattr(batch, optional_name).data.cpu()) 
@@ -54,8 +54,8 @@ def all_reverse(tensor, world_size, task, field, clip, dim=0):
         return field.reverse(tensor)[:clip]
 
 
-def gather_results(model, val_iter, field, world_size, task, optional_names=[]):
-    loss, predictions, answers, outputs = compute_validation_outputs(model, val_iter, field, optional_names=optional_names)
+def gather_results(model, val_iter, field, world_size, task, iteration, optional_names=[]):
+    loss, predictions, answers, outputs = compute_validation_outputs(model, val_iter, field, iteration, optional_names=optional_names)
     clip = get_clip(val_iter)
     if not hasattr(val_iter.dataset.examples[0], 'squad_id') and not hasattr(val_iter.dataset.examples[0], 'wikisql_id') and not hasattr(val_iter.dataset.examples[0], 'woz_id'):
         answers = all_reverse(answers, world_size, task, field, clip)
@@ -75,12 +75,12 @@ def print_results(keys, values, rank=None, num_print=1):
         print()
 
 
-def validate(task, val_iter, model, logger, field, world_size, rank, num_print=10, args=None):
+def validate(task, val_iter, model, logger, field, world_size, rank, iteration, num_print=10, args=None):
     with torch.no_grad():
         model.eval()
         required_names = ['greedy', 'answer']
         optional_names = ['context', 'question']
-        loss, predictions, answers, results = gather_results(model, val_iter, field, world_size, task, optional_names=optional_names)
+        loss, predictions, answers, results = gather_results(model, val_iter, field, world_size, task, iteration, optional_names=optional_names)
         predictions = [p.replace('UNK', 'OOV') for p in predictions]
         names = required_names + optional_names 
         if hasattr(val_iter.dataset.examples[0], 'wikisql_id') or hasattr(val_iter.dataset.examples[0], 'squad_id') or hasattr(val_iter.dataset.examples[0], 'woz_id'):

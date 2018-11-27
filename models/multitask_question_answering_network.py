@@ -7,9 +7,11 @@ from torch import nn
 from torch.nn import functional as F
 
 from util import get_trainable_params
+from modules import expectedBLEU, expectedMultiBleu, matrixBLEU
 
 from cove import MTLSTM
 from allennlp.modules.elmo import Elmo
+
 options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
 weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
 
@@ -74,7 +76,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         self.encoder_embeddings.set_embeddings(embeddings)
         self.decoder_embeddings.set_embeddings(embeddings)
 
-    def forward(self, batch):
+    def forward(self, batch, iteration):
         context, context_lengths, context_limited    = batch.context,  batch.context_lengths,  batch.context_limited
         question, question_lengths, question_limited = batch.question, batch.question_lengths, batch.question_limited
         answer, answer_lengths, answer_limited       = batch.answer,   batch.answer_lengths,   batch.answer_limited
@@ -134,7 +136,18 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 oov_to_limited_idx)
 
             probs, targets = mask(answer_indices[:, 1:].contiguous(), probs.contiguous(), pad_idx=pad_idx)
-            loss = F.nll_loss(probs.log(), targets)
+
+            if self.args.use_bleu_loss and iteration >= 2.0/3 * max(self.args.train_iterations):
+            # if self.args.use_bleu_loss and iteration >= 1.0 / 3 * max(self.args.train_iterations):
+                max_order = 4
+                answer = answer[0][1:]
+                target = targets[0]
+                batch_size = 1
+                translation_len = answer.shape
+
+                loss = expectedMultiBleu.bleu(answer, torch.LongTensor(target), torch.FloatTensor([translation_len] * batch_size), translation_len, max_order=max_order, smooth=True)
+            else:
+                loss = F.nll_loss(probs.log(), targets)
             return loss, None
         else:
             return None, self.greedy(self_attended_context, final_context, final_question, 
