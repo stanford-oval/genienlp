@@ -184,7 +184,9 @@ def run(args, field, val_sets, model):
                                            bleu='iwslt' in task or 'multi30k' in task or 'almond' in task,
                                            dialogue='woz' in task,
                                            rouge='cnn' in task, logical_form='sql' in task, corpus_f1='zre' in task,
-                                           func_accuracy='almond' in task and not args.reverse_task_bool, args=args)
+                                           func_accuracy='almond' in task and not args.reverse_task_bool,
+                                           dev_accuracy='almond' in task and not args.reverse_task_bool,
+                                           args=args)
                     with open(results_file_name, 'w') as results_file:
                         results_file.write(json.dumps(metrics) + '\n')
                 else:
@@ -240,7 +242,7 @@ def get_args():
         'multinli.in.out': 'em',
         'squad': 'nf1',
         'srl': 'nf1',
-        'almond': 'bleu',
+        'almond': 'bleu' if args.reverse_task_bool else 'em',
         'sst': 'em',
         'wikisql': 'lfem',
         'woz.en': 'joint_goal_em',
@@ -264,7 +266,7 @@ def get_best(args):
         lines = f.readlines()
 
     best_score = 0
-    best_it = 0
+    best_it = 10
     deca_scores = {}
     for l in lines:
         if 'val' in l:

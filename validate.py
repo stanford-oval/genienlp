@@ -89,7 +89,9 @@ def validate(task, val_iter, model, logger, field, world_size, rank, iteration, 
                                            bleu='iwslt' in task or 'multi30k' in task or 'almond' in task,
                                            dialogue='woz' in task,
                                            rouge='cnn' in task, logical_form='sql' in task, corpus_f1='zre' in task,
-                                           func_accuracy='almond' in task and not args.reverse_task_bool, args=args)
+                                           func_accuracy='almond' in task and not args.reverse_task_bool,
+                                           dev_accuracy='almond' in task and not args.reverse_task_bool,
+                                           args=args)
         results = [predictions, answers] + results
         print_results(names, results, rank=rank, num_print=num_print)
 

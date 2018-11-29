@@ -190,6 +190,14 @@ def fm_score(prediction, ground_truth):
         return 1.0
     return len(common) / len(ground_truth)
 
+def dm_score(prediction, ground_truth):
+    pred_funcs = get_devices(prediction)
+    ground_truth = get_devices(ground_truth)
+    common = collections.Counter(pred_funcs) & collections.Counter(ground_truth)
+    if not len(ground_truth):
+        return 1.0
+    return len(common) / len(ground_truth)
+
 def exact_match(prediction, ground_truth):
     return prediction == ground_truth
 
@@ -211,6 +219,11 @@ def computeEM(outputs, targets):
 def computeFM(outputs, targets):
     outs = [metric_max_over_ground_truths(fm_score, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
+
+def computeDM(outputs, targets):
+    outs = [metric_max_over_ground_truths(dm_score, o, t) for o, t in zip(outputs, targets)]
+    return sum(outs) / len(outputs) * 100
+
 
 def computeBLEU(outputs, targets):
     targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
@@ -392,7 +405,7 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
         
 
-def compute_metrics(greedy, answer, rouge=False, bleu=False, corpus_f1=False, logical_form=False, dialogue=False, func_accuracy=False, args=None):
+def compute_metrics(greedy, answer, rouge=False, bleu=False, corpus_f1=False, logical_form=False, dialogue=False, func_accuracy=False, dev_accuracy=False, args=None):
     metric_keys = []
     metric_values = []
     if not isinstance(answer[0], list):
@@ -425,9 +438,14 @@ def compute_metrics(greedy, answer, rouge=False, bleu=False, corpus_f1=False, lo
     metric_keys.extend(['nf1', 'nem'])
     metric_values.extend([nf1, nem])
     if func_accuracy:
-        func_accuracy = computeFM(greedy, answer)
+        function_accuracy = computeFM(greedy, answer)
         metric_keys.append('fm')
-        metric_values.append(func_accuracy)
+        metric_values.append(function_accuracy)
+    if dev_accuracy:
+        device_accuracy = computeDM(greedy, answer)
+        metric_keys.append('dm')
+        metric_values.append(device_accuracy)
+
     if corpus_f1:
         corpus_f1, precision, recall = computeCF1(norm_greedy, norm_answer)
         metric_keys += ['corpus_f1', 'precision', 'recall']
