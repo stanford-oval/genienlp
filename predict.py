@@ -117,7 +117,7 @@ def run(args, field, val_sets, model):
                     predictions = []
                     ids = []
                     for batch_idx, batch in enumerate(it):
-                        _, p = model(batch)
+                        _, p = model(batch, iteration=1)
 
                         if task == 'almond':
                             setattr(field, 'use_revtok', False)
@@ -133,7 +133,7 @@ def run(args, field, val_sets, model):
                                 ids.append(int(batch.wikisql_id[i]))
                             if 'squad' in task:
                                 ids.append(it.dataset.q_ids[int(batch.squad_id[i])])
-                            prediction_file.write(pp + '\n')
+                            prediction_file.write(json.dumps(pp) + '\n')
                             predictions.append(pp) 
             else:
                 with open(prediction_file_name) as prediction_file:
@@ -234,7 +234,8 @@ def get_args():
                 setattr(args, r, None)
         args.dropout_ratio = 0.0
 
-    args.task_to_metric = {'cnn_dailymail': 'avg_rouge',
+    args.task_to_metric = {
+        'cnn_dailymail': 'avg_rouge',
         'iwslt.en.de': 'bleu',
         'multinli.in.out': 'em',
         'squad': 'nf1',
@@ -244,7 +245,8 @@ def get_args():
         'wikisql': 'lfem',
         'woz.en': 'joint_goal_em',
         'zre': 'corpus_f1',
-        'schema': 'em'}
+        'schema': 'em'
+    }
 
     if os.path.exists(os.path.join(args.path, 'process_0.log')):
         args.best_checkpoint = get_best(args)
