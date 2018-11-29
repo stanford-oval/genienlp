@@ -45,6 +45,12 @@ def compute_accuracy(pred, gold):
 def compute_grammar_accuracy(pred):
     return len(pred.split(' ')) != 0
 
+def compute_device_correctness(pred, gold):
+    return get_devices(pred) == get_devices(gold)
+
+def get_devices(program):
+    return [x.rsplit('.', 1)[0] for x in program.split(' ') if x.startswith('@')]
+
 def compute_funtion_correctness(pred, gold):
     return get_functions(pred) == get_functions(gold)
 
@@ -99,13 +105,8 @@ def find_indices(ref, shuf):
             line = line[1:-2].replace(r'\"', '"').lower()
             shuf_list.append(line)
 
-    # ref_list_enum = list(enumerate(ref_list))
-    # shuf_list_enum = list(enumerate(shuf_list))
-
     indices = []
     for i, val in enumerate(shuf_list):
-        common1 = list(set([c for c in val if c not in ref_list[121]]))
-        common2 = list(set([c for c in ref_list[121] if c not in val]))
         indices.append(ref_list.index(val))
 
     return indices
@@ -118,10 +119,6 @@ with open(args.input_sentences, 'r') as input_file:
         inputs.append(line)
 
     res = [inputs[i] for i in indices]
-
-
-
-
 
 with open(args.gold_program, 'r') as gold_file,\
      open(args.predicted_program, 'r') as pred_file,\
@@ -136,13 +133,15 @@ with open(args.gold_program, 'r') as gold_file,\
         accuracy = compute_accuracy(pred, gold)
         gramar_accuracy = compute_grammar_accuracy(pred)
         function_correctness = compute_funtion_correctness(pred, gold)
+        device_correctness = compute_device_correctness(pred, gold)
         correct_tokens = compute_correct_tokens(pred, gold)
         correct_quotes = compute_correct_quotes(pred, gold)
 
         out.write(input + ' || ' + gold + ' || ' + pred + ' || '
                   + str(accuracy) + ' || '
                   + str(gramar_accuracy) + '_grammar' + ' || '
-                  + str(function_correctness) + '_function')
+                  + str(function_correctness) + '_function' + ' || '
+                  + str(device_correctness) + '_device')
         if correct_quotes != False:
             out.write(' || ' + str("{0:.2f}".format(correct_quotes)) + '%_correct_quotes')
         if correct_tokens != False:
