@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import matplotlib.pyplot as plt
+
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
@@ -14,6 +14,10 @@ import itertools
 from functools import reduce
 from modules.utils import LongTensor, FloatTensor
 import time
+
+import matplotlib
+matplotlib.use('PDF')
+import matplotlib.pyplot as plt
 
 def one_hots(zeros, ix):
     for i in range(zeros.size()[0]):
