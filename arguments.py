@@ -86,6 +86,7 @@ def parse():
     parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether to use exisiting cached splits or generate new ones')
     parser.add_argument('--lr_rate', default=0.001, type=float, help='initial_learning_rate')
     parser.add_argument('--use_bleu_loss', action='store_true', help='whether to use differentiable BLEU loss or not')
+    parser.add_argument('--elmo', action='store_true', help='whether to use ELMo: Deep contextualized word representations')
 
 
 

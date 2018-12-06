@@ -101,9 +101,9 @@ def get_quotes(pred, gold):
     return quotes_list_pred, quotes_list_gold
 
 def find_indices(ref, shuf):
-    # models preprocess datasets before training and testing.
+    # models preprocess datasets before training and testing
     # during this procedure the dataset gets shuffled
-    # this function find a mapping between original ordering of data and shuffled data in the dataset
+    # this function finds a mapping between original ordering of data and shuffled data in the dataset
     ref_list = []
     shuf_list = []
 
