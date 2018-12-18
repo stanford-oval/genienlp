@@ -33,6 +33,9 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         def dp(args):
             return args.dropout_ratio if args.rnn_layers > 1 else 0.
 
+        if not hasattr(args, 'elmo'):
+            args.elmo = None
+
         self.encoder_embeddings = Embedding(field, args.dimension, 
             dropout=args.dropout_ratio, project=not (args.cove or args.elmo))
         self.decoder_embeddings = Embedding(field, args.dimension, 
@@ -172,7 +175,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 oov_to_limited_idx)
 
 
-            if self.args.use_bleu_loss and iteration >= 2.0/3 * max(self.args.train_iterations):
+            if self.args.use_bleu_loss and iteration >= self.args.loss_switch * max(self.args.train_iterations):
                 max_order = 4
                 targets = answer_indices[:, 1:].contiguous()
                 batch_size = targets.size(0)

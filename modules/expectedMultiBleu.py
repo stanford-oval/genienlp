@@ -124,9 +124,9 @@ def bleu(p, r, translation_lengths, reference_lengths, max_order=4, smooth=False
     reference_length = sum(reference_lengths)
     for n in range(1, max_order + 1):
         overlaps_list.append(calculate_overlap(p, r, n, reference_lengths))
-    overlaps = torch.stack(overlaps_list)
+    overlaps = CUDA_wrapper(torch.stack(overlaps_list))
     matches_by_order = torch.sum(overlaps, 1)
-    possible_matches_by_order = torch.zeros(max_order)
+    possible_matches_by_order = CUDA_wrapper(torch.zeros(max_order))
     for n in range(1, max_order + 1):
         cur_pm = translation_lengths.float() - n + 1
         mask = cur_pm > 0
