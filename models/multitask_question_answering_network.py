@@ -171,18 +171,20 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 context_indices, question_indices, 
                 oov_to_limited_idx)
 
-            probs, targets = mask(answer_indices[:, 1:].contiguous(), probs.contiguous(), pad_idx=pad_idx)
 
             if self.args.use_bleu_loss and iteration >= 2.0/3 * max(self.args.train_iterations):
-            # if self.args.use_bleu_loss and iteration >= 1.0 / 3 * max(self.args.train_iterations):
                 max_order = 4
-                answer = answer[0][1:]
-                target = targets[0]
-                batch_size = 1
-                translation_len = answer.shape
+                targets = answer_indices[:, 1:].contiguous()
+                batch_size = targets.size(0)
+                reference_lengths = [l-1 for l in answer_lengths]
+                translation_len = max(reference_lengths)
+                translation_lengths = torch.Tensor([translation_len] * batch_size, device=self.device)
 
-                loss = expectedMultiBleu.bleu(answer, torch.LongTensor(target), torch.FloatTensor([translation_len] * batch_size), translation_len, max_order=max_order, smooth=True)
+                bleu_loss_smoothed = expectedMultiBleu.bleu(probs, targets, translation_lengths, reference_lengths, max_order=max_order, smooth=True)
+                loss = -1 * bleu_loss_smoothed[0]
+
             else:
+                probs, targets = mask(answer_indices[:, 1:].contiguous(), probs.contiguous(), pad_idx=pad_idx)
                 loss = F.nll_loss(probs.log(), targets)
             return loss, None
         else:

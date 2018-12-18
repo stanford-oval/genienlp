@@ -33,7 +33,7 @@ def ngrams_product(A, n):
     """
     A-is probability matrix
     [batch x length_candidate_translation x reference_len]
-    third dimention is reference's words in order of appearence in reference
+    third dimension is reference's words in order of appearance in reference
     n - states for n-grams
     Output: [batch, (length_candidate_translation-n+1) x (reference_len-n+1)]
     """
@@ -44,7 +44,7 @@ def ngrams_product(A, n):
     cur = A[:, :reslicer(n-1), :reslicer(n-1)].clone()
     for i in range(1, n):
         mul = A[:, i:reslicer(n-1-i), i:reslicer(n-1-i)]
-        cur = cur *  mul
+        cur = cur * mul
     return cur
 
 def get_selected_matrices(probs, references, dim=1):
@@ -87,7 +87,7 @@ def ngram_ref_counts(reference, lengths, n):
                 val = cnt[n_gram]
                 picked.add(n_gram)
             occurrence.append(val)
-        padding = [0 for _ in range(max_len - l if current_length > 0\
+        padding = [1 for _ in range(max_len - l if current_length > 0\
                                                 else max_len - n+ 1)]
         res.append(occurrence + padding)
     return Variable(FloatTensor(res), requires_grad=False)
@@ -143,7 +143,7 @@ def bleu(p, r, translation_lengths, reference_lengths, max_order=4, smooth=False
                                             possible_matches_by_order[i]
             else:
                 precisions[i] = Variable(FloatTensor([0]))
-    if torch.min(precisions[:max_order]).data[0] > 0:
+    if torch.min(precisions[:max_order]).item() > 0:
         p_log_sum = sum([(1. / max_order) * torch.log(p) for p in precisions])
         geo_mean = torch.exp(p_log_sum)
     else:
