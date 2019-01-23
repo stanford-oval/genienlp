@@ -3,6 +3,7 @@ from decanlp.text.torchtext.datasets.generic import Query
 from argparse import ArgumentParser
 import os
 import re
+import sys
 import ujson as json
 from decanlp.metrics import to_lf
 
@@ -64,14 +65,14 @@ def write_logical_forms(greedy, args):
             except Exception as e:
                 f.write(json.dumps(correct_format({})) + '\n')
 
-if __name__ == '__main__':
-    parser = ArgumentParser()
+def main(argv=sys.argv):
+    parser = ArgumentParser(prog=argv[0])
     parser.add_argument('data', help='path to the directory containing data for WikiSQL')
     parser.add_argument('predictions', help='path to prediction file, containing one prediction per line')
     parser.add_argument('ids', help='path to file for indices, a list of integers indicating the index into the dev/test set of the predictions on the corresponding line in \'predicitons\'')
     parser.add_argument('output', help='path for logical forms output line by line')
     parser.add_argument('evaluate', help='running on the \'validation\' or \'test\' set')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     with open(args.predictions) as f:
         greedy = [l for l in f]
     if args.ids is not None:
@@ -79,3 +80,6 @@ if __name__ == '__main__':
             ids = [int(l.strip()) for l in f]
         greedy = [x[1] for x in sorted([(i, g) for i, g in zip(ids, greedy)])]
     write_logical_forms(greedy, args)
+
+if __name__ == '__main__':
+    main()

@@ -20,11 +20,11 @@ def save_args(args):
         json.dump(vars(args), f, indent=2)
 
 
-def parse():
+def parse(argv):
     """
     Returns the arguments from the command line.
     """
-    parser = ArgumentParser()
+    parser = ArgumentParser(prog=argv[0])
     parser.add_argument('--root', default='./decaNLP', type=str, help='root directory for data, results, embeddings, code, etc.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument('--save', default='results', type=str, help='where to save results.')
@@ -96,7 +96,7 @@ def parse():
     parser.add_argument('--loss_switch', default=0.666, type=float, help='switch to BLEU loss after certain iterations controlled by this ratio')
 
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.model is None:
         args.model = 'mcqa'
     if args.val_tasks is None:

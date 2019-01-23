@@ -1,4 +1,3 @@
-from text import torchtext
 import time
 import os
 import sys
@@ -6,7 +5,8 @@ import torch
 import random
 import numpy as np
 
-from text.torchtext.data.utils import get_tokenizer
+from .text import torchtext
+from .text.torchtext.data.utils import get_tokenizer
 
 def tokenizer(s):
     return s.split()

@@ -5,6 +5,7 @@ import math
 import time
 import random
 import collections
+import sys
 from copy import deepcopy
 
 import logging
@@ -365,8 +366,8 @@ def init_opt(args, model):
     return opt
 
 
-def main():
-    args = arguments.parse()
+def main(argv=sys.argv):
+    args = arguments.parse(argv)
     if args is None:
         return
     set_seed(args)

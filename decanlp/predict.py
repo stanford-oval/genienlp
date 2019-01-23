@@ -7,9 +7,10 @@ import ujson as json
 import torch
 import numpy as np
 import random
+import sys
 from pprint import pformat
 
-from .util import get_splits, set_seed, preprocess_examples, tokenizer
+from .util import get_splits, set_seed, preprocess_examples
 from .metrics import compute_metrics
 from . import models
 
@@ -207,8 +208,8 @@ def run(args, field, val_sets, model):
     print(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
 
 
-def get_args():
-    parser = ArgumentParser()
+def get_args(argv):
+    parser = ArgumentParser(prog=argv[0])
     parser.add_argument('--path', required=True)
     parser.add_argument('--evaluate', type=str, required=True)
     parser.add_argument('--tasks', default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl', 'zre', 'woz.en', 'wikisql', 'schema'], nargs='+')
@@ -227,7 +228,7 @@ def get_args():
     parser.add_argument('--eval_dir', type=str, default=None, help='use this directory to store eval results')
     parser.add_argument('--cached', default='', type=str, help='where to save cached files')
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
@@ -267,7 +268,7 @@ def get_args():
     return args
 
 
-if __name__ == '__main__':
+def main(argv=sys.argv):
     args = get_args()
     print(f'Arguments:\n{pformat(vars(args))}')
 
@@ -299,3 +300,6 @@ if __name__ == '__main__':
     model.set_embeddings(field.vocab.vectors)
 
     run(args, field, splits, model)
+
+if __name__ == '__main__':
+    main()

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-from text import torchtext
 from argparse import ArgumentParser
 import ujson as json
 import torch
@@ -11,11 +10,12 @@ import logging
 from copy import deepcopy
 from pprint import pformat
 
-from util import set_seed
-import models
+from .util import set_seed
+from . import models
 
-from text.torchtext.data import Example
-from text.torchtext.datasets.generic import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
+from .text import torchtext
+from .text.torchtext.data import Example
+from .text.torchtext.datasets.generic import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
 
 logger = logging.getLogger(__name__)
 
@@ -37,14 +37,14 @@ class Server():
     def prepare_data(self):
         print(f'Vocabulary has {len(self.field.vocab)} tokens from training')
 
-        char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
-        glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
+        char_vectors = torchtext.vocab.CharNGram(cache=self.args.embeddings)
+        glove_vectors = torchtext.vocab.GloVe(cache=self.args.embeddings)
         vectors = [char_vectors, glove_vectors]
         self.field.vocab.load_vectors(vectors, True)
         self.field.decoder_to_vocab = {idx: self.field.vocab.stoi[word] for idx, word in enumerate(self.field.decoder_itos)}
         self.field.vocab_to_decoder = {idx: self.field.decoder_stoi[word] for idx, word in enumerate(self.field.vocab.itos) if word in self.field.decoder_stoi}
         
-        self._limited_idx_to_full_idx = deepcopy(field.decoder_to_vocab) # should avoid this with a conditional in map to full
+        self._limited_idx_to_full_idx = deepcopy(self.field.decoder_to_vocab) # should avoid this with a conditional in map to full
         self._oov_to_limited_idx = {}
         
         assert self.field.include_lengths
@@ -55,8 +55,8 @@ class Server():
         for name in CQA.fields:
             # batch of size 1
             batch = [getattr(ex, name)]
-            entry, lengths, limited_entry, raw = field.process(batch, device=self.device, train=True, 
-                limited=field.decoder_stoi, l2f=self._limited_idx_to_full_idx, oov2l=self._oov_to_limited_idx)
+            entry, lengths, limited_entry, raw = self.field.process(batch, device=self.device, train=True, 
+                limited=self.field.decoder_stoi, l2f=self._limited_idx_to_full_idx, oov2l=self._oov_to_limited_idx)
             setattr(processed, name, entry)
             setattr(processed, f'{name}_lengths', lengths)
             setattr(processed, f'{name}_limited', limited_entry)
@@ -81,16 +81,16 @@ class Server():
                 tokenize = None
         
             context_question = get_context_question(context, question)
-            fields = [(x, field) for x in CQA.fields]
+            fields = [(x, self.field) for x in CQA.fields]
             ex = Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=tokenize)
             
             batch = self.numericalize_example(ex)
-            _, prediction_batch = model(batch, iteration=0)
+            _, prediction_batch = self.model(batch, iteration=0)
             
             if task == 'almond':
-                predictions = field.reverse(prediction_batch, detokenize=lambda x: ' '.join(x))
+                predictions = self.field.reverse(prediction_batch, detokenize=lambda x: ' '.join(x))
             else:
-                predictions = field.reverse(prediction_batch)
+                predictions = self.field.reverse(prediction_batch)
                 
             client_writer.write((json.dumps(dict(id=request['id'], answer=predictions[0])) + '\n').encode('utf-8'))
     
@@ -110,15 +110,15 @@ class Server():
                     this_r *= s
                 r += this_r
             return r
-        params = list(filter(lambda p: p.requires_grad, model.parameters()))
+        params = list(filter(lambda p: p.requires_grad, self.model.parameters()))
         num_param = mult(params)
-        print(f'{args.model} has {num_param:,} parameters')
-        model.to(self.device)
+        print(f'{self.args.model} has {num_param:,} parameters')
+        self.model.to(self.device)
     
-        model.eval()
+        self.model.eval()
         with torch.no_grad():
             loop = asyncio.get_event_loop()
-            server = loop.run_until_complete(asyncio.start_server(self.handle_client, port=args.port))
+            server = loop.run_until_complete(asyncio.start_server(self.handle_client, port=self.args.port))
             try:
                 loop.run_forever()
             except KeyboardInterrupt:
@@ -128,8 +128,8 @@ class Server():
             loop.close()
 
 
-def get_args():
-    parser = ArgumentParser()
+def get_args(argv):
+    parser = ArgumentParser(prog=argv[0])
     parser.add_argument('--path', required=True)
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
@@ -138,7 +138,7 @@ def get_args():
     parser.add_argument('--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
@@ -179,8 +179,8 @@ def get_args():
     return args
 
 
-if __name__ == '__main__':
-    args = get_args()
+def main(argv=sys.argv):
+    args = get_args(argv)
     print(f'Arguments:\n{pformat(vars(args))}')
 
     np.random.seed(args.seed)
