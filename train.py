@@ -53,7 +53,7 @@ def prepare_data(args, field, logger):
 
     if field is None: 
         logger.info(f'Constructing field')
-        FIELD = torchtext.data.SimpleReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+        FIELD = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     else:
         FIELD = field
 

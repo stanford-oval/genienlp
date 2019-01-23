@@ -34,7 +34,7 @@ def get_all_splits(args, new_vocab):
 
 
 def prepare_data(args, FIELD):
-    new_vocab = torchtext.data.SimpleReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+    new_vocab = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     splits = get_all_splits(args, new_vocab)
     new_vocab.build_vocab(*splits)
     print(f'Vocabulary has {len(FIELD.vocab)} tokens from training')
@@ -130,11 +130,7 @@ def run(args, field, val_sets, model):
                         _, p = model(batch, iteration=1)
 
                         if task == 'almond':
-                            setattr(field, 'use_revtok', False)
-                            setattr(field, 'tokenize', tokenizer)
-                            p = field.reverse_almond(p)
-                            setattr(field, 'use_revtok', True)
-                            setattr(field, 'tokenize', get_tokenizer('revtok'))
+                            p = field.reverse(p, detokenize=lambda x: ' '.join(x))
                         else:
                             p = field.reverse(p)
 

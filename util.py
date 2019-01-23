@@ -128,16 +128,12 @@ def get_splits(args, task, FIELD, **kwargs):
         split = torchtext.datasets.generic.IWSLT.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)
     elif 'almond' in task:
-        setattr(FIELD, 'use_revtok', False)
-        setattr(FIELD, 'tokenize', tokenizer)
         if args.reverse_task_bool:
             src, trg = '.tt', '.en'  # for the reverse task
         else:
             src, trg = '.en', '.tt'
         split = torchtext.datasets.generic.Almond.splits(exts=(src, trg),
             fields=FIELD, root=args.data, **kwargs)
-        setattr(FIELD, 'use_revtok', True)
-        setattr(FIELD, 'tokenize', get_tokenizer('revtok'))
     elif 'squad' in task:
         split = torchtext.datasets.generic.SQuAD.splits(
             fields=FIELD, root=args.data, description=task, **kwargs)

@@ -147,7 +147,7 @@ class TranslationDataset(translation.TranslationDataset):
     def sort_key(ex):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
-    def __init__(self, path, exts, field, subsample=None, **kwargs):
+    def __init__(self, path, exts, field, subsample=None, tokenize=None, **kwargs):
         """Create a TranslationDataset given paths and fields.
 
         Arguments:
@@ -178,7 +178,7 @@ class TranslationDataset(translation.TranslationDataset):
                         context = src_line
                         answer = trg_line
                         context_question = get_context_question(context, question) 
-                        examples.append(data.Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields))
+                        examples.append(data.Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=tokenize))
                         if subsample is not None and len(examples) >= subsample:
                             break
 
@@ -195,6 +195,10 @@ class Multi30k(TranslationDataset, CQA, translation.Multi30k):
 
 class IWSLT(TranslationDataset, CQA, translation.IWSLT):
     pass
+
+
+def split_tokenize(x):
+    return x.split()
 
 
 class Almond(TranslationDataset, CQA):
@@ -234,11 +238,11 @@ class Almond(TranslationDataset, CQA):
             test = '.'.join([test, cls.dirname])
 
         train_data = None if train is None else cls(
-            os.path.join(path, train), exts, fields, **kwargs)
+            os.path.join(path, train), exts, fields, tokenize=split_tokenize, **kwargs)
         val_data = None if validation is None else cls(
-            os.path.join(path, validation), exts, fields, **kwargs)
+            os.path.join(path, validation), exts, fields, tokenize=split_tokenize, **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, test), exts, fields, **kwargs)
+            os.path.join(path, test), exts, fields, tokenize=split_tokenize, **kwargs)
         return tuple(d for d in (train_data, val_data, test_data)
                      if d is not None)
 

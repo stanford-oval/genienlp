@@ -24,11 +24,11 @@ class Example(object):
     """
 
     @classmethod
-    def fromJSON(cls, data, fields):
-        return cls.fromdict(json.loads(data), fields)
+    def fromJSON(cls, data, fields, **kwargs):
+        return cls.fromdict(json.loads(data), fields, **kwargs)
 
     @classmethod
-    def fromdict(cls, data, fields):
+    def fromdict(cls, data, fields, **kwargs):
         ex = cls()
         for key, vals in fields.items():
             if key not in data:
@@ -39,15 +39,15 @@ class Example(object):
                     vals = [vals]
                 for val in vals:
                     name, field = val
-                    setattr(ex, name, intern_strings(field.preprocess(data[key])))
+                    setattr(ex, name, intern_strings(field.preprocess(data[key], **kwargs)))
         return ex
 
     @classmethod
-    def fromTSV(cls, data, fields):
-        return cls.fromlist(data.split('\t'), fields)
+    def fromTSV(cls, data, fields, **kwargs):
+        return cls.fromlist(data.split('\t'), fields, **kwargs)
 
     @classmethod
-    def fromCSV(cls, data, fields):
+    def fromCSV(cls, data, fields, **kwargs):
         data = data.rstrip("\n")
         # If Python 2, encode to utf-8 since CSV doesn't take unicode input
         if six.PY2:
@@ -62,20 +62,20 @@ class Example(object):
                 break
         else:
             parsed_csv_line = list(parsed_csv_lines)[0]
-        return cls.fromlist(parsed_csv_line, fields)
+        return cls.fromlist(parsed_csv_line, fields, **kwargs)
 
     @classmethod
-    def fromlist(cls, data, fields):
+    def fromlist(cls, data, fields, **kwargs):
         ex = cls()
         for (name, field), val in zip(fields, data):
             if field is not None:
                 if isinstance(val, six.string_types):
                     val = val.rstrip('\n')
-                setattr(ex, name, intern_strings(field.preprocess(val)))
+                setattr(ex, name, intern_strings(field.preprocess(val, **kwargs)))
         return ex
 
     @classmethod
-    def fromtree(cls, data, fields, subtrees=False):
+    def fromtree(cls, data, fields, subtrees=False, **kwargs):
         try:
             from nltk.tree import Tree
         except ImportError:
@@ -86,4 +86,4 @@ class Example(object):
         if subtrees:
             return [cls.fromlist(
                 [' '.join(t.leaves()), t.label()], fields) for t in tree.subtrees()]
-        return cls.fromlist([' '.join(tree.leaves()), tree.label()], fields)
+        return cls.fromlist([' '.join(tree.leaves()), tree.label()], fields, **kwargs)
