@@ -7,12 +7,12 @@ from torch.autograd import Variable
 from collections import Counter
 from copy import deepcopy as copy_deep
 from copy import copy as copy
-from modules.matrixBLEU import mBLEU
-from modules.utils import CUDA_wrapper
+from .matrixBLEU import mBLEU
+from .utils import CUDA_wrapper
 from collections import Counter
-from modules.utils import LongTensor, FloatTensor
+from .utils import LongTensor, FloatTensor
 from functools import reduce
-from modules.utils import CUDA_wrapper
+from .utils import CUDA_wrapper
 import sys
 
 def eprint(*args, **kwargs):

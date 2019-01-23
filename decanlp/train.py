@@ -15,17 +15,17 @@ import ujson as json
 import torch
 import numpy as np
 
-from text import torchtext
+from .text import torchtext
 
 from tensorboardX import SummaryWriter
 import string
 
-import arguments
-import models
-from validate import validate
-from multiprocess import Multiprocess, DistributedDataParallel
-from metrics import compute_metrics
-from util import elapsed_time, get_splits, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
+from decanlp import arguments
+from . import models
+from .validate import validate
+from .multiprocess import Multiprocess, DistributedDataParallel
+from .metrics import compute_metrics
+from .util import elapsed_time, get_splits, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
 
 
 def initialize_logger(args, rank='main'):

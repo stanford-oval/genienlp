@@ -6,9 +6,9 @@ import os
 from functools import reduce
 from copy import deepcopy as copy
 import time
-from modules.utils import CUDA_wrapper
-from modules.utils import SoftmaxWithTemperature
-from modules.utils import fill_eye_diag
+from .utils import CUDA_wrapper
+from .utils import SoftmaxWithTemperature
+from .utils import fill_eye_diag
 
 class mBLEU:
     def __init__(self, max_order=4, softmax_temperature=0.001, T_argmax=True,\

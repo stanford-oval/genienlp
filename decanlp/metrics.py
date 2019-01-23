@@ -9,7 +9,7 @@ import numpy as np
 import collections
 from multiprocessing import Pool, cpu_count
 from contextlib import closing
-from utils.lang_utils import *
+from .utils.lang_utils import *
 
 from pyrouge import Rouge155
 from sacrebleu import corpus_bleu

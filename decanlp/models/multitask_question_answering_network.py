@@ -7,8 +7,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from util import get_trainable_params, set_seed
-from modules import expectedBLEU, expectedMultiBleu, matrixBLEU
+from ..util import get_trainable_params, set_seed
+from ..modules import expectedBLEU, expectedMultiBleu, matrixBLEU
 
 from cove import MTLSTM
 from allennlp.modules.elmo import Elmo, batch_to_ids

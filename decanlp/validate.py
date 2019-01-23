@@ -1,6 +1,6 @@
 import torch
-from util import pad, tokenizer
-from metrics import compute_metrics
+from .util import pad, tokenizer
+from .metrics import compute_metrics
 from text.torchtext.data.utils import get_tokenizer
 
 

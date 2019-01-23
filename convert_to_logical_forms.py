@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-from text.torchtext.datasets.generic import Query
+from decanlp.text.torchtext.datasets.generic import Query
 from argparse import ArgumentParser
 import os
 import re
 import ujson as json
-from metrics import to_lf
+from decanlp.metrics import to_lf
 
 
 def correct_format(x):

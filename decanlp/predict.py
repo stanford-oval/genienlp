@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
-from text.torchtext.datasets.generic import Query
-from text import torchtext
+from .text.torchtext.datasets.generic import Query
+from .text import torchtext
 from argparse import ArgumentParser
 import ujson as json
 import torch
@@ -9,9 +9,9 @@ import numpy as np
 import random
 from pprint import pformat
 
-from util import get_splits, set_seed, preprocess_examples, tokenizer
-from metrics import compute_metrics
-import models
+from .util import get_splits, set_seed, preprocess_examples, tokenizer
+from .metrics import compute_metrics
+from . import models
 
 def get_all_splits(args, new_vocab):
     splits = []
