@@ -11,7 +11,7 @@ from util import get_trainable_params, set_seed
 from modules import expectedBLEU, expectedMultiBleu, matrixBLEU
 
 from cove import MTLSTM
-#from allennlp.modules.elmo import Elmo, batch_to_ids
+from allennlp.modules.elmo import Elmo, batch_to_ids
 
 from .common import positional_encodings_like, INF, EPSILON, TransformerEncoder, TransformerDecoder, PackedLSTM, LSTMDecoderAttention, LSTMDecoder, Embedding, Feedforward, mask, CoattentiveLayer
 
@@ -118,29 +118,6 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 question_embedded = self.project_embeddings(torch.cat([question_embedded, question_elmo], -1))
         else:
             context_embedded, question_embedded = context_elmo, question_elmo 
-
-        elif self.args.elmo:
-            context_list = []
-            for b in range(context.size(0)):
-                #FIXME
-                lc = [self.field.decoder_itos[i] if i < self.args.max_generative_vocab else self.field.decoder_itos[0] for i in context[b, :]]
-                if lc[0] == self.field.decoder_itos[2]:
-                    lc[0] = '<S>'
-                if lc[-1] == self.field.decoder_itos[3]:
-                    lc[-1] = '</S>'
-                context_list.append(lc)
-            question_list = []
-            for b in range(question.size(0)):
-                lq = [self.field.decoder_itos[i] if i < self.args.max_generative_vocab else self.field.decoder_itos[0] for i in question[b, :]]
-                if lq[0] == self.field.decoder_itos[2]:
-                    lq[0] = '<S>'
-                if lq[-1] == self.field.decoder_itos[3]:
-                    lq[-1] = '</S>'
-                question_list.append(lq)
-
-            context_embedded = self.project_elmo(torch.cat([self.elmo(batch_to_ids(context_list).to(self.device))['elmo_representations'][0], context_embedded], -1).detach())
-            question_embedded = self.project_elmo(torch.cat([self.elmo(batch_to_ids(question_list).to(self.device))['elmo_representations'][0], question_embedded], -1).detach())
-
 
         context_encoded = self.bilstm_before_coattention(context_embedded, context_lengths)[0]
         question_encoded = self.bilstm_before_coattention(question_embedded, question_lengths)[0]

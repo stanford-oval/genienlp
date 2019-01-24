@@ -84,7 +84,7 @@ def prepare_data(args, field, logger):
 
     for task, s in zip(args.train_tasks, train_sets):
         for ex in s.examples[:10]:
-            print('examples***:', ex.context)
+            print('examples***:', [token.strip() for token in ex.context])
 
     if args.load is None:
         logger.info(f'Getting pretrained word vectors')

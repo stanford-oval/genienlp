@@ -15,7 +15,6 @@ import models
 from text.torchtext.data.utils import get_tokenizer
 
 
-
 def get_all_splits(args, new_vocab):
     splits = []
     for task in args.tasks:
@@ -171,11 +170,7 @@ def run(args, field, val_sets, model):
                             a = from_all_answers(batch.woz_id.data.cpu())
                         else:
                             if task == 'almond':
-                                setattr(field, 'use_revtok', False)
-                                setattr(field, 'tokenize', tokenizer)
-                                a = field.reverse_almond(batch.answer.data)
-                                setattr(field, 'use_revtok', True)
-                                setattr(field, 'tokenize', 'revtok')
+                                a = field.reverse(batch.answer.data, detokenize=lambda x: ' '.join(x))
                             else:
                                 a = field.reverse(batch.answer.data)
                         for aa in a:
@@ -322,7 +317,6 @@ if __name__ == '__main__':
 
     print(f'Loading from {args.best_checkpoint}')
 
-    # save_dict = torch.load(args.best_checkpoint)
     if torch.cuda.is_available():
         save_dict = torch.load(args.best_checkpoint)
     else:
