@@ -1,4 +1,6 @@
 import torch
+from torch.autograd import Variable
+
 
 if torch.cuda.is_available():
     Tensor = torch.cuda.FloatTensor
@@ -23,7 +25,7 @@ class SoftmaxWithTemperature:
         """
         formula: softmax(x/temperature)
         """
-        self.temperature  = temperature
+        self.temperature = temperature
         self.softmax = torch.nn.Softmax()
 
     def __call__(self, x, temperature=None):
