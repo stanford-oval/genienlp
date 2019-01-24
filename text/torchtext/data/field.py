@@ -154,7 +154,7 @@ class Field(RawField):
         self.pad_token = pad_token if self.sequential else None
         self.pad_first = pad_first
 
-    def preprocess(self, x):
+    def preprocess(self, x, tokenize=None):
         """Load a single example using this field, tokenizing if necessary.
 
         If the input is a Python 2 `str`, it will be converted to Unicode
@@ -165,7 +165,9 @@ class Field(RawField):
                 isinstance(x, six.text_type)):
             x = Pipeline(lambda s: six.text_type(s, encoding='utf-8'))(x)
         if self.sequential and isinstance(x, six.text_type):
-            x = self.tokenize(x.rstrip('\n'))
+            if tokenize is None:
+                tokenize = self.tokenize
+            x = tokenize(x.rstrip('\n'))
         if self.lower:
             x = Pipeline(six.text_type.lower)(x)
         if self.preprocessing is not None:
@@ -380,15 +382,19 @@ class ReversibleField(Field):
             kwargs['tokenize'] = 'revtok'
         if 'unk_token' not in kwargs:
             kwargs['unk_token'] = ' UNK '
-        super(ReversibleField, self).__init__(**kwargs)
-
-    def reverse(self, batch, limited=False):
         if self.use_revtok:
             try:
                 import revtok
             except ImportError:
                 print("Please install revtok.")
                 raise
+            self.detokenize = revtok.detokenize
+        else:
+            self.detokenize = None
+        super(ReversibleField, self).__init__(**kwargs)
+
+    def reverse(self, batch, detokenize=None, limited=False):
+        
         if not self.batch_first:
             batch = batch.t()
         with torch.cuda.device_of(batch):
@@ -409,9 +415,12 @@ class ReversibleField(Field):
             return tok not in (self.init_token, self.pad_token)
 
         batch = [filter(filter_special, ex) for ex in batch]
-        if self.use_revtok:
-            return [revtok.detokenize(ex) for ex in batch]
-        return [''.join(ex) for ex in batch]
+        if detokenize is None:
+            detokenize = self.detokenize
+        if detokenize is not None:
+            return [detokenize(ex) for ex in batch]
+        else:
+            return [''.join(ex) for ex in batch]
 
 
 class SubwordField(ReversibleField):

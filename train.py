@@ -53,7 +53,7 @@ def prepare_data(args, field, logger):
 
     if field is None: 
         logger.info(f'Constructing field')
-        FIELD = torchtext.data.SimpleReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+        FIELD = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     else:
         FIELD = field
 
@@ -84,7 +84,7 @@ def prepare_data(args, field, logger):
 
     for task, s in zip(args.train_tasks, train_sets):
         for ex in s.examples[:10]:
-            print('examples***:', ex.context)
+            print('examples***:', [token.strip() for token in ex.context])
 
     if args.load is None:
         logger.info(f'Getting pretrained word vectors')

@@ -64,10 +64,10 @@ def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
         if logger is not None:
             logger.info('Tokenized examples:')
             for ex in s.examples[:10]:
-                logger.info('Context: ' + ' '.join(ex.context))
-                logger.info('Question: ' + ' '.join(ex.question))
-                logger.info(' '.join(ex.context_question))
-                logger.info('Answer: ' + ' '.join(ex.answer))
+                logger.info('Context: ' + ' '.join([token.strip() for token in ex.context]))
+                logger.info('Question: ' + ' '.join([token.strip() for token in ex.question]))
+                logger.info(' '.join([token.strip() for token in ex.context_question]))
+                logger.info('Answer: ' + ' '.join([token.strip() for token in ex.answer]))
 
 
 
@@ -128,16 +128,12 @@ def get_splits(args, task, FIELD, **kwargs):
         split = torchtext.datasets.generic.IWSLT.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)
     elif 'almond' in task:
-        setattr(FIELD, 'use_revtok', False)
-        setattr(FIELD, 'tokenize', tokenizer)
         if args.reverse_task_bool:
             src, trg = '.tt', '.en'  # for the reverse task
         else:
             src, trg = '.en', '.tt'
         split = torchtext.datasets.generic.Almond.splits(exts=(src, trg),
             fields=FIELD, root=args.data, **kwargs)
-        setattr(FIELD, 'use_revtok', True)
-        setattr(FIELD, 'tokenize', get_tokenizer('revtok'))
     elif 'squad' in task:
         split = torchtext.datasets.generic.SQuAD.splits(
             fields=FIELD, root=args.data, description=task, **kwargs)

@@ -44,12 +44,7 @@ def all_reverse(tensor, world_size, task, field, clip, dim=0):
     # for distributed training, dev sets are padded with extra examples so that the
     # tensors are all of a predictable size for all_gather. This line removes those extra examples
     if task == 'almond':
-        setattr(field, 'use_revtok', False)
-        setattr(field, 'tokenize', tokenizer)
-        value = field.reverse_almond(tensor)[:clip]
-        setattr(field, 'use_revtok', True)
-        setattr(field, 'tokenize', get_tokenizer('revtok'))
-        return value
+        return field.reverse(tensor, detokenize=lambda x: ' '.join(x))[:clip]
     else:
         return field.reverse(tensor)[:clip]
 
