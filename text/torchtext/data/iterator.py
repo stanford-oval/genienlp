@@ -7,7 +7,8 @@ from contextlib import contextmanager
 from copy import deepcopy
 
 import torch
-from torch.distributed import get_world_size, get_rank
+if torch.distributed.is_available():
+    from torch.distributed import get_world_size, get_rank
 
 from .batch import Batch
 from .dataset import Dataset

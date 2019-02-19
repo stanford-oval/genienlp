@@ -13,7 +13,7 @@ from modules import expectedBLEU, expectedMultiBleu, matrixBLEU
 from cove import MTLSTM
 from allennlp.modules.elmo import Elmo, batch_to_ids
 
-from .common import positional_encodings_like, INF, EPSILON, TransformerEncoder, TransformerDecoder, PackedLSTM, LSTMDecoderAttention, LSTMDecoder, Embedding, Feedforward, mask, CoattentiveLayer
+from .common import *
 
 
 class MultitaskQuestionAnsweringNetwork(nn.Module):
@@ -174,10 +174,15 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 bleu_loss_smoothed = expectedMultiBleu.bleu(probs, targets, translation_lengths, reference_lengths, max_order=max_order, smooth=True)
                 loss = -1 * bleu_loss_smoothed[0]
 
+            elif self.args.use_maxmargin_loss:
+                targets = answer_indices[:, 1:].contiguous()
+                loss = max_margin_loss(probs, targets, pad_idx=pad_idx)
+
             else:
                 probs, targets = mask(answer_indices[:, 1:].contiguous(), probs.contiguous(), pad_idx=pad_idx)
                 loss = F.nll_loss(probs.log(), targets)
             return loss, None
+
         else:
             return None, self.greedy(self_attended_context, final_context, final_question, 
                 context_indices, question_indices,
