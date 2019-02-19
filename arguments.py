@@ -30,6 +30,7 @@ def parse():
     parser.add_argument('--save', default='results', type=str, help='where to save results.')
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--name', default='', type=str, help='name of the experiment; if blank, a name is automatically generated from the arguments')
+    parser.add_argument('--cached', default='', type=str, help='where to save cached files')
 
     parser.add_argument('--train_tasks', nargs='+', type=str, help='tasks to use for training', required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
@@ -94,8 +95,6 @@ def parse():
     parser.add_argument('--use_bleu_loss', action='store_true', help='whether to use differentiable BLEU loss or not')
     parser.add_argument('--use_maxmargin_loss', action='store_true', help='whether to use max-margin loss or not')
     parser.add_argument('--loss_switch', default=0.666, type=float, help='switch to BLEU loss after certain iterations controlled by this ratio')
-
-
 
 
     args = parser.parse_args()

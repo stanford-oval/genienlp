@@ -119,6 +119,7 @@ def elapsed_time(log):
 
 def get_splits(args, task, FIELD, **kwargs):
     kwargs['skip_cache_bool'] = args.skip_cache_bool
+    kwargs['cached_path'] = args.cached
     if 'multi30k' in task:
         src, trg = ['.'+x for x in task.split('.')[1:]]
         split = torchtext.datasets.generic.Multi30k.splits(exts=(src, trg), 
