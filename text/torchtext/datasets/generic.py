@@ -49,7 +49,7 @@ class IMDb(CQA, imdb.IMDb):
         question = 'Is this review negative or positive?'
 
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             print(f'Loading cached data from {cache_name}')
@@ -98,7 +98,7 @@ class SST(CQA):
     def __init__(self, path, field, subsample=None, **kwargs):
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
         examples = []
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -161,7 +161,8 @@ class TranslationDataset(translation.TranslationDataset):
         """
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
+        print(cached_path)
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
@@ -269,7 +270,7 @@ class SQuAD(CQA, data.Dataset):
     def __init__(self, path, field, subsample=None, **kwargs):
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
         examples, all_answers, q_ids = [], [], []
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -429,7 +430,7 @@ class Summarization(CQA, data.Dataset):
     def __init__(self, path, field, one_answer=True, subsample=None, **kwargs):
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
         examples = []
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -580,7 +581,7 @@ class WikiSQL(CQA, data.Dataset):
             lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
         fields.append(('wikisql_id', FIELD))
 
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', 'query_as_question' if query_as_question else 'query_as_context', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', 'query_as_question' if query_as_question else 'query_as_context', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             print(f'Loading cached data from {cache_name}')
@@ -694,7 +695,7 @@ class SRL(CQA, data.Dataset):
     def __init__(self, path, field, one_answer=True, subsample=None, **kwargs):
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
         examples, all_answers = [], []
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -850,7 +851,7 @@ class WinogradSchema(CQA, data.Dataset):
         fields = [(x, field) for x in self.fields]
 
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             print(f'Loading cached data from {cache_name}')
@@ -969,7 +970,7 @@ class WOZ(CQA, data.Dataset):
 
         examples, all_answers = [], []
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample), description)
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), description)
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             print(f'Loading cached data from {cache_name}')
@@ -1086,7 +1087,7 @@ class MultiNLI(CQA, data.Dataset):
         fields = [(x, field) for x in self.fields]
 
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample), description)
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), description)
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             print(f'Loading cached data from {cache_name}')
@@ -1167,7 +1168,7 @@ class ZeroShotRE(CQA, data.Dataset):
         fields = [(x, field) for x in self.fields]
 
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             print(f'Loading cached data from {cache_name}')
@@ -1295,7 +1296,7 @@ class OntoNotesNER(CQA, data.Dataset):
     def __init__(self, path, field, one_answer=True, subsample=None, path_to_files='.data/ontonotes-release-5.0/data/files', subtask='all', nones=True, **kwargs):
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample), subtask, str(nones))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), subtask, str(nones))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             print(f'Loading cached data from {cache_name}')
@@ -1482,7 +1483,7 @@ class SNLI(CQA, data.Dataset):
         fields = [(x, field) for x in self.fields]
 
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             print(f'Loading cached data from {cache_name}')
@@ -1549,7 +1550,7 @@ class JSON(CQA, data.Dataset):
     def __init__(self, path, field, subsample=None, **kwargs):
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
         examples = []
         skip_cache_bool = kwargs.pop('skip_cache_bool')
