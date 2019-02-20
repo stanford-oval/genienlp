@@ -7,6 +7,7 @@ import os
 import sys
 import numpy as np
 import torch.nn as nn
+import tensorflow
 
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
 from torch.nn.utils.rnn import pack_padded_sequence as pack
@@ -48,7 +49,6 @@ def max_margin_loss(probs, targets, pad_idx=1):
     targets_mask = (targets != pad_idx).float()
     flat_mask = targets_mask.view(batch_size*max_length,)
     flat_preds = probs.view(batch_size*max_length, depth)
-    flat_gold = targets.view(batch_size*max_length)
 
     one_hot = torch.zeros_like(probs)
     one_hot_gold = one_hot.scatter_(2, targets.unsqueeze(2), 1)
@@ -57,7 +57,7 @@ def max_margin_loss(probs, targets, pad_idx=1):
     marginal_scores = marginal_scores.view(batch_size*max_length, depth)
     max_margin = torch.max(marginal_scores, dim=1)[0]
 
-    gold_score = torch.index_select(flat_preds, 1, flat_gold)
+    gold_score = torch.masked_select(flat_preds, one_hot_gold.view(batch_size*max_length, depth).byte())
     margin = max_margin - gold_score
 
     return torch.sum(margin*flat_mask) + 1e-8
