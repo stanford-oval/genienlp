@@ -227,6 +227,7 @@ def get_args():
     parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether use exisiting cached splits or generate new ones')
     parser.add_argument('--reverse_task', action='store_true', dest='reverse_task_bool', help='whether to translate english to code or the other way around')
     parser.add_argument('--eval_dir', type=str, default=None, help='use this directory to store eval results')
+    parser.add_argument('--cached', default='', type=str, help='where to save cached files')
 
     args = parser.parse_args()
 
