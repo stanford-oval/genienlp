@@ -237,7 +237,7 @@ def get_args():
                     'transformer_layers', 'rnn_layers', 'transformer_hidden', 
                     'dimension', 'load', 'max_val_context_length', 'val_batch_size', 
                     'transformer_heads', 'max_output_length', 'max_generative_vocab', 
-                    'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char']
+                    'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char', 'use_maxmargin_loss']
         for r in retrieve:
             if r in config:
                 setattr(args, r,  config[r])
@@ -265,19 +265,34 @@ def get_args():
         'schema': 'em'
     }
 
+    args.best_checkpoint = None
     if not args.checkpoint_name is None:
         args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
     else:
         assert os.path.exists(os.path.join(args.path, 'process_0.log'))
-        args.best_checkpoint = get_best(args)
-           
+
+        ignore_list = []
+        for _ in range(20):
+
+            best_it = get_best(args, ignore_list)
+            args.best_checkpoint = os.path.join(args.path, f'iteration_{int(best_it)}.pth')
+            if os.path.exists(args.best_checkpoint):
+                break
+            else:
+                ignore_list.append(best_it)
+
+        if not args.best_checkpoint:
+            print('Best model is not among the first 20 saved checkpoints.')
+            print('please specify the model you want to evaluate using --checkpoint_name')
+            raise ValueError()
+
     return args
 
 
-def get_best(args):
+def get_best(args, ignore_list):
     with open(os.path.join(args.path, 'config.json')) as f:
         save_every = json.load(f)['save_every']
-    
+
     with open(os.path.join(args.path, 'process_0.log')) as f:
         lines = f.readlines()
 
@@ -299,12 +314,12 @@ def get_best(args):
                 deca_scores[it][metric] = score
             else:
                 deca_scores[it] = {'deca': score, metric: score}
-            if deca_scores[it]['deca'] > best_score:
+            if deca_scores[it]['deca'] > best_score and it not in ignore_list:
                 best_score = deca_scores[it]['deca']
                 best_it = it
-    print(best_it)
-    print(best_score)
-    return os.path.join(args.path, f'iteration_{int(best_it)}.pth')
+    print(f'best model according to deca score: {best_it}')
+    print(f'best model score: {best_score}')
+    return best_it
 
 
 if __name__ == '__main__':
@@ -325,7 +340,7 @@ if __name__ == '__main__':
 
     field = save_dict['field']
     print(f'Initializing Model')
-    Model = getattr(models, args.model) 
+    Model = getattr(models, args.model)
     model = Model(field, args)
     model_dict = save_dict['model_state_dict']
     backwards_compatible_cove_dict = {}
