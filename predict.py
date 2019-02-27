@@ -12,8 +12,6 @@ from pprint import pformat
 from util import get_splits, set_seed, preprocess_examples, tokenizer
 from metrics import compute_metrics
 import models
-from text.torchtext.data.utils import get_tokenizer
-
 
 def get_all_splits(args, new_vocab):
     splits = []
@@ -56,8 +54,8 @@ def to_iter(data, bs, device):
     Iterator = torchtext.data.Iterator
     it = Iterator(data, batch_size=bs, 
        device=device, batch_size_fn=None, 
-       train=False, repeat=False, sort=None, 
-       shuffle=None, reverse=False)
+       train=False, repeat=False, sort=False,
+       shuffle=False, reverse=False)
 
     return it
 
