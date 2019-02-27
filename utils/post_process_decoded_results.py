@@ -23,20 +23,22 @@ Created on Aug 27, 2018
 @author: mehrad
 '''
 
-
+from pprint import pprint
 import sys
 import os
+import numpy as np
 import re
 import argparse
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--reference_gold', default='./test/test.en-tt.tt', type=str)
-parser.add_argument('--input_sentences', default='./test/test.en-tt.en', type=str)
-parser.add_argument('--gold_program', default='./test/almond.gold.txt', type=str)
-parser.add_argument('--predicted_program', default='./test/almond.txt', type=str)
-parser.add_argument('--output_file', default='./test/out_file', type=str)
+parser.add_argument('--original_data', default='./test/cheatsheet.tsv', type=str, help='original dataset containing sentence ids')
+parser.add_argument('--reference_gold', default='./test/test.en-tt.tt', type=str, help='gold thingtalk programs')
+parser.add_argument('--gold_program', default='./test/almond.gold.txt', type=str, help='possibly shuffled gold thingtalk programs')
+parser.add_argument('--predicted_program', default='./test/almond.txt', type=str, help='possibly shuffled predicted thingtalk programs')
+parser.add_argument('--output_file', default='./test/out_file.tsv', type=str, help='output file to save results')
+parser.add_argument('--is_shuffled', action='store_true', help='if prediction results are shuffled use find_indices to retrieve original ordering')
 
 args = parser.parse_args()
 
@@ -100,6 +102,7 @@ def get_quotes(pred, gold):
 
     return quotes_list_pred, quotes_list_gold
 
+
 def find_indices(ref, shuf):
     # models preprocess datasets before training and testing
     # during this procedure the dataset gets shuffled
@@ -113,23 +116,43 @@ def find_indices(ref, shuf):
             ref_list.append(line)
     with open(shuf, 'r') as f_shuf:
         for line in f_shuf:
-            line = line[1:-2].replace(r'\"', '"').lower()
+            line = line[1:-2].replace(r'\"', '"').replace(r'\/', '/').lower()
             shuf_list.append(line)
 
     indices = []
     for i, val in enumerate(shuf_list):
-        indices.append(ref_list.index(val))
+        found = ref_list.index(val)
+        indices.append(found)
+
+    if len(set(indices)) != len(indices):
+        print('programs are not unique, thus index matching is not supported')
+        print('list of not unique programs:')
+        cntr = Counter(indices)
+        pprint([ref_list[k] for k,v in cntr.items() if v > 1])
+        sys.exit(1)
 
     return indices
 
 
 def run():
-    indices = find_indices(args.reference_gold, args.gold_program)
-    inputs = []
-    with open(args.input_sentences, 'r') as input_file:
-        for line in input_file:
-            inputs.append(line)
-        res = [inputs[i] for i in indices]
+
+
+    not_sorted_sents= []
+    not_sorted_ids = []
+
+    with open(args.original_data) as original_data:
+        for line in original_data:
+            id, sentence = line.strip().split('\t')[:2]
+            not_sorted_ids.append(id)
+            not_sorted_sents.append(sentence)
+    if args.is_shuffled:
+        indices = find_indices(args.reference_gold, args.gold_program)
+        ids = [not_sorted_ids[i] for i in indices]
+        sents = [not_sorted_sents[i] for i in indices]
+    else:
+        ids = not_sorted_ids
+        sents= not_sorted_sents
+
 
     errors_dev = defaultdict(int)
     errors_func = defaultdict(lambda: defaultdict(int))
@@ -137,59 +160,69 @@ def run():
     cnt_dev = 0
     cnt_func = 0
 
+    output_file_with_results = args.output_file
+    output_file_raw = args.output_file.rsplit('.', 1)[0] + '_raw.' + args.output_file.rsplit('.', 1)[1]
+
     with open(args.gold_program, 'r') as gold_file,\
          open(args.predicted_program, 'r') as pred_file,\
-         open(args.output_file, 'w') as out:
+         open(output_file_with_results, 'w') as out,\
+         open(output_file_raw, 'w') as out_raw:
 
-        for line in zip(res, gold_file, pred_file):
-            input, gold, pred = line
-            input = input.replace(r'<s>', '').strip()
-            gold = gold.strip()
-            pred = pred.strip()
-            accuracy = compute_accuracy(pred, gold)
-            accuracy_without_params = compute_accuracy_without_params(pred, gold)
-            grammar_accuracy = compute_grammar_accuracy(pred)
-            function_correctness = compute_funtion_correctness(pred, gold)
-            device_correctness = compute_device_correctness(pred, gold)
-            correct_tokens = compute_correct_tokens(pred, gold)
-            correct_quotes = compute_correct_quotes(pred, gold)
+            for line in zip(sents, gold_file, pred_file, ids):
+                input, gold, pred, id = line
+                id = id.strip()
+                input = input.replace(r'<s>', '').strip()
+                gold = gold.strip().replace(r'\"', '"').replace(r'\/', '/').strip('"')
+                pred = pred.strip().replace(r'\"', '"').replace(r'\/', '/')
 
-            ##########
-            # error analysis
-            if not device_correctness:
-                gold_devs = get_devices(gold)
-                pred_devs = get_devices(pred)
-                cnt_dev += 1
-                if len(gold_devs) == len(pred_devs):
+                out_raw.write(id + '\t' + input + '\t' + gold + '\t' + pred)
+                out_raw.write('\n')
 
-                    for i, gold in enumerate(gold_devs):
-                        if gold != pred_devs[i]:
-                            errors_dev[(gold, pred_devs[i])] += 1
 
-            elif not function_correctness:
-                gold_funcs = get_functions(gold)
-                pred_funcs = get_functions(pred)
-                cnt_func += 1
-                if len(gold_funcs) == len(pred_funcs):
-                    devices = get_devices(gold)
-                    for i, device in enumerate(devices):
-                        if gold_funcs[i] != pred_funcs[i]:
-                            errors_func[device][(gold_funcs[i].rsplit('.', 1)[1], pred_funcs[i].rsplit('.', 1)[1])] += 1
-            ##########
+                accuracy = compute_accuracy(pred, gold)
+                accuracy_without_params = compute_accuracy_without_params(pred, gold)
+                grammar_accuracy = compute_grammar_accuracy(pred)
+                function_correctness = compute_funtion_correctness(pred, gold)
+                device_correctness = compute_device_correctness(pred, gold)
+                correct_tokens = compute_correct_tokens(pred, gold)
+                correct_quotes = compute_correct_quotes(pred, gold)
 
-            out.write(input + ' || ' + gold + ' || ' + pred + ' || '
-                      + str(accuracy) + ' || '
-                      + str(accuracy_without_params) + '_w/o_params' + ' || '
-                      + str(grammar_accuracy) + '_grammar' + ' || '
-                      + str(function_correctness) + '_function' + ' || '
-                      + str(device_correctness) + '_device')
-            if correct_quotes != False:
-                out.write(' || ' + str("{0:.2f}".format(correct_quotes)) + '%_correct_quotes')
-            if correct_tokens != False:
-                out.write(' || ' + str("{0:.2f}".format(correct_tokens)) + '%_correct_tokens')
-            out.write('\n')
-            out.write('\n')
-            out.write('\n')
+                ##########
+                # error analysis
+                if not device_correctness:
+                    gold_devs = get_devices(gold)
+                    pred_devs = get_devices(pred)
+                    cnt_dev += 1
+                    if len(gold_devs) == len(pred_devs):
+
+                        for i, gold in enumerate(gold_devs):
+                            if gold != pred_devs[i]:
+                                errors_dev[(gold, pred_devs[i])] += 1
+
+                elif not function_correctness:
+                    gold_funcs = get_functions(gold)
+                    pred_funcs = get_functions(pred)
+                    cnt_func += 1
+                    if len(gold_funcs) == len(pred_funcs):
+                        devices = get_devices(gold)
+                        for i, device in enumerate(devices):
+                            if gold_funcs[i] != pred_funcs[i]:
+                                errors_func[device][(gold_funcs[i].rsplit('.', 1)[1], pred_funcs[i].rsplit('.', 1)[1])] += 1
+                ##########
+
+                out.write(input + ' || ' + gold + ' || ' + pred + ' || '
+                          + str(accuracy) + ' || '
+                          + str(accuracy_without_params) + '_w/o_params' + ' || '
+                          + str(grammar_accuracy) + '_grammar' + ' || '
+                          + str(function_correctness) + '_function' + ' || '
+                          + str(device_correctness) + '_device')
+                if correct_quotes != False:
+                    out.write(' || ' + str("{0:.2f}".format(correct_quotes)) + '%_correct_quotes')
+                if correct_tokens != False:
+                    out.write(' || ' + str("{0:.2f}".format(correct_tokens)) + '%_correct_tokens')
+                out.write('\n')
+                out.write('\n')
+                out.write('\n')
 
 
     print('cnt_dev: ', cnt_dev)
