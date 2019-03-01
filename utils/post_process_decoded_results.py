@@ -172,8 +172,12 @@ def run():
                 input, gold, pred, id = line
                 id = id.strip()
                 input = input.replace(r'<s>', '').strip()
-                gold = gold.strip().replace(r'\"', '"').replace(r'\/', '/').strip('"')
+                gold = gold.strip().replace(r'\"', '"').replace(r'\/', '/')
+                if gold[0] == gold[-1] == '"':
+                    gold = gold[1:-1]
                 pred = pred.strip().replace(r'\"', '"').replace(r'\/', '/')
+                if pred[0] == pred[-1] == '"':
+                    pred = pred[1:-1]
 
                 out_raw.write(id + '\t' + input + '\t' + gold + '\t' + pred)
                 out_raw.write('\n')
