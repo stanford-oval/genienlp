@@ -1,0 +1,25 @@
+#torch==0.4.1
+
+# Revtok
+-e git+https://github.com/jekbradbury/revtok.git#egg=revtok
+
+# torchtext requirements
+tqdm 
+nltk==3.2.5
+
+# tensorboard
+tensorboardX
+python-dateutil
+
+# additional python packages
+ujson
+-e git+git://github.com/andersjo/pyrouge.git#egg=pyrouge
+sacrebleu
+
+# WikISQL evaluation
+records
+babel
+tabulate
+
+-e git+git://github.com/salesforce/cove.git#egg=cove
+allennlp
