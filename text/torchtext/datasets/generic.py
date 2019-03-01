@@ -205,54 +205,86 @@ def split_tokenize(x):
     return x.split()
 
 
-class Almond(TranslationDataset, CQA):
-    """The Almond translation task"""
+class Almond(CQA):
+    """The Almond semantic parsing task"""
 
     base_url = None
     name = 'almond'
-    base_dirname = '{}-{}'
-
+    
+    def __init__(self, path, field, reverse_task=False, subsample=None, **kwargs):
+        fields = [(x, field) for x in self.fields]
+        cached_path = kwargs.pop('cached_path')
+        print(cached_path)
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
+        
+        # the question is irrelevant, so the question says English and ThingTalk even if we're doing
+        # a different language (like Chinese)
+        if reverse_task:
+            question = 'Translate from ThingTalk to English'
+        else:
+            question = 'Translate from English to ThingTalk'
+        
+        skip_cache_bool = kwargs.pop('skip_cache_bool')
+        if os.path.exists(cache_name) and not skip_cache_bool:
+            print(f'Loading cached data from {cache_name}')
+            examples = torch.load(cache_name)
+        else:
+            examples = []
+            with open(path, 'r') as fp:
+                for line in fp:
+                    _id, sentence, target_code = line.strip().split('\t')
+                    if reverse_task:
+                        context = target_code
+                        answer = sentence
+                    else:
+                        context = sentence
+                        answer = target_code
+                    
+                    context_question = get_context_question(context, question) 
+                    examples.append(data.Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=split_tokenize))
+                    if subsample is not None and len(examples) >= subsample:
+                        break
+            os.makedirs(os.path.dirname(cache_name), exist_ok=True)
+            print(f'Caching data to {cache_name}')
+            torch.save(examples, cache_name)
+        
+        super().__init__(examples, fields, **kwargs)
+    
+    @staticmethod
+    def sort_key(ex):
+        return data.interleave_keys(len(ex.context), len(ex.answer))
+    
     @classmethod
-    def splits(cls, exts, fields, root='.data',
+    def splits(cls, fields, root='.data',
                train='train', validation='eval',
-               test='test', **kwargs):
+               test='test', reverse_task=False, **kwargs):
 
         """Create dataset objects for splits of the ThingTalk dataset.
         Arguments:
             root: Root dataset storage directory. Default is '.data'.
-            exts: A tuple containing the extension to path for each language.
             fields: A tuple containing the fields that will be used for data
                 in each language.
             train: The prefix of the train data. Default: 'train'.
-            validation: The prefix of the validation data. Default: 'val'.
+            validation: The prefix of the validation data. Default: 'eval'.
             test: The prefix of the test data. Default: 'test'.
             Remaining keyword arguments: Passed to the splits method of
                 Dataset.
         """
-        cls.dirname = cls.base_dirname.format(exts[0][1:], exts[1][1:])
-        check = os.path.join(root, cls.name, cls.dirname)
-
-        path = check
-
-        if train is not None:
-            train = '.'.join([train, cls.dirname])
-        if validation is not None:
-            validation = '.'.join([validation, cls.dirname])
-        if test is not None:
-            test = '.'.join([test, cls.dirname])
+        path = os.path.join(root, cls.name)
 
         train_data = None if train is None else cls(
-            os.path.join(path, train), exts, fields, tokenize=split_tokenize, **kwargs)
+            os.path.join(path, train + '.tsv'), fields, reverse_task=reverse_task, **kwargs)
         val_data = None if validation is None else cls(
-            os.path.join(path, validation), exts, fields, tokenize=split_tokenize, **kwargs)
+            os.path.join(path, validation + '.tsv'), fields, reverse_task=reverse_task, **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, test), exts, fields, tokenize=split_tokenize, **kwargs)
+            os.path.join(path, test + '.tsv'), fields, reverse_task=reverse_task, **kwargs)
         return tuple(d for d in (train_data, val_data, test_data)
                      if d is not None)
 
     @staticmethod
     def clean(path):
         pass
+
 
 class SQuAD(CQA, data.Dataset):
 

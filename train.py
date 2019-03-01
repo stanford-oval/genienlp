@@ -146,7 +146,7 @@ def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, wri
 
 
 def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_size=1, 
-    log_every=10, val_every=100, save_every=1000, rounds=False, val_iters=[], writer=None, start_iteration=1, rnd=1):
+    log_every=10, val_every=100, save_every=1000, rounds=False, val_iters=[], writer=None, start_iteration=1, rnd=1, best_decascore=None):
     """main training function"""
 
     logger = log(rank) 
@@ -156,8 +156,8 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
     local_train_metric_dict = {}
 
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
+    
     while True:
-
         # For some number of rounds, we 'jump start' some subset of the tasks
         # by training them and not others
         # once the specified number of rounds is completed, 
@@ -169,7 +169,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
             train_iterations = train_iter_deep
 
         for task_idx, (task, train_iter) in enumerate(train_iters):
-            task_best_metrics = {}
+
             task_iterations = train_iterations[task_idx] if train_iterations is not None else None
             if task_iterations == 0:
                 continue
@@ -180,15 +180,18 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                     round_progress = f'round_{rnd}:' if rounds else ''
     
                     # validate
+                    
+                    deca_score = None
                     if (val_every is not None and 
                         ((iteration % args.val_every == 0 % args.val_every) or 
                             (args.load and iteration == start_iteration + 1))):
-                        train_task_val_metric = None
+                        
+                        deca_score = 0
                         for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
                             val_loss, metric_dict = validate(val_task, val_iter, model, logger, field, world_size, rank, iteration, num_print=args.num_print, args=args)
                             if val_loss is not None:
                                 log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}val_{val_task}:val_loss{val_loss.item():.4f}:'
-                                writer.add_scalars(f'loss/val', {val_task: val_loss.item()}, iteration)
+                                writer.add_scalar(f'loss/{val_task}/val', val_loss.item(), iteration)
                             else:
                                 log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}val_{val_task}:'
                                
@@ -197,27 +200,42 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                                 metric_entry += f'{metric_key}_{metric_value:.2f}:'
                             metric_entry = metric_entry[:-1]
                            
+                            deca_score += metric_dict[args.task_to_metric[val_task]]
+                           
                             # val log
                             logger.info(log_entry + metric_entry)
                             if writer is not None:
                                 for metric_key, metric_value in metric_dict.items():
-                                    writer.add_scalars(f'val/{metric_key}', {val_task: metric_value}, iteration)
-                                    writer.add_scalars(f'{metric_key}/val', {val_task: metric_value}, iteration)
-                                    writer.add_scalars(f'{metric_key}/{val_task}', {'val': metric_value}, iteration)
-                                    writer.add_scalars(f'{val_task}/{metric_key}', {'val': metric_value}, iteration)
-                                    writer.add_scalars(f'{val_task}/val', {f'{metric_key}': metric_value}, iteration)
+                                    writer.add_scalar(f'{metric_key}/{val_task}/val', metric_value, iteration)
+                                    writer.add_scalar(f'{val_task}/{metric_key}/val', metric_value, iteration)
+                        writer.add_scalar('deca/val', deca_score, iteration)
+                        logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}val_deca:deca_{deca_score:.2f}')
 
                     # saving
                     if save_every is not None and (iteration % args.save_every == 0 % args.save_every):
+                        
                         if world_size > 1:
                             torch.distributed.barrier() 
                         if rank is not None and rank == 0:
-                            torch.save({'model_state_dict': {k: v.cpu() for k, v in model.state_dict().items()}, 'field': field}, os.path.join(args.log_dir, f'iteration_{iteration}.pth'))
+                            should_save_best = False
+                            if deca_score is not None and (best_decascore is None or best_decascore < deca_score):
+                                best_decascore = deca_score
+                                should_save_best = True
+                                
+                            save_state_dict = {'model_state_dict': {k: v.cpu() for k, v in model.state_dict().items()}, 'field': field,
+                                               'best_decascore': best_decascore}
+                            
+                            torch.save(save_state_dict, os.path.join(args.log_dir, f'iteration_{iteration}.pth'))
+                            if should_save_best:
+                                logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}found new best model')
+                                torch.save(save_state_dict, os.path.join(args.log_dir, 'best.pth'))
+                            
+                            
                         if world_size > 1:
                             torch.distributed.barrier() 
-                        torch.save(opt.state_dict(), os.path.join(args.log_dir, f'iteration_{iteration}_rank_{rank}_optim.pth'))
-                        if world_size > 1:
+                            torch.save(opt.state_dict(), os.path.join(args.log_dir, f'iteration_{iteration}_rank_{rank}_optim.pth'))
                             torch.distributed.barrier() 
+                        
 
                     # lr update
                     lr = opt.param_groups[0]['lr'] 
@@ -256,13 +274,10 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                         len_answers = 0  
     
                         if writer is not None:
-                            writer.add_scalars(f'loss/train', {f'{task}': local_loss}, iteration)
+                            writer.add_scalar(f'loss/{task}/train', local_loss, iteration)
                             for metric_key, metric_value in local_train_metric_dict.items():
-                                writer.add_scalars(f'train/{metric_key}', {task: metric_value}, iteration)
-                                writer.add_scalars(f'{metric_key}/train', {task: metric_value}, iteration)
-                                writer.add_scalars(f'{metric_key}/{task}', {'train': metric_value}, iteration)
-                                writer.add_scalars(f'{task}/{metric_key}', {'train': metric_value}, iteration)
-                                writer.add_scalars(f'{task}/train', {f'{metric_key}': metric_value}, iteration)
+                                writer.add_scalar(f'{metric_key}/{task}/train', metric_value, iteration)
+                                writer.add_scalar(f'{task}/{metric_key}/train', metric_value, iteration)
 
 
                         local_loss = 0
@@ -317,7 +332,8 @@ def run(args, run_args, rank=0, world_size=1):
     train(args, model, opt, train_iters, args.train_iterations, field, val_iters=val_iters, 
         rank=rank, world_size=world_size, 
         log_every=args.log_every, val_every=args.val_every, rounds=len(train_iters)>1,
-        writer=writer if rank==0 else None, save_every=args.save_every, start_iteration=start_iteration)
+        writer=writer if rank==0 else None, save_every=args.save_every, start_iteration=start_iteration,
+        best_decascore=save_dict.get('best_decascore') if save_dict is not None else None)
 
 
 def init_model(args, field, logger, world_size, device):

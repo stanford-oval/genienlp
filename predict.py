@@ -216,7 +216,7 @@ def get_args():
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--data', default='./decaNLP/.data/', type=str, help='where to load data from.')
     parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
-    parser.add_argument('--checkpoint_name')
+    parser.add_argument('--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--bleu', action='store_true', help='whether to use the bleu metric (always on for iwslt)')
     parser.add_argument('--rouge', action='store_true', help='whether to use the bleu metric (always on for cnn, dailymail, and cnn_dailymail)')
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
@@ -263,61 +263,8 @@ def get_args():
         'schema': 'em'
     }
 
-    args.best_checkpoint = None
-    if not args.checkpoint_name is None:
-        args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
-    else:
-        assert os.path.exists(os.path.join(args.path, 'process_0.log'))
-
-        ignore_list = []
-        for _ in range(20):
-
-            best_it = get_best(args, ignore_list)
-            args.best_checkpoint = os.path.join(args.path, f'iteration_{int(best_it)}.pth')
-            if os.path.exists(args.best_checkpoint):
-                break
-            else:
-                ignore_list.append(best_it)
-
-        if not args.best_checkpoint:
-            print('Best model is not among the first 20 saved checkpoints.')
-            print('please specify the model you want to evaluate using --checkpoint_name')
-            raise ValueError()
-
+    args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
     return args
-
-
-def get_best(args, ignore_list):
-    with open(os.path.join(args.path, 'config.json')) as f:
-        save_every = json.load(f)['save_every']
-
-    with open(os.path.join(args.path, 'process_0.log')) as f:
-        lines = f.readlines()
-
-    best_score = 0
-    best_it = 10
-    deca_scores = {}
-    for l in lines:
-        if 'val' in l:
-            try:
-                task = l.split('val_')[1].split(':')[0]
-            except Exception as e:
-                print(e)
-                continue
-            it = int(l.split('iteration_')[1].split(':')[0])
-            metric = args.task_to_metric[task]
-            score = float(l.split(metric+'_')[1].split(':')[0])
-            if it in deca_scores:
-                deca_scores[it]['deca'] += score
-                deca_scores[it][metric] = score
-            else:
-                deca_scores[it] = {'deca': score, metric: score}
-            if deca_scores[it]['deca'] > best_score and it not in ignore_list:
-                best_score = deca_scores[it]['deca']
-                best_it = it
-    print(f'best model according to deca score: {best_it}')
-    print(f'best model score: {best_score}')
-    return best_it
 
 
 if __name__ == '__main__':
