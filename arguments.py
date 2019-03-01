@@ -104,6 +104,20 @@ def parse():
         for t in args.train_tasks:
             if t not in args.val_tasks:
                 args.val_tasks.append(t)
+    
+    args.task_to_metric = {
+        'cnn_dailymail': 'avg_rouge',
+        'iwslt.en.de': 'bleu',
+        'multinli.in.out': 'em',
+        'squad': 'nf1',
+        'srl': 'nf1',
+        'almond': 'bleu' if args.reverse_task_bool else 'em',
+        'sst': 'em',
+        'wikisql': 'lfem',
+        'woz.en': 'joint_goal_em',
+        'zre': 'corpus_f1',
+        'schema': 'em'
+    }
 
     if 'imdb' in args.val_tasks:
         args.val_tasks.remove('imdb')
