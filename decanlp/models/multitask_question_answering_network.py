@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2018, Salesforce, Inc.
+#                     The Board of Trustees of the Leland Stanford Junior University
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
