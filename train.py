@@ -188,7 +188,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                             val_loss, metric_dict = validate(val_task, val_iter, model, logger, field, world_size, rank, iteration, num_print=args.num_print, args=args)
                             if val_loss is not None:
                                 log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}val_{val_task}:val_loss{val_loss.item():.4f}:'
-                                writer.add_scalars(f'loss/val', {val_task: val_loss.item()}, iteration)
+                                writer.add_scalar(f'loss/val/{val_task}', val_loss.item(), iteration)
                             else:
                                 log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}val_{val_task}:'
                                
@@ -201,11 +201,11 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                             logger.info(log_entry + metric_entry)
                             if writer is not None:
                                 for metric_key, metric_value in metric_dict.items():
-                                    writer.add_scalars(f'val/{metric_key}', {val_task: metric_value}, iteration)
-                                    writer.add_scalars(f'{metric_key}/val', {val_task: metric_value}, iteration)
-                                    writer.add_scalars(f'{metric_key}/{val_task}', {'val': metric_value}, iteration)
-                                    writer.add_scalars(f'{val_task}/{metric_key}', {'val': metric_value}, iteration)
-                                    writer.add_scalars(f'{val_task}/val', {f'{metric_key}': metric_value}, iteration)
+                                    writer.add_scalar(f'val/{metric_key}/{val_task}', metric_value, iteration)
+                                    writer.add_scalar(f'{metric_key}/val/{val_task}', metric_value, iteration)
+                                    writer.add_scalar(f'{metric_key}/{val_task}/val', metric_value, iteration)
+                                    writer.add_scalar(f'{val_task}/{metric_key}/val', metric_value, iteration)
+                                    writer.add_scalar(f'{val_task}/val/{metric_key}', metric_value, iteration)
 
                     # saving
                     if save_every is not None and (iteration % args.save_every == 0 % args.save_every):
@@ -256,13 +256,13 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                         len_answers = 0  
     
                         if writer is not None:
-                            writer.add_scalars(f'loss/train', {f'{task}': local_loss}, iteration)
+                            writer.add_scalar(f'loss/train/{task}', local_loss, iteration)
                             for metric_key, metric_value in local_train_metric_dict.items():
-                                writer.add_scalars(f'train/{metric_key}', {task: metric_value}, iteration)
-                                writer.add_scalars(f'{metric_key}/train', {task: metric_value}, iteration)
-                                writer.add_scalars(f'{metric_key}/{task}', {'train': metric_value}, iteration)
-                                writer.add_scalars(f'{task}/{metric_key}', {'train': metric_value}, iteration)
-                                writer.add_scalars(f'{task}/train', {f'{metric_key}': metric_value}, iteration)
+                                writer.add_scalar(f'train/{metric_key}/{task}', metric_value, iteration)
+                                writer.add_scalar(f'{metric_key}/train/{task}', metric_value, iteration)
+                                writer.add_scalar(f'{metric_key}/{task}/train', metric_value, iteration)
+                                writer.add_scalar(f'{task}/{metric_key}/train', metric_value, iteration)
+                                writer.add_scalar(f'{task}/train/{metric_key}', metric_value, iteration)
 
 
                         local_loss = 0
