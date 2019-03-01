@@ -1,6 +1,6 @@
 from subprocess import Popen, PIPE, CalledProcessError
 import json
-from .text.torchtext.datasets.generic import Query
+from .utils.generic_dataset import Query
 import logging
 import os
 import re

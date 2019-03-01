@@ -1,6 +1,5 @@
 import os
 import re
-import zipfile
 import revtok
 import torch
 import io
@@ -11,12 +10,10 @@ import hashlib
 import unicodedata
 
 
-from . import sst
-from . import imdb
-from . import snli
-from . import translation
+from ..text.torchtext.datasets import imdb
+from ..text.torchtext.datasets import translation
 
-from .. import data
+from ..text.torchtext import data
 
 
 CONTEXT_SPECIAL = 'Context:'

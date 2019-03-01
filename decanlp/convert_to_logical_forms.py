@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from decanlp.text.torchtext.datasets.generic import Query
+from .util.generic_dataset import Query
 from argparse import ArgumentParser
 import os
 import re

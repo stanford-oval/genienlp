@@ -15,7 +15,7 @@ from . import models
 
 from .text import torchtext
 from .text.torchtext.data import Example
-from .text.torchtext.datasets.generic import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
+from .utils.generic_dataset import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import os
-from .text.torchtext.datasets.generic import Query
+from .utils.generic_dataset import Query
 from .text import torchtext
 from argparse import ArgumentParser
 import ujson as json
