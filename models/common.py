@@ -7,7 +7,6 @@ import os
 import sys
 import numpy as np
 import torch.nn as nn
-import tensorflow
 
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
 from torch.nn.utils.rnn import pack_padded_sequence as pack
