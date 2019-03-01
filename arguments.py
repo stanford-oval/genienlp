@@ -29,7 +29,6 @@ def parse():
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument('--save', default='results', type=str, help='where to save results.')
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
-    parser.add_argument('--name', default='', type=str, help='name of the experiment; if blank, a name is automatically generated from the arguments')
     parser.add_argument('--cached', default='', type=str, help='where to save cached files')
 
     parser.add_argument('--train_tasks', nargs='+', type=str, help='tasks to use for training', required=True)
@@ -132,12 +131,8 @@ def parse():
     train_out = f'{",".join(args.train_tasks)}'
     if len(args.train_tasks) > 1:
         train_out += f'{"-".join([str(x) for x in args.train_iterations])}'
-    args.log_dir = os.path.join(args.save, args.timestamp,
-        f'{train_out}{(",val=" + ",".join(args.val_tasks)) if args.val_tasks != args.train_tasks else ""},{args.model},' \
-        f'{args.world_size}g',
-        args.commit[:7])
-    if len(args.name) > 0:
-        args.log_dir = os.path.join(args.save, args.name)
+
+    args.log_dir = args.save
     args.dist_sync_file = os.path.join(args.log_dir, 'distributed_sync_file')
     
     for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
