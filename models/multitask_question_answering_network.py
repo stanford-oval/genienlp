@@ -169,7 +169,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 batch_size = targets.size(0)
                 reference_lengths = [l-1 for l in answer_lengths]
                 translation_len = max(reference_lengths)
-                translation_lengths = torch.Tensor([translation_len] * batch_size, device=self.device)
+                translation_lengths = torch.tensor([translation_len] * batch_size, device=self.device)
 
                 bleu_loss_smoothed = expectedMultiBleu.bleu(probs, targets, translation_lengths, reference_lengths, max_order=max_order, smooth=True)
                 loss = -1 * bleu_loss_smoothed[0]

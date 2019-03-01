@@ -613,6 +613,7 @@ class WikiSQL(CQA, data.Dataset):
             lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
         fields.append(('wikisql_id', FIELD))
 
+        cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', 'query_as_question' if query_as_question else 'query_as_context', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
