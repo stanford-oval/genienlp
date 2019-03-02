@@ -120,7 +120,9 @@ class Server():
             predictions = self.field.reverse(prediction_batch, detokenize=lambda x: ' '.join(x))
         else:
             predictions = self.field.reverse(prediction_batch)
-        return json.dumps(dict(id=request['id'], answer=predictions[0])) + '\n'
+        
+        response = json.dumps(dict(id=request['id'], answer=predictions[0]))
+        return response + '\n'
 
     async def handle_client(self, client_reader, client_writer):
         try:
@@ -148,9 +150,15 @@ class Server():
         loop.close()
     
     def _run_stdin(self):
-        for line in sys.stdin:
-            sys.stdout.write(self.handle_request(line))
-            sys.stdout.flush()
+        try:
+            while True:
+                line = sys.stdin.readline()
+                if not line:
+                    break
+                sys.stdout.write(self.handle_request(line))
+                sys.stdout.flush()
+        except KeyboardInterrupt:
+            pass
 
     def run(self):
         def mult(ps):
