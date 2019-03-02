@@ -96,34 +96,38 @@ class Server():
         processed.oov_to_limited_idx = self._oov_to_limited_idx
         processed.limited_idx_to_full_idx = self._limited_idx_to_full_idx
         return processed
+    
+    def handle_request(self, line):
+        request = json.loads(line)
+        task = request['task'] if 'task' in request else 'generic'
+        
+        context = request['context']
+        question = request['question']
+        answer = ''
+        if task == 'almond':
+            tokenize = split_tokenize
+        else:
+            tokenize = None
+    
+        context_question = get_context_question(context, question)
+        fields = [(x, self.field) for x in CQA.fields]
+        ex = Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=tokenize)
+        
+        batch = self.numericalize_example(ex)
+        _, prediction_batch = self.model(batch, iteration=0)
+        
+        if task == 'almond':
+            predictions = self.field.reverse(prediction_batch, detokenize=lambda x: ' '.join(x))
+        else:
+            predictions = self.field.reverse(prediction_batch)
+        return json.dumps(dict(id=request['id'], answer=predictions[0])) + '\n'
 
     async def handle_client(self, client_reader, client_writer):
         try:
-            request = json.loads(await client_reader.readline())
-            
-            task = request['task'] if 'task' in request else 'generic'
-            
-            context = request['context']
-            question = request['question']
-            answer = ''
-            if task == 'almond':
-                tokenize = split_tokenize
-            else:
-                tokenize = None
-        
-            context_question = get_context_question(context, question)
-            fields = [(x, self.field) for x in CQA.fields]
-            ex = Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=tokenize)
-            
-            batch = self.numericalize_example(ex)
-            _, prediction_batch = self.model(batch, iteration=0)
-            
-            if task == 'almond':
-                predictions = self.field.reverse(prediction_batch, detokenize=lambda x: ' '.join(x))
-            else:
-                predictions = self.field.reverse(prediction_batch)
-                
-            client_writer.write((json.dumps(dict(id=request['id'], answer=predictions[0])) + '\n').encode('utf-8'))
+            line = await client_reader.readline()
+            while line:
+                client_writer.write(self.handle_request(line).encode('utf-8'))
+                line = await client_reader.readline()
     
         except IOError:
             logger.info('Connection to client_reader closed')
@@ -131,6 +135,21 @@ class Server():
                 client_writer.close()
             except IOError:
                 pass
+
+    def _run_tcp(self):
+        loop = asyncio.get_event_loop()
+        server = loop.run_until_complete(asyncio.start_server(self.handle_client, port=self.args.port))
+        try:
+            loop.run_forever()
+        except KeyboardInterrupt:
+            pass
+        server.close()
+        loop.run_until_complete(server.wait_closed())
+        loop.close()
+    
+    def _run_stdin(self):
+        for line in sys.stdin:
+            sys.stdout.write(self.handle_request(line))
 
     def run(self):
         def mult(ps):
@@ -148,15 +167,10 @@ class Server():
     
         self.model.eval()
         with torch.no_grad():
-            loop = asyncio.get_event_loop()
-            server = loop.run_until_complete(asyncio.start_server(self.handle_client, port=self.args.port))
-            try:
-                loop.run_forever()
-            except KeyboardInterrupt:
-                pass
-            server.close()
-            loop.run_until_complete(server.wait_closed())
-            loop.close()
+            if self.args.stdin:
+                self._run_stdin()
+            else:
+                self._run_tcp()
 
 
 def get_args(argv):
@@ -167,6 +181,7 @@ def get_args(argv):
     parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
+    parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
 
     args = parser.parse_args(argv[1:])
 
