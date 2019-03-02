@@ -11,8 +11,6 @@ SRCDIR=`dirname $0`
 #wget --no-verbose http://nlp.stanford.edu/data/glove.840B.300d.zip ; unzip glove.840B.300d.zip ; mv glove.840B.300d.zip embeddings/ ; rm glove.42B.300d.zip
 #wget --no-verbose http://www.logos.t.u-tokyo.ac.jp/~hassy/publications/arxiv2016jmt/jmt_pre-trained_embeddings.tar.gz ; tar -xzvf jmt_pre-trained_embeddings.tar.gz; mv jmt_pre-trained_embeddings embeddings/; rm jmt_pre-trained_embeddings.tar.gz
 
-
-
     TMPDIR=`pwd`
     workdir=`mktemp -d $TMPDIR/decaNLP-tests-XXXXXX`
 
