@@ -150,6 +150,7 @@ class Server():
     def _run_stdin(self):
         for line in sys.stdin:
             sys.stdout.write(self.handle_request(line))
+            sys.stdout.flush()
 
     def run(self):
         def mult(ps):
