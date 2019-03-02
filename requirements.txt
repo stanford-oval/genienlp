@@ -1,4 +1,5 @@
-#torch==0.4.1
+numpy
+torch==0.4.1
 
 # Revtok
 -e git+https://github.com/jekbradbury/revtok.git#egg=revtok
