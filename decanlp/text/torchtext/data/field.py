@@ -383,8 +383,6 @@ class ReversibleField(Field):
             self.use_revtok = True
         if kwargs.get('tokenize') is None:
             kwargs['tokenize'] = 'revtok'
-        if 'unk_token' not in kwargs:
-            kwargs['unk_token'] = ' UNK '
         if self.use_revtok:
             try:
                 import revtok
