@@ -40,11 +40,11 @@ subcommands = {
 }
 
 def usage():
-    print('Usage: %s SUBCOMMAND [OPTIONS]' % (sys.argv[0]))
-    print()
-    print('Available subcommands:')
+    print('Usage: %s SUBCOMMAND [OPTIONS]' % (sys.argv[0]), file=sys.stderr)
+    print(file=sys.stderr)
+    print('Available subcommands:', file=sys.stderr)
     for subcommand,(help_text,_) in subcommands.items():
-        print('  %s - %s' % (subcommand, help_text))
+        print('  %s - %s' % (subcommand, help_text), file=sys.stderr)
     sys.exit(1)
 
 def main():

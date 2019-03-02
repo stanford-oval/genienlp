@@ -34,8 +34,11 @@ import os
 import torch
 import random
 import numpy as np
+import logging
 
 from .utils import generic_dataset
+
+logger = logging.getLogger(__name__)
 
 def tokenizer(s):
     return s.split()
@@ -109,7 +112,7 @@ def set_seed(args, rank=None):
         ordinal = args.devices[rank] 
     device = torch.device(f'cuda:{ordinal}' if ordinal > -1 else 'cpu')
     # device = torch.device(f'cuda:{ordinal}' if ordinal > -1 else 'cpu')
-    print(f'device: {device}')
+    logger.debug(f'device: {device}')
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)

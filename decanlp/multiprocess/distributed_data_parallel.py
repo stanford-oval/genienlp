@@ -31,6 +31,9 @@ import torch
 from torch._utils import _flatten_dense_tensors, _unflatten_dense_tensors
 import torch.distributed as dist
 from torch.nn.modules import Module
+import logging
+
+logger = logging.getLogger(__name__)
 
 class DistributedDataParallel(Module):
 
@@ -56,8 +59,8 @@ class DistributedDataParallel(Module):
                         buckets[tp].append(param)
                 if self.warn_on_half:
                     if torch.cuda.HalfTensor in buckets:
-                        print("WARNING: gloo dist backend for half parameters may be extremely slow." +
-                              " It is recommended to use the NCCL backend in this case.")
+                        logger.warning("gloo dist backend for half parameters may be extremely slow." +
+                                       " It is recommended to use the NCCL backend in this case.")
                         self.warn_on_half = False
 
                 for tp in buckets:

@@ -57,7 +57,6 @@ from .multiprocess import Multiprocess, DistributedDataParallel
 from .metrics import compute_metrics
 from .util import elapsed_time, get_splits, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
 
-
 def initialize_logger(args, rank='main'):
     # set up file logger
     logger = logging.getLogger(f'process_{rank}')
@@ -114,7 +113,7 @@ def prepare_data(args, field, logger):
 
     for task, s in zip(args.train_tasks, train_sets):
         for ex in s.examples[:10]:
-            print('examples***:', [token.strip() for token in ex.context])
+            logger.debug('examples***:', [token.strip() for token in ex.context])
 
     if args.load is None:
         logger.info(f'Getting pretrained word vectors')
@@ -131,8 +130,8 @@ def prepare_data(args, field, logger):
     FIELD.vocab_to_decoder = {idx: FIELD.decoder_stoi[word] for idx, word in enumerate(FIELD.vocab.itos) if word in FIELD.decoder_stoi}
 
     logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens')
-    logger.info(f'The first 500 tokens:')
-    print(FIELD.vocab.itos[:500])
+    logger.debug(f'The first 500 tokens:')
+    logger.debug(FIELD.vocab.itos[:500])
 
     logger.info('Preprocessing training data')
     preprocess_examples(args, args.train_tasks, train_sets, FIELD, logger, train=True) 

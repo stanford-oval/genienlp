@@ -37,16 +37,19 @@ import torch
 import numpy as np
 import random
 import sys
+import logging
 from pprint import pformat
 
 from .util import get_splits, set_seed, preprocess_examples
 from .metrics import compute_metrics
 from . import models
 
+logger = logging.getLogger(__name__)
+
 def get_all_splits(args, new_vocab):
     splits = []
     for task in args.tasks:
-        print(f'Loading {task}')
+        logger.info(f'Loading {task}')
         kwargs = {}
         if not 'train' in args.evaluate:
             kwargs['train'] = None
@@ -64,10 +67,10 @@ def prepare_data(args, FIELD):
     new_vocab = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     splits = get_all_splits(args, new_vocab)
     new_vocab.build_vocab(*splits)
-    print(f'Vocabulary has {len(FIELD.vocab)} tokens from training')
+    logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens from training')
     args.max_generative_vocab = min(len(FIELD.vocab), args.max_generative_vocab)
     FIELD.append_vocab(new_vocab)
-    print(f'Vocabulary has expanded to {len(FIELD.vocab)} tokens')
+    logger.info(f'Vocabulary has expanded to {len(FIELD.vocab)} tokens')
 
     char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
     glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
@@ -92,7 +95,7 @@ def to_iter(data, bs, device):
 
 def run(args, field, val_sets, model):
     device = set_seed(args)
-    print(f'Preparing iterators')
+    logger.info(f'Preparing iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
     iters = [(name, to_iter(x, bs, device)) for name, x, bs in zip(args.tasks, val_sets, args.val_batch_size)]
@@ -107,14 +110,14 @@ def run(args, field, val_sets, model):
         return r
     params = list(filter(lambda p: p.requires_grad, model.parameters()))
     num_param = mult(params)
-    print(f'{args.model} has {num_param:,} parameters')
+    logger.info(f'{args.model} has {num_param:,} parameters')
     model.to(device)
 
     decaScore = []
     model.eval()
     with torch.no_grad():
         for task, it in iters:
-            print(task)
+            logger.info(task)
             if args.eval_dir:
                 prediction_file_name = os.path.join(args.eval_dir, os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.txt'))
                 answer_file_name = os.path.join(args.eval_dir, os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.gold.txt'))
@@ -126,22 +129,22 @@ def run(args, field, val_sets, model):
             if 'sql' in task or 'squad' in task:
                 ids_file_name = answer_file_name.replace('gold', 'ids')
             if os.path.exists(prediction_file_name):
-                print('** ', prediction_file_name, ' already exists -- this is where predictions are stored **')
+                logger.warning('** ', prediction_file_name, ' already exists -- this is where predictions are stored **')
                 if args.overwrite:
-                    print('**** overwriting ', prediction_file_name, ' ****')
+                    logger.warning('**** overwriting ', prediction_file_name, ' ****')
             if os.path.exists(answer_file_name):
-                print('** ', answer_file_name, ' already exists -- this is where ground truth answers are stored **')
+                logger.warning('** ', answer_file_name, ' already exists -- this is where ground truth answers are stored **')
                 if args.overwrite:
-                    print('**** overwriting ', answer_file_name, ' ****')
+                    logger.warning('**** overwriting ', answer_file_name, ' ****')
             if os.path.exists(results_file_name):
-                print('** ', results_file_name, ' already exists -- this is where metrics are stored **')
+                logger.warning('** ', results_file_name, ' already exists -- this is where metrics are stored **')
                 if args.overwrite:
-                    print('**** overwriting ', results_file_name, ' ****')
+                    logger.warning('**** overwriting ', results_file_name, ' ****')
                 else:
                     with open(results_file_name) as results_file:
                         if not args.silent:
                             for l in results_file:
-                                print(l)
+                                logger.debug(l)
                         metrics = json.loads(results_file.readlines()[0])
                         decaScore.append(metrics[args.task_to_metric[task]])
                     continue
@@ -225,16 +228,16 @@ def run(args, field, val_sets, model):
     
                 if not args.silent:
                     for i, (p, a) in enumerate(zip(predictions, answers)):
-                        print(f'Prediction {i+1}: {p}\nAnswer {i+1}: {a}\n')
-                    print(metrics)
+                        logger.info(f'Prediction {i+1}: {p}\nAnswer {i+1}: {a}\n')
+                    logger.info(metrics)
                 decaScore.append(metrics[args.task_to_metric[task]])
 
-    print(f'Evaluated Tasks:\n')
+    logger.info(f'Evaluated Tasks:\n')
     for i, (task, _) in enumerate(iters):
-        print(f'{task}: {decaScore[i]}')
-    print(f'-------------------')
-    print(f'DecaScore:  {sum(decaScore)}\n')
-    print(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
+        logger.info(f'{task}: {decaScore[i]}')
+    logger.info(f'-------------------')
+    logger.info(f'DecaScore:  {sum(decaScore)}\n')
+    logger.info(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
 
 
 def get_args(argv):
@@ -299,14 +302,14 @@ def get_args(argv):
 
 def main(argv=sys.argv):
     args = get_args(argv)
-    print(f'Arguments:\n{pformat(vars(args))}')
+    logger.info(f'Arguments:\n{pformat(vars(args))}')
 
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    print(f'Loading from {args.best_checkpoint}')
+    logger.info(f'Loading from {args.best_checkpoint}')
 
     if torch.cuda.is_available():
         save_dict = torch.load(args.best_checkpoint)
@@ -314,7 +317,7 @@ def main(argv=sys.argv):
         save_dict = torch.load(args.best_checkpoint, map_location='cpu')
 
     field = save_dict['field']
-    print(f'Initializing Model')
+    logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
     model = Model(field, args)
     model_dict = save_dict['model_state_dict']

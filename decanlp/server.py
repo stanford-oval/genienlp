@@ -66,7 +66,7 @@ class Server():
         self.model = model
 
     def prepare_data(self):
-        print(f'Vocabulary has {len(self.field.vocab)} tokens from training')
+        logger.info(f'Vocabulary has {len(self.field.vocab)} tokens from training')
 
         char_vectors = torchtext.vocab.CharNGram(cache=self.args.embeddings)
         glove_vectors = torchtext.vocab.GloVe(cache=self.args.embeddings)
@@ -162,7 +162,7 @@ class Server():
             return r
         params = list(filter(lambda p: p.requires_grad, self.model.parameters()))
         num_param = mult(params)
-        print(f'{self.args.model} has {num_param:,} parameters')
+        logger.info(f'{self.args.model} has {num_param:,} parameters')
         self.model.to(self.device)
     
         self.model.eval()
@@ -226,14 +226,14 @@ def get_args(argv):
 
 def main(argv=sys.argv):
     args = get_args(argv)
-    print(f'Arguments:\n{pformat(vars(args))}')
+    logger.info(f'Arguments:\n{pformat(vars(args))}')
 
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    print(f'Loading from {args.best_checkpoint}')
+    logger.info(f'Loading from {args.best_checkpoint}')
 
     if torch.cuda.is_available():
         save_dict = torch.load(args.best_checkpoint)
@@ -241,7 +241,7 @@ def main(argv=sys.argv):
         save_dict = torch.load(args.best_checkpoint, map_location='cpu')
 
     field = save_dict['field']
-    print(f'Initializing Model')
+    logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
     model = Model(field, args)
     model_dict = save_dict['model_state_dict']

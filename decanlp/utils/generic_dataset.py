@@ -38,7 +38,7 @@ import json
 import glob
 import hashlib
 import unicodedata
-
+import logging
 
 from ..text.torchtext.datasets import imdb
 from ..text.torchtext.datasets import translation
@@ -49,6 +49,7 @@ from ..text.torchtext import data
 CONTEXT_SPECIAL = 'Context:'
 QUESTION_SPECIAL = 'Question:'
 
+logger = logging.getLogger(__name__)
 
 def get_context_question(context, question):
     return CONTEXT_SPECIAL + ' ' + context + ' ' + QUESTION_SPECIAL + ' ' + question
@@ -79,7 +80,7 @@ class IMDb(CQA, imdb.IMDb):
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
             for label in ['pos', 'neg']:
@@ -92,7 +93,7 @@ class IMDb(CQA, imdb.IMDb):
                     if subsample is not None and len(examples) > subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
         super(imdb.IMDb, self).__init__(examples, fields, **kwargs)
 
@@ -130,7 +131,7 @@ class SST(CQA):
         examples = []
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
             labels = ['negative', 'positive']
@@ -149,7 +150,7 @@ class SST(CQA):
                         break
        
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
         self.examples = examples
@@ -188,12 +189,11 @@ class TranslationDataset(translation.TranslationDataset):
         """
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
-        print(cached_path)
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
             langs = {'.de': 'German', '.en': 'English', '.fr': 'French', '.ar': 'Arabic', '.cs': 'Czech', '.tt': 'ThingTalk'}
@@ -215,7 +215,7 @@ class TranslationDataset(translation.TranslationDataset):
 
 
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
         super(translation.TranslationDataset, self).__init__(examples, fields, **kwargs)
 
@@ -241,7 +241,6 @@ class Almond(CQA):
     def __init__(self, path, field, reverse_task=False, subsample=None, **kwargs):
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
-        print(cached_path)
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
@@ -253,7 +252,7 @@ class Almond(CQA):
         
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
             examples = []
@@ -272,7 +271,7 @@ class Almond(CQA):
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
         
         super().__init__(examples, fields, **kwargs)
@@ -334,7 +333,7 @@ class SQuAD(CQA, data.Dataset):
         examples, all_answers, q_ids = [], [], []
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples, all_answers, q_ids = torch.load(cache_name)
         else:
             with open(os.path.expanduser(path)) as f:
@@ -361,7 +360,6 @@ class SQuAD(CQA, data.Dataset):
                             else:
                                 answer = qa['answers'][0]['text']
                                 all_answers.append([a['text'] for a in qa['answers']])
-                                #print('original: ', answer)
                                 answer_start = qa['answers'][0]['answer_start']
                                 answer_end = answer_start + len(answer) 
                                 context_before_answer = context[:answer_start]
@@ -373,7 +371,6 @@ class SQuAD(CQA, data.Dataset):
                                 ex = data.Example.fromlist([tagged_context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields)
 
                                 tokenized_answer = ex.answer
-                                #print('tokenized: ', tokenized_answer)
                                 for xi, x in enumerate(ex.context):
                                     if BEGIN in x: 
                                         answer_start = xi + 1
@@ -424,7 +421,7 @@ class SQuAD(CQA, data.Dataset):
                         break
 
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers, q_ids), cache_name)
 
 
@@ -494,7 +491,7 @@ class Summarization(CQA, data.Dataset):
         examples = []
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
             with open(os.path.expanduser(path)) as f:
@@ -508,7 +505,7 @@ class Summarization(CQA, data.Dataset):
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
         super(Summarization, self).__init__(examples, fields, **kwargs)
@@ -531,7 +528,7 @@ class Summarization(CQA, data.Dataset):
                             story_file = open(story_file_name)
                         except EnvironmentError as e:
                             missing_stories += 1
-                            print(e)
+                            logger.warning(e)
                             if os.path.exists(split_file_name):
                                 os.remove(split_file_name)
                         else:
@@ -557,9 +554,9 @@ class Summarization(CQA, data.Dataset):
                                 split_file.write(json.dumps(example)+'\n')
                                 collected_stories += 1
                                 if collected_stories % 1000 == 0:
-                                    print(example) 
-            print(f'Missing {missing_stories} stories')
-            print(f'Collected {collected_stories} stories')
+                                    logger.debug(example) 
+            logger.warning(f'Missing {missing_stories} stories')
+            logger.info(f'Collected {collected_stories} stories')
 
 
     @classmethod
@@ -644,7 +641,7 @@ class WikiSQL(CQA, data.Dataset):
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', 'query_as_question' if query_as_question else 'query_as_context', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples, all_answers = torch.load(cache_name)
         else:
 
@@ -681,7 +678,7 @@ class WikiSQL(CQA, data.Dataset):
                         break
 
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers), cache_name)
 
         super(WikiSQL, self).__init__(examples, fields, **kwargs)
@@ -760,7 +757,7 @@ class SRL(CQA, data.Dataset):
         examples, all_answers = [], []
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples, all_answers = torch.load(cache_name)
         else:
             with open(os.path.expanduser(path)) as f:
@@ -777,7 +774,7 @@ class SRL(CQA, data.Dataset):
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers), cache_name)
 
         FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False, 
@@ -914,7 +911,7 @@ class WinogradSchema(CQA, data.Dataset):
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
             examples = []
@@ -928,7 +925,7 @@ class WinogradSchema(CQA, data.Dataset):
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
         super(WinogradSchema, self).__init__(examples, fields, **kwargs)
@@ -1033,7 +1030,7 @@ class WOZ(CQA, data.Dataset):
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), description)
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples, all_answers = torch.load(cache_name)
         else:
             with open(os.path.expanduser(path)) as f:
@@ -1049,7 +1046,7 @@ class WOZ(CQA, data.Dataset):
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers), cache_name)
 
         super(WOZ, self).__init__(examples, fields, **kwargs)
@@ -1150,7 +1147,7 @@ class MultiNLI(CQA, data.Dataset):
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), description)
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
             examples = []
@@ -1165,7 +1162,7 @@ class MultiNLI(CQA, data.Dataset):
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
         super(MultiNLI, self).__init__(examples, fields, **kwargs)
@@ -1231,7 +1228,7 @@ class ZeroShotRE(CQA, data.Dataset):
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
             examples = []
@@ -1246,7 +1243,7 @@ class ZeroShotRE(CQA, data.Dataset):
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
         super().__init__(examples, fields, **kwargs)
@@ -1359,7 +1356,7 @@ class OntoNotesNER(CQA, data.Dataset):
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), subtask, str(nones))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
             examples = []
@@ -1379,7 +1376,7 @@ class OntoNotesNER(CQA, data.Dataset):
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
         super(OntoNotesNER, self).__init__(examples, fields, **kwargs)
@@ -1484,7 +1481,7 @@ class OntoNotesNER(CQA, data.Dataset):
                                         is_no_good = True
                                         break
                                 if is_no_good:
-                                    print('Throwing out example that looks poorly labeled: ', original.strip(), ' (', file_id.strip(), ')')
+                                    logger.warning('Throwing out example that looks poorly labeled: ', original.strip(), ' (', file_id.strip(), ')')
                                     continue
                                 question = 'What are the tags for all entities?'
                                 answer = '; '.join([f'{x["entity"]} -- {label_to_answer[x["label"]]}' for x in entities]) 
@@ -1546,7 +1543,7 @@ class SNLI(CQA, data.Dataset):
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
             examples = []
@@ -1562,7 +1559,7 @@ class SNLI(CQA, data.Dataset):
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
         super().__init__(examples, fields, **kwargs)
@@ -1615,7 +1612,7 @@ class JSON(CQA, data.Dataset):
         examples = []
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
-            print(f'Loading cached data from {cache_name}')
+            logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
             with open(os.path.expanduser(path)) as f:
@@ -1629,7 +1626,7 @@ class JSON(CQA, data.Dataset):
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            print(f'Caching data to {cache_name}')
+            logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
         super(JSON, self).__init__(examples, fields, **kwargs)

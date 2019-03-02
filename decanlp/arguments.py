@@ -37,7 +37,9 @@ import subprocess
 import json
 import datetime
 from dateutil import tz
+import logging
 
+logger = logging.getLogger(__name__)
 
 def get_commit():
     directory = os.path.dirname(sys.argv[0])
@@ -153,7 +155,7 @@ def parse(argv):
         args.val_tasks.remove('imdb')
     args.world_size = len(args.devices) if args.devices[0] > -1 else -1
     if args.world_size > 1:
-        print('multi-gpu training is currently a work in progress')
+        logger.error('multi-gpu training is currently a work in progress')
         return
     args.timestamp = '-'.join(datetime.datetime.now(tz=tz.tzoffset(None, -8*60*60)).strftime("%y/%m/%d/%H/%M/%S.%f").split())
 
