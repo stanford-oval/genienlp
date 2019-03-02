@@ -169,7 +169,7 @@ def get_args(argv):
     parser.add_argument('--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(argv[1:])
 
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)

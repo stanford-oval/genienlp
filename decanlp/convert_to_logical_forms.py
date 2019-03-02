@@ -100,7 +100,7 @@ def main(argv=sys.argv):
     parser.add_argument('ids', help='path to file for indices, a list of integers indicating the index into the dev/test set of the predictions on the corresponding line in \'predicitons\'')
     parser.add_argument('output', help='path for logical forms output line by line')
     parser.add_argument('evaluate', help='running on the \'validation\' or \'test\' set')
-    args = parser.parse_args(argv)
+    args = parser.parse_args(argv[1:])
     with open(args.predictions) as f:
         greedy = [l for l in f]
     if args.ids is not None:

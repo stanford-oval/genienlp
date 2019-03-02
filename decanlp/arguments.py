@@ -126,7 +126,7 @@ def parse(argv):
     parser.add_argument('--loss_switch', default=0.666, type=float, help='switch to BLEU loss after certain iterations controlled by this ratio')
 
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(argv[1:])
     if args.model is None:
         args.model = 'mcqa'
     if args.val_tasks is None:
