@@ -325,9 +325,6 @@ class Field(RawField):
                     else:
                         lim_idx = len(limited) + len(oov2l)
                         oov2l[x] = lim_idx
-                        if x not in self.vocab.stoi:
-                            self.vocab.stoi[x] = len(self.vocab.itos)
-                            self.vocab.itos.append(x) 
                         l2f[lim_idx] = self.vocab.stoi[x]
                     return lim_idx
                
