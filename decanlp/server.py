@@ -164,7 +164,6 @@ def get_args(argv):
     parser.add_argument('--path', required=True)
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    parser.add_argument('--data', default='./decaNLP/.data/', type=str, help='where to load data from.')
     parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
