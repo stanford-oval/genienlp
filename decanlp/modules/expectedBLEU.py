@@ -1,23 +1,11 @@
 import numpy as np
 import torch
-import torch.nn as nn
-
-import torch.nn.functional as F
-import torch.optim as optim
 from torch.autograd import Variable
-from copy import deepcopy
-from collections import Counter
-from copy import deepcopy as copy
-from .matrixBLEU import mBLEU
 from .utils import CUDA_wrapper
-import itertools
 from functools import reduce
 from .utils import LongTensor, FloatTensor
 import time
 
-import matplotlib
-matplotlib.use('PDF')
-import matplotlib.pyplot as plt
 
 def one_hots(zeros, ix):
     for i in range(zeros.size()[0]):

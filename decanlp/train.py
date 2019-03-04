@@ -52,6 +52,7 @@ from .multiprocess import Multiprocess, DistributedDataParallel
 from .util import elapsed_time, get_splits, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
 from .utils.saver import Saver
 
+
 def initialize_logger(args, rank='main'):
     # set up file logger
     logger = logging.getLogger(f'process_{rank}')
@@ -66,6 +67,7 @@ def initialize_logger(args, rank='main'):
     handler.setLevel(logging.DEBUG)
     logger.addHandler(handler)
     logger.propagate = False
+
     return logger
 
 
@@ -125,8 +127,8 @@ def prepare_data(args, field, logger):
     FIELD.vocab_to_decoder = {idx: FIELD.decoder_stoi[word] for idx, word in enumerate(FIELD.vocab.itos) if word in FIELD.decoder_stoi}
 
     logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens')
-    logger.debug(f'The first 500 tokens:')
-    logger.debug(FIELD.vocab.itos[:500])
+    logger.debug(f'The first 200 tokens:')
+    logger.debug(FIELD.vocab.itos[:200])
 
     logger.info('Preprocessing training data')
     preprocess_examples(args, args.train_tasks, train_sets, FIELD, logger, train=True) 
@@ -180,7 +182,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
     local_train_metric_dict = {}
 
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
-    saver = Saver(args.log_dir)
+    saver = Saver(args.log_dir, args.max_to_keep)
     
     while True:
         # For some number of rounds, we 'jump start' some subset of the tasks
