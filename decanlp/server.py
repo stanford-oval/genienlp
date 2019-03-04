@@ -68,7 +68,10 @@ class Server():
         logger.info(f'Vocabulary has {len(self.field.vocab)} tokens from training')
 
         char_vectors = torchtext.vocab.CharNGram(cache=self.args.embeddings)
-        glove_vectors = torchtext.vocab.GloVe(cache=self.args.embeddings)
+        if args.small_glove:
+            glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings, name="6B", dim=50)
+        else:
+            glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
         self._vector_collections = [char_vectors, glove_vectors]
         
         self._limited_idx_to_full_idx = deepcopy(self.field.decoder_to_vocab) # should avoid this with a conditional in map to full
@@ -222,8 +225,8 @@ def get_args(argv):
                     'transformer_layers', 'rnn_layers', 'transformer_hidden', 
                     'dimension', 'load', 'max_val_context_length', 'val_batch_size', 
                     'transformer_heads', 'max_output_length', 'max_generative_vocab', 
-                    'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char', 'use_maxmargin_loss',
-                    'reverse_task_bool']
+                    'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
+                    'use_maxmargin_loss', 'reverse_task_bool', 'small_glove']
         for r in retrieve:
             if r in config:
                 setattr(args, r,  config[r])

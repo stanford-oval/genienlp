@@ -71,9 +71,12 @@ def prepare_data(args, FIELD):
     args.max_generative_vocab = min(len(FIELD.vocab), args.max_generative_vocab)
     FIELD.append_vocab(new_vocab)
     logger.info(f'Vocabulary has expanded to {len(FIELD.vocab)} tokens')
-
+    logger.info(f'Getting pretrained word vectors')
     char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
-    glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
+    if args.small_glove:
+        glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings, name="6B", dim=50)
+    else:
+        glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
     vectors = [char_vectors, glove_vectors]
     FIELD.vocab.load_vectors(vectors, True)
     FIELD.decoder_to_vocab = {idx: FIELD.vocab.stoi[word] for idx, word in enumerate(FIELD.decoder_itos)}
@@ -268,7 +271,8 @@ def get_args(argv):
                     'transformer_layers', 'rnn_layers', 'transformer_hidden', 
                     'dimension', 'load', 'max_val_context_length', 'val_batch_size', 
                     'transformer_heads', 'max_output_length', 'max_generative_vocab', 
-                    'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char', 'use_maxmargin_loss']
+                    'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
+                    'use_maxmargin_loss', 'small_glove']
         for r in retrieve:
             if r in config:
                 setattr(args, r,  config[r])

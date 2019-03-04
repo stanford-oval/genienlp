@@ -127,6 +127,7 @@ def parse(argv):
     parser.add_argument('--use_bleu_loss', action='store_true', help='whether to use differentiable BLEU loss or not')
     parser.add_argument('--use_maxmargin_loss', action='store_true', help='whether to use max-margin loss or not')
     parser.add_argument('--loss_switch', default=0.666, type=float, help='switch to BLEU loss after certain iterations controlled by this ratio')
+    parser.add_argument('--small_glove', action='store_true', help='Use glove.6B.50d instead of glove.840B.300d')
 
 
     args = parser.parse_args(argv[1:])
