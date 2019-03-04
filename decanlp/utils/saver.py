@@ -74,7 +74,7 @@ class Saver(object):
     def save(self, save_dict, global_step):
         self._maybe_load_last_checkpoints()
         
-        filename = 'iteration_' + str(global_step)
+        filename = 'iteration_' + str(global_step) + '.pth'
         abspath = os.path.join(self._savedir, filename)
         
         self._latest_checkpoint = filename
