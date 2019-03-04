@@ -32,30 +32,25 @@
 import os
 import math
 import time
-import random
-import collections
 import sys
 from copy import deepcopy
 
 import logging
 from pprint import pformat
 from logging import handlers
-import ujson as json
 
 import torch
-import numpy as np
 
 from .text import torchtext
 
 from tensorboardX import SummaryWriter
-import string
 
-from decanlp import arguments
+from . import arguments
 from . import models
 from .validate import validate
 from .multiprocess import Multiprocess, DistributedDataParallel
-from .metrics import compute_metrics
 from .util import elapsed_time, get_splits, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
+from .utils.saver import Saver
 
 def initialize_logger(args, rank='main'):
     # set up file logger
@@ -113,7 +108,7 @@ def prepare_data(args, field, logger):
 
     for task, s in zip(args.train_tasks, train_sets):
         for ex in s.examples[:10]:
-            logger.debug('examples***:', [token.strip() for token in ex.context])
+            logger.debug(f'examples***: {[token.strip() for token in ex.context]}')
 
     if args.load is None:
         logger.info(f'Getting pretrained word vectors')
@@ -185,6 +180,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
     local_train_metric_dict = {}
 
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
+    saver = Saver(args.log_dir)
     
     while True:
         # For some number of rounds, we 'jump start' some subset of the tasks
@@ -254,7 +250,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                             save_state_dict = {'model_state_dict': {k: v.cpu() for k, v in model.state_dict().items()}, 'field': field,
                                                'best_decascore': best_decascore}
                             
-                            torch.save(save_state_dict, os.path.join(args.log_dir, f'iteration_{iteration}.pth'))
+                            saver.save(save_state_dict, global_step=iteration)
                             if should_save_best:
                                 logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}found new best model')
                                 torch.save(save_state_dict, os.path.join(args.log_dir, 'best.pth'))

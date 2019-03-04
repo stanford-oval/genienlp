@@ -65,15 +65,11 @@ class Server():
         self.field = field
         self.model = model
 
-    def prepare_data(self):
         logger.info(f'Vocabulary has {len(self.field.vocab)} tokens from training')
 
         char_vectors = torchtext.vocab.CharNGram(cache=self.args.embeddings)
         glove_vectors = torchtext.vocab.GloVe(cache=self.args.embeddings)
-        vectors = [char_vectors, glove_vectors]
-        self.field.vocab.load_vectors(vectors, True)
-        self.field.decoder_to_vocab = {idx: self.field.vocab.stoi[word] for idx, word in enumerate(self.field.decoder_itos)}
-        self.field.vocab_to_decoder = {idx: self.field.decoder_stoi[word] for idx, word in enumerate(self.field.vocab.itos) if word in self.field.decoder_stoi}
+        self._vector_collections = [char_vectors, glove_vectors]
         
         self._limited_idx_to_full_idx = deepcopy(self.field.decoder_to_vocab) # should avoid this with a conditional in map to full
         self._oov_to_limited_idx = {}
@@ -83,9 +79,28 @@ class Server():
     def numericalize_example(self, ex):
         processed = ProcessedExample()
         
+        new_vectors = []
         for name in CQA.fields:
+            value = getattr(ex, name)
+            
+            assert isinstance(value, list)
+            # check if all the words are in the vocabulary, and if not
+            # grow the vocabulary and the embedding matrix
+            for word in value:
+                if word not in self.field.vocab.stoi:
+                    self.field.vocab.stoi[word] = len(self.field.vocab.itos)
+                    self.field.vocab.itos.append(word)
+                    
+                    new_vector = [vec[word] for vec in self._vector_collections]
+                    
+                    # charNgram returns  a [1, D] tensor, while Glove returns a [D] tensor
+                    # normalize to [1, D] so we can concat along the second dimension
+                    # and later concat all vectors along the first
+                    new_vector = [vec if vec.dim() > 1 else vec.unsqueeze(0) for vec in new_vector]
+                    new_vectors.append(torch.cat(new_vector, dim=1))
+            
             # batch of size 1
-            batch = [getattr(ex, name)]
+            batch = [value]            
             entry, lengths, limited_entry, raw = self.field.process(batch, device=self.device, train=True, 
                 limited=self.field.decoder_stoi, l2f=self._limited_idx_to_full_idx, oov2l=self._oov_to_limited_idx)
             setattr(processed, name, entry)
@@ -95,6 +110,13 @@ class Server():
 
         processed.oov_to_limited_idx = self._oov_to_limited_idx
         processed.limited_idx_to_full_idx = self._limited_idx_to_full_idx
+        
+        if new_vectors:
+            # concat the old embedding matrix and all the new vector along the first dimension
+            new_embedding_matrix = torch.cat([self.field.vocab.vectors] + new_vectors, dim=0)
+            self.field.vocab.vectors = new_embedding_matrix
+            self.model.set_embeddings(new_embedding_matrix)
+            
         return processed
     
     def handle_request(self, line):
@@ -120,7 +142,9 @@ class Server():
             predictions = self.field.reverse(prediction_batch, detokenize=lambda x: ' '.join(x))
         else:
             predictions = self.field.reverse(prediction_batch)
-        return json.dumps(dict(id=request['id'], answer=predictions[0])) + '\n'
+        
+        response = json.dumps(dict(id=request['id'], answer=predictions[0]))
+        return response + '\n'
 
     async def handle_client(self, client_reader, client_writer):
         try:
@@ -148,9 +172,15 @@ class Server():
         loop.close()
     
     def _run_stdin(self):
-        for line in sys.stdin:
-            sys.stdout.write(self.handle_request(line))
-            sys.stdout.flush()
+        try:
+            while True:
+                line = sys.stdin.readline()
+                if not line:
+                    break
+                sys.stdout.write(self.handle_request(line))
+                sys.stdout.flush()
+        except KeyboardInterrupt:
+            pass
 
     def run(self):
         def mult(ps):
@@ -255,7 +285,6 @@ def main(argv=sys.argv):
     model.load_state_dict(model_dict)
     
     server = Server(args, field, model)
-    server.prepare_data()
     model.set_embeddings(field.vocab.vectors)
 
     server.run()
