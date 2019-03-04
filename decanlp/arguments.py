@@ -42,7 +42,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def get_commit():
-    directory = os.path.dirname(sys.argv[0])
+    directory = os.path.dirname(__file__)
     return subprocess.Popen("cd {} && git log | head -n 1".format(directory), shell=True, stdout=subprocess.PIPE).stdout.read().split()[1].decode()
 
 
