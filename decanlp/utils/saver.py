@@ -86,4 +86,5 @@ class Saver(object):
             except (OSError, IOError) as e:
                 logging.warn('Failed to delete old checkpoint: %s', e)
         torch.save(save_dict, abspath)
-        
+        with open(os.path.join(self._savedir, 'checkpoint.json'), 'w') as fp:
+            json.dump(dict(all=self._all_checkpoints, latest=self._latest_checkpoint), fp)
