@@ -122,8 +122,8 @@ def run(args, field, val_sets, model):
         for task, it in iters:
             logger.info(task)
             if args.eval_dir:
-                prediction_file_name = os.path.join(args.eval_dir, os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.txt'))
-                answer_file_name = os.path.join(args.eval_dir, os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.gold.txt'))
+                prediction_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task + '.txt'))
+                answer_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task + '.gold.txt'))
                 results_file_name = answer_file_name.replace('gold', 'results')
             else:
                 prediction_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.txt')
