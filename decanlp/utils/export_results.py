@@ -49,7 +49,7 @@ def run():
 
     result = eval(result[len('OrderedDcit'):])
 
-    results_dict = {k:v for (k,v) in result if k in METRICS}
+    results_dict = {k: f'{v:.2f}%' for (k,v) in result if k in METRICS}
 
     if not os.path.exists(args.out_file):
         with open(args.out_file, 'w+') as f_out:
