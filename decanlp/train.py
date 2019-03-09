@@ -185,7 +185,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
     local_train_metric_dict = {}
 
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
-    saver = Saver(args.log_dir, args.max_to_keep)
+    saver = Saver(args.log_dir, world_size, args.max_to_keep)
     
     while True:
         # For some number of rounds, we 'jump start' some subset of the tasks
@@ -242,30 +242,29 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                         logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}val_deca:deca_{deca_score:.2f}')
 
                     # saving
-                    if save_every is not None and (iteration % args.save_every == 0 % args.save_every):
-                        
-                        if world_size > 1:
-                            torch.distributed.barrier() 
+                    if save_every is not None and (iteration % args.save_every == 0):
                         if rank is not None and rank == 0:
                             should_save_best = False
                             if deca_score is not None and (best_decascore is None or best_decascore < deca_score):
                                 best_decascore = deca_score
                                 should_save_best = True
                                 
-                            save_state_dict = {'model_state_dict': {k: v.cpu() for k, v in model.state_dict().items()}, 'field': field,
+                            save_model_state_dict = {'model_state_dict': {k: v.cpu() for k, v in model.state_dict().items()}, 'field': field,
                                                'best_decascore': best_decascore}
-                            
-                            saver.save(save_state_dict, global_step=iteration)
+                            save_opt_state_dict = opt.state_dict()
+                            save_opt_state_dict.update({'start_iteration': iteration})
+
+                            if world_size > 1:
+                                torch.distributed.barrier()
+                            saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
                             if should_save_best:
                                 logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}found new best model')
-                                torch.save(save_state_dict, os.path.join(args.log_dir, 'best.pth'))
-                            
-                            
-                        if world_size > 1:
-                            torch.distributed.barrier() 
-                            torch.save(opt.state_dict(), os.path.join(args.log_dir, f'iteration_{iteration}_rank_{rank}_optim.pth'))
-                            torch.distributed.barrier() 
-                        
+                                torch.save(save_model_state_dict, os.path.join(args.log_dir, 'best.pth'))
+                                if world_size > 1:
+                                    torch.distributed.barrier()
+                                torch.save(save_opt_state_dict, os.path.join(args.log_dir, 'best_optim.pth'))
+                                if world_size > 1:
+                                    torch.distributed.barrier()
 
                     # lr update
                     lr = opt.param_groups[0]['lr'] 
@@ -354,9 +353,12 @@ def run(args, run_args, rank=0, world_size=1):
         save_dict = torch.load(os.path.join(args.save, args.load))
         model.load_state_dict(save_dict['model_state_dict'])
         if args.resume:
-            logger.info(f'Resuming Training from {os.path.splitext(args.load)[0]}_rank_{rank}_optim.pth')
-            opt.load_state_dict(torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_rank_{rank}_optim.pth')))
-            start_iteration = int(os.path.splitext(os.path.basename(args.load))[0].split('_')[1])
+            logger.info(f'Resuming Training from {os.path.splitext(args.load)[0]}_optim.pth')
+            opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'))
+            start_iteration = opt_state_dict.pop('start_iteration')
+            logger.info(f'Starting iteration is {start_iteration}')
+            opt.load_state_dict(opt_state_dict)
+            # start_iteration = int(os.path.splitext(os.path.basename(args.load))[0].split('_')[1])
 
     logger.info(f'Begin Training')
     train(args, model, opt, train_iters, args.train_iterations, field, val_iters=val_iters, 

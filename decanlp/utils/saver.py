@@ -47,9 +47,10 @@ class Saver(object):
     and creating checkpoint files to keep track of which saves are valid and which are not.
     '''
 
-    def __init__(self, savedir, max_to_keep=5):
+    def __init__(self, savedir, world_size, max_to_keep=5):
         self._savedir = savedir
         self._max_to_keep = max_to_keep
+        self.world_size = world_size
         assert max_to_keep >= 1
         
         self._loaded_last_checkpoints = False
@@ -71,20 +72,30 @@ class Saver(object):
             self._all_checkpoints = []
             self._latest_checkpoint = None
         
-    def save(self, save_dict, global_step):
+    def save(self, save_model_state_dict, save_opt_state_dict, global_step):
         self._maybe_load_last_checkpoints()
-        
-        filename = 'iteration_' + str(global_step) + '.pth'
-        abspath = os.path.join(self._savedir, filename)
-        
-        self._latest_checkpoint = filename
-        self._all_checkpoints.append(filename)
+
+        model_name = 'iteration_' + str(global_step) + '.pth'
+        opt_name = 'iteration_' + str(global_step) + '_optim.pth'
+
+
+        self._latest_checkpoint = model_name
+        self._all_checkpoints.append(model_name)
         if len(self._all_checkpoints) > self._max_to_keep:
             try:
                 todelete = self._all_checkpoints.pop(0)
                 os.unlink(os.path.join(self._savedir, todelete))
+                opt_todelete = todelete.rsplit('.', 1)[0] + '_optim.' + todelete.rsplit('.', 1)[1]
+                os.unlink(os.path.join(self._savedir, opt_todelete))
             except (OSError, IOError) as e:
-                logging.warn('Failed to delete old checkpoint: %s', e)
-        torch.save(save_dict, abspath)
+                logging.warning('Failed to delete old checkpoint: %s', e)
+        if self.world_size > 1:
+            torch.distributed.barrier()
+        torch.save(save_model_state_dict, os.path.join(self._savedir, model_name))
+        if self.world_size > 1:
+            torch.distributed.barrier()
+        torch.save(save_opt_state_dict, os.path.join(self._savedir, opt_name))
+        if self.world_size > 1:
+            torch.distributed.barrier()
         with open(os.path.join(self._savedir, 'checkpoint.json'), 'w') as fp:
             json.dump(dict(all=self._all_checkpoints, latest=self._latest_checkpoint), fp)
