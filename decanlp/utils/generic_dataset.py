@@ -103,11 +103,17 @@ class IMDb(CQA, imdb.IMDb):
                train='train', validation=None, test='test', **kwargs):
         assert validation is None
         path = cls.download(root)
+
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux'), fields, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, f'{train}'), fields, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, f'{test}'), fields, **kwargs)
-        return tuple(d for d in (train_data, test_data)
+        return tuple(d for d in (train_data, test_data, aux_data)
                      if d is not None)
 
 
@@ -161,13 +167,19 @@ class SST(CQA):
                train='train', validation='dev', test='test', **kwargs):
         path = cls.download(root)
         postfix = f'_binary_sent.csv'
+
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, f'aux{postfix}'), fields, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, f'{train}{postfix}'), fields, **kwargs)
         validation_data = None if validation is None else cls(
             os.path.join(path, f'{validation}{postfix}'), fields, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, f'{test}{postfix}'), fields, **kwargs)
-        return tuple(d for d in (train_data, validation_data, test_data)
+        return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
@@ -298,13 +310,21 @@ class Almond(CQA):
         """
         path = os.path.join(root, cls.name)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), fields, reverse_task=reverse_task, **kwargs)
+
+
         train_data = None if train is None else cls(
             os.path.join(path, train + '.tsv'), fields, reverse_task=reverse_task, **kwargs)
         val_data = None if validation is None else cls(
             os.path.join(path, validation + '.tsv'), fields, reverse_task=reverse_task, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, test + '.tsv'), fields, reverse_task=reverse_task, **kwargs)
-        return tuple(d for d in (train_data, val_data, test_data)
+
+
+        return tuple(d for d in (train_data, val_data, test_data, aux_data)
                      if d is not None)
 
     @staticmethod
@@ -452,6 +472,12 @@ class SQuAD(CQA, data.Dataset):
         assert test is None
         path = cls.download(root)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux = '-'.join(['aux', extension])
+            aux_data = cls(os.path.join(path, aux), fields, **kwargs)
+
         extension = 'v2.0.json' if '2.0' in description else 'v1.1.json'
         train = '-'.join([train, extension]) if train is not None else None
         validation = '-'.join([validation, extension]) if validation is not None else None
@@ -460,7 +486,7 @@ class SQuAD(CQA, data.Dataset):
             os.path.join(path, train), fields, **kwargs)
         validation_data = None if validation is None else cls(
             os.path.join(path, validation), fields, **kwargs)
-        return tuple(d for d in (train_data, validation_data)
+        return tuple(d for d in (train_data, validation_data, aux_data)
                      if d is not None)
 
 
@@ -513,7 +539,8 @@ class Summarization(CQA, data.Dataset):
     @classmethod
     def cache_splits(cls, path):
 
-        for split in ['training', 'validation', 'test']:
+        splits = ['training', 'validation', 'test']
+        for split in splits:
             missing_stories, collected_stories = 0, 0
             split_file_name = os.path.join(path, f'{split}.jsonl')
             if os.path.exists(split_file_name):
@@ -565,13 +592,18 @@ class Summarization(CQA, data.Dataset):
         path = cls.download(root)
         cls.cache_splits(path)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'auxiliary.jsonl'), fields, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, 'training.jsonl'), fields, **kwargs)
         validation_data = None if validation is None else cls(
             os.path.join(path, 'validation.jsonl'), fields, one_answer=False, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, 'test.jsonl'), fields, one_answer=False, **kwargs)
-        return tuple(d for d in (train_data, validation_data, test_data)
+        return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
@@ -699,13 +731,18 @@ class WikiSQL(CQA, data.Dataset):
         """
         path = cls.download(root)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux'), fields, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, train), fields, **kwargs)
         validation_data = None if validation is None else cls(
             os.path.join(path, validation), fields, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, test), fields, **kwargs)
-        return tuple(d for d in (train_data, validation_data, test_data)
+        return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
@@ -786,9 +823,10 @@ class SRL(CQA, data.Dataset):
 
 
     @classmethod
-    def cache_splits(cls, path, path_to_files, train='train', validation='dev', test='test'):
+    def cache_splits(cls, path, train='train', validation='dev', test='test'):
 
-        for split in [train, validation, test]:
+        splits = [train, validation, test]
+        for split in splits:
             split_file_name = os.path.join(path, f'{split}.jsonl')
             if os.path.exists(split_file_name):
                 continue
@@ -873,15 +911,18 @@ class SRL(CQA, data.Dataset):
                             assert a in context
                             modified_all_answers.append(a)
                         split_file.write(json.dumps({'context': context, 'question': question, 'answer': answer, 'type': 'wiki', 'all_answers': modified_all_answers})+'\n')
-            
 
-            
 
     @classmethod
     def splits(cls, fields, root='.data',
                train='train', validation='dev', test='test', **kwargs):
         path = cls.download(root)
-        cls.cache_splits(path, None)
+        cls.cache_splits(path)
+
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
 
         train_data = None if train is None else cls(
             os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
@@ -889,7 +930,7 @@ class SRL(CQA, data.Dataset):
             os.path.join(path, f'{validation}.jsonl'), fields, one_answer=False, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, f'{test}.jsonl'), fields, one_answer=False, **kwargs)
-        return tuple(d for d in (train_data, validation_data, test_data)
+        return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
@@ -992,13 +1033,18 @@ class WinogradSchema(CQA, data.Dataset):
         path = cls.download(root)
         cls.cache_splits(path)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
         validation_data = None if validation is None else cls(
             os.path.join(path, f'{validation}.jsonl'), fields, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, f'{test}.jsonl'), fields, **kwargs)
-        return tuple(d for d in (train_data, validation_data, test_data)
+        return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
@@ -1058,6 +1104,7 @@ class WOZ(CQA, data.Dataset):
         if os.path.exists(train_jsonl):
             return
 
+        splits = [train, validation, test, 'aux'] if is_aux else [train, validation, test]
         file_name_base = 'woz_{}_{}.json'
         question_base = "What is the change in state"
         for split in [train, validation, test]:
@@ -1119,13 +1166,18 @@ class WOZ(CQA, data.Dataset):
         path = cls.download(root)
         cls.cache_splits(path)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
         validation_data = None if validation is None else cls(
             os.path.join(path, f'{validation}.jsonl'), fields, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, f'{test}.jsonl'), fields, **kwargs)
-        return tuple(d for d in (train_data, validation_data, test_data)
+        return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
@@ -1200,13 +1252,18 @@ class MultiNLI(CQA, data.Dataset):
         path = cls.download(root)
         cls.cache_splits(path)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
         validation_data = None if validation is None else cls(
             os.path.join(path, f'{validation}.jsonl'), fields, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, f'{test}.jsonl'), fields, **kwargs)
-        return tuple(d for d in (train_data, validation_data, test_data)
+        return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
@@ -1279,13 +1336,18 @@ class ZeroShotRE(CQA, data.Dataset):
         path = cls.download(root)
         cls.cache_splits(path)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
         validation_data = None if validation is None else cls(
             os.path.join(path, f'{validation}.jsonl'), fields, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, f'{test}.jsonl'), fields, **kwargs)
-        return tuple(d for d in (train_data, validation_data, test_data)
+        return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
@@ -1516,13 +1578,18 @@ class OntoNotesNER(CQA, data.Dataset):
         path = cls.download(root)
         cls.cache_splits(path, path_to_files)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
         validation_data = None if validation is None else cls(
             os.path.join(path, f'{validation}.jsonl'), fields, one_answer=False, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, f'{test}.jsonl'), fields, one_answer=False, **kwargs)
-        return tuple(d for d in (train_data, validation_data, test_data)
+        return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 class SNLI(CQA, data.Dataset):
@@ -1588,13 +1655,18 @@ class SNLI(CQA, data.Dataset):
         path = cls.download(root)
         cls.cache_splits(path)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
         validation_data = None if validation is None else cls(
             os.path.join(path, f'{validation}.jsonl'), fields, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, f'{test}.jsonl'), fields, **kwargs)
-        return tuple(d for d in (train_data, validation_data, test_data)
+        return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
@@ -1634,7 +1706,12 @@ class JSON(CQA, data.Dataset):
     @classmethod
     def splits(cls, fields, name, root='.data',
                train='train', validation='val', test='test', **kwargs):
-        path = os.path.join(root, name) 
+        path = os.path.join(root, name)
+
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
 
         train_data = None if train is None else cls(
             os.path.join(path, 'train.jsonl'), fields, **kwargs)
@@ -1642,5 +1719,5 @@ class JSON(CQA, data.Dataset):
             os.path.join(path, 'val.jsonl'), fields, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, 'test.jsonl'), fields, **kwargs)
-        return tuple(d for d in (train_data, validation_data, test_data)
+        return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)

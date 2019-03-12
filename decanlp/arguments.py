@@ -129,6 +129,12 @@ def parse(argv):
     parser.add_argument('--loss_switch', default=0.666, type=float, help='switch to BLEU loss after certain iterations controlled by this ratio')
     parser.add_argument('--small_glove', action='store_true', help='Use glove.6B.50d instead of glove.840B.300d')
 
+    parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')
+    parser.add_argument('--harder_dataset', default='', type=str, help='path to auxiliary dataset (ignored if curriculum is not used)')
+    parser.add_argument('--curriculum_max_frac', default=1.0, type=float, help='max fraction of harder dataset to keep for curriculum')
+    parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
+    parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum')
+
 
     args = parser.parse_args(argv[1:])
     if args.model is None:
