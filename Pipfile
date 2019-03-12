@@ -1,7 +1,9 @@
 [[source]]
+name = "pypi"
 url = "https://pypi.org/simple"
 verify_ssl = true
-name = "pypi"
+
+[dev-packages]
 
 [packages]
 numpy = "*"
@@ -19,9 +21,6 @@ cove = {editable = true,git = "git://github.com/salesforce/cove.git"}
 allennlp = "*"
 tensorboardX = "*"
 Babel = "*"
-requirements-txt = "*"
-
-[dev-packages]
 
 [requires]
 python_version = "3.6"
