@@ -1,0 +1,27 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+numpy = "*"
+torch = "==0.4.1"
+revtok = {editable = true,git = "https://github.com/jekbradbury/revtok.git"}
+tqdm = "*"
+nltk = "==3.2.5"
+python-dateutil = "*"
+ujson = "*"
+pyrouge = {editable = true,git = "git://github.com/andersjo/pyrouge.git"}
+sacrebleu = "*"
+records = "*"
+tabulate = "*"
+cove = {editable = true,git = "git://github.com/salesforce/cove.git"}
+allennlp = "*"
+tensorboardX = "*"
+Babel = "*"
+requirements-txt = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.6"

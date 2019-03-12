@@ -9,6 +9,7 @@ SRCDIR=`dirname $0`
 function delete {
     rm -rf $1
 }
+
 mkdir -p $SRCDIR/embeddings
 curl -O "https://parmesan.stanford.edu/glove/glove.6B.50d.txt.pt" ; mv glove.6B.50d.txt.pt $SRCDIR/embeddings/
 curl -O "https://parmesan.stanford.edu/glove/charNgram.txt.pt" ; mv charNgram.txt.pt $SRCDIR/embeddings/
@@ -22,9 +23,14 @@ curl -O "https://parmesan.stanford.edu/glove/charNgram.txt.pt" ; mv charNgram.tx
 
         # train
         pipenv run decanlp train --train_tasks almond  --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --small_glove --no_commit
+        # with curriculum
+        pipenv run decanlp train --train_tasks almond  --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_"$i"_curriculum --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --small_glove --no_commit --use_curriculum
+
 
         # greedy decode
         pipenv run decanlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
+        pipenv run decanlp predict --tasks almond --evaluate test --path $workdir/model_"$i"_curriculum  --overwrite --eval_dir $workdir/model_"$i"_curriculum /eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
+
 
         # export prediction results
         pipenv run python3 $SRCDIR/../utils/post_process_decoded_results.py --original_data $SRCDIR/dataset/almond/test.tsv --gold_program $workdir/model_$i/eval_results/test/almond.gold.txt --predicted_program $workdir/model_$i/eval_results/test/almond.txt --output_file $workdir/model_$i/results.tsv

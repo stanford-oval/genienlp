@@ -260,8 +260,8 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
 
     saver = Saver(args.log_dir, world_size, args.max_to_keep)
     epoch = 0
-    while True:
 
+    while True:
         logging.info(f'starting epoch {epoch}')
 
         if epoch == 0:
