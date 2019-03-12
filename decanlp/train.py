@@ -235,13 +235,12 @@ def create_mixed_set(args, train_sets, aux_sets, epoch):
 
         logging.info(f'at epoch {epoch} we have {train_size_target} examples from training set and {aux_size_target} examples from auxiliary training set')
 
-        train_set_indices = np.random.choice(range(train_size_target), size=train_size_target, replace=False)
-        aux_set_indices = np.random.choice(range(aux_size_target), size=aux_size_target, replace=False)
+        train_set_indices = np.random.choice(range(train_size), size=train_size_target, replace=False)
+        aux_set_indices = np.random.choice(range(aux_size), size=aux_size_target, replace=False)
 
         setattr(mixed_set[i], 'examples', [train_examples[i] for i in train_set_indices] + [aux_examples[i] for i in aux_set_indices])
 
     return mixed_set
-
 
 
 def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_size=1,
@@ -254,28 +253,34 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
     local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, start_iteration
 
     train_iter_deep = deepcopy(train_iterations)
-    local_train_metric_dict = {}
+    local_train_metric_dict = dict()
 
-    task_iteration = defaultdict(int)
+    task_iteration = dict()
+    task_done = dict()
 
     saver = Saver(args.log_dir, world_size, args.max_to_keep)
     epoch = 0
 
+    for task in args.train_tasks:
+        task_iteration[task] = 1
+        task_done[task] = False
+
     while True:
-        logging.info(f'starting epoch {epoch}')
 
-        if epoch == 0:
-            logger.info(f'Preparing iterators')
-            train_iters = [(name, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
-                              for name, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
-            val_iters = [(name, to_iter(args, world_size, tok, x, device, train=False, token_testing=args.token_testing, sort=False if 'sql' in name else None))
-                            for name, x, tok in zip(args.val_tasks, val_sets, args.val_batch_size)]
+        logger.info(f'starting epoch {epoch}')
+        logger.info(f'Preparing iterators')
+        train_iters = [(name, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
+                          for name, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
+        val_iters = [(name, to_iter(args, world_size, tok, x, device, train=False, token_testing=args.token_testing, sort=False if 'sql' in name else None))
+                        for name, x, tok in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
-        elif args.use_curriculum:
-            logger.info(f'Updating iterators for curriculum')
+        if args.use_curriculum:
+            # logger.info(f'Updating iterators for curriculum')
             mixed_sets = create_mixed_set(args, train_sets, aux_sets, epoch)
             train_iters = [(name, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
                   for name, x, tok in zip(args.train_tasks, mixed_sets, args.train_batch_tokens)]
+            val_iters = [(name, to_iter(args, world_size, tok, x, device, train=False, token_testing=args.token_testing, sort=False if 'sql' in name else None))
+                  for name, x, tok in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
 
         train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
@@ -294,14 +299,17 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
             task_iterations = train_iterations[task_idx] if train_iterations is not None else None
             if task_iterations == 0:
                 continue
-            task_iteration[task] = 1
+            if task_iterations is not None and task_iteration[task] > task_iterations:
+                task_done[task] = True
+                continue
+
+
             for batch in train_iter:
                 if not args.resume or iteration > start_iteration:
                     task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
                     round_progress = f'round_{rnd}:' if rounds else ''
     
                     # validate
-                    
                     deca_score = None
                     if (val_every is not None and 
                         ((iteration % args.val_every == 0 % args.val_every) or 
@@ -399,7 +407,6 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                                 writer.add_scalar(f'{metric_key}/{task}/train', metric_value, iteration)
                                 writer.add_scalar(f'{task}/{metric_key}/train', metric_value, iteration)
 
-
                         local_loss = 0
                         local_train_metric_dict = {}
                         num_examples = 0
@@ -407,14 +414,13 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                 # book keeping
                 task_iteration[task] += 1
                 iteration += 1
-                if task_iterations is not None and task_iteration[task] > task_iterations:
-                    break
 
         # book keeping
         epoch += 1
         rnd += 1
-        # if not rounds or rnd > rounds:
-        #     break
+        if all(task_done.values()):
+            logger.info(f'training is done after {epoch} epochs')
+            break
 
 
 def run(args, run_args, rank=0, world_size=1):

@@ -29,7 +29,7 @@ curl -O "https://parmesan.stanford.edu/glove/charNgram.txt.pt" ; mv charNgram.tx
 
         # greedy decode
         pipenv run decanlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
-        pipenv run decanlp predict --tasks almond --evaluate test --path $workdir/model_"$i"_curriculum  --overwrite --eval_dir $workdir/model_"$i"_curriculum /eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
+        pipenv run decanlp predict --tasks almond --evaluate test --path $workdir/model_"$i"_curriculum  --overwrite --eval_dir $workdir/model_"$i"_curriculum/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
 
 
         # export prediction results
