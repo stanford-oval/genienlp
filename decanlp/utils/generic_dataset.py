@@ -472,13 +472,13 @@ class SQuAD(CQA, data.Dataset):
         assert test is None
         path = cls.download(root)
 
+        extension = 'v2.0.json' if '2.0' in description else 'v1.1.json'
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
             aux = '-'.join(['aux', extension])
             aux_data = cls(os.path.join(path, aux), fields, **kwargs)
 
-        extension = 'v2.0.json' if '2.0' in description else 'v1.1.json'
         train = '-'.join([train, extension]) if train is not None else None
         validation = '-'.join([validation, extension]) if validation is not None else None
 
@@ -1104,7 +1104,7 @@ class WOZ(CQA, data.Dataset):
         if os.path.exists(train_jsonl):
             return
 
-        splits = [train, validation, test, 'aux'] if is_aux else [train, validation, test]
+        splits = [train, validation, test]
         file_name_base = 'woz_{}_{}.json'
         question_base = "What is the change in state"
         for split in [train, validation, test]:
