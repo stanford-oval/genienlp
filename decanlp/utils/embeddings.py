@@ -41,6 +41,8 @@ ENTITIES = ['DATE', 'DURATION', 'EMAIL_ADDRESS', 'HASHTAG',
 MAX_ARG_VALUES = 5
 
 class AlmondEmbeddings(torchtext.vocab.Vectors):
+    def __init__(self, name=None, cache=None, **kw):
+        super().__init__(name, cache, **kw)
 
     def cache(self, name, cache, url=None):
         del name
@@ -60,7 +62,7 @@ class AlmondEmbeddings(torchtext.vocab.Vectors):
 
         self.itos = itos
         self.stoi = {word: i for i, word in enumerate(itos)}
-        self.vectors = torch.Tensor(vectors).view(-1, dim)
+        self.vectors = torch.stack(vectors, dim=0).view(-1, dim)
         self.dim = dim
 
 
