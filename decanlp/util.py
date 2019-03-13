@@ -162,7 +162,7 @@ def get_splits(args, task, FIELD, **kwargs):
             fields=FIELD, root=args.data, **kwargs)
     elif 'almond' in task:
         split = generic_dataset.Almond.splits(
-            fields=FIELD, root=args.data, reverse_task=args.reverse_task_bool, **kwargs)
+            fields=FIELD, root=args.data, reverse_task=args.reverse_task_bool, thingpedia=args.thingpedia, **kwargs)
     elif 'squad' in task:
         split = generic_dataset.SQuAD.splits(
             fields=FIELD, root=args.data, description=task, **kwargs)

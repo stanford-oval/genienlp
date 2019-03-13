@@ -110,10 +110,12 @@ def prepare_data(args, field, logger):
 
     for task, s in zip(args.train_tasks, train_sets):
         for ex in s.examples[:10]:
-            logger.debug(f'examples***: {[token.strip() for token in ex.context]}')
+            logger.debug(f'examples***: {[token.strip() for token in ex.question]}')
 
     if args.load is None:
         logger.info(f'Getting pretrained word vectors')
+
+
         char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
         if args.small_glove:
             glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings, name="6B", dim=50)

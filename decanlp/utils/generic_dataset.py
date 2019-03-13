@@ -231,6 +231,16 @@ class IWSLT(TranslationDataset, CQA, translation.IWSLT):
 def split_tokenize(x):
     return x.split()
 
+def clean(name):
+    """Normalize argument names into English words.
+
+    Removes the "v_" prefix, converts camelCase to multiple words, and underscores
+    to spaces.
+    """
+    if name.startswith('v_'):
+        name = name[len('v_'):]
+    return re.sub('([^A-Z])([A-Z])', '$1 $2', re.sub('_', ' ', name)).lower()
+
 
 class Almond(CQA):
     """The Almond semantic parsing task"""
@@ -238,18 +248,50 @@ class Almond(CQA):
     base_url = None
     name = 'almond'
     
-    def __init__(self, path, field, reverse_task=False, subsample=None, **kwargs):
+    def __init__(self, path, field, reverse_task=False, subsample=None, thingpedia=None, **kwargs):
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
-        
-        # the question is irrelevant, so the question says English and ThingTalk even if we're doing
-        # a different language (like Chinese)
-        if reverse_task:
-            question = 'Translate from ThingTalk to English'
-        else:
-            question = 'Translate from English to ThingTalk'
-        
+
+        def extract_words(thingpedia):
+
+            words_list = set()
+            with open(thingpedia, 'r') as f:
+                result = json.load(f)
+                output = dict()
+
+                output['devices'] = []
+                output['entities'] = []
+
+                all_devices = result['devices']
+                all_entities = result['entities']
+
+                for entity in all_entities:
+                    words_list.add(entity['type'])
+
+                for device in all_devices:
+                    if device['kind_type'] in ('global', 'category', 'discovery'):
+                        continue
+
+                    if device.get('kind_canonical', None):
+                        words_list.add(device['kind'])
+                    else:
+                        print('WARNING: missing canonical for device:%s' % (device['kind']))
+                    for function_type in ('triggers', 'queries', 'actions'):
+                        for function_name, function in device[function_type].items():
+                            if not function['canonical']:
+                                print('WARNING: missing canonical for @%s.%s' % (device['kind'], function_name))
+                            else:
+                                words_list.add(function_name)
+                                for type in function['types']:
+                                    words_list.add(type)
+
+            return words_list
+
+        words_list = set()
+        if thingpedia is not None:
+            words_list = extract_words(thingpedia)
+
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             logger.info(f'Loading cached data from {cache_name}')
@@ -260,11 +302,13 @@ class Almond(CQA):
                 for line in fp:
                     _id, sentence, target_code = line.strip().split('\t')
                     if reverse_task:
-                        context = target_code
+                        question = target_code
                         answer = sentence
                     else:
-                        context = sentence
+                        question = sentence
                         answer = target_code
+
+                    context = ' '.join(words_list)
                     
                     context_question = get_context_question(context, question) 
                     examples.append(data.Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=split_tokenize))
