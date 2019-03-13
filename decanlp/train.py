@@ -212,7 +212,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                     round_progress = f'round_{rnd}:' if rounds else ''
     
                     # validate
-                    
+
                     deca_score = None
                     if (val_every is not None and 
                         ((iteration % args.val_every == 0 % args.val_every) or 
@@ -391,11 +391,11 @@ def init_opt(args, model):
     opt = None
     if 'adam' in args.optimizer.lower():
         if args.transformer_lr:
-            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(0.9, 0.98), eps=1e-9)
+            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
         else:
-            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999))
+            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
     else:
-        opt = torch.optim.SGD(model.params, lr=args.sgd_lr) 
+        opt = torch.optim.SGD(model.params, lr=args.sgd_lr, weight_decay=args.weight_decay,)
     return opt
 
 
