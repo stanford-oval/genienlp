@@ -1,5 +1,5 @@
 numpy
-torch==0.4.1
+torch>=0.4.1,<2.0.0
 
 # Revtok
 -e git+https://github.com/jekbradbury/revtok.git#egg=revtok
