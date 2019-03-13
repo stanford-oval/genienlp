@@ -47,6 +47,7 @@ from . import models
 from .text import torchtext
 from .text.torchtext.data import Example
 from .utils.generic_dataset import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
+from .utils.embeddings import load_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -66,13 +67,7 @@ class Server():
         self.model = model
 
         logger.info(f'Vocabulary has {len(self.field.vocab)} tokens from training')
-
-        char_vectors = torchtext.vocab.CharNGram(cache=self.args.embeddings)
-        if args.small_glove:
-            glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings, name="6B", dim=50)
-        else:
-            glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
-        self._vector_collections = [char_vectors, glove_vectors]
+        self._vector_collections = load_embeddings(args)
         
         self._limited_idx_to_full_idx = deepcopy(self.field.decoder_to_vocab) # should avoid this with a conditional in map to full
         self._oov_to_limited_idx = {}

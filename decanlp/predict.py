@@ -42,6 +42,7 @@ from pprint import pformat
 
 from .util import get_splits, set_seed, preprocess_examples
 from .metrics import compute_metrics
+from .utils.embeddings import load_embeddings
 from . import models
 
 logger = logging.getLogger(__name__)
@@ -71,13 +72,7 @@ def prepare_data(args, FIELD):
     args.max_generative_vocab = min(len(FIELD.vocab), args.max_generative_vocab)
     FIELD.append_vocab(new_vocab)
     logger.info(f'Vocabulary has expanded to {len(FIELD.vocab)} tokens')
-    logger.info(f'Getting pretrained word vectors')
-    char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
-    if args.small_glove:
-        glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings, name="6B", dim=50)
-    else:
-        glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
-    vectors = [char_vectors, glove_vectors]
+    vectors = load_embeddings(args)
     FIELD.vocab.load_vectors(vectors, True)
     FIELD.decoder_to_vocab = {idx: FIELD.vocab.stoi[word] for idx, word in enumerate(FIELD.decoder_itos)}
     FIELD.vocab_to_decoder = {idx: FIELD.decoder_stoi[word] for idx, word in enumerate(FIELD.vocab.itos) if word in FIELD.decoder_stoi}

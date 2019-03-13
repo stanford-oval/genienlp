@@ -51,6 +51,7 @@ from .validate import validate
 from .multiprocess import Multiprocess, DistributedDataParallel
 from .util import elapsed_time, get_splits, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
 from .utils.saver import Saver
+from .utils.embeddings import load_embeddings
 
 
 def initialize_logger(args, rank='main'):
@@ -113,13 +114,7 @@ def prepare_data(args, field, logger):
             logger.debug(f'examples***: {[token.strip() for token in ex.context]}')
 
     if args.load is None:
-        logger.info(f'Getting pretrained word vectors')
-        char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
-        if args.small_glove:
-            glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings, name="6B", dim=50)
-        else:
-            glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
-        vectors = [char_vectors, glove_vectors]
+        vectors = load_embeddings(args, logger)
         vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
         logger.info(f'Building vocabulary')
         FIELD.build_vocab(*vocab_sets, max_size=args.max_effective_vocab, vectors=vectors)
