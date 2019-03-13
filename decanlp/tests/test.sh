@@ -22,9 +22,12 @@ curl -O "https://parmesan.stanford.edu/glove/charNgram.txt.pt" ; mv charNgram.tx
 
         # train
         pipenv run decanlp train --train_tasks almond  --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --small_glove --no_commit
+        # thingpedia as context
+        pipenv run decanlp train --train_tasks almond  --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_'$i'_with_thingpedia/ --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --small_glove --no_commit --thingpedia $SRCDIR/dataset/thingpedia-8.json
 
         # greedy decode
         pipenv run decanlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
+        pipenv run decanlp predict --tasks almond --evaluate test --path $workdir/model_'$i'_with_thingpedia/ --overwrite --eval_dir $workdir/model_'$i'_with_thingpedia/ /eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
 
         # export prediction results
         pipenv run python3 $SRCDIR/../utils/post_process_decoded_results.py --original_data $SRCDIR/dataset/almond/test.tsv --gold_program $workdir/model_$i/eval_results/test/almond.gold.txt --predicted_program $workdir/model_$i/eval_results/test/almond.txt --output_file $workdir/model_$i/results.tsv

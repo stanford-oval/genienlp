@@ -272,7 +272,7 @@ def get_args(argv):
                     'dimension', 'load', 'max_val_context_length', 'val_batch_size', 
                     'transformer_heads', 'max_output_length', 'max_generative_vocab', 
                     'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
-                    'use_maxmargin_loss', 'small_glove']
+                    'use_maxmargin_loss', 'small_glove', 'thingpedia']
         for r in retrieve:
             if r in config:
                 setattr(args, r,  config[r])
