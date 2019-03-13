@@ -41,10 +41,8 @@ import sys
 from copy import deepcopy
 from pprint import pformat
 
-from .util import set_seed
+from .util import set_seed, load_config_json
 from . import models
-
-from .text import torchtext
 from .text.torchtext.data import Example
 from .utils.generic_dataset import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
 from .utils.embeddings import load_embeddings
@@ -213,43 +211,7 @@ def get_args(argv):
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
 
     args = parser.parse_args(argv[1:])
-
-    with open(os.path.join(args.path, 'config.json')) as config_file:
-        config = json.load(config_file)
-        retrieve = ['model',
-                    'transformer_layers', 'rnn_layers', 'transformer_hidden', 
-                    'dimension', 'load', 'max_val_context_length', 'val_batch_size', 
-                    'transformer_heads', 'max_output_length', 'max_generative_vocab', 
-                    'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
-                    'use_maxmargin_loss', 'reverse_task_bool', 'small_glove']
-        for r in retrieve:
-            if r in config:
-                setattr(args, r,  config[r])
-            elif 'cove' in r:
-                setattr(args, r, False)
-            elif 'elmo' in r:
-                setattr(args, r, [-1])
-            elif 'glove_and_char' in r:
-                setattr(args, r, True)
-            else:
-                setattr(args, r, None)
-        args.dropout_ratio = 0.0
-
-    args.task_to_metric = {
-        'cnn_dailymail': 'avg_rouge',
-        'iwslt.en.de': 'bleu',
-        'multinli.in.out': 'em',
-        'squad': 'nf1',
-        'srl': 'nf1',
-        'almond': 'bleu' if args.reverse_task_bool else 'em',
-        'sst': 'em',
-        'wikisql': 'lfem',
-        'woz.en': 'joint_goal_em',
-        'zre': 'corpus_f1',
-        'schema': 'em'
-    }
-
-    args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
+    load_config_json(args)
     return args
 
 
