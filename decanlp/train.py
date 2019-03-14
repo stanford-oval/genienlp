@@ -163,10 +163,11 @@ def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, wri
     loss.backward()
     if lr is not None:
         opt.param_groups[0]['lr'] = lr
+    grad_norm = None
     if grad_clip > 0.0:
-        torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
+        grad_norm, torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
     opt.step()
-    return loss.item(), {}
+    return loss.item(), {}, grad_norm
 
 
 def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_size=1, 
@@ -267,7 +268,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                         lr = get_learning_rate(iteration, args) 
 
                     # param update
-                    loss, train_metric_dict = step(model, batch, opt, iteration, field, task, lr=lr, grad_clip=args.grad_clip, writer=writer, it=train_iter)
+                    loss, train_metric_dict, grad_norm = step(model, batch, opt, iteration, field, task, lr=lr, grad_clip=args.grad_clip, writer=writer, it=train_iter)
 
                     # train metrics
                     local_loss += loss
@@ -299,6 +300,9 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
     
                         if writer is not None:
                             writer.add_scalar(f'loss/{task}/train', local_loss, iteration)
+                            writer.add_scalar(f'training/lr', lr, iteration)
+                            if grad_norm is not None:
+                                writer.add_scalar(f'training/norm', grad_norm, iteration)
                             for metric_key, metric_value in local_train_metric_dict.items():
                                 writer.add_scalar(f'{metric_key}/{task}/train', metric_value, iteration)
                                 writer.add_scalar(f'{task}/{metric_key}/train', metric_value, iteration)
