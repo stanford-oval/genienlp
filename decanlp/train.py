@@ -165,7 +165,7 @@ def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, wri
         opt.param_groups[0]['lr'] = lr
     grad_norm = None
     if grad_clip > 0.0:
-        grad_norm, torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
     opt.step()
     if torch.isnan(loss).item():
         raise ValueError('Found NaN loss')
