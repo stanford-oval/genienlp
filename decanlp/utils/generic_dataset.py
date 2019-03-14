@@ -231,16 +231,11 @@ class IWSLT(TranslationDataset, CQA, translation.IWSLT):
 def split_tokenize(x):
     return x.split()
 
-def clean(name):
-    """Normalize argument names into English words.
+def generate_tokens(type):
 
-    Removes the "v_" prefix, converts camelCase to multiple words, and underscores
-    to spaces.
-    """
-    if name.startswith('v_'):
-        name = name[len('v_'):]
-    return re.sub('([^A-Z])([A-Z])', '$1 $2', re.sub('_', ' ', name)).lower()
-
+    args = type[len('Enum')+1:-1].split(',')
+    result = list(map(lambda arg: f'enum:{arg}', args))
+    return result
 
 class Almond(CQA):
     """The Almond semantic parsing task"""
@@ -249,6 +244,7 @@ class Almond(CQA):
     name = 'almond'
     
     def __init__(self, path, field, reverse_task=False, subsample=None, thingpedia=None, **kwargs):
+
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
@@ -267,26 +263,30 @@ class Almond(CQA):
                 all_entities = result['entities']
 
                 for entity in all_entities:
-                    words_list.add(entity['type'])
+                    if entity['has_ner_support']:
+                        words_list.add('^^' + entity['type'])
 
                 for device in all_devices:
                     if device['kind_type'] in ('global', 'category', 'discovery'):
                         continue
 
-                    if device.get('kind_canonical', None):
-                        words_list.add(device['kind'])
-                    else:
+                    if not device.get('kind_canonical', None):
                         print('WARNING: missing canonical for device:%s' % (device['kind']))
+
                     for function_type in ('triggers', 'queries', 'actions'):
                         for function_name, function in device[function_type].items():
                             if not function['canonical']:
                                 print('WARNING: missing canonical for @%s.%s' % (device['kind'], function_name))
                             else:
-                                words_list.add(function_name)
-                                for type in function['types']:
-                                    words_list.add(type)
+                                words_list.add('@' + device['kind'] + '.' + function_name)
+                                for arg, type in zip(function['args'], function['types']):
+                                    if type.startswith('Enum'):
+                                        tokens = generate_tokens(type)
+                                        words_list.update(tokens)
+                                    words_list.add('param:' + arg + ':' + type)
 
             return words_list
+
 
         words_list = set()
         if thingpedia is not None:
