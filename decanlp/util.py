@@ -50,10 +50,7 @@ def get_context_question(ex, context, question, field):
 
 def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
     min_length = 1
-    if args.use_thingpedia:
-        max_context_length = len(splits[0].examples[0].context)
-    else:
-        max_context_length = args.max_train_context_length if train else args.max_val_context_length
+    max_context_length = args.max_train_context_length if train else args.max_val_context_length
     is_too_long = lambda ex: (len(ex.answer) > args.max_answer_length or
         len(ex.context)>max_context_length)
     is_too_short = lambda ex: (len(ex.answer) < min_length or
@@ -164,9 +161,12 @@ def get_splits(args, task, FIELD, **kwargs):
         src, trg = ['.'+x for x in task.split('.')[1:]]
         split = generic_dataset.IWSLT.splits(exts=(src, trg), 
             fields=FIELD, root=args.data, **kwargs)
-    elif 'almond' in task:
+    elif task.lower() == 'almond':
         split = generic_dataset.Almond.splits(
-            fields=FIELD, root=args.data, reverse_task=args.reverse_task_bool, thingpedia=args.thingpedia if args.use_thingpedia else None, **kwargs)
+            fields=FIELD, root=args.data, reverse_task=args.reverse_task_bool, **kwargs)
+    elif task.lower() == 'almond_with_thingpedia':
+        split = generic_dataset.Almond_with_thingpedia.splits(
+            fields=FIELD, thingpedia=args.thingpedia, root=args.data, reverse_task=args.reverse_task_bool, **kwargs)
     elif 'squad' in task:
         split = generic_dataset.SQuAD.splits(
             fields=FIELD, root=args.data, description=task, **kwargs)
@@ -245,12 +245,12 @@ def load_config_json(args):
     args.almond_type_embeddings = False
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
-        retrieve = ['model',
-                    'transformer_layers', 'rnn_layers', 'transformer_hidden',
+        retrieve = ['model', 'transformer_layers', 'rnn_layers', 'transformer_hidden',
                     'dimension', 'load', 'max_val_context_length', 'val_batch_size',
                     'transformer_heads', 'max_output_length', 'max_generative_vocab',
                     'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
-                    'use_maxmargin_loss', 'small_glove', 'almond_type_embeddings']
+                    'use_maxmargin_loss', 'small_glove', 'almond_type_embeddings',
+                    'thingpedia']
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
@@ -271,6 +271,7 @@ def load_config_json(args):
         'squad': 'nf1',
         'srl': 'nf1',
         'almond': 'bleu' if args.reverse_task_bool else 'em',
+        'almond_with_thingpedia': 'bleu' if args.reverse_task_bool else 'em',
         'sst': 'em',
         'wikisql': 'lfem',
         'woz.en': 'joint_goal_em',

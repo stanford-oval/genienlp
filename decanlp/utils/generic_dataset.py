@@ -237,60 +237,24 @@ def generate_tokens(type):
     result = list(map(lambda arg: f'enum:{arg}', args))
     return result
 
+
 class Almond(CQA):
     """The Almond semantic parsing task"""
 
     base_url = None
     name = 'almond'
-    
-    def __init__(self, path, field, reverse_task=False, subsample=None, thingpedia=None, **kwargs):
 
+    def __init__(self, path, field, reverse_task=False, subsample=None, **kwargs):
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
-        def extract_words(thingpedia):
-
-            words_list = set()
-            with open(thingpedia, 'r') as f:
-                result = json.load(f)
-                output = dict()
-
-                output['devices'] = []
-                output['entities'] = []
-
-                all_devices = result['devices']
-                all_entities = result['entities']
-
-                for entity in all_entities:
-                    if entity['has_ner_support']:
-                        words_list.add('^^' + entity['type'])
-
-                for device in all_devices:
-                    if device['kind_type'] in ('global', 'category', 'discovery'):
-                        continue
-
-                    if not device.get('kind_canonical', None):
-                        print('WARNING: missing canonical for device:%s' % (device['kind']))
-
-                    for function_type in ('triggers', 'queries', 'actions'):
-                        for function_name, function in device[function_type].items():
-                            if not function['canonical']:
-                                print('WARNING: missing canonical for @%s.%s' % (device['kind'], function_name))
-                            else:
-                                words_list.add('@' + device['kind'] + '.' + function_name)
-                                for arg, type in zip(function['args'], function['types']):
-                                    if type.startswith('Enum'):
-                                        tokens = generate_tokens(type)
-                                        words_list.update(tokens)
-                                    words_list.add('param:' + arg + ':' + type)
-
-            return words_list
-
-
-        words_list = set()
-        if thingpedia is not None:
-            words_list = extract_words(thingpedia)
+        # the question is irrelevant, so the question says English and ThingTalk even if we're doing
+        # a different language (like Chinese)
+        if reverse_task:
+            question = 'Translate from ThingTalk to English'
+        else:
+            question = 'Translate from English to ThingTalk'
 
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
@@ -302,30 +266,20 @@ class Almond(CQA):
                 for line in fp:
                     _id, sentence, target_code = line.strip().split('\t')
                     if reverse_task:
+                        context = target_code
                         answer = sentence
-                        if thingpedia is not None:
-                            question = target_code
-                            context = ' '.join(words_list)
-                        else:
-                            question = 'Translate from Natural Language to Thingtalk'
-                            context = target_code
                     else:
+                        context = sentence
                         answer = target_code
-                        if thingpedia is not None:
-                            question = sentence
-                            context = ' '.join(words_list)
-                        else:
-                            question = 'Translate from Natural Language to Thingtalk'
-                            context = sentence
-                    
-                    context_question = get_context_question(context, question) 
+
+                    context_question = get_context_question(context, question)
                     examples.append(data.Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=split_tokenize))
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
-        
+
         super().__init__(examples, fields, **kwargs)
     
     @staticmethod
@@ -362,6 +316,113 @@ class Almond(CQA):
     @staticmethod
     def clean(path):
         pass
+
+class Almond_with_thingpedia(CQA):
+
+    base_url = None
+    # point to same dataset as almond task
+    name = 'almond'
+
+    def __init__(self, path, field, thingpedia, reverse_task=False, subsample=None, **kwargs):
+
+        fields = [(x, field) for x in self.fields]
+        cached_path = kwargs.pop('cached_path')
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
+
+        def extract_words(thingpedia):
+
+            words_list = set()
+            with open(thingpedia, 'r') as f:
+                result = json.load(f)
+                output = dict()
+
+                output['devices'] = []
+                output['entities'] = []
+
+                all_devices = result['devices']
+                all_entities = result['entities']
+
+                for entity in all_entities:
+                    if entity['has_ner_support']:
+                        words_list.add('^^' + entity['type'])
+
+                for device in all_devices:
+                    if device['kind_type'] in ('global', 'category', 'discovery'):
+                        continue
+
+                    if not device.get('kind_canonical', None):
+                        logger.warning('WARNING: missing canonical for device:%s' % (device['kind']))
+
+                    for function_type in ('triggers', 'queries', 'actions'):
+                        for function_name, function in device[function_type].items():
+                            if not function['canonical']:
+                                logger.warning('WARNING: missing canonical for @%s.%s' % (device['kind'], function_name))
+                            else:
+                                words_list.add('@' + device['kind'] + '.' + function_name)
+                                for arg, type in zip(function['args'], function['types']):
+                                    if type.startswith('Enum'):
+                                        tokens = generate_tokens(type)
+                                        words_list.update(tokens)
+                                    words_list.add('param:' + arg + ':' + type)
+
+            return words_list
+
+        words_list = extract_words(thingpedia)
+
+        skip_cache_bool = kwargs.pop('skip_cache_bool')
+        if os.path.exists(cache_name) and not skip_cache_bool:
+            logger.info(f'Loading cached data from {cache_name}')
+            examples = torch.load(cache_name)
+        else:
+            examples = []
+            with open(path, 'r') as fp:
+                for line in fp:
+                    _id, sentence, target_code = line.strip().split('\t')
+                    if reverse_task:
+                        answer = sentence
+                        question = target_code
+                        context = ' '.join(words_list)
+                    else:
+                        answer = target_code
+                        question = sentence
+                        context = ' '.join(words_list)
+
+                    context_question = get_context_question(context, question)
+                    examples.append(data.Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=split_tokenize))
+                    if subsample is not None and len(examples) >= subsample:
+                        break
+            os.makedirs(os.path.dirname(cache_name), exist_ok=True)
+            logger.info(f'Caching data to {cache_name}')
+            torch.save(examples, cache_name)
+
+        super().__init__(examples, fields, **kwargs)
+
+    @classmethod
+    def splits(cls, fields, thingpedia, root='.data',
+               train='train', validation='eval',
+               test='test', reverse_task=False, **kwargs):
+
+        """Create dataset objects for splits of the ThingTalk dataset.
+        Arguments:
+            root: Root dataset storage directory. Default is '.data'.
+            fields: A tuple containing the fields that will be used for data
+                in each language.
+            train: The prefix of the train data. Default: 'train'.
+            validation: The prefix of the validation data. Default: 'eval'.
+            test: The prefix of the test data. Default: 'test'.
+            Remaining keyword arguments: Passed to the splits method of
+                Dataset.
+        """
+        path = os.path.join(root, cls.name)
+
+        train_data = None if train is None else cls(
+            os.path.join(path, train + '.tsv'), fields, thingpedia, reverse_task=reverse_task, **kwargs)
+        val_data = None if validation is None else cls(
+            os.path.join(path, validation + '.tsv'), fields, thingpedia, reverse_task=reverse_task, **kwargs)
+        test_data = None if test is None else cls(
+            os.path.join(path, test + '.tsv'), fields, thingpedia, reverse_task=reverse_task, **kwargs)
+        return tuple(d for d in (train_data, val_data, test_data)
+                     if d is not None)
 
 
 class SQuAD(CQA, data.Dataset):

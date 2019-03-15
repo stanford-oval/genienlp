@@ -109,11 +109,6 @@ def prepare_data(args, field, logger):
         if args.vocab_tasks is not None and task in args.vocab_tasks:
             vocab_sets.extend(split)
 
-    for task, s in zip(args.train_tasks, train_sets):
-        for ex in s.examples[:10]:
-            ex_list = ex.question if args.use_thingpedia else ex.context
-            logger.debug(f'examples***: {[token.strip() for token in ex_list]}')
-
     if args.load is None:
         vectors = load_embeddings(args, logger)
         vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets

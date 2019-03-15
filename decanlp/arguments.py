@@ -84,8 +84,8 @@ def parse(argv):
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
     parser.add_argument('--max_effective_vocab', default=int(1e6), type=int, help='max effective vocabulary size for pretrained embeddings')
     parser.add_argument('--max_generative_vocab', default=50000, type=int, help='max vocabulary for the generative softmax')
-    parser.add_argument('--max_train_context_length', default=400, type=int, help='maximum length of the contexts during training')
-    parser.add_argument('--max_val_context_length', default=400, type=int, help='maximum length of the contexts during validation')
+    parser.add_argument('--max_train_context_length', default=500, type=int, help='maximum length of the contexts during training')
+    parser.add_argument('--max_val_context_length', default=500, type=int, help='maximum length of the contexts during validation')
     parser.add_argument('--max_answer_length', default=50, type=int, help='maximum length of answers during training and validation')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument('--preserve_case', action='store_false', dest='lower', help='whether to preserve casing for all text')
@@ -130,8 +130,6 @@ def parse(argv):
     parser.add_argument('--loss_switch', default=0.666, type=float, help='switch to BLEU loss after certain iterations controlled by this ratio')
     parser.add_argument('--small_glove', action='store_true', help='Use glove.6B.50d instead of glove.840B.300d')
     parser.add_argument('--almond_type_embeddings', action='store_true', help='Add type-based word embeddings for Almond task')
-
-    parser.add_argument('--use_thingpedia', action='store_true', help='use thingpedia as context')
     parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from')
 
 
@@ -151,6 +149,7 @@ def parse(argv):
         'squad': 'nf1',
         'srl': 'nf1',
         'almond': 'bleu' if args.reverse_task_bool else 'em',
+        'almond_with_thingpedia': 'bleu' if args.reverse_task_bool else 'em',
         'sst': 'em',
         'wikisql': 'lfem',
         'woz.en': 'joint_goal_em',
