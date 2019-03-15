@@ -54,6 +54,7 @@ from .validate import validate
 from .multiprocess import Multiprocess, DistributedDataParallel
 from .util import elapsed_time, get_splits, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
 from .utils.saver import Saver
+from .utils.embeddings import load_embeddings
 
 
 def initialize_logger(args, rank='main'):
@@ -86,8 +87,6 @@ def prepare_data(args, field, logger):
     else:
         FIELD = field
 
-    if len(args.train_tasks) > 1 and args.use_curriculum:
-        logger.error('Curriculum learning is supported for one task only.')
     train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
     for task in args.train_tasks:
         logger.info(f'Loading {task}')
@@ -105,7 +104,7 @@ def prepare_data(args, field, logger):
         else:
             assert len(split) == 1
             train_sets.append(split[0])
-        logger.info(f'{task} has {len(split)} training examples')
+        logger.info(f'{task} has {len(split[0])} training examples')
 
         if args.vocab_tasks is not None and task in args.vocab_tasks:
             vocab_sets.extend(split)
@@ -118,7 +117,7 @@ def prepare_data(args, field, logger):
         logger.info(f'Adding {task} to validation datasets')
         split = get_splits(args, task, FIELD, **kwargs)
         assert len(split) == 1
-        logger.info(f'{task} has {len(split)} validation examples')
+        logger.info(f'{task} has {len(split[0])} validation examples')
         val_sets.append(split[0])
         if args.vocab_tasks is not None and task in args.vocab_tasks:
             vocab_sets.extend(split)
@@ -128,14 +127,8 @@ def prepare_data(args, field, logger):
             logger.debug(f'examples***: {[token.strip() for token in ex.context]}')
 
     if args.load is None:
-        logger.info(f'Getting pretrained word vectors')
-        char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
-        if args.small_glove:
-            glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings, name="6B", dim=50)
-        else:
-            glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
-        vectors = [char_vectors, glove_vectors]
-        vocab_sets = (train_sets + val_sets + aux_sets) if len(vocab_sets) == 0 else vocab_sets
+        vectors = load_embeddings(args, logger)
+        vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
         logger.info(f'Building vocabulary')
         FIELD.build_vocab(*vocab_sets, max_size=args.max_effective_vocab, vectors=vectors)
 
@@ -164,11 +157,10 @@ def to_iter(args, world_size, val_batch_size, data, device, train=True, token_te
     shuffle = None if not token_testing else False
     reverse = args.reverse
     Iterator = torchtext.data.BucketIterator if train else torchtext.data.Iterator
-    repeat = False
-    it = Iterator(data, batch_size=val_batch_size, 
+    it = Iterator(data, batch_size=val_batch_size,
        device=device, batch_size_fn=batch_fn if train else None, 
-       distributed=world_size>1, train=train, repeat=repeat, sort=sort,
-       shuffle=shuffle, reverse=args.reverse)
+       distributed=world_size>1, train=train, repeat=train, sort=sort,
+       shuffle=shuffle, reverse=reverse)
     return it
 
 
@@ -187,19 +179,19 @@ def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, wri
     loss.backward()
     if lr is not None:
         opt.param_groups[0]['lr'] = lr
+    grad_norm = None
     if grad_clip > 0.0:
-        torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
     opt.step()
-    return loss.item(), {}
-
+    if torch.isnan(loss).item():
+        raise ValueError('Found NaN loss')
+    return loss.item(), {}, grad_norm
 
 
 def create_mixed_set(args, train_sets, aux_sets, epoch):
 
     assert len(aux_sets) == len(train_sets)
     num_tasks = len(train_sets)
-
-    # mixed_set = deepcopy(train_sets)
     mixed_set = train_sets
 
     for i in range(num_tasks):
@@ -242,6 +234,16 @@ def create_mixed_set(args, train_sets, aux_sets, epoch):
 
     return mixed_set
 
+def update_fraction(args, task_iteration):
+
+    if args.curriculum_strategy == 'linear':
+        next_fraction = args.curriculum_rate * task_iteration
+    elif args. curriculum_strategy == 'exp':
+        next_fraction = args.curriculum_rate * np.exp(task_iteration)
+
+    fraction = min(args.curriculum_max_frac, next_fraction)
+
+    return fraction
 
 def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_size=1,
     log_every=10, val_every=100, save_every=1000, rounds=False, val_sets=[], aux_sets=[], writer=None, start_iteration=1, rnd=1, best_decascore=None):
@@ -257,33 +259,34 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
 
     task_iteration = dict()
     task_done = dict()
-
-    saver = Saver(args.log_dir, world_size, args.max_to_keep)
-    epoch = 0
+    task_fraction = dict()
 
     for task in args.train_tasks:
         task_iteration[task] = 1
         task_done[task] = False
+        task_fraction[task] = 0.0
+
+    saver = Saver(args.log_dir, world_size, args.max_to_keep)
+    epoch = 0
+
+    logger.info(f'Preparing iterators')
+    train_iters = [(name, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
+                      for name, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
+    train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
+
+    val_iters = [(name, to_iter(args, world_size, tok, x, device, train=False, token_testing=args.token_testing, sort=False if 'sql' in name else None))
+                    for name, x, tok in zip(args.val_tasks, val_sets, args.val_batch_size)]
+
+
+    if args.use_curriculum:
+        aux_iters = [(name, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
+                          for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
+        aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
 
     while True:
 
         logger.info(f'starting epoch {epoch}')
-        logger.info(f'Preparing iterators')
-        train_iters = [(name, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
-                          for name, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
-        val_iters = [(name, to_iter(args, world_size, tok, x, device, train=False, token_testing=args.token_testing, sort=False if 'sql' in name else None))
-                        for name, x, tok in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
-        if args.use_curriculum:
-            # logger.info(f'Updating iterators for curriculum')
-            mixed_sets = create_mixed_set(args, train_sets, aux_sets, epoch)
-            train_iters = [(name, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
-                  for name, x, tok in zip(args.train_tasks, mixed_sets, args.train_batch_tokens)]
-            val_iters = [(name, to_iter(args, world_size, tok, x, device, train=False, token_testing=args.token_testing, sort=False if 'sql' in name else None))
-                  for name, x, tok in zip(args.val_tasks, val_sets, args.val_batch_size)]
-
-
-        train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
         # For some number of rounds, we 'jump start' some subset of the tasks
         # by training them and not others
         # once the specified number of rounds is completed, 
@@ -294,7 +297,7 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
         else:
             train_iterations = train_iter_deep
 
-        for task_idx, (task, train_iter) in enumerate(train_iters):
+        for task_idx, (task, train_iter)in enumerate(train_iters):
 
             task_iterations = train_iterations[task_idx] if train_iterations is not None else None
             if task_iterations == 0:
@@ -303,8 +306,19 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                 task_done[task] = True
                 continue
 
+            if args.use_curriculum:
+                aux_iter = aux_iters[task_idx][1]
+                prob = np.random.choice(['train', 'aux'], p=[1-task_fraction[task], task_fraction[task]])
+                if prob == 'aux':
+                    batch = next(aux_iter)
+                elif prob == 'train':
+                    batch = next(train_iter)
 
-            for batch in train_iter:
+            else:
+                batch = next(train_iter)
+
+            # run only once
+            for _ in range(1):
                 if not args.resume or iteration > start_iteration:
                     task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
                     round_progress = f'round_{rnd}:' if rounds else ''
@@ -371,7 +385,11 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                         lr = get_learning_rate(iteration, args) 
 
                     # param update
-                    loss, train_metric_dict = step(model, batch, opt, iteration, field, task, lr=lr, grad_clip=args.grad_clip, writer=writer, it=train_iter)
+                    loss, train_metric_dict, grad_norm = step(model, batch, opt, iteration, field, task, lr=lr, grad_clip=args.grad_clip, writer=writer, it=train_iter)
+
+                    # update curriculum fraction
+                    if args.use_curriculum:
+                        task_fraction[task] = update_fraction(args, task_iteration[task])
 
                     # train metrics
                     local_loss += loss
@@ -403,6 +421,9 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
     
                         if writer is not None:
                             writer.add_scalar(f'loss/{task}/train', local_loss, iteration)
+                            writer.add_scalar(f'training/lr', lr, iteration)
+                            if grad_norm is not None:
+                                writer.add_scalar(f'training/norm', grad_norm, iteration)
                             for metric_key, metric_value in local_train_metric_dict.items():
                                 writer.add_scalar(f'{metric_key}/{task}/train', metric_value, iteration)
                                 writer.add_scalar(f'{task}/{metric_key}/train', metric_value, iteration)
@@ -418,6 +439,7 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
         # book keeping
         epoch += 1
         rnd += 1
+
         if all(task_done.values()):
             logger.info(f'training is done after {epoch} epochs')
             break
@@ -450,7 +472,6 @@ def run(args, run_args, rank=0, world_size=1):
             start_iteration = opt_state_dict.pop('start_iteration')
             logger.info(f'Starting iteration is {start_iteration}')
             opt.load_state_dict(opt_state_dict)
-            # start_iteration = int(os.path.splitext(os.path.basename(args.load))[0].split('_')[1])
 
     logger.info(f'Begin Training')
     train(args, model, opt, train_sets, args.train_iterations, field, val_sets=val_sets, aux_sets=aux_sets,
@@ -481,11 +502,11 @@ def init_opt(args, model):
     opt = None
     if 'adam' in args.optimizer.lower():
         if args.transformer_lr:
-            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(0.9, 0.98), eps=1e-9)
+            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
         else:
-            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999))
+            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
     else:
-        opt = torch.optim.SGD(model.params, lr=args.sgd_lr) 
+        opt = torch.optim.SGD(model.params, lr=args.sgd_lr, weight_decay=args.weight_decay,)
     return opt
 
 
