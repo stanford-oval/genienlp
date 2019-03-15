@@ -40,8 +40,9 @@ import sys
 import logging
 from pprint import pformat
 
-from .util import get_splits, set_seed, preprocess_examples
+from .util import get_splits, set_seed, preprocess_examples, load_config_json
 from .metrics import compute_metrics
+from .utils.embeddings import load_embeddings
 from . import models
 
 logger = logging.getLogger(__name__)
@@ -71,13 +72,7 @@ def prepare_data(args, FIELD):
     args.max_generative_vocab = min(len(FIELD.vocab), args.max_generative_vocab)
     FIELD.append_vocab(new_vocab)
     logger.info(f'Vocabulary has expanded to {len(FIELD.vocab)} tokens')
-    logger.info(f'Getting pretrained word vectors')
-    char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
-    if args.small_glove:
-        glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings, name="6B", dim=50)
-    else:
-        glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
-    vectors = [char_vectors, glove_vectors]
+    vectors = load_embeddings(args)
     FIELD.vocab.load_vectors(vectors, True)
     FIELD.decoder_to_vocab = {idx: FIELD.vocab.stoi[word] for idx, word in enumerate(FIELD.decoder_itos)}
     FIELD.vocab_to_decoder = {idx: FIELD.decoder_stoi[word] for idx, word in enumerate(FIELD.vocab.itos) if word in FIELD.decoder_stoi}
@@ -265,42 +260,7 @@ def get_args(argv):
 
     args = parser.parse_args(argv[1:])
 
-    with open(os.path.join(args.path, 'config.json')) as config_file:
-        config = json.load(config_file)
-        retrieve = ['model', 
-                    'transformer_layers', 'rnn_layers', 'transformer_hidden', 
-                    'dimension', 'load', 'max_val_context_length', 'val_batch_size', 
-                    'transformer_heads', 'max_output_length', 'max_generative_vocab', 
-                    'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
-                    'use_maxmargin_loss', 'small_glove', 'thingpedia', 'use_thingpedia']
-        for r in retrieve:
-            if r in config:
-                setattr(args, r,  config[r])
-            elif 'cove' in r:
-                setattr(args, r, False)
-            elif 'elmo' in r:
-                setattr(args, r, [-1])
-            elif 'glove_and_char' in r:
-                setattr(args, r, True)
-            else:
-                setattr(args, r, None)
-        args.dropout_ratio = 0.0
-
-    args.task_to_metric = {
-        'cnn_dailymail': 'avg_rouge',
-        'iwslt.en.de': 'bleu',
-        'multinli.in.out': 'em',
-        'squad': 'nf1',
-        'srl': 'nf1',
-        'almond': 'bleu' if args.reverse_task_bool else 'em',
-        'sst': 'em',
-        'wikisql': 'lfem',
-        'woz.en': 'joint_goal_em',
-        'zre': 'corpus_f1',
-        'schema': 'em'
-    }
-
-    args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
+    load_config_json(args)
     return args
 
 

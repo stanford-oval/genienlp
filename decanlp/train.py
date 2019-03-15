@@ -51,6 +51,7 @@ from .validate import validate
 from .multiprocess import Multiprocess, DistributedDataParallel
 from .util import elapsed_time, get_splits, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
 from .utils.saver import Saver
+from .utils.embeddings import load_embeddings
 
 
 def initialize_logger(args, rank='main'):
@@ -114,15 +115,7 @@ def prepare_data(args, field, logger):
             logger.debug(f'examples***: {[token.strip() for token in ex_list]}')
 
     if args.load is None:
-        logger.info(f'Getting pretrained word vectors')
-
-
-        char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
-        if args.small_glove:
-            glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings, name="6B", dim=50)
-        else:
-            glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
-        vectors = [char_vectors, glove_vectors]
+        vectors = load_embeddings(args, logger)
         vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
         logger.info(f'Building vocabulary')
         FIELD.build_vocab(*vocab_sets, max_size=args.max_effective_vocab, vectors=vectors)
@@ -171,10 +164,13 @@ def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, wri
     loss.backward()
     if lr is not None:
         opt.param_groups[0]['lr'] = lr
+    grad_norm = None
     if grad_clip > 0.0:
-        torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
     opt.step()
-    return loss.item(), {}
+    if torch.isnan(loss).item():
+        raise ValueError('Found NaN loss')
+    return loss.item(), {}, grad_norm
 
 
 def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_size=1, 
@@ -275,7 +271,7 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
                         lr = get_learning_rate(iteration, args) 
 
                     # param update
-                    loss, train_metric_dict = step(model, batch, opt, iteration, field, task, lr=lr, grad_clip=args.grad_clip, writer=writer, it=train_iter)
+                    loss, train_metric_dict, grad_norm = step(model, batch, opt, iteration, field, task, lr=lr, grad_clip=args.grad_clip, writer=writer, it=train_iter)
 
                     # train metrics
                     local_loss += loss
@@ -307,6 +303,9 @@ def train(args, model, opt, train_iters, train_iterations, field, rank=0, world_
     
                         if writer is not None:
                             writer.add_scalar(f'loss/{task}/train', local_loss, iteration)
+                            writer.add_scalar(f'training/lr', lr, iteration)
+                            if grad_norm is not None:
+                                writer.add_scalar(f'training/norm', grad_norm, iteration)
                             for metric_key, metric_value in local_train_metric_dict.items():
                                 writer.add_scalar(f'{metric_key}/{task}/train', metric_value, iteration)
                                 writer.add_scalar(f'{task}/{metric_key}/train', metric_value, iteration)

@@ -34,6 +34,7 @@ import os
 import torch
 import random
 import numpy as np
+import ujson as json
 import logging
 
 from .utils import generic_dataset
@@ -239,3 +240,42 @@ def pad(x, new_channel, dim, val=None):
     size[dim] = new_channel - size[dim]
     padding = x.new(*size).fill_(val)
     return torch.cat([x, padding], dim)
+
+def load_config_json(args):
+    args.almond_type_embeddings = False
+    with open(os.path.join(args.path, 'config.json')) as config_file:
+        config = json.load(config_file)
+        retrieve = ['model',
+                    'transformer_layers', 'rnn_layers', 'transformer_hidden',
+                    'dimension', 'load', 'max_val_context_length', 'val_batch_size',
+                    'transformer_heads', 'max_output_length', 'max_generative_vocab',
+                    'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
+                    'use_maxmargin_loss', 'small_glove', 'almond_type_embeddings']
+        for r in retrieve:
+            if r in config:
+                setattr(args, r, config[r])
+            elif 'cove' in r:
+                setattr(args, r, False)
+            elif 'elmo' in r:
+                setattr(args, r, [-1])
+            elif 'glove_and_char' in r:
+                setattr(args, r, True)
+            else:
+                setattr(args, r, None)
+        args.dropout_ratio = 0.0
+
+    args.task_to_metric = {
+        'cnn_dailymail': 'avg_rouge',
+        'iwslt.en.de': 'bleu',
+        'multinli.in.out': 'em',
+        'squad': 'nf1',
+        'srl': 'nf1',
+        'almond': 'bleu' if args.reverse_task_bool else 'em',
+        'sst': 'em',
+        'wikisql': 'lfem',
+        'woz.en': 'joint_goal_em',
+        'zre': 'corpus_f1',
+        'schema': 'em'
+    }
+
+    args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
