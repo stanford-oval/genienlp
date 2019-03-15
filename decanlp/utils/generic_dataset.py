@@ -302,13 +302,21 @@ class Almond(CQA):
                 for line in fp:
                     _id, sentence, target_code = line.strip().split('\t')
                     if reverse_task:
-                        question = target_code
                         answer = sentence
+                        if thingpedia is not None:
+                            question = target_code
+                            context = ' '.join(words_list)
+                        else:
+                            question = 'Translate from Natural Language to Thingtalk'
+                            context = target_code
                     else:
-                        question = sentence
                         answer = target_code
-
-                    context = ' '.join(words_list)
+                        if thingpedia is not None:
+                            question = sentence
+                            context = ' '.join(words_list)
+                        else:
+                            question = 'Translate from Natural Language to Thingtalk'
+                            context = sentence
                     
                     context_question = get_context_question(context, question) 
                     examples.append(data.Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=split_tokenize))

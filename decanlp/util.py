@@ -49,7 +49,10 @@ def get_context_question(ex, context, question, field):
 
 def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
     min_length = 1
-    max_context_length = args.max_train_context_length if train else args.max_val_context_length
+    if args.use_thingpedia:
+        max_context_length = len(splits[0].examples[0].context)
+    else:
+        max_context_length = args.max_train_context_length if train else args.max_val_context_length
     is_too_long = lambda ex: (len(ex.answer) > args.max_answer_length or
         len(ex.context)>max_context_length)
     is_too_short = lambda ex: (len(ex.answer) < min_length or
@@ -162,7 +165,7 @@ def get_splits(args, task, FIELD, **kwargs):
             fields=FIELD, root=args.data, **kwargs)
     elif 'almond' in task:
         split = generic_dataset.Almond.splits(
-            fields=FIELD, root=args.data, reverse_task=args.reverse_task_bool, thingpedia=args.thingpedia, **kwargs)
+            fields=FIELD, root=args.data, reverse_task=args.reverse_task_bool, thingpedia=args.thingpedia if args.use_thingpedia else None, **kwargs)
     elif 'squad' in task:
         split = generic_dataset.SQuAD.splits(
             fields=FIELD, root=args.data, description=task, **kwargs)

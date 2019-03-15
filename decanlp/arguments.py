@@ -130,7 +130,8 @@ def parse(argv):
     parser.add_argument('--loss_switch', default=0.666, type=float, help='switch to BLEU loss after certain iterations controlled by this ratio')
     parser.add_argument('--small_glove', action='store_true', help='Use glove.6B.50d instead of glove.840B.300d')
 
-    parser.add_argument('--thingpedia', type=str, help='provide thingpedia as context')
+    parser.add_argument('--use_thingpedia', action='store_true', help='use thingpedia as context')
+    parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from')
 
 
     args = parser.parse_args(argv[1:])

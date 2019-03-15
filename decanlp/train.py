@@ -110,7 +110,8 @@ def prepare_data(args, field, logger):
 
     for task, s in zip(args.train_tasks, train_sets):
         for ex in s.examples[:10]:
-            logger.debug(f'examples***: {[token.strip() for token in ex.question]}')
+            ex_list = ex.question if args.use_thingpedia else ex.context
+            logger.debug(f'examples***: {[token.strip() for token in ex_list]}')
 
     if args.load is None:
         logger.info(f'Getting pretrained word vectors')
