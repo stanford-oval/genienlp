@@ -108,6 +108,7 @@ def parse(argv):
     parser.add_argument('--optimizer', default='adam', type=str, help='Adam or SGD')
     parser.add_argument('--no_transformer_lr', action='store_false', dest='transformer_lr', help='turns off the transformer learning rate strategy') 
     parser.add_argument('--sgd_lr', default=1.0, type=float, help='learning rate for SGD (if not using Adam)')
+    parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
 
     parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside args.save')
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')
@@ -128,6 +129,7 @@ def parse(argv):
     parser.add_argument('--use_maxmargin_loss', action='store_true', help='whether to use max-margin loss or not')
     parser.add_argument('--loss_switch', default=0.666, type=float, help='switch to BLEU loss after certain iterations controlled by this ratio')
     parser.add_argument('--small_glove', action='store_true', help='Use glove.6B.50d instead of glove.840B.300d')
+    parser.add_argument('--almond_type_embeddings', action='store_true', help='Add type-based word embeddings for Almond task')
 
 
     args = parser.parse_args(argv[1:])
