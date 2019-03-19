@@ -65,6 +65,7 @@ def get_clip(val_iter):
 
 
 def all_reverse(tensor, world_size, task, field, clip, dim=0):
+    
     if world_size > 1:
         tensor = tensor.float() # tensors must be on cpu and float for all_gather
         all_tensors = [torch.zeros_like(tensor) for _ in range(world_size)]
@@ -72,12 +73,10 @@ def all_reverse(tensor, world_size, task, field, clip, dim=0):
         torch.distributed.all_gather(all_tensors, tensor)
         torch.distributed.barrier()
         tensor = torch.cat(all_tensors, 0).long() # tensors must be long for reverse
+    
     # for distributed training, dev sets are padded with extra examples so that the
-    # tensors are all of a predictable size for all_gather. This line removes those extra examples
-    if task == 'almond':
-        return field.reverse(tensor, detokenize=lambda x: ' '.join(x))[:clip]
-    else:
-        return field.reverse(tensor)[:clip]
+    # tensors are all of a predictable size for all_gather. `[:clip]` removes those extra examples
+    return field.reverse(tensor, detokenize=task.detokenize)[:clip]
 
 
 def gather_results(model, val_iter, field, world_size, task, iteration, optional_names=[]):

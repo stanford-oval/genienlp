@@ -338,7 +338,7 @@ def run(args, run_args, rank=0, world_size=1):
     logger.info(f'Preparing iterators')
     train_iters = [(task, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
                       for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
-    val_iters = [(task, to_iter(args, world_size, tok, x, device, train=False, token_testing=args.token_testing, sort=False if 'sql' in name else None))
+    val_iters = [(task, to_iter(args, world_size, tok, x, device, train=False, token_testing=args.token_testing, sort=False if 'sql' in task.name else None))
                     for task, x, tok in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     if hasattr(args, 'tensorboard') and args.tensorboard:
