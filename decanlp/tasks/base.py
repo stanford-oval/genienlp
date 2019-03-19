@@ -28,7 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-from ..utils import generic_dataset
+from . import generic_dataset
 
 
 class BaseTask:

@@ -27,11 +27,8 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from subprocess import Popen, PIPE, CalledProcessError
-import json
-from .utils.generic_dataset import Query
+from subprocess import Popen, PIPE
 import logging
-import os
 import re
 import string
 import numpy as np
@@ -39,6 +36,7 @@ import collections
 from multiprocessing import Pool, cpu_count
 from contextlib import closing
 from .utils.lang_utils import *
+from .tasks.generic_dataset import Query
 
 from pyrouge import Rouge155
 from sacrebleu import corpus_bleu

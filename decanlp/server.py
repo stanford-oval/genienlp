@@ -29,7 +29,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-import os
 from argparse import ArgumentParser
 import ujson as json
 import torch
@@ -44,9 +43,9 @@ from pprint import pformat
 from .util import set_seed, load_config_json
 from . import models
 from .text.torchtext.data import Example
-from .utils.generic_dataset import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
+from .tasks.generic_dataset import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
 
 logger = logging.getLogger(__name__)
 

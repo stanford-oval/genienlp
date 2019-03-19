@@ -29,7 +29,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-from .utils.generic_dataset import Query
 from .text import torchtext
 from argparse import ArgumentParser
 import ujson as json
