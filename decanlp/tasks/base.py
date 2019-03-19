@@ -43,12 +43,40 @@ class BaseTask:
         self.name = name
 
     def get_splits(self, field, root, **kwargs):
+        """
+        Load the train, test, eval datasets for this task
+
+        :param field: the torchtext.Field to use for tokenization, preprocessing and vocabulary construction
+        :param root: the base directory where data is stored
+        :param kwargs: other arguments to pass to the Dataset
+        :return: a list of torchtext.Dataset
+        """
         return generic_dataset.JSON.splits(
             fields=field, root=root, name=self.name, **kwargs)
 
+    def preprocess_example(self, ex, train=False, max_context_length=None):
+        """
+        Preprocess a given example, in a task specific way.
+
+        The example should be modified in place.
+        Return False if the example should be dropped from the dataset
+
+        :param ex: the torchtext.Example to preprocess
+        :return: True if the example is valid, False otherwise
+        """
+        return True
+
     @property
     def metrics(self):
-        return ['em']
+        """
+        What metrics to evaluate this task on.
+
+        This property must return a non-empty list.
+        The first entry in the list will be the metric to use to compute the decascore.
+
+        :return: a list of metric names
+        """
+        return ['em', 'nem', 'nf1']
 
     tokenize = None
     detokenize = None

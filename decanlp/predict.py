@@ -40,9 +40,10 @@ import sys
 import logging
 from pprint import pformat
 
-from .util import get_splits, set_seed, preprocess_examples, load_config_json
+from .util import set_seed, preprocess_examples, load_config_json
 from .metrics import compute_metrics
 from .utils.embeddings import load_embeddings
+from .tasks.registry import get_tasks
 from . import models
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,10 @@ def get_all_splits(args, new_vocab):
             kwargs['validation'] = None
         if not 'test' in args.evaluate:
             kwargs['test'] = None
-        s = get_splits(args, task, new_vocab, **kwargs)[0]
+
+        kwargs['skip_cache_bool'] = args.skip_cache_bool
+        kwargs['cached_path'] = args.cached
+        s = task.get_splits(new_vocab, root=args.data, **kwargs)[0]
         preprocess_examples(args, [task], [s], new_vocab, train=False)
         splits.append(s)
     return splits
@@ -115,16 +119,16 @@ def run(args, field, val_sets, model):
     model.eval()
     with torch.no_grad():
         for task, it in iters:
-            logger.info(task)
+            logger.info(task.name)
             if args.eval_dir:
-                prediction_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task + '.txt'))
-                answer_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task + '.gold.txt'))
+                prediction_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task.name + '.txt'))
+                answer_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task.name + '.gold.txt'))
                 results_file_name = answer_file_name.replace('gold', 'results')
             else:
-                prediction_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.txt')
-                answer_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task + '.gold.txt')
+                prediction_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.txt')
+                answer_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.gold.txt')
                 results_file_name = answer_file_name.replace('gold', 'results')
-            if 'sql' in task or 'squad' in task:
+            if 'sql' in task.name or 'squad' in task.name:
                 ids_file_name = answer_file_name.replace('gold', 'ids')
             if os.path.exists(prediction_file_name):
                 logger.warning('** ', prediction_file_name, ' already exists -- this is where predictions are stored **')
@@ -144,7 +148,7 @@ def run(args, field, val_sets, model):
                             for l in results_file:
                                 logger.debug(l)
                         metrics = json.loads(results_file.readlines()[0])
-                        decaScore.append(metrics[args.task_to_metric[task]])
+                        decaScore.append(metrics[task.metrics[0]])
                     continue
 
             for x in [prediction_file_name, answer_file_name, results_file_name]:
@@ -157,30 +161,27 @@ def run(args, field, val_sets, model):
                     for batch_idx, batch in enumerate(it):
                         _, p = model(batch, iteration=1)
 
-                        if task == 'almond':
-                            p = field.reverse(p, detokenize=lambda x: ' '.join(x))
-                        else:
-                            p = field.reverse(p)
+                        p = field.reverse(p, detokenize=task.detokenize)
 
                         for i, pp in enumerate(p):
-                            if 'sql' in task:
+                            if 'sql' in task.name:
                                 ids.append(int(batch.wikisql_id[i]))
-                            if 'squad' in task:
+                            if 'squad' in task.name:
                                 ids.append(it.dataset.q_ids[int(batch.squad_id[i])])
                             prediction_file.write(json.dumps(pp) + '\n')
                             predictions.append(pp) 
-                if 'sql' in task:
+                if 'sql' in task.name:
                     with open(ids_file_name, 'w') as id_file:
                         for i in ids:
                             id_file.write(json.dumps(i) + '\n')
-                if 'squad' in task:
+                if 'squad' in task.name:
                     with open(ids_file_name, 'w') as id_file:
                         for i in ids:
                             id_file.write(i + '\n')
             else:
                 with open(prediction_file_name) as prediction_file:
                     predictions = [x.strip() for x in prediction_file.readlines()] 
-                if 'sql' in task or 'squad' in task:
+                if 'sql' in task.name or 'squad' in task.name:
                     with open(ids_file_name) as id_file:
                         ids = [int(x.strip()) for x in id_file.readlines()]
    
@@ -198,10 +199,7 @@ def run(args, field, val_sets, model):
                         elif hasattr(batch, 'woz_id'):
                             a = from_all_answers(batch.woz_id.data.cpu())
                         else:
-                            if task == 'almond':
-                                a = field.reverse(batch.answer.data, detokenize=lambda x: ' '.join(x))
-                            else:
-                                a = field.reverse(batch.answer.data)
+                            a = field.reverse(batch.answer.data, detokenize=task.detokenize)
                         for aa in a:
                             answers.append(aa) 
                             answer_file.write(json.dumps(aa) + '\n')
@@ -211,13 +209,7 @@ def run(args, field, val_sets, model):
     
             if len(answers) > 0:
                 if not os.path.exists(results_file_name) or args.overwrite:
-                    metrics, answers = compute_metrics(predictions, answers,
-                                           bleu='iwslt' in task or 'multi30k' in task or 'almond' in task,
-                                           dialogue='woz' in task,
-                                           rouge='cnn' in task, logical_form='sql' in task, corpus_f1='zre' in task,
-                                           func_accuracy='almond' in task and not args.reverse_task_bool,
-                                           dev_accuracy='almond' in task and not args.reverse_task_bool,
-                                           args=args)
+                    metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)
                     with open(results_file_name, 'w') as results_file:
                         results_file.write(json.dumps(metrics) + '\n')
                 else:
@@ -228,11 +220,11 @@ def run(args, field, val_sets, model):
                     for i, (p, a) in enumerate(zip(predictions, answers)):
                         logger.info(f'Prediction {i+1}: {p}\nAnswer {i+1}: {a}\n')
                     logger.info(metrics)
-                decaScore.append(metrics[args.task_to_metric[task]])
+                decaScore.append(metrics[task.metrics[0]])
 
     logger.info(f'Evaluated Tasks:\n')
     for i, (task, _) in enumerate(iters):
-        logger.info(f'{task}: {decaScore[i]}')
+        logger.info(f'{task.name}: {decaScore[i]}')
     logger.info(f'-------------------')
     logger.info(f'DecaScore:  {sum(decaScore)}\n')
     logger.info(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
@@ -242,7 +234,7 @@ def get_args(argv):
     parser = ArgumentParser(prog=argv[0])
     parser.add_argument('--path', required=True)
     parser.add_argument('--evaluate', type=str, required=True)
-    parser.add_argument('--tasks', default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl', 'zre', 'woz.en', 'wikisql', 'schema'], nargs='+')
+    parser.add_argument('--tasks', default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl', 'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--data', default='./decaNLP/.data/', type=str, help='where to load data from.')
@@ -259,6 +251,7 @@ def get_args(argv):
     parser.add_argument('--cached', default='', type=str, help='where to save cached files')
 
     args = parser.parse_args(argv[1:])
+    args.tasks = get_tasks(args.task_names)
 
     load_config_json(args)
     return args

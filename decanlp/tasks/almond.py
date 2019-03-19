@@ -34,13 +34,24 @@ from ..util import generic_dataset
 
 @register_task('almond')
 class Almond(BaseTask):
+    @property
+    def metrics(self):
+        return ['em', 'nem', 'nf1', 'fm', 'dm', 'bleu']
+
     def get_splits(self, field, root, **kwargs):
         return generic_dataset.Almond.splits(
             fields=field, root=root, reverse_task=False, **kwargs)
 
+    def detokenize(self, tokenized):
+        return ' '.join(tokenized)
+
 
 @register_task('reverse_almond')
 class ReverseAlmond(BaseTask):
+    @property
+    def metrics(self):
+        return ['bleu', 'em', 'nem', 'nf1']
+
     def get_splits(self, field, root, **kwargs):
         return generic_dataset.Almond.splits(
             fields=field, root=root, reverse_task=True, **kwargs)

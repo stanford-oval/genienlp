@@ -58,38 +58,32 @@ def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
 
     for task, s in zip(tasks, splits):
         if logger is not None:
-            logger.info(f'{task} has {len(s.examples)} examples')
-        if 'cnn' in task or 'dailymail' in task or 'imdb' in task:
-            for x in s.examples:
-                x.context = x.context[:max_context_length]
+            logger.info(f'{task.name} has {len(s.examples)} examples')
+
+        l = len(s.examples)
+        s.examples = list(filter(lambda ex: task.preprocess_example(ex, train=train, max_context_length=max_context_length), s.examples))
 
         if train:
             l = len(s.examples)
             s.examples = [ex for ex in s.examples if not is_too_long(ex)]
             if len(s.examples) < l:
                 if logger is not None:
-                    logger.info(f'Filtering out long {task} examples: {l} -> {len(s.examples)}')
+                    logger.info(f'Filtering out long {task.name} examples: {l} -> {len(s.examples)}')
     
             l = len(s.examples)
             s.examples = [ex for ex in s.examples if not is_too_short(ex)]
             if len(s.examples) < l:
                 if logger is not None:
-                   logger.info(f'Filtering out short {task} examples: {l} -> {len(s.examples)}')
-    
-            l = len(s.examples)
-            s.examples = [ex for ex in s.examples if 'This page includes the show' not in ex.answer]
-            if len(s.examples) < l:
-                if logger is not None:
-                   logger.info(f'Filtering {task} examples with a dummy summary: {l} -> {len(s.examples)} ')
-       
+                   logger.info(f'Filtering out short {task.name} examples: {l} -> {len(s.examples)}')
+
         if logger is not None:
             context_lengths = [len(ex.context) for ex in s.examples] 
             question_lengths = [len(ex.question) for ex in s.examples] 
             answer_lengths = [len(ex.answer) for ex in s.examples] 
 
-            logger.info(f'{task} context lengths (min, mean, max): {np.min(context_lengths)}, {int(np.mean(context_lengths))}, {np.max(context_lengths)}') 
-            logger.info(f'{task} question lengths (min, mean, max): {np.min(question_lengths)}, {int(np.mean(question_lengths))}, {np.max(question_lengths)}')
-            logger.info(f'{task} answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}')
+            logger.info(f'{task.name} context lengths (min, mean, max): {np.min(context_lengths)}, {int(np.mean(context_lengths))}, {np.max(context_lengths)}')
+            logger.info(f'{task.name} question lengths (min, mean, max): {np.min(question_lengths)}, {int(np.mean(question_lengths))}, {np.max(question_lengths)}')
+            logger.info(f'{task.name} answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}')
 
         for x in s.examples:
             x.context_question = get_context_question(x, x.context, x.question, field)
@@ -150,77 +144,6 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def get_splits(args, task, FIELD, **kwargs):
-    kwargs['skip_cache_bool'] = args.skip_cache_bool
-    kwargs['cached_path'] = args.cached
-    if 'multi30k' in task:
-        src, trg = ['.'+x for x in task.split('.')[1:]]
-        split = generic_dataset.Multi30k.splits(exts=(src, trg), 
-            fields=FIELD, root=args.data, **kwargs)
-    elif 'iwslt' in task:
-        src, trg = ['.'+x for x in task.split('.')[1:]]
-        split = generic_dataset.IWSLT.splits(exts=(src, trg), 
-            fields=FIELD, root=args.data, **kwargs)
-    elif 'almond' in task:
-        split = generic_dataset.Almond.splits(
-            fields=FIELD, root=args.data, reverse_task=args.reverse_task_bool, **kwargs)
-    elif 'squad' in task:
-        split = generic_dataset.SQuAD.splits(
-            fields=FIELD, root=args.data, description=task, **kwargs)
-    elif 'wikisql' in task:
-        split = generic_dataset.WikiSQL.splits(
-            fields=FIELD, root=args.data, query_as_question='query_as_question' in task, **kwargs)
-    elif 'ontonotes.ner' in task:
-        split_task = task.split('.')
-        _, _, subtask, nones, counting = split_task
-        split = generic_dataset.OntoNotesNER.splits(
-            subtask=subtask, nones=True if nones == 'nones' else False,
-            fields=FIELD, root=args.data, **kwargs)
-    elif 'woz' in task:
-        split = generic_dataset.WOZ.splits(description=task,
-            fields=FIELD, root=args.data, **kwargs)
-    elif 'multinli' in task:
-        split = generic_dataset.MultiNLI.splits(description=task,
-            fields=FIELD, root=args.data, **kwargs)
-    elif 'srl' in task:
-        split = generic_dataset.SRL.splits(
-            fields=FIELD, root=args.data, **kwargs)
-    elif 'snli' in task:
-        split = generic_dataset.SNLI.splits(
-            fields=FIELD, root=args.data, **kwargs)
-    elif 'schema' in task:
-        split = generic_dataset.WinogradSchema.splits(
-            fields=FIELD, root=args.data, **kwargs)
-    elif task == 'cnn':
-        split = generic_dataset.CNN.splits(
-            fields=FIELD, root=args.data, **kwargs)
-    elif task == 'dailymail':
-        split = generic_dataset.DailyMail.splits(
-            fields=FIELD, root=args.data, **kwargs)
-    elif task == 'cnn_dailymail':
-        split_cnn = generic_dataset.CNN.splits(
-            fields=FIELD, root=args.data, **kwargs)
-        split_dm = generic_dataset.DailyMail.splits(
-            fields=FIELD, root=args.data, **kwargs)
-        for scnn, sdm in zip(split_cnn, split_dm):
-            scnn.examples.extend(sdm)
-        split = split_cnn
-    elif 'sst' in task:
-        split = generic_dataset.SST.splits(
-            fields=FIELD, root=args.data, **kwargs)
-    elif 'imdb' in task:
-        kwargs['validation'] = None
-        split = generic_dataset.IMDb.splits(
-            fields=FIELD, root=args.data, **kwargs)
-    elif 'zre' in task:
-        split = generic_dataset.ZeroShotRE.splits(
-            fields=FIELD, root=args.data, **kwargs)
-    elif os.path.exists(os.path.join(args.data, task)):
-        split = generic_dataset.JSON.splits(
-            fields=FIELD, root=args.data, name=task, **kwargs)
-    return split
-
-
 def batch_fn(new, i, sofar):
     prev_max_len = sofar / (i - 1) if i > 1 else 0
     return max(len(new.context), 5*len(new.answer), prev_max_len) * i
@@ -237,6 +160,7 @@ def pad(x, new_channel, dim, val=None):
     size[dim] = new_channel - size[dim]
     padding = x.new(*size).fill_(val)
     return torch.cat([x, padding], dim)
+
 
 def load_config_json(args):
     args.almond_type_embeddings = False
@@ -260,19 +184,5 @@ def load_config_json(args):
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0
-
-    args.task_to_metric = {
-        'cnn_dailymail': 'avg_rouge',
-        'iwslt.en.de': 'bleu',
-        'multinli.in.out': 'em',
-        'squad': 'nf1',
-        'srl': 'nf1',
-        'almond': 'bleu' if args.reverse_task_bool else 'em',
-        'sst': 'em',
-        'wikisql': 'lfem',
-        'woz.en': 'joint_goal_em',
-        'zre': 'corpus_f1',
-        'schema': 'em'
-    }
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)

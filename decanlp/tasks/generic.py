@@ -33,6 +33,10 @@ from ..util import generic_dataset
 
 @register_task('multi30k')
 class Multi30K(BaseTask):
+    @property
+    def metrics(self):
+        return ['bleu', 'em', 'nem', 'nf1']
+
     def get_splits(self, field, root, **kwargs):
         src, trg = ['.' + x for x in self.name.split('.')[1:]]
         return generic_dataset.Multi30k.splits(exts=(src, trg),
@@ -41,14 +45,22 @@ class Multi30K(BaseTask):
 
 @register_task('iwslt')
 class IWSLT(BaseTask):
+    @property
+    def metrics(self):
+        return ['bleu', 'em', 'nem', 'nf1']
+
     def get_splits(self, field, root, **kwargs):
-        src, trg = ['.' + x for x in task.split('.')[1:]]
+        src, trg = ['.' + x for x in self.name.split('.')[1:]]
         return generic_dataset.IWSLT.splits(exts=(src, trg),
                                             fields=field, root=root, **kwargs)
 
 
 @register_task('squad')
 class SQuAD(BaseTask):
+    @property
+    def metrics(self):
+        return ['nf1', 'em', 'nem']
+
     def get_splits(self, field, root, **kwargs):
         return generic_dataset.SQuAD.splits(
             fields=field, root=root, description=self.name, **kwargs)
@@ -56,6 +68,10 @@ class SQuAD(BaseTask):
 
 @register_task('wikisql')
 class WikiSQL(BaseTask):
+    @property
+    def metrics(self):
+        return ['lfem', 'em', 'nem', 'nf1']
+
     def get_splits(self, field, root, **kwargs):
         return generic_dataset.WikiSQL.splits(
             fields=field, root=root, query_as_question='query_as_question' in self.name, **kwargs)
@@ -73,6 +89,10 @@ class OntoNotesNER(BaseTask):
 
 @register_task('woz')
 class WoZ(BaseTask):
+    @property
+    def metrics(self):
+        return ['joint_goal_em', 'turn_request_em', 'turn_goal_em', 'avg_dialogue', 'em', 'nem', 'nf1']
+
     def get_splits(self, field, root, **kwargs):
         return generic_dataset.WOZ.splits(description=self.name,
                                           fields=field, root=root, **kwargs)
@@ -86,6 +106,10 @@ class MultiNLI(BaseTask):
 
 @register_task('srl')
 class SRL(BaseTask):
+    @property
+    def metrics(self):
+        return ['nf1', 'em', 'nem']
+
     def get_splits(self, field, root, **kwargs):
         return generic_dataset.SRL.splits(fields=field, root=root, **kwargs)
 
@@ -102,20 +126,35 @@ class WinogradSchema(BaseTask):
         return generic_dataset.WinogradSchema.splits(fields=field, root=root, **kwargs)
 
 
+class BaseSummarizationTask(BaseTask):
+    @property
+    def metrics(self):
+        return ['avg_rouge', 'rouge1', 'rouge2', 'rougeL', 'em', 'nem', 'nf1']
+
+    def preprocess_example(self, ex, train=False, max_context_length=None):
+        ex.context = ex.context[:max_context_length]
+
+        if train:
+            # Filter examples with a dummy summary
+            return 'This page includes the show' not in ex.answer
+        else:
+            return True
+
+
 @register_task('cnn')
-class CNN(BaseTask):
+class CNN(BaseSummarizationTask):
     def get_splits(self, field, root, **kwargs):
         return generic_dataset.CNN.splits(fields=field, root=root, **kwargs)
 
 
 @register_task('dailymail')
-class DailyMail(BaseTask):
+class DailyMail(BaseSummarizationTask):
     def get_splits(self, field, root, **kwargs):
         return generic_dataset.DailyMail.splits(fields=field, root=root, **kwargs)
 
 
 @register_task('cnn_dailymail')
-class CNNDailyMail(BaseTask):
+class CNNDailyMail(BaseSummarizationTask):
     def get_splits(self, field, root, **kwargs):
         split_cnn = generic_dataset.CNN.splits(
             fields=field, root=root, **kwargs)
@@ -135,6 +174,10 @@ class SST(BaseTask):
 
 @register_task('imdb')
 class IMDB(BaseTask):
+    def preprocess_example(self, ex, train=False, max_context_length=None):
+        ex.context = ex.context[:max_context_length]
+        return True
+
     def get_splits(self, field, root, **kwargs):
         kwargs['validation'] = None
         return generic_dataset.IMDb.splits(fields=field, root=root, **kwargs)
@@ -142,5 +185,9 @@ class IMDB(BaseTask):
 
 @register_task('zre')
 class ZRE(BaseTask):
+    @property
+    def metrics(self):
+        return ['corpus_f1', 'precision', 'recall', 'em', 'nem', 'nf1']
+
     def get_splits(self, field, root, **kwargs):
         return generic_dataset.ZeroShotRE.splits(fields=field, root=root, **kwargs)

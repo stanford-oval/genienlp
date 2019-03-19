@@ -434,16 +434,16 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
         
 
-def compute_metrics(greedy, answer, rouge=False, bleu=False, corpus_f1=False, logical_form=False, dialogue=False, func_accuracy=False, dev_accuracy=False, args=None):
+def compute_metrics(greedy, answer, requested_metrics, args=None):
     metric_keys = []
     metric_values = []
     if not isinstance(answer[0], list):
         answer = [[a] for a in answer]
-    if logical_form:
+    if 'lfem' in requested_metrics:
         lfem, answer = computeLFEM(greedy, answer, args)
         metric_keys += ['lfem']
         metric_values += [lfem]
-    if dialogue:
+    if 'joint_goal_em' in requested_metrics:
         joint_goal_em, request_em, turn_goal_em, answer = computeDialogue(greedy, answer)
         avg_dialogue = (joint_goal_em + request_em) / 2
         metric_keys += ['joint_goal_em', 'turn_request_em', 'turn_goal_em', 'avg_dialogue']
@@ -451,11 +451,11 @@ def compute_metrics(greedy, answer, rouge=False, bleu=False, corpus_f1=False, lo
     em = computeEM(greedy, answer)
     metric_keys += ['em']
     metric_values += [em]
-    if bleu:
+    if 'bleu' in requested_metrics:
         bleu = computeBLEU(greedy, answer)
         metric_keys.append('bleu')
         metric_values.append(bleu)
-    if rouge:
+    if 'avg_rouge' in requested_metrics:
         rouge = computeROUGE(greedy, answer)
         metric_keys += ['rouge1', 'rouge2', 'rougeL', 'avg_rouge']
         avg_rouge = (rouge['rouge_1_f_score'] + rouge['rouge_2_f_score'] + rouge['rouge_l_f_score']) / 3
@@ -466,18 +466,20 @@ def compute_metrics(greedy, answer, rouge=False, bleu=False, corpus_f1=False, lo
     nem = computeEM(norm_greedy, norm_answer)
     metric_keys.extend(['nf1', 'nem'])
     metric_values.extend([nf1, nem])
-    if func_accuracy:
+    if 'fm' in requested_metrics:
         function_accuracy = computeFM(greedy, answer)
         metric_keys.append('fm')
         metric_values.append(function_accuracy)
-    if dev_accuracy:
+    if 'dm' in requested_metrics:
         device_accuracy = computeDM(greedy, answer)
         metric_keys.append('dm')
         metric_values.append(device_accuracy)
 
-    if corpus_f1:
+    if 'corpus_f1' in requested_metrics:
         corpus_f1, precision, recall = computeCF1(norm_greedy, norm_answer)
         metric_keys += ['corpus_f1', 'precision', 'recall']
         metric_values += [corpus_f1, precision, recall]
-    metric_dict = collections.OrderedDict(list(zip(metric_keys, metric_values)))
+
+    metric_dict = dict(zip(metric_keys, metric_values))
+    metric_dict = collections.OrderedDict((key, metric_dict[key]) for key in requested_metrics)
     return metric_dict, answer

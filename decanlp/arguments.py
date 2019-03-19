@@ -39,6 +39,8 @@ import datetime
 from dateutil import tz
 import logging
 
+from .tasks.registry import get_tasks
+
 logger = logging.getLogger(__name__)
 
 def get_commit():
@@ -63,7 +65,7 @@ def parse(argv):
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--cached', default='', type=str, help='where to save cached files')
 
-    parser.add_argument('--train_tasks', nargs='+', type=str, help='tasks to use for training', required=True)
+    parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training', required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
     parser.add_argument('--train_batch_tokens', nargs='+', default=[9000], type=int, help='Number of tokens to use for dynamic batching, corresponging to tasks in train tasks')
     parser.add_argument('--jump_start', default=0, type=int, help='number of iterations to give jump started tasks')
@@ -75,7 +77,7 @@ def parse(argv):
     parser.add_argument('--log_every', default=int(1e2), type=int, help='how often to log results in # of iterations')
     parser.add_argument('--save_every', default=int(1e3), type=int, help='how often to save a checkpoint in # of iterations')
 
-    parser.add_argument('--val_tasks', nargs='+', type=str, help='tasks to collect evaluation metrics for')
+    parser.add_argument('--val_tasks', nargs='+', type=str, dest='val_task_names', help='tasks to collect evaluation metrics for')
     parser.add_argument('--val_every', default=int(1e3), type=int, help='how often to run validation in # of iterations')
     parser.add_argument('--val_no_filter', action='store_false', dest='val_filter', help='whether to allow filtering on the validation sets')
     parser.add_argument('--val_batch_size', nargs='+', default=[256], type=int, help='Batch size for validation corresponding to tasks in val tasks')
@@ -135,28 +137,19 @@ def parse(argv):
     args = parser.parse_args(argv[1:])
     if args.model is None:
         args.model = 'mcqa'
-    if args.val_tasks is None:
-        args.val_tasks = []
-        for t in args.train_tasks:
-            if t not in args.val_tasks:
-                args.val_tasks.append(t)
-    
-    args.task_to_metric = {
-        'cnn_dailymail': 'avg_rouge',
-        'iwslt.en.de': 'bleu',
-        'multinli.in.out': 'em',
-        'squad': 'nf1',
-        'srl': 'nf1',
-        'almond': 'bleu' if args.reverse_task_bool else 'em',
-        'sst': 'em',
-        'wikisql': 'lfem',
-        'woz.en': 'joint_goal_em',
-        'zre': 'corpus_f1',
-        'schema': 'em'
-    }
 
-    if 'imdb' in args.val_tasks:
-        args.val_tasks.remove('imdb')
+    args.train_tasks = get_tasks(args.train_task_names)
+
+    if args.val_task_names is None:
+        args.val_task_names = []
+        for t in args.train_task_names:
+            if t not in args.val_task_names:
+                args.val_task_names.append(t)
+    if 'imdb' in args.val_task_names:
+        args.val_task_names.remove('imdb')
+
+    args.val_tasks = get_tasks(args.val_task_names)
+    
     args.world_size = len(args.devices) if args.devices[0] > -1 else -1
     if args.world_size > 1:
         logger.error('multi-gpu training is currently a work in progress')
@@ -178,9 +171,6 @@ def parse(argv):
         args.commit = get_commit()
     else:
         args.commit = ''
-    train_out = f'{",".join(args.train_tasks)}'
-    if len(args.train_tasks) > 1:
-        train_out += f'{"-".join([str(x) for x in args.train_iterations])}'
 
     args.log_dir = args.save
     args.dist_sync_file = os.path.join(args.log_dir, 'distributed_sync_file')
