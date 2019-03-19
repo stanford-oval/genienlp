@@ -1,0 +1,146 @@
+#
+# Copyright (c) 2019, The Board of Trustees of the Leland Stanford Junior University
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# * Neither the name of the copyright holder nor the names of its
+#   contributors may be used to endorse or promote products derived from
+#   this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+from .base import BaseTask
+from .registry import register_task
+from ..util import generic_dataset
+
+@register_task('multi30k')
+class Multi30K(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        src, trg = ['.' + x for x in self.name.split('.')[1:]]
+        return generic_dataset.Multi30k.splits(exts=(src, trg),
+                                               fields=field, root=root, **kwargs)
+
+
+@register_task('iwslt')
+class IWSLT(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        src, trg = ['.' + x for x in task.split('.')[1:]]
+        return generic_dataset.IWSLT.splits(exts=(src, trg),
+                                            fields=field, root=root, **kwargs)
+
+
+@register_task('squad')
+class SQuAD(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        return generic_dataset.SQuAD.splits(
+            fields=field, root=root, description=self.name, **kwargs)
+
+
+@register_task('wikisql')
+class WikiSQL(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        return generic_dataset.WikiSQL.splits(
+            fields=field, root=root, query_as_question='query_as_question' in self.name, **kwargs)
+
+
+@register_task('ontonotes')
+class OntoNotesNER(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        split_task = self.name.split('.')
+        _, _, subtask, nones, counting = split_task
+        return generic_dataset.OntoNotesNER.splits(
+            subtask=subtask, nones=True if nones == 'nones' else False,
+            fields=field, root=root, **kwargs)
+
+
+@register_task('woz')
+class WoZ(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        return generic_dataset.WOZ.splits(description=self.name,
+                                          fields=field, root=root, **kwargs)
+
+
+@register_task('multinli')
+class MultiNLI(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        return generic_dataset.MultiNLI.splits(description=self.name,
+                                               fields=field, root=root, **kwargs)
+
+@register_task('srl')
+class SRL(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        return generic_dataset.SRL.splits(fields=field, root=root, **kwargs)
+
+
+@register_task('snli')
+class SNLI(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        return generic_dataset.SNLI.splits(fields=field, root=root, **kwargs)
+
+
+@register_task('schema')
+class WinogradSchema(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        return generic_dataset.WinogradSchema.splits(fields=field, root=root, **kwargs)
+
+
+@register_task('cnn')
+class CNN(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        return generic_dataset.CNN.splits(fields=field, root=root, **kwargs)
+
+
+@register_task('dailymail')
+class DailyMail(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        return generic_dataset.DailyMail.splits(fields=field, root=root, **kwargs)
+
+
+@register_task('cnn_dailymail')
+class CNNDailyMail(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        split_cnn = generic_dataset.CNN.splits(
+            fields=field, root=root, **kwargs)
+        split_dm = generic_dataset.DailyMail.splits(
+            fields=field, root=root, **kwargs)
+        for scnn, sdm in zip(split_cnn, split_dm):
+            scnn.examples.extend(sdm)
+        return split_cnn
+
+
+@register_task('sst')
+class SST(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        return generic_dataset.SST.splits(
+            fields=field, root=root, **kwargs)
+
+
+@register_task('imdb')
+class IMDB(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        kwargs['validation'] = None
+        return generic_dataset.IMDb.splits(fields=field, root=root, **kwargs)
+
+
+@register_task('zre')
+class ZRE(BaseTask):
+    def get_splits(self, field, root, **kwargs):
+        return generic_dataset.ZeroShotRE.splits(fields=field, root=root, **kwargs)
