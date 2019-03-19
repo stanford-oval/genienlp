@@ -42,6 +42,9 @@ class Almond(BaseTask):
         return generic_dataset.Almond.splits(
             fields=field, root=root, reverse_task=False, **kwargs)
 
+    def tokenize(self, sentence):
+        return sentence.split(' ')
+
     def detokenize(self, tokenized):
         return ' '.join(tokenized)
 

@@ -62,7 +62,7 @@ class TaskRegistry:
 
 
 _registry = TaskRegistry()
-
+_registry['generic'] = BaseTask
 
 def task_name_to_cls_name(name):
     return name.split('.')[0]

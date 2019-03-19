@@ -46,16 +46,12 @@ from . import models
 from .text.torchtext.data import Example
 from .utils.generic_dataset import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
 from .utils.embeddings import load_embeddings
+from .tasks.registry import get_tasks
 
 logger = logging.getLogger(__name__)
 
 class ProcessedExample():
     pass
-
-
-def split_tokenize(x):
-    return x.split()
-
 
 class Server():
     def __init__(self, args, field, model):
@@ -117,15 +113,12 @@ class Server():
     
     def handle_request(self, line):
         request = json.loads(line)
-        task = request['task'] if 'task' in request else 'generic'
+        task = get_tasks([request['task'] if 'task' in request else 'generic'])[0]
         
         context = request['context']
         question = request['question']
         answer = ''
-        if task == 'almond':
-            tokenize = split_tokenize
-        else:
-            tokenize = None
+        tokenize = task.tokenize
     
         context_question = get_context_question(context, question)
         fields = [(x, self.field) for x in CQA.fields]
@@ -134,10 +127,7 @@ class Server():
         batch = self.numericalize_example(ex)
         _, prediction_batch = self.model(batch, iteration=0)
         
-        if task == 'almond':
-            predictions = self.field.reverse(prediction_batch, detokenize=lambda x: ' '.join(x))
-        else:
-            predictions = self.field.reverse(prediction_batch)
+        predictions = self.field.reverse(prediction_batch, detokenize=task.detokenize)
         
         response = json.dumps(dict(id=request['id'], answer=predictions[0]))
         return response + '\n'
