@@ -160,7 +160,7 @@ def run(args, field, val_sets, model):
                     for batch_idx, batch in enumerate(it):
                         _, p = model(batch, iteration=1)
 
-                        p = field.reverse(p, detokenize=task.detokenize)
+                        p = field.reverse(p, detokenize=task.detokenize, field_name='answer')
 
                         for i, pp in enumerate(p):
                             if 'sql' in task.name:
@@ -198,7 +198,7 @@ def run(args, field, val_sets, model):
                         elif hasattr(batch, 'woz_id'):
                             a = from_all_answers(batch.woz_id.data.cpu())
                         else:
-                            a = field.reverse(batch.answer.data, detokenize=task.detokenize)
+                            a = field.reverse(batch.answer.data, detokenize=task.detokenize, field_name='answer')
                         for aa in a:
                             answers.append(aa) 
                             answer_file.write(json.dumps(aa) + '\n')

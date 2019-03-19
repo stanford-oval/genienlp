@@ -132,6 +132,10 @@ def parse(argv):
     parser.add_argument('--small_glove', action='store_true', help='Use glove.6B.50d instead of glove.840B.300d')
     parser.add_argument('--almond_type_embeddings', action='store_true', help='Add type-based word embeddings for Almond task')
     parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
+    parser.add_argument('--almond_grammar', type=str,
+                        choices=['typeless.bottomup', 'typeless.topdown', 'plain.bottomup', 'plain.topdown', 'pos.typeless.bottomup', 'pos.typeless.topdown',
+                                 'pos.bottomup', 'pos.topdown', 'full.bottomup', 'full.topdown'],
+                        help="which grammar to use for Almond task (leave unspecified for no grammar)")
 
     args = parser.parse_args(argv[1:])
     if args.model is None:

@@ -36,6 +36,7 @@ from ..registry import register_task
 from .. import generic_dataset
 from ...text.torchtext import data
 
+from .grammar import thingtalk, plainthingtalk, posthingtalk
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,20 @@ class Almond(BaseTask):
 
         self._thingpedia = args.thingpedia
         self._grammar = None
+        self._grammar_direction = None
+
+        if args.almond_grammar:
+            self._grammar_direction = args.almond_grammar.split('.')[-1]
+            if args.almond_grammar.startswith('typeless.'):
+                self._grammar = plainthingtalk.PlainThingTalkGrammar(self._thingpedia, grammar_include_types=False, logger=logger)
+            elif args.almond_grammar.startswith('plain.'):
+                self._grammar = plainthingtalk.PlainThingTalkGrammar(self._thingpedia, grammar_include_types=True, logger=logger)
+            elif args.almond_grammar.startswith('pos.typeless.'):
+                self._grammar = posthingtalk.PosThingTalkGrammar(self._thingpedia, grammar_include_types=False, logger=logger)
+            elif args.almond_grammar.startswith('pos.'):
+                self._grammar = posthingtalk.PosThingTalkGrammar(self._thingpedia, grammar_include_types=True, logger=logger)
+            else:
+                self._grammar = thingtalk.ThingTalkGrammar(self._thingpedia, logger=logger)
 
     @property
     def metrics(self):
@@ -139,14 +154,19 @@ class Almond(BaseTask):
         return AlmondDataset.splits(
             fields=field, root=root, tokenize=self.tokenize, reverse_task=False, **kwargs)
 
-    def tokenize(self, sentence):
+    def tokenize(self, sentence, field_name=None):
         tokenized =  sentence.split(' ')
 
-        if self._grammar is None:
+        if self._grammar is None or field_name != 'answer':
             return tokenized
+        else:
+            return self._grammar.preprocess_program(tokenized, direction=self._grammar_direction)
 
-    def detokenize(self, tokenized):
-        return ' '.join(tokenized)
+    def detokenize(self, tokenized, field_name=None):
+        if self._grammar is None or field_name != 'answer':
+            return ' '.join(tokenized)
+        else:
+            return ' '.join(self._grammar.reconstruct_program(tokenized, direction=self._grammar_direction, ignore_errors=True))
 
 
 @register_task('reverse_almond')

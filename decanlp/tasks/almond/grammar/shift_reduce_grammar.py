@@ -119,17 +119,15 @@ class ShiftReduceGrammar:
             if ignore_errors:
                 # the NN generated something that does not conform to the grammar,
                 # ignore it
-                return []
+                return
             else:
                 raise
-            
-        output = []
+
         for i, (term_id, payload) in enumerate(term_ids):
             if payload is not None:
-                output.append(payload)
+                yield payload
             else:
-                output.append(self.tokens[term_id])
-        return output
+                yield self.tokens[term_id]
         
     def print_all_actions(self):
         print(0, 'pad')

@@ -76,7 +76,7 @@ def all_reverse(tensor, world_size, task, field, clip, dim=0):
     
     # for distributed training, dev sets are padded with extra examples so that the
     # tensors are all of a predictable size for all_gather. `[:clip]` removes those extra examples
-    return field.reverse(tensor, detokenize=task.detokenize)[:clip]
+    return field.reverse(tensor, detokenize=task.detokenize, field_name='answer')[:clip]
 
 
 def gather_results(model, val_iter, field, world_size, task, iteration, optional_names=[]):

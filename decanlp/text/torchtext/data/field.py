@@ -387,12 +387,12 @@ class ReversibleField(Field):
             except ImportError:
                 print("Please install revtok.")
                 raise
-            self.detokenize = revtok.detokenize
+            self.detokenize = lambda x, **kw: revtok.detokenize(x)
         else:
             self.detokenize = None
         super(ReversibleField, self).__init__(**kwargs)
 
-    def reverse(self, batch, detokenize=None, limited=False):
+    def reverse(self, batch, detokenize=None, field_name=None, limited=False):
         
         if not self.batch_first:
             batch = batch.t()
@@ -417,7 +417,7 @@ class ReversibleField(Field):
         if detokenize is None:
             detokenize = self.detokenize
         if detokenize is not None:
-            return [detokenize(ex) for ex in batch]
+            return [detokenize(ex, field_name=field_name) for ex in batch]
         else:
             return [''.join(ex) for ex in batch]
 
