@@ -137,8 +137,6 @@ def parse(argv):
     if args.model is None:
         args.model = 'mcqa'
 
-    args.train_tasks = get_tasks(args.train_task_names)
-
     if args.val_task_names is None:
         args.val_task_names = []
         for t in args.train_task_names:
@@ -147,23 +145,21 @@ def parse(argv):
     if 'imdb' in args.val_task_names:
         args.val_task_names.remove('imdb')
 
-    args.val_tasks = get_tasks(args.val_task_names)
-    
     args.world_size = len(args.devices) if args.devices[0] > -1 else -1
     if args.world_size > 1:
         logger.error('multi-gpu training is currently a work in progress')
         return
     args.timestamp = '-'.join(datetime.datetime.now(tz=tz.tzoffset(None, -8*60*60)).strftime("%y/%m/%d/%H/%M/%S.%f").split())
 
-    if len(args.train_tasks) > 1:
+    if len(args.train_task_names) > 1:
         if args.train_iterations is  None:
             args.train_iterations = [1]
-        if len(args.train_iterations) < len(args.train_tasks):
-            args.train_iterations = len(args.train_tasks) * args.train_iterations
-        if len(args.train_batch_tokens) < len(args.train_tasks):
-            args.train_batch_tokens = len(args.train_tasks) * args.train_batch_tokens
-    if len(args.val_batch_size) < len(args.val_tasks):
-        args.val_batch_size = len(args.val_tasks) * args.val_batch_size
+        if len(args.train_iterations) < len(args.train_task_names):
+            args.train_iterations = len(args.train_task_names) * args.train_iterations
+        if len(args.train_batch_tokens) < len(args.train_task_names):
+            args.train_batch_tokens = len(args.train_task_names) * args.train_batch_tokens
+    if len(args.val_batch_size) < len(args.val_task_names):
+        args.val_batch_size = len(args.val_task_names) * args.val_batch_size
         
     # postprocess arguments
     if args.commit:
@@ -177,5 +173,10 @@ def parse(argv):
     for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
     save_args(args)
+
+    # create the task objects after we saved the configuration to the JSON file, because
+    # tasks are not JSON serializable
+    args.train_tasks = get_tasks(args.train_task_names)
+    args.val_tasks = get_tasks(args.val_task_names)
 
     return args
