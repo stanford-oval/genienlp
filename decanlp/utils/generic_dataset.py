@@ -228,17 +228,13 @@ class IWSLT(TranslationDataset, CQA, translation.IWSLT):
     pass
 
 
-def split_tokenize(x):
-    return x.split()
-
-
 class Almond(CQA):
     """The Almond semantic parsing task"""
 
     base_url = None
     name = 'almond'
     
-    def __init__(self, path, field, reverse_task=False, subsample=None, **kwargs):
+    def __init__(self, path, field, tokenize, reverse_task=False, subsample=None, **kwargs):
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
@@ -267,7 +263,7 @@ class Almond(CQA):
                         answer = target_code
                     
                     context_question = get_context_question(context, question) 
-                    examples.append(data.Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=split_tokenize))
+                    examples.append(data.Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=tokenize))
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -283,7 +279,7 @@ class Almond(CQA):
     @classmethod
     def splits(cls, fields, root='.data',
                train='train', validation='eval',
-               test='test', reverse_task=False, **kwargs):
+               test='test', tokenize=None, reverse_task=False, **kwargs):
 
         """Create dataset objects for splits of the ThingTalk dataset.
         Arguments:
@@ -299,11 +295,11 @@ class Almond(CQA):
         path = os.path.join(root, cls.name)
 
         train_data = None if train is None else cls(
-            os.path.join(path, train + '.tsv'), fields, reverse_task=reverse_task, **kwargs)
+            os.path.join(path, train + '.tsv'), fields, tokenize=tokenize, reverse_task=reverse_task, **kwargs)
         val_data = None if validation is None else cls(
-            os.path.join(path, validation + '.tsv'), fields, reverse_task=reverse_task, **kwargs)
+            os.path.join(path, validation + '.tsv'), fields, tokenize=tokenize, reverse_task=reverse_task, **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, test + '.tsv'), fields, reverse_task=reverse_task, **kwargs)
+            os.path.join(path, test + '.tsv'), fields, tokenize=tokenize, reverse_task=reverse_task, **kwargs)
         return tuple(d for d in (train_data, val_data, test_data)
                      if d is not None)
 

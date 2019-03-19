@@ -39,7 +39,7 @@ class BaseTask:
 
     """
 
-    def __init__(self, name):
+    def __init__(self, name, args):
         self.name = name
 
     def get_splits(self, field, root, **kwargs):

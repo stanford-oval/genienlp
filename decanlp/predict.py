@@ -248,11 +248,12 @@ def get_args(argv):
     parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether use exisiting cached splits or generate new ones')
     parser.add_argument('--eval_dir', type=str, default=None, help='use this directory to store eval results')
     parser.add_argument('--cached', default='', type=str, help='where to save cached files')
+    parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
 
     args = parser.parse_args(argv[1:])
-    args.tasks = get_tasks(args.task_names)
 
     load_config_json(args)
+    args.tasks = get_tasks(args.task_names, args)
     return args
 
 

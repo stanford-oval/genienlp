@@ -34,16 +34,25 @@ from ..util import generic_dataset
 
 @register_task('almond')
 class Almond(BaseTask):
+    def __init__(self, name, args):
+        super().__init__(name, args)
+
+        self._thingpedia = args.thingpedia
+        self._grammar = None
+
     @property
     def metrics(self):
         return ['em', 'nem', 'nf1', 'fm', 'dm', 'bleu']
 
     def get_splits(self, field, root, **kwargs):
         return generic_dataset.Almond.splits(
-            fields=field, root=root, reverse_task=False, **kwargs)
+            fields=field, root=root, tokenize=self.tokenize, reverse_task=False, **kwargs)
 
     def tokenize(self, sentence):
-        return sentence.split(' ')
+        tokenized =  sentence.split(' ')
+
+        if self._grammar is None:
+            return tokenized
 
     def detokenize(self, tokenized):
         return ' '.join(tokenized)

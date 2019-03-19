@@ -65,6 +65,8 @@ class Server():
         
         self._limited_idx_to_full_idx = deepcopy(self.field.decoder_to_vocab) # should avoid this with a conditional in map to full
         self._oov_to_limited_idx = {}
+
+        self._cached_tasks = dict()
         
         assert self.field.include_lengths
 
@@ -113,7 +115,13 @@ class Server():
     
     def handle_request(self, line):
         request = json.loads(line)
-        task = get_tasks([request['task'] if 'task' in request else 'generic'])[0]
+
+        task_name = request['task'] if 'task' in request else 'generic'
+        if task_name in self._cached_tasks:
+            task = self._cached_tasks[task_name]
+        else:
+            task = get_tasks([task_name], self.args)[0]
+            self._cached_tasks[task_name] = task
         
         context = request['context']
         question = request['question']
@@ -196,6 +204,7 @@ def get_args(argv):
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
     parser.add_argument('--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')

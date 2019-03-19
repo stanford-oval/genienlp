@@ -39,7 +39,7 @@ class Example(object):
                     vals = [vals]
                 for val in vals:
                     name, field = val
-                    setattr(ex, name, intern_strings(field.preprocess(data[key], **kwargs)))
+                    setattr(ex, name, intern_strings(field.preprocess(data[key], field_name=name, **kwargs)))
         return ex
 
     @classmethod

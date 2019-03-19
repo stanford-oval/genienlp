@@ -131,7 +131,7 @@ def parse(argv):
     parser.add_argument('--loss_switch', default=0.666, type=float, help='switch to BLEU loss after certain iterations controlled by this ratio')
     parser.add_argument('--small_glove', action='store_true', help='Use glove.6B.50d instead of glove.840B.300d')
     parser.add_argument('--almond_type_embeddings', action='store_true', help='Add type-based word embeddings for Almond task')
-
+    parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
 
     args = parser.parse_args(argv[1:])
     if args.model is None:
@@ -176,7 +176,7 @@ def parse(argv):
 
     # create the task objects after we saved the configuration to the JSON file, because
     # tasks are not JSON serializable
-    args.train_tasks = get_tasks(args.train_task_names)
-    args.val_tasks = get_tasks(args.val_task_names)
+    args.train_tasks = get_tasks(args.train_task_names, args)
+    args.val_tasks = get_tasks(args.val_task_names, args)
 
     return args
