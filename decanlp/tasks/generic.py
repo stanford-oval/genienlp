@@ -29,7 +29,7 @@
 
 from .base import BaseTask
 from .registry import register_task
-from .tasks import generic_dataset
+from . import generic_dataset
 
 
 @register_task('multi30k')

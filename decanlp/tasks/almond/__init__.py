@@ -30,6 +30,7 @@
 import logging
 import os
 import torch
+from tqdm import tqdm
 
 from ..base import BaseTask
 from ..registry import register_task
@@ -66,22 +67,25 @@ class AlmondDataset(generic_dataset.CQA):
             examples = torch.load(cache_name)
         else:
             examples = []
-            with open(path, 'r') as fp:
-                for line in fp:
-                    _id, sentence, target_code = line.strip().split('\t')
-                    if reverse_task:
-                        context = target_code
-                        answer = sentence
-                    else:
-                        context = sentence
-                        answer = target_code
 
-                    context_question = generic_dataset.get_context_question(context, question)
-                    examples.append(data.Example.fromlist(
-                        [context, question, answer, generic_dataset.CONTEXT_SPECIAL, generic_dataset.QUESTION_SPECIAL, context_question], fields,
-                        tokenize=tokenize))
-                    if subsample is not None and len(examples) >= subsample:
-                        break
+            with open(path, 'r') as fp:
+                lines = [line.strip().split('\t') for line in fp]
+
+            max_examples = min(len(lines), subsample) if subsample is not None else len(lines)
+            for _id, sentence, target_code in tqdm(lines, total=max_examples):
+                if reverse_task:
+                    context = target_code
+                    answer = sentence
+                else:
+                    context = sentence
+                    answer = target_code
+
+                context_question = generic_dataset.get_context_question(context, question)
+                examples.append(data.Example.fromlist(
+                    [context, question, answer, generic_dataset.CONTEXT_SPECIAL, generic_dataset.QUESTION_SPECIAL, context_question], fields,
+                    tokenize=tokenize))
+                if len(examples) >= max_examples:
+                    break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
