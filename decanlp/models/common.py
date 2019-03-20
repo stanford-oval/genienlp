@@ -375,29 +375,42 @@ class Feedforward(nn.Module):
 
 class Embedding(nn.Module):
 
-    def __init__(self, field, trained_dimension, dropout=0.0, project=True):
+    def __init__(self, field, output_dimension, trained_dimension=0, dropout=0.0, project=True):
         super().__init__()
         self.field = field
         self.project = project
         dimension = 0
         pretrained_dimension = field.vocab.vectors.size(-1)
-        self.pretrained_embeddings = [nn.Embedding(len(field.vocab), pretrained_dimension)]
-        self.pretrained_embeddings[0].weight.data = field.vocab.vectors
-        self.pretrained_embeddings[0].weight.requires_grad = False
+        self.pretrained_embeddings = nn.Embedding(len(field.vocab), pretrained_dimension)
+        self.pretrained_embeddings.weight.data = field.vocab.vectors
+        self.pretrained_embeddings.weight.requires_grad = False
         dimension += pretrained_dimension
+
+        if trained_dimension > 0:
+            self.trained_embeddings = nn.Embedding(len(field.vocab), trained_dimension)
+        else:
+            self.trained_embeddings = None
         if self.project:
-            self.projection = Feedforward(dimension, trained_dimension)
-        dimension = trained_dimension
+            self.projection = Feedforward(dimension, output_dimension)
+        dimension = output_dimension
         self.dropout = nn.Dropout(dropout)
         self.dimension = dimension
 
     def forward(self, x, lengths=None, device=-1):
-        pretrained_embeddings = self.pretrained_embeddings[0](x.cpu()).to(x.device).detach()
-        return self.projection(pretrained_embeddings) if self.project else pretrained_embeddings
+        cpu_x = x.cpu()
+
+        pretrained_embeddings = self.pretrained_embeddings(x.cpu()).to(x.device).detach()
+        if self.trained_embeddings is not None:
+            trained_embeddings = self.trained_embeddings(x.cpu()).to(x.device)
+            embeddings = torch.cat((pretrained_embeddings, trained_embeddings), dim=2)
+        else:
+            embeddings = pretrained_embeddings
+
+        return self.projection(embeddings) if self.project else embeddings
 
     def set_embeddings(self, w):
-        self.pretrained_embeddings[0].weight.data = w
-        self.pretrained_embeddings[0].weight.requires_grad = False
+        self.pretrained_embeddings.weight.data = w
+        self.pretrained_embeddings.weight.requires_grad = False
 
 
 class SemanticFusionUnit(nn.Module):
