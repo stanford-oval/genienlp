@@ -85,6 +85,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 self.project_embeddings = Feedforward(2 * args.dimension, args.dimension, dropout=0.0)
         
         self.decoder_embeddings = Embedding(field, args.dimension,
+                                            include_pretrained=args.glove_decoder,
                                             trained_dimension=args.trainable_decoder_embedding,
                                             dropout=args.dropout_ratio, project=True)
     
