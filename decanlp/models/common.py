@@ -381,27 +381,35 @@ class Embedding(nn.Module):
         self.project = project
         dimension = 0
         pretrained_dimension = field.vocab.vectors.size(-1)
-        self.pretrained_embeddings = nn.Embedding(len(field.vocab), pretrained_dimension)
-        self.pretrained_embeddings.weight.data = field.vocab.vectors
-        self.pretrained_embeddings.weight.requires_grad = False
+        
+        # NOTE: this must be a list so that pytorch will not iterate into the module when
+        # traversing this module
+        # in turn, this means that moving this Embedding() to the GPU will not move the
+        # actual embedding, which will stay on CPU; this is necessary because a) we call
+        # set_embeddings() sometimes with CPU-only tensors, and b) the embedding tensor
+        # is too big for the GPU anyway
+        self.pretrained_embeddings = [nn.Embedding(len(field.vocab), pretrained_dimension)]
+        self.pretrained_embeddings[0].weight.data = field.vocab.vectors
+        self.pretrained_embeddings[0].weight.requires_grad = False
         dimension += pretrained_dimension
 
+        # OTOH, if we have a trained embedding, we move it around together with the module
+        # (ie, potentially on GPU), because the saving when applying gradient outweights
+        # the cost, and hopefully the embedding is small enough to fit in GPU memory
         if trained_dimension > 0:
             self.trained_embeddings = nn.Embedding(len(field.vocab), trained_dimension)
+            dimension += trained_dimension
         else:
             self.trained_embeddings = None
         if self.project:
             self.projection = Feedforward(dimension, output_dimension)
-        dimension = output_dimension
         self.dropout = nn.Dropout(dropout)
-        self.dimension = dimension
+        self.dimension = output_dimension
 
     def forward(self, x, lengths=None, device=-1):
-        cpu_x = x.cpu()
-
-        pretrained_embeddings = self.pretrained_embeddings(x.cpu()).to(x.device).detach()
+        pretrained_embeddings = self.pretrained_embeddings[0](x.cpu()).to(x.device).detach()
         if self.trained_embeddings is not None:
-            trained_embeddings = self.trained_embeddings(x.cpu()).to(x.device)
+            trained_embeddings = self.trained_embeddings(x)
             embeddings = torch.cat((pretrained_embeddings, trained_embeddings), dim=2)
         else:
             embeddings = pretrained_embeddings
@@ -409,8 +417,8 @@ class Embedding(nn.Module):
         return self.projection(embeddings) if self.project else embeddings
 
     def set_embeddings(self, w):
-        self.pretrained_embeddings.weight.data = w
-        self.pretrained_embeddings.weight.requires_grad = False
+        self.pretrained_embeddings[0].weight.data = w
+        self.pretrained_embeddings[0].weight.requires_grad = False
 
 
 class SemanticFusionUnit(nn.Module):
