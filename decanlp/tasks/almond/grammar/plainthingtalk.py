@@ -270,7 +270,7 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
 
             '$word_list': [('WORD',),
                            ('$word_list', 'WORD')]
-        }
+        })
         
         def add_type(type, value_rules, operators):
             assert all(isinstance(x, tuple) for x in value_rules)
