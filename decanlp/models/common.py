@@ -418,7 +418,7 @@ class Embedding(nn.Module):
             trained_embeddings = self.trained_embeddings(x)
         else:
             trained_embeddings = None
-        if pretrained_embeddings is not None and trained_embeddings is not None
+        if pretrained_embeddings is not None and trained_embeddings is not None:
             embeddings = torch.cat((pretrained_embeddings, trained_embeddings), dim=2)
         elif pretrained_embeddings is not None:
             embeddings = pretrained_embeddings
