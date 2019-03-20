@@ -170,7 +170,7 @@ def load_config_json(args):
                     'transformer_heads', 'max_output_length', 'max_generative_vocab',
                     'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
                     'use_maxmargin_loss', 'small_glove', 'almond_type_embeddings',
-                    'almond_grammar', 'trainable_decoder_embedding']
+                    'almond_grammar', 'trainable_decoder_embedding', 'glove_decoder']
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
