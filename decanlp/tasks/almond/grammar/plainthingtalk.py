@@ -57,9 +57,6 @@ TYPES = {
         ('end_of', 'unit:week'),
         ('end_of', 'unit:mon'),
         ('end_of', 'unit:year'),
-        ('$constant_Date', '+', '$constant_Measure(ms)'),
-        ('$constant_Date', '-', '$constant_Measure(ms)'),
-        ('$constant_Time',),
         ]),
     'Time': (['=='], ['TIME']),
     'Currency': (['==', '>=', '<='], ['CURRENCY']),
@@ -104,7 +101,7 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
     def __init__(self, filename, grammar_include_types=True, **kw):
         super().__init__(**kw)
         self._grammar_include_types = grammar_include_types
-        
+
         self.init_from_file(filename)
         
     def reset(self):
@@ -164,17 +161,17 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
         self._process_entities(thingpedia['entities'])
 
         self.complete()
-    
+
     def complete(self):
         self.num_functions = len(self.functions['queries']) + len(self.functions['actions'])
         
         GRAMMAR = OrderedDict({
             '$input': [('$rule',),
-                       ('executor', '=', '$constant_Entity(tt:username)', ':', '$rule'),
+                       ('executor', '=', '$constant', ':', '$rule'),
                        ('policy', '$policy'),
                        ('bookkeeping', '$bookkeeping')],
             '$bookkeeping': [('special', '$special'),
-                             ('answer', '$constant_Any')],
+                             ('answer', '$constant')],
             '$special': [(x,) for x in SPECIAL_TOKENS],
             '$rule':  [('$stream', '=>', '$action'),
                        ('$stream_join', '=>', '$action'),
@@ -194,26 +191,27 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
                                ('$thingpedia_actions',),
                                ('$thingpedia_actions', 'filter', '$filter')],
             '$table': [('$thingpedia_queries',),
+                       ('$thingpedia_queries', '$const_param_list'),
                        ('(', '$table', ')', 'filter', '$filter'),
-                       ('aggregate', 'min', '$out_param_Any', 'of', '(', '$table', ')'),
-                       ('aggregate', 'max', '$out_param_Any', 'of', '(', '$table', ')'),
-                       ('aggregate', 'sum', '$out_param_Any', 'of', '(', '$table', ')'),
-                       ('aggregate', 'avg', '$out_param_Any', 'of', '(', '$table', ')'),
+                       ('aggregate', 'min', '$param_name', 'of', '(', '$table', ')'),
+                       ('aggregate', 'max', '$param_name', 'of', '(', '$table', ')'),
+                       ('aggregate', 'sum', '$param_name', 'of', '(', '$table', ')'),
+                       ('aggregate', 'avg', '$param_name', 'of', '(', '$table', ')'),
                        ('aggregate', 'count', 'of', '(', '$table', ')'),
-                       ('aggregate', 'argmin', '$out_param_Any', '$constant_Number', ',', '$constant_Number', 'of', '(', '$table', ')'),
-                       ('aggregate', 'argmax', '$out_param_Any', '$constant_Number', ',', '$constant_Number', 'of', '(', '$table', ')'),
+                       ('aggregate', 'argmin', '$param_name', '$constant', ',', '$constant', 'of', '(', '$table', ')'),
+                       ('aggregate', 'argmax', '$param_name', '$constant', ',', '$constant', 'of', '(', '$table', ')'),
                        ('$table_join',),
-                       ('window', '$constant_Number', ',', '$constant_Number', 'of', '(', '$stream', ')'),
-                       ('timeseries', '$constant_Date', ',', '$constant_Measure(ms)', 'of', '(', '$stream', ')'),
-                       ('sequence', '$constant_Number', ',', '$constant_Number', 'of', '(', '$table', ')'),
-                       ('history', '$constant_Date', ',', '$constant_Measure(ms)', 'of', '(', '$table', ')')
+                       ('window', '$constant', ',', '$constant', 'of', '(', '$stream', ')'),
+                       ('timeseries', '$constant', ',', '$constant', 'of', '(', '$stream', ')'),
+                       ('sequence', '$constant', ',', '$constant', 'of', '(', '$table', ')'),
+                       ('history', '$constant', ',', '$constant', 'of', '(', '$table', ')')
                        ],
             '$table_join': [('(', '$table', ')', 'join', '(', '$table', ')'),
                             ('$table_join', 'on', '$param_passing')],
-            '$stream': [('timer', 'base', '=', '$constant_Date', ',', 'interval', '=', '$constant_Measure(ms)'),
-                        ('attimer', 'time', '=', '$constant_Time',),
+            '$stream': [('timer', 'base', '=', '$constant', ',', 'interval', '=', '$constant'),
+                        ('attimer', 'time', '=', '$constant',),
                         ('monitor', '(', '$table', ')'),
-                        ('monitor', '(', '$table', ')', 'on', 'new', '$out_param_Any'),
+                        ('monitor', '(', '$table', ')', 'on', 'new', '$param_name'),
                         ('monitor', '(', '$table', ')', 'on', 'new', '[', '$out_param_list', ']'),
                         ('edge', '(', '$stream', ')', 'on', '$filter'),
                         ('edge', '(', '$stream', ')', 'on', 'true'),
@@ -223,14 +221,18 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
                              ('$stream_join', 'on', '$param_passing')],
             '$action': [('notify',),
                         ('return',),
-                        ('$thingpedia_actions',)],
-            '$thingpedia_queries': [('$thingpedia_queries', '$const_param_list')],
-            '$thingpedia_actions': [('$thingpedia_actions', '$input_param_list')],
+                        ('$thingpedia_actions',),
+                        ('$thingpedia_actions', '$input_param_list')],
+            '$thingpedia_queries': [],
+            '$thingpedia_actions': [],
             '$input_param': [('$const_param',),
                              ('on', '$param_passing')],
             '$input_param_list': [('$input_param',),
                                   ('$input_param_list', '$input_param')],
-            '$param_passing': [('$param_name', '=', '$param_name')],
+            '$const_param_list': [('$const_param',),
+                                  ('$const_param_list', '$const_param')],
+            '$param_passing': [('$param_name', '=', '$param_name'),
+                               ('$param_name', '=', 'event')],
             '$const_param': [('$param_name', '=', '$constant')],
             '$out_param_list': [('$param_name',),
                                 ('$out_param_list', ',', '$param_name')],
@@ -252,21 +254,27 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
                              ('$param_name', '>=', '$constant'),
                              ('$param_name', '<=', '$constant'),
                              ('$param_name', 'contains', '$constant'),
-                             ('$param_name', 'in_array', '$constant_Array')],
+                             ('$param_name', 'in_array', '$constant')],
 
-            '$constant_Array': [('[', '$constant_array_values', ']',)],
             '$constant_array_values': [('$constant',),
                                        ('$constant_array_values', ',', '$constant')],
-            '$constant': [('undefined',)],
+
+
+            '$constant': [('undefined',),
+                          ('$constant', '+', '$primitive_constant'),
+                          ('$constant', '-', '$primitive_constant'),
+                          ('$constant', '$primitive_constant'), # <- for compound measures
+                          ('$primitive_constant',)],
+            '$primitive_constant': [('[', '$constant_array_values', ']',)],
             '$param_name': [],
 
             '$word_list': [('WORD',),
                            ('$word_list', 'WORD')]
-        })
+        }
         
         def add_type(type, value_rules, operators):
             assert all(isinstance(x, tuple) for x in value_rules)
-            GRAMMAR['$constant'] += value_rules
+            GRAMMAR['$primitive_constant'] += value_rules
 
         # base types
         for type, (operators, values) in TYPES.items():
@@ -284,12 +292,11 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
                     value_rules.append((v,))
             add_type(type, value_rules, operators)
         for base_unit, units in UNITS.items():
-            value_rules = [('$constant', 'unit:' + unit) for unit in units]
-            value_rules += [('$constant', '$constant', 'unit:' + unit) for unit in units]
+            value_rules = [('$primitive_constant', 'unit:' + unit) for unit in units]
             operators, _ = TYPES['Number']
             add_type('Measure(' + base_unit + ')', value_rules, operators)
         for i in range(MAX_ARG_VALUES):
-            GRAMMAR['$constant'].append(('DURATION_' + str(i),))
+            GRAMMAR['$primitive_constant'].append(('DURATION_' + str(i),))
 
         # well known entities
         add_type('Entity(tt:device)', [(device,) for device in self.devices], ['=='])
@@ -315,6 +322,7 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
             for function_name, params in self.functions[function_type].items():
                 GRAMMAR['$thingpedia_' + function_type].append((function_name,))
 
+        enum_values = OrderedSet()
         for function_type in ('queries', 'actions'):
             for function_name, params in self.functions[function_type].items():
                 for param_name, param_type, param_direction in params:
@@ -330,8 +338,16 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
                         param_types[param_name].add(param_type)
                     else:
                         param_types[param_name].add('Any')
+
+                        if param_type.startswith('Enum('):
+                           enum_type = self._enum_types[param_type]
+                           for enum in enum_type:
+                              if enum in enum_values:
+                                  continue
+                        
+                              enum_values.add(enum)
+                              GRAMMAR['$primitive_constant'].append(('enum:' + enum,))
                     
-        enum_values = OrderedSet()
 
         for param_name, options in param_types.items():
             for param_type in options:
@@ -343,7 +359,7 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
                             continue
                         
                         enum_values.add(enum)
-                        GRAMMAR['$constant'].append(('enum:' + enum,))
+                        GRAMMAR['$primitive_constant'].append(('enum:' + enum,))
 
         self._grammar = GRAMMAR
         self.construct_parser(self._grammar)
@@ -353,6 +369,7 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
             self._logger.info('num queries', len(self.functions['queries']))
             self._logger.info('num actions', len(self.functions['actions']))
             self._logger.info('num other', len(self.tokens) - self.num_functions - self.num_control_tokens)
+
 
     def tokenize_program(self, program):
         if isinstance(program, str):
@@ -370,13 +387,13 @@ class PlainThingTalkGrammar(ShiftReduceGrammar):
 
             if (not self._grammar_include_types) and token.startswith('param:'):
                 token = 'param:' + token.split(':')[1] + ':Any'
-            
+
             if token not in self.dictionary:
                 raise ValueError("Invalid token " + token)
             else:
                 yield self.dictionary[token], None
 
-        
+
 if __name__ == '__main__':
     grammar = PlainThingTalkGrammar(sys.argv[1], grammar_include_types=False)
     for t in grammar.tokens:
