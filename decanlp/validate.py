@@ -64,7 +64,7 @@ def get_clip(val_iter):
     return -val_iter.extra if val_iter.extra > 0 else None
 
 
-def all_reverse(tensor, world_size, task, field, clip, dim=0):
+def all_reverse(tensor, world_size, task, field, field_name, clip, dim=0):
     
     if world_size > 1:
         tensor = tensor.float() # tensors must be on cpu and float for all_gather
@@ -76,15 +76,16 @@ def all_reverse(tensor, world_size, task, field, clip, dim=0):
     
     # for distributed training, dev sets are padded with extra examples so that the
     # tensors are all of a predictable size for all_gather. `[:clip]` removes those extra examples
-    return field.reverse(tensor, detokenize=task.detokenize, field_name='answer')[:clip]
+    return field.reverse(tensor, detokenize=task.detokenize, field_name=field_name)[:clip]
 
 
 def gather_results(model, val_iter, field, world_size, task, iteration, optional_names=[]):
     loss, predictions, answers, outputs = compute_validation_outputs(model, val_iter, field, iteration, optional_names=optional_names)
     clip = get_clip(val_iter)
     if not hasattr(val_iter.dataset.examples[0], 'squad_id') and not hasattr(val_iter.dataset.examples[0], 'wikisql_id') and not hasattr(val_iter.dataset.examples[0], 'woz_id'):
-        answers = all_reverse(answers, world_size, task, field, clip)
-    return loss, all_reverse(predictions, world_size, task, field, clip), answers, [all_reverse(x, world_size, task, field, clip) for x in outputs]
+        answers = all_reverse(answers, world_size, task, field, field_name='answer', clip=clip)
+    return loss, all_reverse(predictions, world_size, task, field, field_name='answer', clip=clip), answers, \
+        [all_reverse(output, world_size, task, field, field_name, clip) for output, field_name in zip(outputs, optional_names)]
 
 
 def print_results(keys, values, rank=None, num_print=1):

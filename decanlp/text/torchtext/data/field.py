@@ -387,7 +387,7 @@ class ReversibleField(Field):
             except ImportError:
                 print("Please install revtok.")
                 raise
-            self.detokenize = lambda x, **kw: revtok.detokenize(x)
+            self.detokenize = revtok.detokenize
         else:
             self.detokenize = None
         super(ReversibleField, self).__init__(**kwargs)
@@ -414,10 +414,10 @@ class ReversibleField(Field):
             return tok not in (self.init_token, self.pad_token)
 
         batch = [filter(filter_special, ex) for ex in batch]
-        if detokenize is None:
-            detokenize = self.detokenize
         if detokenize is not None:
             return [detokenize(ex, field_name=field_name) for ex in batch]
+        elif self.detokenize is not None:
+            return [self.detokenize(ex) for ex in batch]
         else:
             return [''.join(ex) for ex in batch]
 

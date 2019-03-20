@@ -130,12 +130,12 @@ class ShiftReduceGrammar:
                 yield self.tokens[term_id]
         
     def print_all_actions(self):
-        print(0, 'pad')
-        print(1, 'accept')
-        print(2, 'start')
+        print(0, 'P', 'pad')
+        print(1, 'A', 'accept')
+        print(2, 'G', 'start')
         for i, (lhs, rhs) in enumerate(self._parser.rules):
-            print(i+self.num_control_tokens, 'reduce', lhs, '->', ' '.join(rhs))
-        print(self._word_id, 'copy', 'WORD')
+            print(i+self.num_control_tokens, 'R' + str(i), 'reduce', lhs, '->', ' '.join(rhs))
+        print(self._word_id, 'S0', 'copy', 'WORD')
 
     def _action_to_print_full(self, action):
         if action == slr.PAD_ID:

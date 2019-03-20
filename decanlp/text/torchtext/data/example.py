@@ -71,7 +71,7 @@ class Example(object):
             if field is not None:
                 if isinstance(val, six.string_types):
                     val = val.rstrip('\n')
-                setattr(ex, name, intern_strings(field.preprocess(val, **kwargs)))
+                setattr(ex, name, intern_strings(field.preprocess(val, field_name=name, **kwargs)))
         return ex
 
     @classmethod

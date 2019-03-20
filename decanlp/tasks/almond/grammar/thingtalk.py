@@ -406,5 +406,4 @@ class ThingTalkGrammar(ShiftReduceGrammar):
         
 if __name__ == '__main__':
     grammar = ThingTalkGrammar(sys.argv[1])
-    for t in grammar.tokens:
-        print(t)
+    grammar.print_all_actions()
