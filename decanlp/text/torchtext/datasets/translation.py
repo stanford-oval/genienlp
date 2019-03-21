@@ -58,13 +58,18 @@ class TranslationDataset(data.Dataset):
         """
         path = cls.download(root)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux'), exts, fields, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, train), exts, fields, **kwargs)
         val_data = None if validation is None else cls(
             os.path.join(path, validation), exts, fields, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, test), exts, fields, **kwargs)
-        return tuple(d for d in (train_data, val_data, test_data)
+        return tuple(d for d in (train_data, val_data, test_data, aux_data)
                      if d is not None)
 
 
@@ -129,6 +134,12 @@ class IWSLT(TranslationDataset):
         check = os.path.join(root, cls.name, cls.dirname)
         path = cls.download(root, check=check)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux = '.'.join(['aux', cls.dirname])
+            aux_data = cls(os.path.join(path, aux), exts, fields, **kwargs)
+
         if train is not None:
             train = '.'.join([train, cls.dirname])
         if validation is not None:
@@ -145,7 +156,7 @@ class IWSLT(TranslationDataset):
             os.path.join(path, validation), exts, fields, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, test), exts, fields, **kwargs)
-        return tuple(d for d in (train_data, val_data, test_data)
+        return tuple(d for d in (train_data, val_data, test_data, aux_data)
                      if d is not None)
 
     @staticmethod

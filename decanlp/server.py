@@ -29,7 +29,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-import os
 from argparse import ArgumentParser
 import ujson as json
 import torch
@@ -44,18 +43,14 @@ from pprint import pformat
 from .util import set_seed, load_config_json
 from . import models
 from .text.torchtext.data import Example
-from .utils.generic_dataset import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
 from .utils.embeddings import load_embeddings
+from .tasks.registry import get_tasks
+from .tasks.generic_dataset import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
 
 logger = logging.getLogger(__name__)
 
 class ProcessedExample():
     pass
-
-
-def split_tokenize(x):
-    return x.split()
-
 
 class Server():
     def __init__(self, args, field, model):
@@ -69,6 +64,8 @@ class Server():
         
         self._limited_idx_to_full_idx = deepcopy(self.field.decoder_to_vocab) # should avoid this with a conditional in map to full
         self._oov_to_limited_idx = {}
+
+        self._cached_tasks = dict()
         
         assert self.field.include_lengths
 
@@ -117,15 +114,18 @@ class Server():
     
     def handle_request(self, line):
         request = json.loads(line)
-        task = request['task'] if 'task' in request else 'generic'
+
+        task_name = request['task'] if 'task' in request else 'generic'
+        if task_name in self._cached_tasks:
+            task = self._cached_tasks[task_name]
+        else:
+            task = get_tasks([task_name], self.args)[0]
+            self._cached_tasks[task_name] = task
         
         context = request['context']
         question = request['question']
         answer = ''
-        if task == 'almond':
-            tokenize = split_tokenize
-        else:
-            tokenize = None
+        tokenize = task.tokenize
     
         context_question = get_context_question(context, question)
         fields = [(x, self.field) for x in CQA.fields]
@@ -134,10 +134,7 @@ class Server():
         batch = self.numericalize_example(ex)
         _, prediction_batch = self.model(batch, iteration=0)
         
-        if task == 'almond':
-            predictions = self.field.reverse(prediction_batch, detokenize=lambda x: ' '.join(x))
-        else:
-            predictions = self.field.reverse(prediction_batch)
+        predictions = self.field.reverse(prediction_batch, detokenize=task.detokenize, field_name='answer')
         
         response = json.dumps(dict(id=request['id'], answer=predictions[0]))
         return response + '\n'
@@ -206,6 +203,7 @@ def get_args(argv):
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
     parser.add_argument('--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
