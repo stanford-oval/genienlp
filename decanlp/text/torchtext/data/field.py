@@ -35,7 +35,7 @@ class RawField(object):
         self.preprocessing = preprocessing
         self.postprocessing = postprocessing
 
-    def preprocess(self, x):
+    def preprocess(self, x, field_name=None):
         """ Preprocess an example if the `preprocessing` Pipeline is provided. """
         if self.preprocessing is not None:
             return self.preprocessing(x)
@@ -154,7 +154,7 @@ class Field(RawField):
         self.pad_token = pad_token if self.sequential else None
         self.pad_first = pad_first
 
-    def preprocess(self, x, tokenize=None):
+    def preprocess(self, x, tokenize=None, field_name=None):
         """Load a single example using this field, tokenizing if necessary.
 
         If the input is a Python 2 `str`, it will be converted to Unicode
@@ -166,8 +166,9 @@ class Field(RawField):
             x = Pipeline(lambda s: six.text_type(s, encoding='utf-8'))(x)
         if self.sequential and isinstance(x, six.text_type):
             if tokenize is None:
-                tokenize = self.tokenize
-            x = tokenize(x.rstrip('\n'))
+                x = self.tokenize(x.rstrip('\n'))
+            else:
+                x = tokenize(x.rstrip('\n'), field_name=field_name)
         if self.lower:
             x = Pipeline(six.text_type.lower)(x)
         if self.preprocessing is not None:
@@ -391,7 +392,7 @@ class ReversibleField(Field):
             self.detokenize = None
         super(ReversibleField, self).__init__(**kwargs)
 
-    def reverse(self, batch, detokenize=None, limited=False):
+    def reverse(self, batch, detokenize=None, field_name=None, limited=False):
         
         if not self.batch_first:
             batch = batch.t()
@@ -413,10 +414,10 @@ class ReversibleField(Field):
             return tok not in (self.init_token, self.pad_token)
 
         batch = [filter(filter_special, ex) for ex in batch]
-        if detokenize is None:
-            detokenize = self.detokenize
         if detokenize is not None:
-            return [detokenize(ex) for ex in batch]
+            return [detokenize(ex, field_name=field_name) for ex in batch]
+        elif self.detokenize is not None:
+            return [self.detokenize(ex) for ex in batch]
         else:
             return [''.join(ex) for ex in batch]
 

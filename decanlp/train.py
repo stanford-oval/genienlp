@@ -52,7 +52,7 @@ from . import arguments
 from . import models
 from .validate import validate
 from .multiprocess import Multiprocess, DistributedDataParallel
-from .util import elapsed_time, get_splits, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
+from .util import elapsed_time, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
 from .utils.saver import Saver
 from .utils.embeddings import load_embeddings
 
@@ -89,14 +89,17 @@ def prepare_data(args, field, logger):
 
     train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
     for task in args.train_tasks:
-        logger.info(f'Loading {task}')
+        logger.info(f'Loading {task.name}')
         kwargs = {'test': None}
         kwargs['subsample'] = args.subsample
         kwargs['validation'] = None
         if args.use_curriculum:
             kwargs['curriculum'] = True
-        logger.info(f'Adding {task} to training datasets')
-        split = get_splits(args, task, FIELD, **kwargs)
+        kwargs['skip_cache_bool'] = args.skip_cache_bool
+        kwargs['cached_path'] = args.cached
+
+        logger.info(f'Adding {task.name} to training datasets')
+        split = task.get_splits(FIELD, args.data, **kwargs)
         if args.use_curriculum:
             assert len(split) == 2
             train_sets.append(split[0])
@@ -104,27 +107,25 @@ def prepare_data(args, field, logger):
         else:
             assert len(split) == 1
             train_sets.append(split[0])
-        logger.info(f'{task} has {len(split[0])} training examples')
-
-        if args.vocab_tasks is not None and task in args.vocab_tasks:
+        logger.info(f'{task.name} has {len(split)} training examples')
+        if args.vocab_tasks is not None and task.name in args.vocab_tasks:
             vocab_sets.extend(split)
 
     for task in args.val_tasks:
-        logger.info(f'Loading {task}')
+        logger.info(f'Loading {task.name}')
         kwargs = {'test': None}
         kwargs['subsample'] = args.subsample
         kwargs['train'] = None
-        logger.info(f'Adding {task} to validation datasets')
-        split = get_splits(args, task, FIELD, **kwargs)
-        assert len(split) == 1
-        logger.info(f'{task} has {len(split[0])} validation examples')
-        val_sets.append(split[0])
-        if args.vocab_tasks is not None and task in args.vocab_tasks:
-            vocab_sets.extend(split)
+        kwargs['skip_cache_bool'] = args.skip_cache_bool
+        kwargs['cached_path'] = args.cached
 
-    for task, s in zip(args.train_tasks, train_sets):
-        for ex in s.examples[:10]:
-            logger.debug(f'examples***: {[token.strip() for token in ex.context]}')
+        logger.info(f'Adding {task.name} to validation datasets')
+        split = task.get_splits(FIELD, args.data, **kwargs)
+        assert len(split) == 1
+        logger.info(f'{task.name} has {len(split[0])} validation examples')
+        val_sets.append(split[0])
+        if args.vocab_tasks is not None and task.name in args.vocab_tasks:
+            vocab_sets.extend(split)
 
     if args.load is None:
         vectors = load_embeddings(args, logger)
@@ -224,12 +225,12 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
     epoch = 0
 
     logger.info(f'Preparing iterators')
-    train_iters = [(name, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
-                      for name, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
+    train_iters = [(task, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
+                      for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(name, to_iter(args, world_size, tok, x, device, train=False, token_testing=args.token_testing, sort=False if 'sql' in name else None))
-                    for name, x, tok in zip(args.val_tasks, val_sets, args.val_batch_size)]
+    val_iters = [(task, to_iter(args, world_size, tok, x, device, train=False, token_testing=args.token_testing, sort=False if 'sql' in task.name else None))
+                    for task, x, tok in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
 
     if args.use_curriculum:
@@ -287,26 +288,26 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                         for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
                             val_loss, metric_dict = validate(val_task, val_iter, model, logger, field, world_size, rank, iteration, num_print=args.num_print, args=args)
                             if val_loss is not None:
-                                log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}val_{val_task}:val_loss{val_loss.item():.4f}:'
-                                writer.add_scalar(f'loss/{val_task}/val', val_loss.item(), iteration)
+                                log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}val_{val_task.name}:val_loss{val_loss.item():.4f}:'
+                                writer.add_scalar(f'loss/{val_task.name}/val', val_loss.item(), iteration)
                             else:
-                                log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}val_{val_task}:'
+                                log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}val_{val_task.name}:'
                                
                             metric_entry = ''
                             for metric_key, metric_value in metric_dict.items():
                                 metric_entry += f'{metric_key}_{metric_value:.2f}:'
                             metric_entry = metric_entry[:-1]
                            
-                            deca_score += metric_dict[args.task_to_metric[val_task]]
+                            deca_score += metric_dict[val_task.metrics[0]]
                            
                             # val log
                             logger.info(log_entry + metric_entry)
                             if writer is not None:
                                 for metric_key, metric_value in metric_dict.items():
-                                    writer.add_scalar(f'{metric_key}/{val_task}/val', metric_value, iteration)
-                                    writer.add_scalar(f'{val_task}/{metric_key}/val', metric_value, iteration)
+                                    writer.add_scalar(f'{metric_key}/{val_task.name}/val', metric_value, iteration)
+                                    writer.add_scalar(f'{val_task.name}/{metric_key}/val', metric_value, iteration)
                         writer.add_scalar('deca/val', deca_score, iteration)
-                        logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}val_deca:deca_{deca_score:.2f}')
+                        logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}val_deca:deca_{deca_score:.2f}')
 
                     # saving
                     if save_every is not None and (iteration % args.save_every == 0):
@@ -325,7 +326,7 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                                 torch.distributed.barrier()
                             saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
                             if should_save_best:
-                                logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}found new best model')
+                                logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}found new best model')
                                 torch.save(save_model_state_dict, os.path.join(args.log_dir, 'best.pth'))
                                 if world_size > 1:
                                     torch.distributed.barrier()
@@ -368,19 +369,19 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                         for metric_key, metric_value in local_train_metric_dict.items():
                             metric_entry += f'{metric_key}_{metric_value:.2f}:'
                         metric_entry = f'{metric_entry[:-1]}'
-                        logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task}:{task_progress}{avg_batch_size}loss_{local_loss:.4f}{metric_entry}') 
+                        logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}{avg_batch_size}loss_{local_loss:.4f}{metric_entry}')
                         num_examples = 0 
                         len_contexts = 0 
                         len_answers = 0  
     
                         if writer is not None:
-                            writer.add_scalar(f'loss/{task}/train', local_loss, iteration)
+                            writer.add_scalar(f'loss/{task.name}/train', local_loss, iteration)
                             writer.add_scalar(f'training/lr', lr, iteration)
                             if grad_norm is not None:
                                 writer.add_scalar(f'training/norm', grad_norm, iteration)
                             for metric_key, metric_value in local_train_metric_dict.items():
-                                writer.add_scalar(f'{metric_key}/{task}/train', metric_value, iteration)
-                                writer.add_scalar(f'{task}/{metric_key}/train', metric_value, iteration)
+                                writer.add_scalar(f'{metric_key}/{task.name}/train', metric_value, iteration)
+                                writer.add_scalar(f'{task.name}/{metric_key}/train', metric_value, iteration)
 
                         local_loss = 0
                         local_train_metric_dict = {}

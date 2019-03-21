@@ -27,13 +27,12 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from .utils.generic_dataset import Query
+from .tasks.generic_dataset import Query
 from argparse import ArgumentParser
 import os
-import re
 import sys
 import ujson as json
-from decanlp.metrics import to_lf
+from .metrics import to_lf
 
 
 def correct_format(x):

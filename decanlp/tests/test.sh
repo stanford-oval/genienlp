@@ -25,15 +25,20 @@ curl -O "https://parmesan.stanford.edu/glove/charNgram.txt.pt" ; mv charNgram.tx
         pipenv run decanlp train --train_tasks almond  --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --small_glove --no_commit
         # with curriculum
         pipenv run decanlp train --train_tasks almond  --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_"$i"_curriculum --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --small_glove --no_commit --use_curriculum
+        # with grammar
+        pipenv run decanlp train --train_tasks almond  --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_"$i"_grammar --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --small_glove --no_commit --thingpedia $SRCDIR/dataset/thingpedia-8strict.json --almond_grammar full.bottomup
+
 
 
         # greedy decode
         pipenv run decanlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
         pipenv run decanlp predict --tasks almond --evaluate test --path $workdir/model_"$i"_curriculum  --overwrite --eval_dir $workdir/model_"$i"_curriculum/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
-
+        pipenv run decanlp predict --tasks almond --evaluate test --path $workdir/model_"$i"_grammar --overwrite --eval_dir $workdir/model_"$i"_grammar/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings --thingpedia $SRCDIR/dataset/thingpedia-8strict.json
 
         # export prediction results
         pipenv run python3 $SRCDIR/../utils/post_process_decoded_results.py --original_data $SRCDIR/dataset/almond/test.tsv --gold_program $workdir/model_$i/eval_results/test/almond.gold.txt --predicted_program $workdir/model_$i/eval_results/test/almond.txt --output_file $workdir/model_$i/results.tsv
+        pipenv run python3 $SRCDIR/../utils/post_process_decoded_results.py --original_data $SRCDIR/dataset/almond/test.tsv --gold_program $workdir/model_"$i"_curriculum/eval_results/test/almond.gold.txt --predicted_program $workdir/model_"$i"_curriculum/eval_results/test/almond.txt --output_file $workdir/model_"$i"_curriculum/results.tsv
+        pipenv run python3 $SRCDIR/../utils/post_process_decoded_results.py --original_data $SRCDIR/dataset/almond/test.tsv --gold_program $workdir/model_"$i"_grammar/eval_results/test/almond.gold.txt --predicted_program $workdir/model_"$i"_grammar/eval_results/test/almond.txt --output_file $workdir/model_"$i"_grammar/results.tsv
 
         # check if result files exist
         if [ ! -f $workdir/model_$i/results.tsv ] && [ ! -f $workdir/model_$i/results_raw.tsv ]; then
@@ -44,4 +49,4 @@ curl -O "https://parmesan.stanford.edu/glove/charNgram.txt.pt" ; mv charNgram.tx
         i=$((i+1))
     done
 
-trap "delete $workdir" EXIT
+trap "delete $workdir" TERM
