@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 class AlmondDataset(generic_dataset.CQA):
-    """The Almond semantic parsing task"""
+    """Obtaining dataset for Almond semantic parsing task"""
 
     base_url = None
     name = 'almond'
@@ -114,13 +114,18 @@ class AlmondDataset(generic_dataset.CQA):
         """
         path = os.path.join(root, cls.name)
 
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), fields, tokenize=tokenize, reverse_task=reverse_task, **kwargs)
+
         train_data = None if train is None else cls(
             os.path.join(path, train + '.tsv'), fields, tokenize=tokenize, reverse_task=reverse_task, **kwargs)
         val_data = None if validation is None else cls(
             os.path.join(path, validation + '.tsv'), fields, tokenize=tokenize, reverse_task=reverse_task, **kwargs)
         test_data = None if test is None else cls(
             os.path.join(path, test + '.tsv'), fields, tokenize=tokenize, reverse_task=reverse_task, **kwargs)
-        return tuple(d for d in (train_data, val_data, test_data)
+        return tuple(d for d in (train_data, val_data, test_data, aux_data)
                      if d is not None)
 
     @staticmethod
@@ -130,6 +135,9 @@ class AlmondDataset(generic_dataset.CQA):
 
 @register_task('almond')
 class Almond(BaseTask):
+    """The Almond semantic parsing task
+    i.e. natural language to formal language (ThingTalk) mapping"""
+
     def __init__(self, name, args):
         super().__init__(name, args)
 
@@ -159,7 +167,7 @@ class Almond(BaseTask):
             fields=field, root=root, tokenize=self.tokenize, reverse_task=False, **kwargs)
 
     def tokenize(self, sentence, field_name=None):
-        tokenized =  sentence.split(' ')
+        tokenized = sentence.split(' ')
 
         if self._grammar is None or field_name != 'answer':
             return tokenized
@@ -175,6 +183,9 @@ class Almond(BaseTask):
 
 @register_task('reverse_almond')
 class ReverseAlmond(BaseTask):
+    """Reverse Almond semantic parsing task
+    i.e. formal language to natural language mapping"""
+
     @property
     def metrics(self):
         return ['bleu', 'em', 'nem', 'nf1']
