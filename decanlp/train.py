@@ -240,8 +240,6 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
 
     while True:
 
-        logger.info(f'starting epoch {epoch}')
-
         # For some number of rounds, we 'jump start' some subset of the tasks
         # by training them and not others
         # once the specified number of rounds is completed, 
