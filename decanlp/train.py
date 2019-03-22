@@ -102,12 +102,12 @@ def prepare_data(args, field, logger):
         split = task.get_splits(FIELD, args.data, **kwargs)
         if args.use_curriculum:
             assert len(split) == 2
-            train_sets.append(split[0])
             aux_sets.append(split[1])
+            logger.info(f'{task.name} has {len(split[1])} auxiliary examples')
         else:
             assert len(split) == 1
-            train_sets.append(split[0])
-        logger.info(f'{task.name} has {len(split)} training examples')
+        train_sets.append(split[0])
+        logger.info(f'{task.name} has {len(split[0])} training examples')
         if args.vocab_tasks is not None and task.name in args.vocab_tasks:
             vocab_sets.extend(split)
 
