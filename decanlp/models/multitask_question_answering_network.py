@@ -69,7 +69,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 cove_params = get_trainable_params(self.cove) 
                 for p in cove_params:
                     p.requires_grad = False
-                cove_dim = int(args.intermediate_cove) * 600 + int(args.cove) * 600 + 400 # the last 400 is for GloVe and char n-gram embeddings
+                cove_dim = int(args.intermediate_cove) * 600 + int(args.cove) * 600 + 400 + int(args.almond_type_embeddings) * 18 # the last 400 is for GloVe and char n-gram embeddings
                 self.project_cove = Feedforward(cove_dim, args.dimension)
 
         if -1 not in self.args.elmo:
@@ -144,8 +144,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             context_embedded = self.encoder_embeddings(context)
             question_embedded = self.encoder_embeddings(question)
             if self.args.cove:
-                context_embedded = self.project_cove(torch.cat([self.cove(context_embedded[:, :, -300:], context_lengths), context_embedded], -1).detach())
-                question_embedded = self.project_cove(torch.cat([self.cove(question_embedded[:, :, -300:], question_lengths), question_embedded], -1).detach())
+                context_embedded = self.project_cove(torch.cat([self.cove(context_embedded[:, :, 100:400], context_lengths), context_embedded], -1).detach())
+                question_embedded = self.project_cove(torch.cat([self.cove(question_embedded[:, :, 100:400], question_lengths), question_embedded], -1).detach())
             if -1 not in self.args.elmo:
                 context_embedded = self.project_embeddings(torch.cat([context_embedded, context_elmo], -1))
                 question_embedded = self.project_embeddings(torch.cat([question_embedded, question_elmo], -1))
