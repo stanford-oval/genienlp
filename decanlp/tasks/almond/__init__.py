@@ -30,6 +30,7 @@
 import logging
 import os
 import torch
+import sys
 from tqdm import tqdm
 
 from ..base import BaseTask
@@ -181,6 +182,8 @@ class Almond(BaseTask):
             fields=field, root=root, tokenize=self.tokenize, reverse_task=False, **kwargs)
 
     def tokenize(self, sentence, field_name=None):
+        if not sentence:
+            return []
         tokenized = sentence.split(' ')
 
         if self._grammar is None or field_name != 'answer':
@@ -215,6 +218,11 @@ class AlmondWithThingpediaAsContext(BaseTask):
         super().__init__(name, args)
 
         self._thingpedia = args.thingpedia
+        self._default_context = ' '.join(extract_words(args.thingpedia))
+
+    @property
+    def default_context(self):
+        return self._default_context
 
     @property
     def metrics(self):

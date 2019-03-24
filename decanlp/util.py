@@ -174,12 +174,15 @@ def load_config_json(args):
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
-            elif 'cove' in r:
+            elif r in ('cove', 'intermediate_cove', 'use_maxmargin_loss', 'small_glove',
+                       'almond_type_embbedings'):
                 setattr(args, r, False)
             elif 'elmo' in r:
                 setattr(args, r, [-1])
-            elif 'glove_and_char' in r:
+            elif r in ('glove_decoder', 'glove_and_char'):
                 setattr(args, r, True)
+            elif r == 'trainable_decoder_embedding':
+                setattr(args, r, 0)
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0

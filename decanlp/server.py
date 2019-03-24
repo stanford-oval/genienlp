@@ -123,7 +123,11 @@ class Server():
             self._cached_tasks[task_name] = task
         
         context = request['context']
+        if not context:
+            context = task.default_context
         question = request['question']
+        if not question:
+            question = task.default_question
         answer = ''
         tokenize = task.tokenize
     

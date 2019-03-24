@@ -415,7 +415,10 @@ class Embedding(nn.Module):
         else:
             pretrained_embeddings = None
         if self.trained_embeddings is not None:
-            trained_embeddings = self.trained_embeddings(x)
+            trained_vocabulary_size = self.trained_embeddings.weight.size()[0]
+            valid_x = torch.lt(x, trained_vocabulary_size)
+            masked_x = torch.where(valid_x, x, torch.zeros_like(x))
+            trained_embeddings = self.trained_embeddings(masked_x)
         else:
             trained_embeddings = None
         if pretrained_embeddings is not None and trained_embeddings is not None:

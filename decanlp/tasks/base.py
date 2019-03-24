@@ -42,6 +42,14 @@ class BaseTask:
     def __init__(self, name, args):
         self.name = name
 
+    @property
+    def default_question(self):
+        return ''
+
+    @property
+    def default_context(self):
+        return ''
+
     def get_splits(self, field, root, **kwargs):
         """
         Load the train, test, eval datasets for this task
