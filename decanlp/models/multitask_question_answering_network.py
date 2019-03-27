@@ -36,6 +36,7 @@ import json
 import torch
 from torch import nn
 from torch.nn import functional as F
+from collections import defaultdict
 
 from ..util import get_trainable_params, set_seed
 from ..modules import expectedBLEU, expectedMultiBleu, matrixBLEU
@@ -83,11 +84,31 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             self.project_elmo = Feedforward(elmo_dim, args.dimension)
             if self.args.glove_and_char:
                 self.project_embeddings = Feedforward(2 * args.dimension, args.dimension, dropout=0.0)
-        
-        self.decoder_embeddings = Embedding(field, args.dimension,
-                                            include_pretrained=args.glove_decoder,
-                                            trained_dimension=args.trainable_decoder_embedding,
-                                            dropout=args.dropout_ratio, project=True)
+
+        if args.pretrained_decoder_lm:
+            pretrained_save_dict = torch.load(os.path.join(args.embeddings, args.pretrained_decoder_lm), map_location=str(self.device))
+
+            self.pretrained_decoder_vocab_itos = pretrained_save_dict['vocab']
+            self.pretrained_decoder_vocab_stoi = defaultdict(lambda: 0, {
+                w: i for i, w in enumerate(self.pretrained_decoder_vocab_itos)
+            })
+            self.pretrained_decoder_embeddings = PretrainedDecoderLM(rnn_type=pretrained_save_dict['settings']['rnn_type'],
+                                                                     ntoken=len(self.pretrained_decoder_vocab),
+                                                                     emsize=pretrained_save_dict['settings']['emsize'],
+                                                                     nhid=pretrained_save_dict['settings']['nhid'],
+                                                                     nlayers=pretrained_save_dict['settings']['nlayers'],
+                                                                     dropout=0.0)
+            self.pretrained_decoder_embeddings.load_state_dict(pretrained_save_dict['model'], strict=True)
+
+            assert self.pretrained_decoder_embeddings.nhid == args.dimension
+            self.decoder_embeddings = None
+        else:
+            self.pretrained_decoder_vocab = None
+            self.pretrained_decoder_embeddings = None
+            self.decoder_embeddings = Embedding(field, args.dimension,
+                                                include_pretrained=args.glove_decoder,
+                                                trained_dimension=args.trainable_decoder_embedding,
+                                                dropout=args.dropout_ratio, project=True)
     
         self.bilstm_before_coattention = PackedLSTM(args.dimension,  args.dimension,
             batch_first=True, bidirectional=True, num_layers=1, dropout=0)
@@ -121,12 +142,13 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
 
     def set_embeddings(self, embeddings):
         self.encoder_embeddings.set_embeddings(embeddings)
-        self.decoder_embeddings.set_embeddings(embeddings)
+        if self.decoder_embeddings is not None:
+            self.decoder_embeddings.set_embeddings(embeddings)
 
     def forward(self, batch, iteration):
-        context, context_lengths, context_limited, context_elmo    = batch.context,  batch.context_lengths,  batch.context_limited, batch.context_elmo
-        question, question_lengths, question_limited, question_elmo = batch.question, batch.question_lengths, batch.question_limited, batch.question_elmo
-        answer, answer_lengths, answer_limited       = batch.answer,   batch.answer_lengths,   batch.answer_limited
+        context, context_lengths, context_limited, context_tokens     = batch.context,  batch.context_lengths,  batch.context_limited, batch.context_tokens
+        question, question_lengths, question_limited, question_tokens = batch.question, batch.question_lengths, batch.question_limited, batch.question_tokens
+        answer, answer_lengths, answer_limited, answer_tokens         = batch.answer,   batch.answer_lengths,   batch.answer_limited, batch.answer_tokens
         oov_to_limited_idx, limited_idx_to_full_idx  = batch.oov_to_limited_idx, batch.limited_idx_to_full_idx
 
         def map_to_full(x):
@@ -137,8 +159,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             def elmo(z, layers, device):
                 e = self.elmo(batch_to_ids(z).to(device))['elmo_representations']
                 return torch.cat([e[x] for x in layers], -1)
-            context_elmo =  self.project_elmo(elmo(context_elmo, self.args.elmo, context.device).detach())
-            question_elmo = self.project_elmo(elmo(question_elmo, self.args.elmo, question.device).detach())
+            context_elmo =  self.project_elmo(elmo(context_tokens, self.args.elmo, context.device).detach())
+            question_elmo = self.project_elmo(elmo(question_tokens, self.args.elmo, question.device).detach())
 
         if self.args.glove_and_char:
             context_embedded = self.encoder_embeddings(context)
@@ -184,7 +206,16 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
 
         if self.training:
             answer_padding = (answer_indices.data == pad_idx)[:, :-1]
-            answer_embedded = self.decoder_embeddings(answer)
+
+            if self.args.pretrained_decoder_lm:
+                answer_pretrained_numerical = [
+                    [self.pretrained_decoder_vocab_stoi[w] for w in sentence] for sentence in answer_tokens
+                ]
+
+                with torch.no_grad():
+                    answer_embedded = self.pretrained_decoder_embeddings.encode(answer_pretrained_numerical)
+            else:
+                answer_embedded = self.decoder_embeddings(answer)
             self_attended_decoded = self.self_attentive_decoder(answer_embedded[:, :-1].contiguous(), self_attended_context, context_padding=context_padding, answer_padding=answer_padding, positional_encodings=True)
             decoder_outputs = self.dual_ptr_rnn_decoder(self_attended_decoded, 
                 final_context, final_question, hidden=context_rnn_state)
@@ -263,14 +294,30 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                    for l in range(len(self.self_attentive_decoder.layers) + 1)]
         hiddens[0] = hiddens[0] + positional_encodings_like(hiddens[0])
         eos_yet = context.new_zeros((B, )).byte()
-    
+
+        pretrained_lm_hidden = None
+        if self.args.pretrained_decoder_lm:
+            pretrained_lm_hidden = self.pretrained_decoder_embeddings.init_hidden(B)
         rnn_output, context_alignment, question_alignment = None, None, None
         for t in range(T):
             if t == 0:
-                embedding = self.decoder_embeddings(
-                    self_attended_context[-1].new_full((B, 1), self.field.vocab.stoi['<init>'], dtype=torch.long), [1]*B)
+                if self.args.pretrained_decoder_lm:
+                    init_token = self_attended_context[-1].new_full((B, 1), self.pretrained_decoder_vocab_stoi['<init>'], dtype=torch.long)
+                    embedding, pretrained_lm_hidden = self.pretrained_decoder_embeddings.encode(init_token, pretrained_lm_hidden)
+                else:
+                    init_token = self_attended_context[-1].new_full((B, 1), self.field.vocab.stoi['<init>'], dtype=torch.long)
+                    embedding = self.decoder_embeddings(init_token, [1]*B)
             else:
-                embedding = self.decoder_embeddings(outs[:, t - 1].unsqueeze(1), [1]*B)
+                if self.args.pretrained_decoder_lm:
+                    current_token = [self.field.vocab.itos[x] for x in outs[:, t - 1]]
+                    current_token_id = torch.tensor([[self.pretrained_decoder_vocab_stoi[x]] for x in current_token],
+                                                    dtype=torch.long, device=self.device, requires_grad=False)
+                    embedding, pretrained_lm_hidden = self.pretrained_decoder_embeddings.encode(current_token_id,
+                                                                                                pretrained_lm_hidden)
+                else:
+                    current_token_id = outs[:, t - 1].unsqueeze(1)
+                    embedding = self.decoder_embeddings(current_token_id, [1]*B)
+
             hiddens[0][:, t] = hiddens[0][:, t] + (math.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)
             for l in range(len(self.self_attentive_decoder.layers)):
                 hiddens[l + 1][:, t] = self.self_attentive_decoder.layers[l].feedforward(
