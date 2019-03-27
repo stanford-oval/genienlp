@@ -93,7 +93,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 w: i for i, w in enumerate(self.pretrained_decoder_vocab_itos)
             })
             self.pretrained_decoder_embeddings = PretrainedDecoderLM(rnn_type=pretrained_save_dict['settings']['rnn_type'],
-                                                                     ntoken=len(self.pretrained_decoder_vocab),
+                                                                     ntoken=len(self.pretrained_decoder_vocab_itos),
                                                                      emsize=pretrained_save_dict['settings']['emsize'],
                                                                      nhid=pretrained_save_dict['settings']['nhid'],
                                                                      nlayers=pretrained_save_dict['settings']['nlayers'],
@@ -103,7 +103,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             assert self.pretrained_decoder_embeddings.nhid == args.dimension
             self.decoder_embeddings = None
         else:
-            self.pretrained_decoder_vocab = None
+            self.pretrained_decoder_vocab_itos = None
+            self.pretrained_decoder_vocab_stoi = None
             self.pretrained_decoder_embeddings = None
             self.decoder_embeddings = Embedding(field, args.dimension,
                                                 include_pretrained=args.glove_decoder,
@@ -208,12 +209,16 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             answer_padding = (answer_indices.data == pad_idx)[:, :-1]
 
             if self.args.pretrained_decoder_lm:
+                # note that pretrained_decoder_embeddings is time first
                 answer_pretrained_numerical = [
-                    [self.pretrained_decoder_vocab_stoi[w] for w in sentence] for sentence in answer_tokens
+                    [self.pretrained_decoder_vocab_stoi[sentence[time]] for sentence in answer_tokens] for time in range(len(answer_tokens[0]))
                 ]
+                answer_pretrained_numerical = torch.tensor(answer_pretrained_numerical, dtype=torch.long,
+                                                           device=self.device)
 
                 with torch.no_grad():
-                    answer_embedded = self.pretrained_decoder_embeddings.encode(answer_pretrained_numerical)
+                    answer_embedded, _ = self.pretrained_decoder_embeddings.encode(answer_pretrained_numerical)
+                    answer_embedded.transpose_(0, 1)
             else:
                 answer_embedded = self.decoder_embeddings(answer)
             self_attended_decoded = self.self_attentive_decoder(answer_embedded[:, :-1].contiguous(), self_attended_context, context_padding=context_padding, answer_padding=answer_padding, positional_encodings=True)
@@ -302,18 +307,24 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         for t in range(T):
             if t == 0:
                 if self.args.pretrained_decoder_lm:
-                    init_token = self_attended_context[-1].new_full((B, 1), self.pretrained_decoder_vocab_stoi['<init>'], dtype=torch.long)
+                    init_token = self_attended_context[-1].new_full((1, B), self.pretrained_decoder_vocab_stoi['<init>'], dtype=torch.long)
+                    
+                    # note that pretrained_decoder_embeddings is time first
                     embedding, pretrained_lm_hidden = self.pretrained_decoder_embeddings.encode(init_token, pretrained_lm_hidden)
+                    embedding.transpose_(0, 1)
                 else:
                     init_token = self_attended_context[-1].new_full((B, 1), self.field.vocab.stoi['<init>'], dtype=torch.long)
                     embedding = self.decoder_embeddings(init_token, [1]*B)
             else:
                 if self.args.pretrained_decoder_lm:
                     current_token = [self.field.vocab.itos[x] for x in outs[:, t - 1]]
-                    current_token_id = torch.tensor([[self.pretrained_decoder_vocab_stoi[x]] for x in current_token],
+                    current_token_id = torch.tensor([[self.pretrained_decoder_vocab_stoi[x] for x in current_token]],
                                                     dtype=torch.long, device=self.device, requires_grad=False)
                     embedding, pretrained_lm_hidden = self.pretrained_decoder_embeddings.encode(current_token_id,
                                                                                                 pretrained_lm_hidden)
+                                                                                                
+                    # note that pretrained_decoder_embeddings is time first
+                    embedding.transpose_(0, 1)
                 else:
                     current_token_id = outs[:, t - 1].unsqueeze(1)
                     embedding = self.decoder_embeddings(current_token_id, [1]*B)
