@@ -99,6 +99,9 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                                                                      nlayers=pretrained_save_dict['settings']['nlayers'],
                                                                      dropout=0.0)
             self.pretrained_decoder_embeddings.load_state_dict(pretrained_save_dict['model'], strict=True)
+            pretrained_lm_params = get_trainable_params(self.pretrained_decoder_embeddings)
+            for p in pretrained_lm_params:
+                p.requires_grad = False
 
             if self.pretrained_decoder_embeddings.nhid != args.dimension:
                 self.pretrained_decoder_embedding_projection = Feedforward(self.pretrained_decoder_embeddings.nhid,
