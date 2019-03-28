@@ -100,7 +100,11 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                                                                      dropout=0.0)
             self.pretrained_decoder_embeddings.load_state_dict(pretrained_save_dict['model'], strict=True)
 
-            assert self.pretrained_decoder_embeddings.nhid == args.dimension
+            if self.pretrained_decoder_embeddings.nhid != args.dimension:
+                self.pretrained_decoder_embedding_projection = Feedforward(self.pretrained_decoder_embeddings.nhid,
+                                                                           args.dimension)
+            else:
+                self.pretrained_decoder_embedding_projection = None
             self.decoder_embeddings = None
         else:
             self.pretrained_decoder_vocab_itos = None
@@ -219,6 +223,9 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 with torch.no_grad():
                     answer_embedded, _ = self.pretrained_decoder_embeddings.encode(answer_pretrained_numerical)
                     answer_embedded.transpose_(0, 1)
+
+                if self.pretrained_decoder_embedding_projection is not None:
+                    answer_embedded = self.pretrained_decoder_embedding_projection(answer_embedded)
             else:
                 answer_embedded = self.decoder_embeddings(answer)
             self_attended_decoded = self.self_attentive_decoder(answer_embedded[:, :-1].contiguous(), self_attended_context, context_padding=context_padding, answer_padding=answer_padding, positional_encodings=True)
@@ -312,6 +319,9 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                     # note that pretrained_decoder_embeddings is time first
                     embedding, pretrained_lm_hidden = self.pretrained_decoder_embeddings.encode(init_token, pretrained_lm_hidden)
                     embedding.transpose_(0, 1)
+
+                    if self.pretrained_decoder_embedding_projection is not None:
+                        embedding = self.pretrained_decoder_embedding_projection(embedding)
                 else:
                     init_token = self_attended_context[-1].new_full((B, 1), self.field.vocab.stoi['<init>'], dtype=torch.long)
                     embedding = self.decoder_embeddings(init_token, [1]*B)
@@ -325,6 +335,9 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                                                                                                 
                     # note that pretrained_decoder_embeddings is time first
                     embedding.transpose_(0, 1)
+
+                    if self.pretrained_decoder_embedding_projection is not None:
+                        embedding = self.pretrained_decoder_embedding_projection(embedding)
                 else:
                     current_token_id = outs[:, t - 1].unsqueeze(1)
                     embedding = self.decoder_embeddings(current_token_id, [1]*B)
