@@ -177,6 +177,8 @@ def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, wri
     model.train()
     opt.zero_grad()
     loss, predictions = model(batch, iteration)
+    if torch.isnan(loss).item():
+        return None, {}, None
     loss.backward()
     if lr is not None:
         opt.param_groups[0]['lr'] = lr
@@ -184,8 +186,7 @@ def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, wri
     if grad_clip > 0.0:
         grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
     opt.step()
-    if torch.isnan(loss).item():
-        raise ValueError('Found NaN loss')
+
     return loss.item(), {}, grad_norm
 
 
@@ -304,7 +305,8 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                                 for metric_key, metric_value in metric_dict.items():
                                     writer.add_scalar(f'{metric_key}/{val_task.name}/val', metric_value, iteration)
                                     writer.add_scalar(f'{val_task.name}/{metric_key}/val', metric_value, iteration)
-                        writer.add_scalar('deca/val', deca_score, iteration)
+                        if writer is not None:
+                            writer.add_scalar('deca/val', deca_score, iteration)
                         logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}val_deca:deca_{deca_score:.2f}')
 
                     # saving
@@ -339,6 +341,9 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
 
                     # param update
                     loss, train_metric_dict, grad_norm = step(model, batch, opt, iteration, field, task, lr=lr, grad_clip=args.grad_clip, writer=writer, it=train_iter)
+                    if loss is None:
+                        logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
+                        continue
 
                     # update curriculum fraction
                     if args.use_curriculum:
