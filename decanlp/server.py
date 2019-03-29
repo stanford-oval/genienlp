@@ -99,7 +99,7 @@ class Server():
             setattr(processed, name, entry)
             setattr(processed, f'{name}_lengths', lengths)
             setattr(processed, f'{name}_limited', limited_entry)
-            setattr(processed, f'{name}_elmo', [[s.strip() for s in l] for l in raw])
+            setattr(processed, f'{name}_tokens', [[s.strip() for s in l] for l in raw])
 
         processed.oov_to_limited_idx = self._oov_to_limited_idx
         processed.limited_idx_to_full_idx = self._limited_idx_to_full_idx
