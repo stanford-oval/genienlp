@@ -239,6 +239,8 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                           for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
 
+    zero_loss = 0
+
     while True:
 
         # For some number of rounds, we 'jump start' some subset of the tasks
@@ -344,6 +346,13 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                     if loss is None:
                         logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
                         continue
+                    if loss < 1e-5:
+                        zero_loss += 1
+                        if zero_loss >= 100:
+                            logger.info('Found loss less than 1e-5 for 100 steps, stopping.')
+                            return
+                    else:
+                        zero_loss = 0
 
                     # update curriculum fraction
                     if args.use_curriculum:
