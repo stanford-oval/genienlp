@@ -172,14 +172,21 @@ def get_learning_rate(i, args):
         transformer_lr = transformer_lr * math.sqrt(args.dimension * args.warmup) * args.sgd_lr
     return transformer_lr
 
-
 def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, writer=None, it=None):
     model.train()
     opt.zero_grad()
     loss, predictions = model(batch, iteration)
-    if torch.isnan(loss).item():
-        return None, {}, None
     loss.backward()
+    trainable_params = get_trainable_params(model, name=True)
+    flag = False
+    for name, param in trainable_params:
+        if param.grad is not None and torch.isnan(param.grad).any():
+            print(f'param name is: {name}')
+            print(f'param is: {param}')
+            print(f'param is: {param.grad}')
+            flag = True
+    if flag:
+        return None, {}, None
     if lr is not None:
         opt.param_groups[0]['lr'] = lr
     grad_norm = None

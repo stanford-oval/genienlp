@@ -126,8 +126,11 @@ def count_params(params):
     return mult(params)
 
 
-def get_trainable_params(model):
-    return list(filter(lambda p: p.requires_grad, model.parameters()))
+def get_trainable_params(model, name=False):
+    if name:
+        return list(filter(lambda p: p[1].requires_grad, model.named_parameters()))
+    else:
+        return list(filter(lambda p: p.requires_grad, model.parameters()))
 
 
 def elapsed_time(log):
