@@ -172,20 +172,21 @@ def get_learning_rate(i, args):
         transformer_lr = transformer_lr * math.sqrt(args.dimension * args.warmup) * args.sgd_lr
     return transformer_lr
 
-def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, writer=None, it=None):
+def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, writer=None, it=None, rank=0):
     model.train()
     opt.zero_grad()
     loss, predictions = model(batch, iteration)
     loss.backward()
     trainable_params = get_trainable_params(model, name=True)
-    flag = False
+    logger = log(rank)
+    Flag = False
     for name, param in trainable_params:
         if param.grad is not None and torch.isnan(param.grad).any():
-            print(f'param name is: {name}')
-            print(f'param is: {param}')
-            print(f'param is: {param.grad}')
-            flag = True
-    if flag:
+            logger.warning(f'param name is: {name}')
+            logger.warning(f'param value is: {param}')
+            logger.warning(f'param gradient is: {param.grad}')
+            Flag = True
+    if Flag:
         return None, {}, None
     if lr is not None:
         opt.param_groups[0]['lr'] = lr
@@ -247,6 +248,7 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
 
     zero_loss = 0
+    logger.info(f'Begin Training')
 
     while True:
 
@@ -349,7 +351,7 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                         lr = get_learning_rate(iteration, args) 
 
                     # param update
-                    loss, train_metric_dict, grad_norm = step(model, batch, opt, iteration, field, task, lr=lr, grad_clip=args.grad_clip, writer=writer, it=train_iter)
+                    loss, train_metric_dict, grad_norm = step(model, batch, opt, iteration, field, task, lr=lr, grad_clip=args.grad_clip, writer=writer, it=train_iter, rank=rank)
                     if loss is None:
                         logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
                         continue
@@ -447,7 +449,7 @@ def run(args, run_args, rank=0, world_size=1):
             logger.info(f'Starting iteration is {start_iteration}')
             opt.load_state_dict(opt_state_dict)
 
-    logger.info(f'Begin Training')
+
     train(args, model, opt, train_sets, args.train_iterations, field, val_sets=val_sets, aux_sets=aux_sets,
         rank=rank, world_size=world_size, 
         log_every=args.log_every, val_every=args.val_every, rounds=len(train_sets)>1,

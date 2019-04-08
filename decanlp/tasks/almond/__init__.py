@@ -45,7 +45,6 @@ from .grammar import thingtalk, plainthingtalk, posthingtalk
 logger = logging.getLogger(__name__)
 
 
-
 class AlmondDataset(generic_dataset.CQA):
     """Obtaining dataset for Almond semantic parsing task"""
 
@@ -64,7 +63,7 @@ class AlmondDataset(generic_dataset.CQA):
         else:
             examples = []
 
-            with open(path, 'r') as fp:
+            with open(path, 'r', encoding='utf-8') as fp:
                 lines = [line.strip().split('\t') for line in fp]
 
             if context_switch:
@@ -73,6 +72,10 @@ class AlmondDataset(generic_dataset.CQA):
 
             max_examples = min(len(lines), subsample) if subsample is not None else len(lines)
             for _id, sentence, target_code in tqdm(lines, total=max_examples):
+                # remove BOM
+                if lines[0][1].startswith('\ufeff'):
+                    lines[0][1] = lines[0][1][1:]
+
                 if context_switch:
                     if reverse_task:
                         answer = sentence
