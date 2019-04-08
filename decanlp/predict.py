@@ -130,17 +130,17 @@ def run(args, field, val_sets, model):
             if 'sql' in task.name or 'squad' in task.name:
                 ids_file_name = answer_file_name.replace('gold', 'ids')
             if os.path.exists(prediction_file_name):
-                logger.warning('** ', prediction_file_name, ' already exists -- this is where predictions are stored **')
+                logger.warning(f'** {prediction_file_name} already exists -- this is where predictions are stored **')
                 if args.overwrite:
-                    logger.warning('**** overwriting ', prediction_file_name, ' ****')
+                    logger.warning(f'**** overwriting {prediction_file_name} ****')
             if os.path.exists(answer_file_name):
-                logger.warning('** ', answer_file_name, ' already exists -- this is where ground truth answers are stored **')
+                logger.warning(f'** {answer_file_name} already exists -- this is where ground truth answers are stored **')
                 if args.overwrite:
-                    logger.warning('**** overwriting ', answer_file_name, ' ****')
+                    logger.warning(f'**** overwriting {answer_file_name} ****')
             if os.path.exists(results_file_name):
-                logger.warning('** ', results_file_name, ' already exists -- this is where metrics are stored **')
+                logger.warning(f'** {results_file_name} already exists -- this is where metrics are stored **')
                 if args.overwrite:
-                    logger.warning('**** overwriting ', results_file_name, ' ****')
+                    logger.warning(f'**** overwriting {results_file_name} ****')
                 else:
                     with open(results_file_name) as results_file:
                         if not args.silent:
