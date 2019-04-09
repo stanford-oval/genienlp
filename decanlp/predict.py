@@ -142,17 +142,17 @@ def run(args, field, val_sets, model):
                 if args.overwrite:
                     logger.warning(f'**** overwriting {results_file_name} ****')
                 else:
-                    with open(results_file_name) as results_file:
-                        if not args.silent:
-                            for l in results_file:
-                                logger.debug(l)
-                        metrics = json.loads(results_file.readlines()[0])
-                        decaScore.append(metrics[task.metrics[0]])
+                    lines = open(results_file_name).readlines()
+                    if not args.silent:
+                        for l in lines:
+                            logger.warning(l)
+                    metrics = json.loads(lines[0])
+                    decaScore.append(metrics[task.metrics[0]])
                     continue
 
             for x in [prediction_file_name, answer_file_name, results_file_name]:
                 os.makedirs(os.path.dirname(x), exist_ok=True)
-    
+
             if not os.path.exists(prediction_file_name) or args.overwrite:
                 with open(prediction_file_name, 'w') as prediction_file:
                     predictions = []
@@ -168,7 +168,7 @@ def run(args, field, val_sets, model):
                             if 'squad' in task.name:
                                 ids.append(it.dataset.q_ids[int(batch.squad_id[i])])
                             prediction_file.write(json.dumps(pp) + '\n')
-                            predictions.append(pp) 
+                            predictions.append(pp)
                 if 'sql' in task.name:
                     with open(ids_file_name, 'w') as id_file:
                         for i in ids:
@@ -179,14 +179,14 @@ def run(args, field, val_sets, model):
                             id_file.write(i + '\n')
             else:
                 with open(prediction_file_name) as prediction_file:
-                    predictions = [x.strip() for x in prediction_file.readlines()] 
+                    predictions = [x.strip() for x in prediction_file.readlines()]
                 if 'sql' in task.name or 'squad' in task.name:
                     with open(ids_file_name) as id_file:
                         ids = [int(x.strip()) for x in id_file.readlines()]
-   
+
             def from_all_answers(an):
-                return [it.dataset.all_answers[sid] for sid in an.tolist()] 
-    
+                return [it.dataset.all_answers[sid] for sid in an.tolist()]
+
             if not os.path.exists(answer_file_name) or args.overwrite:
                 with open(answer_file_name, 'w') as answer_file:
                     answers = []
@@ -200,12 +200,12 @@ def run(args, field, val_sets, model):
                         else:
                             a = field.reverse(batch.answer.data, detokenize=task.detokenize, field_name='answer')
                         for aa in a:
-                            answers.append(aa) 
+                            answers.append(aa)
                             answer_file.write(json.dumps(aa) + '\n')
             else:
                 with open(answer_file_name) as answer_file:
-                    answers = [json.loads(x.strip()) for x in answer_file.readlines()] 
-    
+                    answers = [json.loads(x.strip()) for x in answer_file.readlines()]
+
             if len(answers) > 0:
                 if not os.path.exists(results_file_name) or args.overwrite:
                     metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)
@@ -214,7 +214,7 @@ def run(args, field, val_sets, model):
                 else:
                     with open(results_file_name) as results_file:
                         metrics = json.loads(results_file.readlines()[0])
-    
+
                 if not args.silent:
                     for i, (p, a) in enumerate(zip(predictions, answers)):
                         logger.info(f'Prediction {i+1}: {p}\nAnswer {i+1}: {a}\n')

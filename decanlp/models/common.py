@@ -142,11 +142,7 @@ class LayerNorm(nn.Module):
     def forward(self, x):
         mean = x.mean(-1, keepdim=True)
         std = x.std(-1, keepdim=True)
-        if torch.nonzero(std).byte().all():
-            return self.gamma * (x - mean) / (std + self.eps) + self.beta
-        else:
-            return (x - mean) + self.beta
-
+        return self.gamma * (x - mean) / (std + self.eps) + self.beta
 
 
 class ResidualBlock(nn.Module):
