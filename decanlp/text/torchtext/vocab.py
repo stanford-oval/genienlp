@@ -16,6 +16,7 @@ from .utils import reporthook
 
 logger = logging.getLogger(__name__)
 
+MAX_WORD_LENGTH = 100
 
 class Vocab(object):
     """Defines a vocabulary object that will be used to numericalize a field.
@@ -309,6 +310,9 @@ class Vectors(object):
                     except:
                         logger.info("Skipping non-UTF8 token {}".format(repr(word)))
                         continue
+
+                if len(word) > MAX_WORD_LENGTH:
+                    continue
                 vectors.extend(float(x) for x in entries)
                 itos.append(word)
 
