@@ -5,6 +5,7 @@ import io
 import logging
 import os
 import zipfile
+import numpy as np
 
 import six
 from six.moves.urllib.request import urlretrieve
@@ -215,6 +216,102 @@ class SubwordVocab(Vocab):
             self.load_vectors(vectors, cat=cat_vectors)
 
 
+def string_hash(x):
+    """ Simple deterministic string hash
+
+    Based on g_str_hash from glib.
+    We need this because str.__hash__ is not deterministic (it varies with each process restart)
+    and it uses 8 bytes (which is too much for our uses)
+    """
+
+    h = np.int32(5381)
+    for c in x:
+        h = (h << 5) + h + ord(c)
+    return h
+
+
+class HashTable(object):
+    EMPTY_BUCKET = 0
+
+    def __init__(self, itos):
+        # open addressing hashing, with load factor 0.66
+
+        max_str_len = max(len(x) for x in itos)
+        self.itos = np.array(itos, dtype='U' + str(max_str_len))
+
+        self.table_size = int(len(itos) * 3 / 2)
+        self.table = np.zeros((self.table_size,), dtype=np.int64)
+
+        self._build(itos)
+
+    def save_dict(self):
+        return {
+            'itos': self.itos,
+            'table': self.table,
+        }
+
+    def load_save_dict(self, save_dict):
+        self.itos = save_dict['itos']
+        self.table = save_dict['table']
+        self.table_size = self.table.shape[0]
+
+    def _build(self, itos):
+        for i, word in enumerate(itos):
+            hash = string_hash(word)
+            bucket = hash % self.table_size
+
+            while self.table[bucket] != self.EMPTY_BUCKET:
+                hash += 7
+                bucket = hash % self.table_size
+
+            self.itos[i] = word
+            self.table[bucket] = 1 + i
+
+    def __iter__(self):
+        return iter(self.itos)
+    def __reversed__(self):
+        return reversed(self.itos)
+
+    def __len__(self):
+        return self.itos
+
+    def __eq__(self, other):
+        return isinstance(other, HashTable) and self.itos == other.itos
+    def __hash__(self):
+        return hash(self.itos)
+
+    def _find(self, key):
+        hash = string_hash(key)
+        for probe_count in range(self.table_size):
+            bucket = (hash + 7 * probe_count) % self.table_size
+
+            key_index = self.table[bucket]
+            if key_index == self.EMPTY_BUCKET:
+                return None
+
+            if self.itos[key_index - 1] == key:
+                return key_index - 1
+        return None
+
+    def __get__(self, key):
+        found = self._find(key)
+        if found is None:
+            raise KeyError(f'Invalid key {key}')
+        else:
+            return found
+
+    def __contains__(self, key):
+        found = self._find(key)
+        return found is not None
+
+    def get(self, key, default=None):
+        found = self._find(key)
+        if found is None:
+            return default
+        else:
+            return found
+
+
 class Vectors(object):
 
     def __init__(self, name, cache='.vector_cache',
@@ -239,12 +336,12 @@ class Vectors(object):
     def cache(self, name, cache, url=None):
         if os.path.isfile(name):
             path = name
-            path_pt = os.path.join(cache, os.path.basename(name)) + '.pt'
+            path_npz = os.path.join(cache, os.path.basename(name)) + '.npz'
         else:
             path = os.path.join(cache, name)
-            path_pt = path + '.pt'
+            path_npz = path + '.npz'
 
-        if not os.path.isfile(path_pt):
+        if not os.path.isfile(path_npz):
             if not os.path.isfile(path) and url:
                 logger.info('Downloading vectors from {}'.format(url))
                 if not os.path.exists(cache):
@@ -316,15 +413,26 @@ class Vectors(object):
                 vectors.extend(float(x) for x in entries)
                 itos.append(word)
 
-            self.itos = itos
-            self.stoi = {word: i for i, word in enumerate(itos)}
-            self.vectors = torch.Tensor(vectors).view(-1, dim)
+            self.stoi = HashTable(itos)
+            self.itos = self.stoi.itos
+
+            vectors = np.ndarray(vectors).reshape(-1, dim)
+
+            self.vectors = torch.from_numpy(vectors)
             self.dim = dim
-            logger.info('Saving vectors to {}'.format(path_pt))
-            torch.save((self.itos, self.stoi, self.vectors, self.dim), path_pt)
+            logger.info('Saving vectors to {}'.format(path_npz))
+
+            save_dict = self.stoi.save_dict()
+            save_dict['vectors'] = vectors
+
+            np.savez(path_npz, save_dict)
         else:
-            logger.info('Loading vectors from {}'.format(path_pt))
-            self.itos, self.stoi, self.vectors, self.dim = torch.load(path_pt)
+            logger.info('Loading vectors from {}'.format(path_npz))
+
+            save_dict = np.load(path_npz, mmap_mode='r')
+            self.stoi = HashTable([])
+            self.stoi.load_save_dict(save_dict)
+            self.vectors = torch.from_numpy(save_dict['vectors'])
 
 
 class GloVe(Vectors):
