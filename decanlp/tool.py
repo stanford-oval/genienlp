@@ -30,13 +30,14 @@
 
 import sys
 
-from decanlp import convert_to_logical_forms, train, predict, server
+from . import convert_to_logical_forms, train, predict, server, cache_embeddings
 
 subcommands = {
     'convert-to-logical-froms': ('Convert to logical forms (for SQL tasks)', convert_to_logical_forms.main),
     'train': ('Train a model', train.main),
     'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.main),
-    'server': ('Export RPC interface to predict', server.main)
+    'server': ('Export RPC interface to predict', server.main),
+    'cache-embeddings': ('Download and cache embeddings', cache_embeddings.main)
 }
 
 def usage():
