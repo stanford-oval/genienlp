@@ -224,39 +224,37 @@ def string_hash(x):
     and it uses 8 bytes (which is too much for our uses)
     """
 
-    h = np.int32(5381)
+    h = 5381
     for c in x:
         h = (h << 5) + h + ord(c)
-    return h
+        h = h & 0xFFFFFFFF
+    return np.uint32(h)
 
 
 class HashTable(object):
     EMPTY_BUCKET = 0
 
-    def __init__(self, itos):
-        # open addressing hashing, with load factor 0.66
+    def __init__(self, itos, table=None):
+        # open addressing hashing, with load factor 0.50
 
-        max_str_len = max(len(x) for x in itos)
-        self.itos = np.array(itos, dtype='U' + str(max_str_len))
+        if table is not None:
+            assert isinstance(itos, np.ndarray)
 
-        self.table_size = int(len(itos) * 3 / 2)
-        self.table = np.zeros((self.table_size,), dtype=np.int64)
+            self.itos = itos
+            self.table = table
+            self.table_size = table.shape[0]
+        else:
 
-        self._build(itos)
+            max_str_len = max(len(x) for x in itos)
+            self.itos = np.array(itos, dtype='U' + str(max_str_len))
 
-    def save_dict(self):
-        return {
-            'itos': self.itos,
-            'table': self.table,
-        }
+            self.table_size = int(len(itos) * 2)
+            self.table = np.zeros((self.table_size,), dtype=np.int64)
 
-    def load_save_dict(self, save_dict):
-        self.itos = save_dict['itos']
-        self.table = save_dict['table']
-        self.table_size = self.table.shape[0]
+            self._build(itos)
 
     def _build(self, itos):
-        for i, word in enumerate(itos):
+        for i, word in enumerate(tqdm(itos, total=len(itos))):
             hash = string_hash(word)
             bucket = hash % self.table_size
 
@@ -293,7 +291,7 @@ class HashTable(object):
                 return key_index - 1
         return None
 
-    def __get__(self, key):
+    def __getitem__(self, key):
         found = self._find(key)
         if found is None:
             raise KeyError(f'Invalid key {key}')
@@ -336,12 +334,16 @@ class Vectors(object):
     def cache(self, name, cache, url=None):
         if os.path.isfile(name):
             path = name
-            path_npz = os.path.join(cache, os.path.basename(name)) + '.npz'
+            path_vectors_np = os.path.join(cache, os.path.basename(name)) + '.vectors.npy'
+            path_itos_np = os.path.join(cache, os.path.basename(name)) + '.itos.npy'
+            path_table_np = os.path.join(cache, os.path.basename(name)) + '.table.npy'
         else:
             path = os.path.join(cache, name)
-            path_npz = path + '.npz'
+            path_vectors_np = path + '.vectors.npy'
+            path_itos_np = path + '.itos.npy'
+            path_table_np = path + '.table.npy'
 
-        if not os.path.isfile(path_npz):
+        if not os.path.isfile(path_vectors_np):
             if not os.path.isfile(path) and url:
                 logger.info('Downloading vectors from {}'.format(url))
                 if not os.path.exists(cache):
@@ -382,6 +384,8 @@ class Vectors(object):
                 binary_lines = True
 
             logger.info("Loading vectors from {}".format(path))
+            vectors = None
+            i = 0
             for line in tqdm(lines, total=len(lines)):
                 # Explicitly splitting on " " is important, so we don't
                 # get rid of Unicode non-breaking spaces in the vectors.
@@ -390,6 +394,7 @@ class Vectors(object):
                 word, entries = entries[0], entries[1:]
                 if dim is None and len(entries) > 1:
                     dim = len(entries)
+                    vectors = np.zeros((len(lines), dim), dtype=np.float32)
                 elif len(entries) == 1:
                     logger.warning("Skipping token {} with 1-dimensional "
                                    "vector {}; likely a header".format(word, entries))
@@ -410,29 +415,38 @@ class Vectors(object):
 
                 if len(word) > MAX_WORD_LENGTH:
                     continue
-                vectors.extend(float(x) for x in entries)
+                vectors[i] = [float(x) for x in entries]
+                i += 1
                 itos.append(word)
+            del lines
+
+            # we dropped some words because they were too long, so now vectors
+            # has some empty entries at the end
+            assert len(itos) <= vectors.shape[0]
+            vectors = vectors[:len(itos)]
 
             self.stoi = HashTable(itos)
             self.itos = self.stoi.itos
+            del itos
+            assert self.itos.shape[0] == vectors.shape[0]
 
-            vectors = np.ndarray(vectors).reshape(-1, dim)
+            print('Saving vectors to {}'.format(path_vectors_np))
+
+            np.save(path_vectors_np, vectors)
+            np.save(path_itos_np, self.itos)
+            np.save(path_table_np, self.stoi.table)
 
             self.vectors = torch.from_numpy(vectors)
             self.dim = dim
-            logger.info('Saving vectors to {}'.format(path_npz))
-
-            save_dict = self.stoi.save_dict()
-            save_dict['vectors'] = vectors
-
-            np.savez(path_npz, save_dict)
         else:
-            logger.info('Loading vectors from {}'.format(path_npz))
+            logger.info('Loading vectors from {}'.format(path_vectors_np))
 
-            save_dict = np.load(path_npz, mmap_mode='r')
-            self.stoi = HashTable([])
-            self.stoi.load_save_dict(save_dict)
-            self.vectors = torch.from_numpy(save_dict['vectors'])
+            vectors = np.load(path_vectors_np, mmap_mode='r')
+            itos = np.load(path_itos_np, mmap_mode='r')
+            table = np.load(path_table_np, mmap_mode='r')
+            self.stoi = HashTable(itos, table)
+            self.itos = self.stoi.itos
+            self.vectors = torch.from_numpy(vectors)
 
 
 class GloVe(Vectors):
