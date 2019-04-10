@@ -219,14 +219,15 @@ class SubwordVocab(Vocab):
 def string_hash(x):
     """ Simple deterministic string hash
 
-    Based on g_str_hash from glib.
+    Based on https://cp-algorithms.com/string/string-hashing.html.
     We need this because str.__hash__ is not deterministic (it varies with each process restart)
     and it uses 8 bytes (which is too much for our uses)
     """
 
-    h = 5381
+    P = 1009
+    h = 0
     for c in x:
-        h = (h << 5) + h + ord(c)
+        h = (h << 10) + h + ord(c) * P
         h = h & 0xFFFFFFFF
     return np.uint32(h)
 
