@@ -448,6 +448,7 @@ class Vectors(object):
             self.stoi = HashTable(itos, table)
             self.itos = self.stoi.itos
             self.vectors = torch.from_numpy(vectors)
+            self.dim = self.vectors.size()[1]
 
 
 class GloVe(Vectors):
