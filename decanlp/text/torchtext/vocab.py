@@ -5,6 +5,7 @@ import io
 import logging
 import os
 import zipfile
+import numpy as np
 
 import six
 from six.moves.urllib.request import urlretrieve
@@ -16,6 +17,7 @@ from .utils import reporthook
 
 logger = logging.getLogger(__name__)
 
+MAX_WORD_LENGTH = 100
 
 class Vocab(object):
     """Defines a vocabulary object that will be used to numericalize a field.
@@ -214,6 +216,101 @@ class SubwordVocab(Vocab):
             self.load_vectors(vectors, cat=cat_vectors)
 
 
+def string_hash(x):
+    """ Simple deterministic string hash
+
+    Based on https://cp-algorithms.com/string/string-hashing.html.
+    We need this because str.__hash__ is not deterministic (it varies with each process restart)
+    and it uses 8 bytes (which is too much for our uses)
+    """
+
+    P = 1009
+    h = 0
+    for c in x:
+        h = (h << 10) + h + ord(c) * P
+        h = h & 0xFFFFFFFF
+    return np.uint32(h)
+
+
+class HashTable(object):
+    EMPTY_BUCKET = 0
+
+    def __init__(self, itos, table=None):
+        # open addressing hashing, with load factor 0.50
+
+        if table is not None:
+            assert isinstance(itos, np.ndarray)
+
+            self.itos = itos
+            self.table = table
+            self.table_size = table.shape[0]
+        else:
+
+            max_str_len = max(len(x) for x in itos)
+            self.itos = np.array(itos, dtype='U' + str(max_str_len))
+
+            self.table_size = int(len(itos) * 2)
+            self.table = np.zeros((self.table_size,), dtype=np.int64)
+
+            self._build(itos)
+
+    def _build(self, itos):
+        for i, word in enumerate(tqdm(itos, total=len(itos))):
+            hash = string_hash(word)
+            bucket = hash % self.table_size
+
+            while self.table[bucket] != self.EMPTY_BUCKET:
+                hash += 7
+                bucket = hash % self.table_size
+
+            self.itos[i] = word
+            self.table[bucket] = 1 + i
+
+    def __iter__(self):
+        return iter(self.itos)
+    def __reversed__(self):
+        return reversed(self.itos)
+
+    def __len__(self):
+        return self.itos
+
+    def __eq__(self, other):
+        return isinstance(other, HashTable) and self.itos == other.itos
+    def __hash__(self):
+        return hash(self.itos)
+
+    def _find(self, key):
+        hash = string_hash(key)
+        for probe_count in range(self.table_size):
+            bucket = (hash + 7 * probe_count) % self.table_size
+
+            key_index = self.table[bucket]
+            if key_index == self.EMPTY_BUCKET:
+                return None
+
+            if self.itos[key_index - 1] == key:
+                return key_index - 1
+        return None
+
+    def __getitem__(self, key):
+        found = self._find(key)
+        if found is None:
+            raise KeyError(f'Invalid key {key}')
+        else:
+            return found
+
+    def __contains__(self, key):
+        found = self._find(key)
+        return found is not None
+
+    def get(self, key, default=None):
+        found = self._find(key)
+        if found is None:
+            return default
+        else:
+            return found
+
+
 class Vectors(object):
 
     def __init__(self, name, cache='.vector_cache',
@@ -238,12 +335,16 @@ class Vectors(object):
     def cache(self, name, cache, url=None):
         if os.path.isfile(name):
             path = name
-            path_pt = os.path.join(cache, os.path.basename(name)) + '.pt'
+            path_vectors_np = os.path.join(cache, os.path.basename(name)) + '.vectors.npy'
+            path_itos_np = os.path.join(cache, os.path.basename(name)) + '.itos.npy'
+            path_table_np = os.path.join(cache, os.path.basename(name)) + '.table.npy'
         else:
             path = os.path.join(cache, name)
-            path_pt = path + '.pt'
+            path_vectors_np = path + '.vectors.npy'
+            path_itos_np = path + '.itos.npy'
+            path_table_np = path + '.table.npy'
 
-        if not os.path.isfile(path_pt):
+        if not os.path.isfile(path_vectors_np):
             if not os.path.isfile(path) and url:
                 logger.info('Downloading vectors from {}'.format(url))
                 if not os.path.exists(cache):
@@ -284,6 +385,8 @@ class Vectors(object):
                 binary_lines = True
 
             logger.info("Loading vectors from {}".format(path))
+            vectors = None
+            i = 0
             for line in tqdm(lines, total=len(lines)):
                 # Explicitly splitting on " " is important, so we don't
                 # get rid of Unicode non-breaking spaces in the vectors.
@@ -292,6 +395,7 @@ class Vectors(object):
                 word, entries = entries[0], entries[1:]
                 if dim is None and len(entries) > 1:
                     dim = len(entries)
+                    vectors = np.zeros((len(lines), dim), dtype=np.float32)
                 elif len(entries) == 1:
                     logger.warning("Skipping token {} with 1-dimensional "
                                    "vector {}; likely a header".format(word, entries))
@@ -309,18 +413,42 @@ class Vectors(object):
                     except:
                         logger.info("Skipping non-UTF8 token {}".format(repr(word)))
                         continue
-                vectors.extend(float(x) for x in entries)
-                itos.append(word)
 
-            self.itos = itos
-            self.stoi = {word: i for i, word in enumerate(itos)}
-            self.vectors = torch.Tensor(vectors).view(-1, dim)
+                if len(word) > MAX_WORD_LENGTH:
+                    continue
+                vectors[i] = [float(x) for x in entries]
+                i += 1
+                itos.append(word)
+            del lines
+
+            # we dropped some words because they were too long, so now vectors
+            # has some empty entries at the end
+            assert len(itos) <= vectors.shape[0]
+            vectors = vectors[:len(itos)]
+
+            self.stoi = HashTable(itos)
+            self.itos = self.stoi.itos
+            del itos
+            assert self.itos.shape[0] == vectors.shape[0]
+
+            print('Saving vectors to {}'.format(path_vectors_np))
+
+            np.save(path_vectors_np, vectors)
+            np.save(path_itos_np, self.itos)
+            np.save(path_table_np, self.stoi.table)
+
+            self.vectors = torch.from_numpy(vectors)
             self.dim = dim
-            logger.info('Saving vectors to {}'.format(path_pt))
-            torch.save((self.itos, self.stoi, self.vectors, self.dim), path_pt)
         else:
-            logger.info('Loading vectors from {}'.format(path_pt))
-            self.itos, self.stoi, self.vectors, self.dim = torch.load(path_pt)
+            logger.info('Loading vectors from {}'.format(path_vectors_np))
+
+            vectors = np.load(path_vectors_np, mmap_mode='r')
+            itos = np.load(path_itos_np, mmap_mode='r')
+            table = np.load(path_table_np, mmap_mode='r')
+            self.stoi = HashTable(itos, table)
+            self.itos = self.stoi.itos
+            self.vectors = torch.from_numpy(vectors)
+            self.dim = self.vectors.size()[1]
 
 
 class GloVe(Vectors):

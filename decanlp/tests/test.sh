@@ -11,8 +11,12 @@ function delete {
 }
 
 mkdir -p $SRCDIR/embeddings
-curl -O "https://parmesan.stanford.edu/glove/glove.6B.50d.txt.pt" ; mv glove.6B.50d.txt.pt $SRCDIR/embeddings/
-curl -O "https://parmesan.stanford.edu/glove/charNgram.txt.pt" ; mv charNgram.txt.pt $SRCDIR/embeddings/
+
+for v in glove.6B.50d charNgram ; do
+    for f in vectors itos table ; do
+        curl -O "https://parmesan.stanford.edu/glove/${v}.txt.${f}.npy" ; mv ${v}.txt.${f}.npy $SRCDIR/embeddings/
+    done
+done
 
     TMPDIR=`pwd`
     workdir=`mktemp -d $TMPDIR/decaNLP-tests-XXXXXX`
