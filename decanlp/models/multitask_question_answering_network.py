@@ -63,7 +63,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         
             self.encoder_embeddings = Embedding(field, args.dimension,
                                                 trained_dimension=0,
-                                                dropout=args.dropout_ratio, project=not args.cove)
+                                                dropout=args.dropout_ratio, project=not args.cove,
+                                                requires_grad=args.retrain_encoder_embedding)
     
             if self.args.cove or self.args.intermediate_cove:
                 self.cove = MTLSTM(model_cache=args.embeddings, layer0=args.intermediate_cove, layer1=args.cove)

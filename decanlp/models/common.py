@@ -375,10 +375,11 @@ class Feedforward(nn.Module):
 
 class Embedding(nn.Module):
 
-    def __init__(self, field, output_dimension, include_pretrained=True, trained_dimension=0, dropout=0.0, project=True):
+    def __init__(self, field, output_dimension, include_pretrained=True, trained_dimension=0, dropout=0.0, project=True, requires_grad=False):
         super().__init__()
         self.field = field
         self.project = project
+        self.requires_grad = requires_grad
         dimension = 0
         pretrained_dimension = field.vocab.vectors.size(-1)
 
@@ -391,7 +392,7 @@ class Embedding(nn.Module):
             # is too big for the GPU anyway
             self.pretrained_embeddings = [nn.Embedding(len(field.vocab), pretrained_dimension)]
             self.pretrained_embeddings[0].weight.data = field.vocab.vectors
-            self.pretrained_embeddings[0].weight.requires_grad = False
+            self.pretrained_embeddings[0].weight.requires_grad = self.requires_grad
             dimension += pretrained_dimension
         else:
             self.pretrained_embeddings = None
@@ -433,7 +434,7 @@ class Embedding(nn.Module):
     def set_embeddings(self, w):
         if self.pretrained_embeddings is not None:
             self.pretrained_embeddings[0].weight.data = w
-            self.pretrained_embeddings[0].weight.requires_grad = False
+            self.pretrained_embeddings[0].weight.requires_grad = self.requires_grad
 
 
 class SemanticFusionUnit(nn.Module):
