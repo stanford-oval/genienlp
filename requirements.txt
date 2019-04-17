@@ -17,6 +17,7 @@ ujson
 -e git+git://github.com/andersjo/pyrouge.git#egg=pyrouge
 sacrebleu
 orderedset
+requests
 
 -e git+git://github.com/salesforce/cove.git#egg=cove
 allennlp

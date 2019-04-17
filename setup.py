@@ -57,6 +57,7 @@ setuptools.setup(
         'ujson',
         'pyrouge',
         'sacrebleu',
-        'orderedset'
+        'orderedset',
+        'requests'
     ]
 )
