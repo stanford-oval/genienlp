@@ -45,4 +45,18 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/salesforce/decaNLP",
+
+    install_requires=[
+        'numpy',
+        'torch>=0.4.1,<2.0.0',
+        'revtok',
+        'tqdm',
+        'nltk',
+        'tensorboardX',
+        'python-dateutil',
+        'ujson',
+        'pyrouge',
+        'sacrebleu',
+        'orderedset'
+    ]
 )
