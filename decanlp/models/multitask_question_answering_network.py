@@ -41,11 +41,7 @@ from collections import defaultdict
 from ..util import get_trainable_params, set_seed
 from ..modules import expectedBLEU, expectedMultiBleu, matrixBLEU
 
-from cove import MTLSTM
-from allennlp.modules.elmo import Elmo, batch_to_ids
-
 from .common import *
-
 
 class MultitaskQuestionAnsweringNetwork(nn.Module):
 
@@ -66,6 +62,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                                                 dropout=args.dropout_ratio, project=not args.cove)
     
             if self.args.cove or self.args.intermediate_cove:
+                from cove import MTLSTM
+
                 self.cove = MTLSTM(model_cache=args.embeddings, layer0=args.intermediate_cove, layer1=args.cove)
                 cove_params = get_trainable_params(self.cove) 
                 for p in cove_params:
@@ -74,6 +72,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 self.project_cove = Feedforward(cove_dim, args.dimension)
 
         if -1 not in self.args.elmo:
+            from allennlp.modules.elmo import Elmo
+
             options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
             weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
             self.elmo = Elmo(options_file, weight_file, 3, dropout=0.0, do_layer_norm=False)
@@ -164,6 +164,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         self.map_to_full = map_to_full
 
         if -1 not in self.args.elmo:
+            from allennlp.modules.elmo import batch_to_ids
+
             def elmo(z, layers, device):
                 e = self.elmo(batch_to_ids(z).to(device))['elmo_representations']
                 return torch.cat([e[x] for x in layers], -1)
