@@ -18,10 +18,5 @@ ujson
 sacrebleu
 orderedset
 
-# WikISQL evaluation
-records
-babel
-tabulate
-
 -e git+git://github.com/salesforce/cove.git#egg=cove
 allennlp
