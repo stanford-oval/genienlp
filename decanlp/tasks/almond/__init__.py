@@ -49,7 +49,6 @@ class AlmondDataset(generic_dataset.CQA):
     """Obtaining dataset for Almond semantic parsing task"""
 
     base_url = None
-    name = 'almond'
 
     def __init__(self, path, field, tokenize, contextual=False, thingpedia_in_context=False, reverse_task=False, subsample=None, **kwargs):
         fields = [(x, field) for x in self.fields]
@@ -128,7 +127,7 @@ class AlmondDataset(generic_dataset.CQA):
     @classmethod
     def splits(cls, fields, root='.data',
                train='train', validation='eval',
-               test='test', **kwargs):
+               test='test', contextual=False, **kwargs):
 
         """Create dataset objects for splits of the ThingTalk dataset.
         Arguments:
@@ -141,19 +140,23 @@ class AlmondDataset(generic_dataset.CQA):
             Remaining keyword arguments: Passed to the splits method of
                 Dataset.
         """
-        path = os.path.join(root, cls.name)
+        if contextual:
+            name = 'contextual_almond'
+        else:
+            name = 'almond'
+        path = os.path.join(root, name)
 
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), fields, contextual=contextual, **kwargs)
 
         train_data = None if train is None else cls(
             os.path.join(path, train + '.tsv'), fields, **kwargs)
         val_data = None if validation is None else cls(
-            os.path.join(path, validation + '.tsv'), fields, **kwargs)
+            os.path.join(path, validation + '.tsv'), fields, contextual=contextual, **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, test + '.tsv'), fields, **kwargs)
+            os.path.join(path, test + '.tsv'), fields, contextual=contextual, **kwargs)
         return tuple(d for d in (train_data, val_data, test_data, aux_data)
                      if d is not None)
 
