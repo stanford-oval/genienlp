@@ -208,7 +208,7 @@ class TranslationDataset(translation.TranslationDataset):
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
-            langs = {'.de': 'German', '.en': 'English', '.fr': 'French', '.ar': 'Arabic', '.cs': 'Czech', '.tt': 'ThingTalk'}
+            langs = {'.de': 'German', '.en': 'English', '.fr': 'French', '.ar': 'Arabic', '.cs': 'Czech', '.tt': 'ThingTalk', '.fa': 'Farsi'}
             source, target = langs[exts[0]], langs[exts[1]]
             src_path, trg_path = tuple(os.path.expanduser(path + x) for x in exts)
             question = f'Translate from {source} to {target}'

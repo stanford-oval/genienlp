@@ -466,7 +466,7 @@ def init_model(args, field, logger, world_size, device):
     logger.info(f'{args.model} has {num_param:,} trainable parameters')
 
     model.to(device)
-    if world_size > 1: 
+    if world_size > 1:
         logger.info(f'Wrapping model for distributed')
         model = DistributedDataParallel(model)
 
