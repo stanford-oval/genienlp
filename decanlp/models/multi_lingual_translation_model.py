@@ -28,31 +28,17 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
-import math
-import numpy as np
-import json
 import itertools
 
-import torch
-from torch import nn
-from torch.nn import functional as F
-from collections import defaultdict
-
-from ..util import get_trainable_params, set_seed
-from ..modules import expectedBLEU, expectedMultiBleu, matrixBLEU
-
-from cove import MTLSTM
-from allennlp.modules.elmo import Elmo, batch_to_ids
-
+from ..util import set_seed
+from decanlp.utils.model_utils import init_model
 from .common import *
 
-from ..train import init_model, init_opt
 import logging
 
 _logger = logging.getLogger(__name__)
 
-class MultitaskQuestionAnsweringNetwork(nn.Module):
+class MultiLingualTranslationModel(nn.Module):
 
     def __init__(self, field, args):
         super().__init__()
@@ -69,9 +55,9 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             model_field = model_dict['field']
             model = init_model(args, model_field, _logger, args.world_size, self.device)
             model.load_state_dict(model_dict['model_state_dict'])
-            model_opt_dict = torch.load(os.path.join(args.embeddings, f'{model}/best_optim.pth'), map_location=self.device)
-            model_opt = init_opt(args, model)
-            model_opt.load_state_dict(model_opt_dict)
+            # model_opt_dict = torch.load(os.path.join(args.embeddings, f'{model}/best_optim.pth'), map_location=self.device)
+            # model_opt = init_opt(args, model)
+            # model_opt.load_state_dict(model_opt_dict)
 
             setattr(self, f'{name}_field', model_field)
             setattr(self, f'{name}_model', model)

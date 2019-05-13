@@ -37,6 +37,7 @@ import numpy as np
 import ujson as json
 import logging
 
+
 logger = logging.getLogger(__name__)
 
 def tokenizer(s):
