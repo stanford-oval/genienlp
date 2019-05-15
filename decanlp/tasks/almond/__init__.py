@@ -62,8 +62,10 @@ class AlmondDataset(generic_dataset.CQA):
         else:
             examples = []
 
+            n = 0
             with open(path, 'r', encoding='utf-8') as fp:
-                lines = [line.strip().split('\t') for line in fp]
+                for line in fp:
+                    n += 1
 
             if thingpedia_in_context:
                 thingpedia = kwargs.pop('thingpedia')
@@ -71,8 +73,13 @@ class AlmondDataset(generic_dataset.CQA):
             else:
                 words_list = None
 
-            max_examples = min(len(lines), subsample) if subsample is not None else len(lines)
-            for parts in tqdm(lines, total=max_examples):
+            max_examples = min(n, subsample) if subsample is not None else n
+            for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
+                if i >= max_examples:
+                    break
+
+                parts = line.strip().split('\t')
+
                 if contextual:
                     _id, context, sentence, target_code = parts
                 else:
