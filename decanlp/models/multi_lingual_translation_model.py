@@ -51,23 +51,23 @@ class MultiLingualTranslationModel(nn.Module):
 
         for name in ['machine_translation', 'semantic_parser', 'thingtalk_machine_translation']:
 
-            model_dict = torch.load(os.path.join(args.embeddings, f'{name}/best.pth'), map_location=self.device)
+            model_dict = torch.load(os.path.join(args.saved_models, f'{name}/best.pth'), map_location=self.device)
             model_field = model_dict['field']
             model = init_model(args, model_field, _logger, args.world_size, self.device)
             model.load_state_dict(model_dict['model_state_dict'])
-            # model_opt_dict = torch.load(os.path.join(args.embeddings, f'{model}/best_optim.pth'), map_location=self.device)
+            # model_opt_dict = torch.load(os.path.join(args.saved_models, f'{model}/best_optim.pth'), map_location=self.device)
             # model_opt = init_opt(args, model)
             # model_opt.load_state_dict(model_opt_dict)
 
             setattr(self, f'{name}_field', model_field)
             setattr(self, f'{name}_model', model)
-            setattr(self, f'{name}_opt', model_opt)
+            # setattr(self, f'{name}_opt', model_opt)
 
 
-    def set_embeddings(self, embeddings):
-        self.encoder_embeddings.set_embeddings(embeddings)
-        if self.decoder_embeddings is not None:
-            self.decoder_embeddings.set_embeddings(embeddings)
+    # def set_embeddings(self, embeddings):
+    #     self.encoder_embeddings.set_embeddings(embeddings)
+    #     if self.decoder_embeddings is not None:
+    #         self.decoder_embeddings.set_embeddings(embeddings)
 
     def forward(self, batch, iteration):
         context, context_lengths, context_limited, context_tokens     = batch.context,  batch.context_lengths,  batch.context_limited, batch.context_tokens

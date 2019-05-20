@@ -64,6 +64,7 @@ def parse(argv):
     parser.add_argument('--save', default='results', type=str, help='where to save results.')
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--cached', default='', type=str, help='where to save cached files')
+    parser.add_argument('--saved_models', default='./saved_models', type=str, help='directory where cached models should be loaded from')
 
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training', required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
