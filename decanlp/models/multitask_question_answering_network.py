@@ -168,7 +168,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             def elmo(z, layers, device):
                 e = self.elmo(batch_to_ids(z).to(device))['elmo_representations']
                 return torch.cat([e[x] for x in layers], -1)
-            context_elmo =  self.project_elmo(elmo(context_tokens, self.args.elmo, context.device).detach())
+            context_elmo = self.project_elmo(elmo(context_tokens, self.args.elmo, context.device).detach())
             question_elmo = self.project_elmo(elmo(question_tokens, self.args.elmo, question.device).detach())
 
         if self.args.glove_and_char:
@@ -221,8 +221,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 answer_pretrained_numerical = [
                     [self.pretrained_decoder_vocab_stoi[sentence[time]] for sentence in answer_tokens] for time in range(len(answer_tokens[0]))
                 ]
-                answer_pretrained_numerical = torch.tensor(answer_pretrained_numerical, dtype=torch.long,
-                                                           device=self.device)
+                answer_pretrained_numerical = torch.tensor(answer_pretrained_numerical, dtype=torch.long, device=self.device)
 
                 with torch.no_grad():
                     answer_embedded, _ = self.pretrained_decoder_embeddings.encode(answer_pretrained_numerical)
@@ -364,7 +363,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             pred_probs, preds = probs.max(-1)
             preds = preds.squeeze(1)
             eos_yet = eos_yet | (preds == self.field.decoder_stoi['<eos>'])
-            outs[:, t] = preds.cpu().apply_(self.map_to_full)
+            # outs[:, t] = preds.cpu().apply_(self.map_to_full)
+            outs[:, t] = preds.cpu()
             if eos_yet.all():
                 break
         return outs
