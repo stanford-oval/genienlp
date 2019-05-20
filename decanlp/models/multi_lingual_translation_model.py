@@ -164,6 +164,6 @@ class MultiLingualTranslationModel(nn.Module):
             self.thingtalk_machine_translation_model.eval()
             _, greedy_output_from_thingtalk_MT = self.thingtalk_machine_translation_model(batch, iteration)
             greedy_output_from_thingtalk_MT_tokens = self.thingtalk_machine_translation_field.reverse(greedy_output_from_thingtalk_MT, detokenize=self.thingtalk_machine_translation_model.args.train_tasks[0].detokenize, field_name='answer')
-            print(f'**** greedy_output_from_thingtalk_MT_tokens: {greedy_output_from_thingtalk_MT_tokens} ***')
+            print(f'**** greedy_output_from_thingtalk_MT_tokens: {greedy_output_from_thingtalk_MT_tokens[0]} ***')
             return None, greedy_output_from_thingtalk_MT
 
