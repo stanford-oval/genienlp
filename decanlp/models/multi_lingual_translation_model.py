@@ -41,16 +41,16 @@ from .common import *
 
 import logging
 
+from ..tasks.registry import get_tasks
+
 _logger = logging.getLogger(__name__)
 
 class MultiLingualTranslationModel(nn.Module):
 
     def __init__(self, field, args):
         super().__init__()
-
-        # self.field = field
+        self.field = field
         self.args = args
-        # self.pad_idx = self.field.vocab.stoi[self.field.pad_token]
         self.device = set_seed(args)
 
 
@@ -68,18 +68,20 @@ class MultiLingualTranslationModel(nn.Module):
             setattr(self, f'{name}_model', model)
             # setattr(self, f'{name}_opt', model_opt)
 
-
     def forward(self, batch, iteration):
         context, context_lengths, context_limited, context_tokens     = batch.context,  batch.context_lengths,  batch.context_limited, batch.context_tokens
         question, question_lengths, question_limited, question_tokens = batch.question, batch.question_lengths, batch.question_limited, batch.question_tokens
         answer, answer_lengths, answer_limited, answer_tokens         = batch.answer,   batch.answer_lengths,   batch.answer_limited, batch.answer_tokens
         oov_to_limited_idx, limited_idx_to_full_idx  = batch.oov_to_limited_idx, batch.limited_idx_to_full_idx
 
-        batch_size = len(question_tokens)
-
         setattr(batch, 'context_limited', None)
         setattr(batch, 'question_limited', None)
         setattr(batch, 'answer_limited', None)
+
+        original_context = context
+        original_question = question
+
+        batch_size = len(question_tokens)
 
         # running through Farsi-English MT
         #### TODO fix this later
@@ -98,7 +100,9 @@ class MultiLingualTranslationModel(nn.Module):
 
         self.machine_translation_model.eval()
         _, greedy_output_from_MT = self.machine_translation_model(batch, iteration)
-        greedy_output_from_MT_tokens = self.machine_translation_field.reverse(greedy_output_from_MT, detokenize=self.machine_translation_model.args.train_tasks[0].detokenize, field_name='answer')
+        task = self.machine_translation_model.args.train_tasks[0] if self.training else self.machine_translation_model.args.tasks[0]
+
+        greedy_output_from_MT_tokens = self.machine_translation_field.reverse(greedy_output_from_MT, detokenize=task.detokenize, field_name='answer')
 
 
         # numericalize input to semantic parser
@@ -123,7 +127,8 @@ class MultiLingualTranslationModel(nn.Module):
 
         self.semantic_parser_model.eval()
         _, greedy_output_from_SP = self.semantic_parser_model(batch, iteration)
-        greedy_output_from_SP_tokens = self.semantic_parser_field.reverse(greedy_output_from_SP, detokenize=self.semantic_parser_model.args.train_tasks[0].detokenize, field_name='answer')
+        task = self.semantic_parser_model.args.train_tasks[0] if self.training else self.semantic_parser_model.args.tasks[0]
+        greedy_output_from_SP_tokens = self.semantic_parser_field.reverse(greedy_output_from_SP, detokenize=task.detokenize, field_name='answer')
 
         # numericalize input to thingtalk machine translation
         #### TODO fix this later
@@ -141,7 +146,7 @@ class MultiLingualTranslationModel(nn.Module):
         question_numericalized = [[self.thingtalk_machine_translation_field.decoder_stoi[sentence[time]] for sentence in question_tokens] for time in range(len(question_tokens[0]))]
 
         ##  TODO fix this
-        answer_numericalized = [[self.thingtalk_machine_translation_field.decoder_stoi.get(sentence[time], self.thingtalk_machine_translation_field.decoder_stoi['<unk>']) for sentence in answer_tokens] for time in range(len(answer_tokens[0]))]
+        answer_numericalized = [[self.field.decoder_stoi.get(sentence[time], self.field.decoder_stoi['<unk>']) for sentence in answer_tokens] for time in range(len(answer_tokens[0]))]
 
         context = torch.tensor(context_numericalized, dtype=torch.long, device=self.device).t_()
         question = torch.tensor(question_numericalized, dtype=torch.long, device=self.device).t_()
@@ -163,7 +168,21 @@ class MultiLingualTranslationModel(nn.Module):
 
             self.thingtalk_machine_translation_model.eval()
             _, greedy_output_from_thingtalk_MT = self.thingtalk_machine_translation_model(batch, iteration)
-            greedy_output_from_thingtalk_MT_tokens = self.thingtalk_machine_translation_field.reverse(greedy_output_from_thingtalk_MT, detokenize=self.thingtalk_machine_translation_model.args.train_tasks[0].detokenize, field_name='answer')
+            task = self.thingtalk_machine_translation_model.args.train_tasks[0] if self.training else self.thingtalk_machine_translation_model.args.tasks[0]
+            greedy_output_from_thingtalk_MT_tokens = self.thingtalk_machine_translation_field.reverse(greedy_output_from_thingtalk_MT, detokenize=task.detokenize, field_name='answer')
             print(f'**** greedy_output_from_thingtalk_MT_tokens: {greedy_output_from_thingtalk_MT_tokens[0]} ***')
-            return None, greedy_output_from_thingtalk_MT
+
+            context_tokens = [[self.thingtalk_machine_translation_field.init_token] + tokens.split(' ') + [self.thingtalk_machine_translation_field.eos_token] for tokens in greedy_output_from_thingtalk_MT_tokens]
+            context_lengths = [len(sublist) for sublist in context_tokens]
+            max_length = max(context_lengths)
+            context_tokens = [tokens + [self.thingtalk_machine_translation_field.pad_token] * (max_length - len(tokens)) for tokens in context_tokens]
+
+            prediction_tokens = context_tokens
+            prediction_numericalized = [[self.field.decoder_stoi.get(sentence[time], self.field.decoder_stoi['<unk>']) for sentence in prediction_tokens] for time in range(len(prediction_tokens[0]))]
+            prediction = torch.tensor(prediction_numericalized, dtype=torch.long, device=self.device).t_()
+
+            setattr(batch, 'context', original_context)
+            setattr(batch, 'question', original_question)
+
+            return None, prediction
 

@@ -168,13 +168,13 @@ def load_config_json(args):
     args.almond_type_embeddings = False
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
-        retrieve = ['model', 'transformer_layers', 'rnn_layers', 'transformer_hidden',
+        retrieve = ['model', 'transformer_layers', 'rnn_layers', 'transformer_hidden', 'world_size',
                     'dimension', 'load', 'max_val_context_length', 'val_batch_size',
                     'transformer_heads', 'max_output_length', 'max_generative_vocab',
                     'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
                     'use_maxmargin_loss', 'small_glove', 'almond_type_embeddings',
                     'almond_grammar', 'trainable_decoder_embedding', 'glove_decoder',
-                    'pretrained_decoder_lm']
+                    'pretrained_decoder_lm', 'retrain_encoder_embedding', 'question', 'use_fastText']
 
         for r in retrieve:
             if r in config:
@@ -188,6 +188,8 @@ def load_config_json(args):
                 setattr(args, r, True)
             elif r == 'trainable_decoder_embedding':
                 setattr(args, r, 0)
+            elif r == 'retrain_encoder_embedding':
+                setattr(args, r, False)
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0

@@ -233,7 +233,7 @@ def get_args(argv):
     parser = ArgumentParser(prog=argv[0])
     parser.add_argument('--path', required=True)
     parser.add_argument('--evaluate', type=str, required=True)
-    parser.add_argument('--tasks', default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl', 'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
+    parser.add_argument('--tasks', default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst','srl', 'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--data', default='./decaNLP/.data/', type=str, help='where to load data from.')
@@ -248,6 +248,8 @@ def get_args(argv):
     parser.add_argument('--eval_dir', type=str, default=None, help='use this directory to store eval results')
     parser.add_argument('--cached', default='', type=str, help='where to save cached files')
     parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
+
+    parser.add_argument('--saved_models', default='./saved_models', type=str, help='directory where cached models should be loaded from')
 
     args = parser.parse_args(argv[1:])
 
@@ -285,7 +287,7 @@ def main(argv=sys.argv):
     model_dict = backwards_compatible_cove_dict
     model.load_state_dict(model_dict)
     field, splits = prepare_data(args, field)
-    model.set_embeddings(field.vocab.vectors)
+    # model.set_embeddings(field.vocab.vectors)
 
     run(args, field, splits, model)
 
