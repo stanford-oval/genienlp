@@ -100,7 +100,7 @@ class MultiLingualTranslationModel(nn.Module):
 
         self.machine_translation_model.eval()
         _, greedy_output_from_MT = self.machine_translation_model(batch, iteration)
-        task = self.machine_translation_model.args.train_tasks[0] if self.training else self.machine_translation_model.args.tasks[0]
+        task = self.machine_translation_model.args.train_tasks[0] if hasattr(self.machine_translation_model.args, 'train_tasks') else self.machine_translation_model.args.tasks[0]
 
         greedy_output_from_MT_tokens = self.machine_translation_field.reverse(greedy_output_from_MT, detokenize=task.detokenize, field_name='answer')
 
@@ -127,7 +127,7 @@ class MultiLingualTranslationModel(nn.Module):
 
         self.semantic_parser_model.eval()
         _, greedy_output_from_SP = self.semantic_parser_model(batch, iteration)
-        task = self.semantic_parser_model.args.train_tasks[0] if self.training else self.semantic_parser_model.args.tasks[0]
+        task = self.semantic_parser_model.args.train_tasks[0] if hasattr(self.semantic_parser_model.args, 'train_tasks') else self.semantic_parser_model.args.tasks[0]
         greedy_output_from_SP_tokens = self.semantic_parser_field.reverse(greedy_output_from_SP, detokenize=task.detokenize, field_name='answer')
 
         # numericalize input to thingtalk machine translation
@@ -168,7 +168,7 @@ class MultiLingualTranslationModel(nn.Module):
 
             self.thingtalk_machine_translation_model.eval()
             _, greedy_output_from_thingtalk_MT = self.thingtalk_machine_translation_model(batch, iteration)
-            task = self.thingtalk_machine_translation_model.args.train_tasks[0] if self.training else self.thingtalk_machine_translation_model.args.tasks[0]
+            task = self.thingtalk_machine_translation_model.args.train_tasks[0] if hasattr(self.thingtalk_machine_translation_model.args, 'train_tasks') else self.thingtalk_machine_translation_model.args.tasks[0]
             greedy_output_from_thingtalk_MT_tokens = self.thingtalk_machine_translation_field.reverse(greedy_output_from_thingtalk_MT, detokenize=task.detokenize, field_name='answer')
             print(f'**** greedy_output_from_thingtalk_MT_tokens: {greedy_output_from_thingtalk_MT_tokens[0]} ***')
 
