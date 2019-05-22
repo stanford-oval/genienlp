@@ -42,7 +42,6 @@ from ..util import get_trainable_params, set_seed
 from ..modules import expectedBLEU, expectedMultiBleu, matrixBLEU
 
 from cove import MTLSTM
-from allennlp.modules.elmo import Elmo, batch_to_ids
 
 from .common import *
 
@@ -75,6 +74,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 self.project_cove = Feedforward(cove_dim, args.dimension)
 
         if -1 not in self.args.elmo:
+            from allennlp.modules.elmo import Elmo, batch_to_ids
             options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
             weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
             self.elmo = Elmo(options_file, weight_file, 3, dropout=0.0, do_layer_norm=False)

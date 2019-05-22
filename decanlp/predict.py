@@ -61,6 +61,7 @@ def get_all_splits(args, new_vocab):
 
         kwargs['skip_cache_bool'] = args.skip_cache_bool
         kwargs['cached_path'] = args.cached
+        kwargs['subsample'] = args.subsample
         s = task.get_splits(new_vocab, root=args.data, **kwargs)[0]
         preprocess_examples(args, [task], [s], new_vocab, train=False)
         splits.append(s)
@@ -250,6 +251,7 @@ def get_args(argv):
     parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
 
     parser.add_argument('--saved_models', default='./saved_models', type=str, help='directory where cached models should be loaded from')
+    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets (experimental)')
 
     args = parser.parse_args(argv[1:])
 
@@ -287,7 +289,8 @@ def main(argv=sys.argv):
     model_dict = backwards_compatible_cove_dict
     model.load_state_dict(model_dict)
     field, splits = prepare_data(args, field)
-    # model.set_embeddings(field.vocab.vectors)
+    if args.model != 'MultiLingualTranslationModel':
+        model.set_embeddings(field.vocab.vectors)
 
     run(args, field, splits, model)
 

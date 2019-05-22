@@ -41,8 +41,6 @@ from .common import *
 
 import logging
 
-from ..tasks.registry import get_tasks
-
 _logger = logging.getLogger(__name__)
 
 class MultiLingualTranslationModel(nn.Module):
@@ -53,8 +51,12 @@ class MultiLingualTranslationModel(nn.Module):
         self.args = args
         self.device = set_seed(args)
 
+        if args.use_google_translate:
+            model_names = ['semantic_parser', 'thingtalk_machine_translation']
+        else:
+            model_names = ['machine_translation', 'semantic_parser', 'thingtalk_machine_translation']
 
-        for name in ['machine_translation', 'semantic_parser', 'thingtalk_machine_translation']:
+        for name in model_names:
 
             model_dict = torch.load(os.path.join(args.saved_models, f'{name}/best.pth'), map_location=self.device)
             model_field = model_dict['field']
@@ -85,24 +87,27 @@ class MultiLingualTranslationModel(nn.Module):
 
         # running through Farsi-English MT
         #### TODO fix this later
-        # question = 'Translate from Farsi to English'.split()
-        question = 'Translate from English to ThingTalk'.split()
-        question_tokens_single = [self.machine_translation_field.init_token] + question + [self.machine_translation_field.eos_token]
-        question_tokens = list(itertools.repeat(question_tokens_single, batch_size))
-        context_numericalized = [[self.machine_translation_field.decoder_stoi.get(sentence[time], self.machine_translation_field.decoder_stoi['<unk>']) for sentence in context_tokens] for time in range(len(context_tokens[0]))]
-        question_numericalized = [[self.machine_translation_field.decoder_stoi[sentence[time]] for sentence in question_tokens] for time in range(len(question_tokens[0]))]
-
-        context = torch.tensor(context_numericalized, dtype=torch.long, device=self.device).t_()
-        question = torch.tensor(question_numericalized, dtype=torch.long, device=self.device).t_()
-        setattr(batch, 'context', context)
-        setattr(batch, 'question', question)
 
 
-        self.machine_translation_model.eval()
-        _, greedy_output_from_MT = self.machine_translation_model(batch, iteration)
-        task = self.machine_translation_model.args.train_tasks[0] if hasattr(self.machine_translation_model.args, 'train_tasks') else self.machine_translation_model.args.tasks[0]
+        if not self.args.use_google_translate:
+            # question = 'Translate from Farsi to English'.split()
+            question = 'Translate from English to ThingTalk'.split()
+            question_tokens_single = [self.machine_translation_field.init_token] + question + [self.machine_translation_field.eos_token]
+            question_tokens = list(itertools.repeat(question_tokens_single, batch_size))
+            context_numericalized = [[self.machine_translation_field.decoder_stoi.get(sentence[time], self.machine_translation_field.decoder_stoi['<unk>']) for sentence in context_tokens] for time in range(len(context_tokens[0]))]
+            question_numericalized = [[self.machine_translation_field.decoder_stoi[sentence[time]] for sentence in question_tokens] for time in range(len(question_tokens[0]))]
 
-        greedy_output_from_MT_tokens = self.machine_translation_field.reverse(greedy_output_from_MT, detokenize=task.detokenize, field_name='answer')
+            context = torch.tensor(context_numericalized, dtype=torch.long, device=self.device).t_()
+            question = torch.tensor(question_numericalized, dtype=torch.long, device=self.device).t_()
+            setattr(batch, 'context', context)
+            setattr(batch, 'question', question)
+
+
+            self.machine_translation_model.eval()
+            _, greedy_output_from_MT = self.machine_translation_model(batch, iteration)
+            task = self.machine_translation_model.args.train_tasks[0] if hasattr(self.machine_translation_model.args, 'train_tasks') else self.machine_translation_model.args.tasks[0]
+
+            greedy_output_from_MT_tokens = self.machine_translation_field.reverse(greedy_output_from_MT, detokenize=task.detokenize, field_name='answer')
 
 
         # numericalize input to semantic parser
@@ -110,10 +115,11 @@ class MultiLingualTranslationModel(nn.Module):
         question_tokens_single = [self.semantic_parser_field.init_token] + question + [self.semantic_parser_field.eos_token]
         question_tokens = list(itertools.repeat(question_tokens_single, batch_size))
 
-        context_tokens = [[self.semantic_parser_field.init_token] + tokens.split(' ') + [self.semantic_parser_field.eos_token] for tokens in greedy_output_from_MT_tokens]
-        context_lengths = [len(sublist) for sublist in context_tokens]
-        max_length = max(context_lengths)
-        context_tokens = [tokens + [self.semantic_parser_field.pad_token] * (max_length - len(tokens)) for tokens in context_tokens]
+        if not self.args.use_google_translate:
+            context_tokens = [[self.semantic_parser_field.init_token] + tokens.split(' ') + [self.semantic_parser_field.eos_token] for tokens in greedy_output_from_MT_tokens]
+            context_lengths = [len(sublist) for sublist in context_tokens]
+            max_length = max(context_lengths)
+            context_tokens = [tokens + [self.semantic_parser_field.pad_token] * (max_length - len(tokens)) for tokens in context_tokens]
 
 
         context_numericalized = [[self.semantic_parser_field.decoder_stoi.get(sentence[time], self.semantic_parser_field.decoder_stoi['<unk>']) for sentence in context_tokens] for time in range(len(context_tokens[0]))]
