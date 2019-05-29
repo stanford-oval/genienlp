@@ -217,13 +217,6 @@ def run(args, field, val_sets, model):
                 with open(context_file_name, 'w') as context_file:
                     contexts = []
                     for batch_idx, batch in enumerate(it):
-                        # if hasattr(batch, 'wikisql_id'):
-                        #     a = from_all_answers(batch.wikisql_id.data.cpu())
-                        # elif hasattr(batch, 'squad_id'):
-                        #     a = from_all_answers(batch.squad_id.data.cpu())
-                        # elif hasattr(batch, 'woz_id'):
-                        #     a = from_all_answers(batch.woz_id.data.cpu())
-
                         c = field.reverse(batch.context.data, detokenize=task.detokenize, field_name='context')
                         for cc in c:
                             contexts.append(cc)
