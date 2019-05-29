@@ -68,9 +68,9 @@ class AlmondEmbeddings(torchtext.vocab.Vectors):
 
 def load_embeddings(args, logger=_logger):
     logger.info(f'Getting pretrained word vectors')
-    vetors = []
+    final_vectors = []
     if args.use_fastText:
-        fastText_vectors = torchtext.vocab.FastText(cache=args.embeddings, language='fa')
+        vectors = torchtext.vocab.FastText(cache=args.embeddings, language='fa')
     else:
         char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
         if args.small_glove:
@@ -78,6 +78,7 @@ def load_embeddings(args, logger=_logger):
         else:
             glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
         vectors = [char_vectors, glove_vectors]
+    final_vectors.extend(vectors)
     if args.almond_type_embeddings:
-        vectors = [fastText_vectors, AlmondEmbeddings()]
-    return vectors
+        final_vectors.append(AlmondEmbeddings())
+    return final_vectors
