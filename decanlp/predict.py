@@ -174,7 +174,7 @@ def run(args, field, val_sets, model):
                                 ids.append(int(batch.wikisql_id[i]))
                             if 'squad' in task.name:
                                 ids.append(it.dataset.q_ids[int(batch.squad_id[i])])
-                            prediction_file.write(json.dumps(pp) + '\n')
+                            prediction_file.write(pp + '\n')
                             predictions.append(pp)
                 if 'sql' in task.name:
                     with open(ids_file_name, 'w') as id_file:
@@ -208,7 +208,7 @@ def run(args, field, val_sets, model):
                             a = field.reverse(batch.answer.data, detokenize=task.detokenize, field_name='answer')
                         for aa in a:
                             answers.append(aa)
-                            answer_file.write(json.dumps(aa) + '\n')
+                            answer_file.write(aa + '\n')
             else:
                 with open(answer_file_name) as answer_file:
                     answers = [json.loads(x.strip()) for x in answer_file.readlines()]
@@ -227,7 +227,7 @@ def run(args, field, val_sets, model):
                         c = field.reverse(batch.context.data, detokenize=task.detokenize, field_name='context')
                         for cc in c:
                             contexts.append(cc)
-                            context_file.write(json.dumps(cc) + '\n')
+                            context_file.write(cc + '\n')
 
             if len(answers) > 0:
                 if not os.path.exists(results_file_name) or args.overwrite:
