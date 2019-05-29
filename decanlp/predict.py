@@ -124,10 +124,12 @@ def run(args, field, val_sets, model):
                 prediction_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task.name + '.txt'))
                 answer_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task.name + '.gold.txt'))
                 results_file_name = answer_file_name.replace('gold', 'results')
+                context_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task.name + '.context.txt'))
             else:
                 prediction_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.txt')
                 answer_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.gold.txt')
                 results_file_name = answer_file_name.replace('gold', 'results')
+                context_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.context.txt')
             if 'sql' in task.name or 'squad' in task.name:
                 ids_file_name = answer_file_name.replace('gold', 'ids')
             if os.path.exists(prediction_file_name):
@@ -138,6 +140,10 @@ def run(args, field, val_sets, model):
                 logger.warning(f'** {answer_file_name} already exists -- this is where ground truth answers are stored **')
                 if args.overwrite:
                     logger.warning(f'**** overwriting {answer_file_name} ****')
+            if os.path.exists(context_file_name):
+                logger.warning(f'** {context_file_name} already exists -- this is where context sentences are stored **')
+                if args.overwrite:
+                    logger.warning(f'**** overwriting {context_file_name} ****')
             if os.path.exists(results_file_name):
                 logger.warning(f'** {results_file_name} already exists -- this is where metrics are stored **')
                 if args.overwrite:
@@ -151,7 +157,7 @@ def run(args, field, val_sets, model):
                     decaScore.append(metrics[task.metrics[0]])
                     continue
 
-            for x in [prediction_file_name, answer_file_name, results_file_name]:
+            for x in [prediction_file_name, answer_file_name, results_file_name, context_file_name]:
                 os.makedirs(os.path.dirname(x), exist_ok=True)
 
             if not os.path.exists(prediction_file_name) or args.overwrite:
@@ -206,6 +212,22 @@ def run(args, field, val_sets, model):
             else:
                 with open(answer_file_name) as answer_file:
                     answers = [json.loads(x.strip()) for x in answer_file.readlines()]
+
+            if not os.path.exists(context_file_name) or args.overwrite:
+                with open(context_file_name, 'w') as context_file:
+                    contexts = []
+                    for batch_idx, batch in enumerate(it):
+                        # if hasattr(batch, 'wikisql_id'):
+                        #     a = from_all_answers(batch.wikisql_id.data.cpu())
+                        # elif hasattr(batch, 'squad_id'):
+                        #     a = from_all_answers(batch.squad_id.data.cpu())
+                        # elif hasattr(batch, 'woz_id'):
+                        #     a = from_all_answers(batch.woz_id.data.cpu())
+
+                        c = field.reverse(batch.context.data, detokenize=task.detokenize, field_name='context')
+                        for cc in c:
+                            contexts.append(cc)
+                            context_file.write(json.dumps(cc) + '\n')
 
             if len(answers) > 0:
                 if not os.path.exists(results_file_name) or args.overwrite:
