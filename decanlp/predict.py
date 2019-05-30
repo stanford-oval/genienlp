@@ -61,6 +61,7 @@ def get_all_splits(args, new_vocab):
 
         kwargs['skip_cache_bool'] = args.skip_cache_bool
         kwargs['cached_path'] = args.cached
+        kwargs['subsample'] = args.subsample
         s = task.get_splits(new_vocab, root=args.data, **kwargs)[0]
         preprocess_examples(args, [task], [s], new_vocab, train=False)
         splits.append(s)
@@ -123,10 +124,12 @@ def run(args, field, val_sets, model):
                 prediction_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task.name + '.txt'))
                 answer_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task.name + '.gold.txt'))
                 results_file_name = answer_file_name.replace('gold', 'results')
+                context_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task.name + '.context.txt'))
             else:
                 prediction_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.txt')
                 answer_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.gold.txt')
                 results_file_name = answer_file_name.replace('gold', 'results')
+                context_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.context.txt')
             if 'sql' in task.name or 'squad' in task.name:
                 ids_file_name = answer_file_name.replace('gold', 'ids')
             if os.path.exists(prediction_file_name):
@@ -137,6 +140,10 @@ def run(args, field, val_sets, model):
                 logger.warning(f'** {answer_file_name} already exists -- this is where ground truth answers are stored **')
                 if args.overwrite:
                     logger.warning(f'**** overwriting {answer_file_name} ****')
+            if os.path.exists(context_file_name):
+                logger.warning(f'** {context_file_name} already exists -- this is where context sentences are stored **')
+                if args.overwrite:
+                    logger.warning(f'**** overwriting {context_file_name} ****')
             if os.path.exists(results_file_name):
                 logger.warning(f'** {results_file_name} already exists -- this is where metrics are stored **')
                 if args.overwrite:
@@ -150,7 +157,7 @@ def run(args, field, val_sets, model):
                     decaScore.append(metrics[task.metrics[0]])
                     continue
 
-            for x in [prediction_file_name, answer_file_name, results_file_name]:
+            for x in [prediction_file_name, answer_file_name, results_file_name, context_file_name]:
                 os.makedirs(os.path.dirname(x), exist_ok=True)
 
             if not os.path.exists(prediction_file_name) or args.overwrite:
@@ -167,7 +174,7 @@ def run(args, field, val_sets, model):
                                 ids.append(int(batch.wikisql_id[i]))
                             if 'squad' in task.name:
                                 ids.append(it.dataset.q_ids[int(batch.squad_id[i])])
-                            prediction_file.write(json.dumps(pp) + '\n')
+                            prediction_file.write(pp + '\n')
                             predictions.append(pp)
                 if 'sql' in task.name:
                     with open(ids_file_name, 'w') as id_file:
@@ -201,10 +208,19 @@ def run(args, field, val_sets, model):
                             a = field.reverse(batch.answer.data, detokenize=task.detokenize, field_name='answer')
                         for aa in a:
                             answers.append(aa)
-                            answer_file.write(json.dumps(aa) + '\n')
+                            answer_file.write(aa + '\n')
             else:
                 with open(answer_file_name) as answer_file:
                     answers = [json.loads(x.strip()) for x in answer_file.readlines()]
+
+            if not os.path.exists(context_file_name) or args.overwrite:
+                with open(context_file_name, 'w') as context_file:
+                    contexts = []
+                    for batch_idx, batch in enumerate(it):
+                        c = field.reverse(batch.context.data, detokenize=task.detokenize, field_name='context')
+                        for cc in c:
+                            contexts.append(cc)
+                            context_file.write(cc + '\n')
 
             if len(answers) > 0:
                 if not os.path.exists(results_file_name) or args.overwrite:
@@ -233,7 +249,7 @@ def get_args(argv):
     parser = ArgumentParser(prog=argv[0])
     parser.add_argument('--path', required=True)
     parser.add_argument('--evaluate', type=str, required=True)
-    parser.add_argument('--tasks', default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl', 'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
+    parser.add_argument('--tasks', default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst','srl', 'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--data', default='./decaNLP/.data/', type=str, help='where to load data from.')
@@ -248,6 +264,9 @@ def get_args(argv):
     parser.add_argument('--eval_dir', type=str, default=None, help='use this directory to store eval results')
     parser.add_argument('--cached', default='', type=str, help='where to save cached files')
     parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
+
+    parser.add_argument('--saved_models', default='./saved_models', type=str, help='directory where cached models should be loaded from')
+    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets (experimental)')
 
     args = parser.parse_args(argv[1:])
 
@@ -285,7 +304,8 @@ def main(argv=sys.argv):
     model_dict = backwards_compatible_cove_dict
     model.load_state_dict(model_dict)
     field, splits = prepare_data(args, field)
-    model.set_embeddings(field.vocab.vectors)
+    if args.model != 'MultiLingualTranslationModel':
+        model.set_embeddings(field.vocab.vectors)
 
     run(args, field, splits, model)
 

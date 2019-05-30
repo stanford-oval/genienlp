@@ -64,6 +64,7 @@ def parse(argv):
     parser.add_argument('--save', default='results', type=str, help='where to save results.')
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--cached', default='', type=str, help='where to save cached files')
+    parser.add_argument('--saved_models', default='./saved_models', type=str, help='directory where cached models should be loaded from')
 
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training', required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
@@ -103,6 +104,8 @@ def parse(argv):
     parser.add_argument('--intermediate_cove', action='store_true', help='whether to use the intermediate layers of contextualized word vectors (McCann et al. 2017)')
     parser.add_argument('--elmo', default=[-1], nargs='+', type=int,  help='which layer(s) (0, 1, or 2) of ELMo (Peters et al. 2018) to use; -1 for none ')
     parser.add_argument('--no_glove_and_char', action='store_false', dest='glove_and_char', help='turn off GloVe and CharNGram embeddings')
+    parser.add_argument('--use_fastText', action='store_true', help='use fastText embeddings for encoder')
+    parser.add_argument('--retrain_encoder_embedding', default=False, action='store_true', help='whether to retrain encoder embeddings')
     parser.add_argument('--trainable_decoder_embedding', default=0, type=int, help='size of trainable portion of decoder embedding (0 or omit to disable)')
     parser.add_argument('--no_glove_decoder', action='store_false', dest='glove_decoder', help='turn off GloVe embeddings from decoder')
     parser.add_argument('--pretrained_decoder_lm', help='pretrained language model to use as embedding layer for the decoder (omit to disable)')
@@ -144,6 +147,8 @@ def parse(argv):
                         choices=['typeless.bottomup', 'typeless.topdown', 'plain.bottomup', 'plain.topdown', 'pos.typeless.bottomup', 'pos.typeless.topdown',
                                  'pos.bottomup', 'pos.topdown', 'full.bottomup', 'full.topdown'],
                         help="which grammar to use for Almond task (leave unspecified for no grammar)")
+    parser.add_argument('--question', type=str, help='provide a fixed question')
+    parser.add_argument('--use_google_translate', action='store_true', help='use google translate instead of pre-trained machine translator')
 
     args = parser.parse_args(argv[1:])
     if args.model is None:
@@ -163,8 +168,11 @@ def parse(argv):
         return
     args.timestamp = '-'.join(datetime.datetime.now(tz=tz.tzoffset(None, -8*60*60)).strftime("%y/%m/%d/%H/%M/%S.%f").split())
 
+    if args.use_google_translate:
+        args.data = args.data + '_google_translate'
+
     if len(args.train_task_names) > 1:
-        if args.train_iterations is  None:
+        if args.train_iterations is None:
             args.train_iterations = [1]
         if len(args.train_iterations) < len(args.train_task_names):
             args.train_iterations = len(args.train_task_names) * args.train_iterations

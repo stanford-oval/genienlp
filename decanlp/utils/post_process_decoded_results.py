@@ -25,8 +25,6 @@ Created on Aug 27, 2018
 
 from pprint import pprint
 import sys
-import os
-import numpy as np
 import re
 import argparse
 from collections import defaultdict, Counter
@@ -173,10 +171,10 @@ def run():
                 id = id.strip()
                 input = input.replace(r'<s>', '').strip()
                 gold = gold.strip().replace(r'\"', '"').replace(r'\/', '/')
-                if gold[0] == gold[-1] == '"':
+                if gold and gold[0] == gold[-1] == '"':
                     gold = gold[1:-1]
                 pred = pred.strip().replace(r'\"', '"').replace(r'\/', '/')
-                if pred[0] == pred[-1] == '"':
+                if pred and pred[0] == pred[-1] == '"':
                     pred = pred[1:-1]
 
                 out_raw.write(id + '\t' + input + '\t' + gold + '\t' + pred)
@@ -199,9 +197,9 @@ def run():
                     cnt_dev += 1
                     if len(gold_devs) == len(pred_devs):
 
-                        for i, gold in enumerate(gold_devs):
-                            if gold != pred_devs[i]:
-                                errors_dev[(gold, pred_devs[i])] += 1
+                        for i, g in enumerate(gold_devs):
+                            if g != pred_devs[i]:
+                                errors_dev[(g, pred_devs[i])] += 1
 
                 elif not function_correctness:
                     gold_funcs = get_functions(gold)
@@ -209,9 +207,9 @@ def run():
                     cnt_func += 1
                     if len(gold_funcs) == len(pred_funcs):
                         devices = get_devices(gold)
-                        for i, device in enumerate(devices):
+                        for i, d in enumerate(devices):
                             if gold_funcs[i] != pred_funcs[i]:
-                                errors_func[device][(gold_funcs[i].rsplit('.', 1)[1], pred_funcs[i].rsplit('.', 1)[1])] += 1
+                                errors_func[d][(gold_funcs[i].rsplit('.', 1)[1], pred_funcs[i].rsplit('.', 1)[1])] += 1
                 ##########
 
                 out.write(input + ' || ' + gold + ' || ' + pred + ' || '
@@ -227,7 +225,6 @@ def run():
                 out.write('\n')
                 out.write('\n')
                 out.write('\n')
-
 
     print('cnt_dev: ', cnt_dev)
     print('cnt_func: ', cnt_func)

@@ -28,6 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from .multitask_question_answering_network import MultitaskQuestionAnsweringNetwork
+from .multi_lingual_translation_model import MultiLingualTranslationModel
 from .coattentive_pointer_generator import CoattentivePointerGenerator
 from .self_attentive_pointer_generator import SelfAttentivePointerGenerator
 from .pointer_generator import PointerGenerator

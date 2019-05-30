@@ -38,9 +38,8 @@ from copy import deepcopy
 import logging
 from pprint import pformat
 from logging import handlers
-from collections import defaultdict
 import numpy as np
-import itertools
+from .utils.model_utils import init_model
 
 import torch
 
@@ -49,10 +48,9 @@ from .text import torchtext
 from tensorboardX import SummaryWriter
 
 from . import arguments
-from . import models
 from .validate import validate
-from .multiprocess import Multiprocess, DistributedDataParallel
-from .util import elapsed_time, batch_fn, set_seed, preprocess_examples, get_trainable_params, count_params
+from .multiprocess import Multiprocess
+from .util import elapsed_time, batch_fn, set_seed, preprocess_examples, get_trainable_params
 from .utils.saver import Saver
 from .utils.embeddings import load_embeddings
 
@@ -420,6 +418,16 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
             logger.info(f'training is done after {epoch} epochs')
             break
 
+def init_opt(args, model):
+    opt = None
+    if 'adam' in args.optimizer.lower():
+        if args.transformer_lr:
+            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
+        else:
+            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
+    else:
+        opt = torch.optim.SGD(model.params, lr=args.sgd_lr, weight_decay=args.weight_decay,)
+    return opt
 
 def run(args, run_args, rank=0, world_size=1):
     device = set_seed(args, rank=rank)
@@ -455,35 +463,6 @@ def run(args, run_args, rank=0, world_size=1):
         log_every=args.log_every, val_every=args.val_every, rounds=len(train_sets)>1,
         writer=writer if rank==0 else None, save_every=args.save_every, start_iteration=start_iteration,
         best_decascore=save_dict.get('best_decascore') if save_dict is not None else None)
-
-
-def init_model(args, field, logger, world_size, device):
-    logger.info(f'Initializing {args.model}')
-    Model = getattr(models, args.model) 
-    model = Model(field, args)
-    params = get_trainable_params(model) 
-    num_param = count_params(params)
-    logger.info(f'{args.model} has {num_param:,} trainable parameters')
-
-    model.to(device)
-    if world_size > 1: 
-        logger.info(f'Wrapping model for distributed')
-        model = DistributedDataParallel(model)
-
-    model.params = params
-    return model
-
-
-def init_opt(args, model):
-    opt = None
-    if 'adam' in args.optimizer.lower():
-        if args.transformer_lr:
-            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
-        else:
-            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
-    else:
-        opt = torch.optim.SGD(model.params, lr=args.sgd_lr, weight_decay=args.weight_decay,)
-    return opt
 
 
 def main(argv=sys.argv):
