@@ -438,7 +438,7 @@ def run(args, run_args, rank=0, world_size=1):
 
     if hasattr(args, 'tensorboard') and args.tensorboard:
         logger.info(f'Initializing Writer')
-        writer = SummaryWriter(logdir=args.log_dir)
+        writer = SummaryWriter(log_dir=args.log_dir)
     else:
         writer = None
 

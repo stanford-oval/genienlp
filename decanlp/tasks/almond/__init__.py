@@ -51,7 +51,6 @@ class AlmondDataset(generic_dataset.CQA):
     base_url = None
 
     def __init__(self, path, field, tokenize, contextual=False, thingpedia_in_context=False, reverse_task=False, subsample=None, **kwargs):
-
         fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
@@ -67,7 +66,6 @@ class AlmondDataset(generic_dataset.CQA):
             with open(path, 'r', encoding='utf-8') as fp:
                 for line in fp:
                     n += 1
-
 
             if thingpedia_in_context:
                 thingpedia = kwargs.pop('thingpedia')
@@ -109,14 +107,13 @@ class AlmondDataset(generic_dataset.CQA):
                     # the question is irrelevant, so the question says English and ThingTalk even if we're doing
                     # a different language (like Chinese)
                     if reverse_task:
-                        question = target_question if target_question is not None else 'Translate from ThingTalk to English'
+                        question = 'Translate from ThingTalk to English'
                         context = target_code
                         answer = sentence
                     else:
-                        question = target_question if target_question is not None else 'Translate from English to ThingTalk'
+                        question = 'Translate from English to ThingTalk'
                         context = sentence
                         answer = target_code
-
 
                 context_question = generic_dataset.get_context_question(context, question)
                 examples.append(data.Example.fromlist(
@@ -185,7 +182,6 @@ class BaseAlmondTask(BaseTask):
         self._thingpedia = args.thingpedia
         self._grammar = None
         self._grammar_direction = None
-        self.args = args
 
         if args.almond_grammar:
             self._grammar_direction = args.almond_grammar.split('.')[-1]
@@ -207,13 +203,6 @@ class BaseAlmondTask(BaseTask):
     @property
     def metrics(self):
         return ['em', 'nem', 'nf1', 'fm', 'dm', 'bleu']
-
-
-    def get_splits(self, field, root, **kwargs):
-        if self.args.question is not None:
-            kwargs['question'] = self.args.question
-        return AlmondDataset.splits(
-            fields=field, root=root, tokenize=self.tokenize, reverse_task=False, **kwargs)
 
     def tokenize(self, sentence, field_name=None):
         if not sentence:
