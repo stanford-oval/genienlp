@@ -59,7 +59,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         
             self.encoder_embeddings = Embedding(field, args.dimension,
                                                 trained_dimension=0,
-                                                dropout=args.dropout_ratio, project=not args.cove)
+                                                dropout=args.dropout_ratio, project=not args.cove,
+                                                requires_grad=args.retrain_encoder_embedding)
     
             if self.args.cove or self.args.intermediate_cove:
                 from cove import MTLSTM
@@ -72,8 +73,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 self.project_cove = Feedforward(cove_dim, args.dimension)
 
         if -1 not in self.args.elmo:
-            from allennlp.modules.elmo import Elmo
 
+            from allennlp.modules.elmo import Elmo, batch_to_ids
             options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
             weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
             self.elmo = Elmo(options_file, weight_file, 3, dropout=0.0, do_layer_norm=False)
@@ -169,7 +170,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             def elmo(z, layers, device):
                 e = self.elmo(batch_to_ids(z).to(device))['elmo_representations']
                 return torch.cat([e[x] for x in layers], -1)
-            context_elmo =  self.project_elmo(elmo(context_tokens, self.args.elmo, context.device).detach())
+            context_elmo = self.project_elmo(elmo(context_tokens, self.args.elmo, context.device).detach())
             question_elmo = self.project_elmo(elmo(question_tokens, self.args.elmo, question.device).detach())
 
         if self.args.glove_and_char:
@@ -222,8 +223,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 answer_pretrained_numerical = [
                     [self.pretrained_decoder_vocab_stoi[sentence[time]] for sentence in answer_tokens] for time in range(len(answer_tokens[0]))
                 ]
-                answer_pretrained_numerical = torch.tensor(answer_pretrained_numerical, dtype=torch.long,
-                                                           device=self.device)
+                answer_pretrained_numerical = torch.tensor(answer_pretrained_numerical, dtype=torch.long, device=self.device)
 
                 with torch.no_grad():
                     answer_embedded, _ = self.pretrained_decoder_embeddings.encode(answer_pretrained_numerical)
@@ -365,7 +365,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             pred_probs, preds = probs.max(-1)
             preds = preds.squeeze(1)
             eos_yet = eos_yet | (preds == self.field.decoder_stoi['<eos>'])
-            outs[:, t] = preds.cpu().apply_(self.map_to_full)
+            # outs[:, t] = preds.cpu().apply_(self.map_to_full)
+            outs[:, t] = preds.cpu()
             if eos_yet.all():
                 break
         return outs
