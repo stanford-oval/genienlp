@@ -25,8 +25,6 @@ Created on Aug 27, 2018
 
 from pprint import pprint
 import sys
-import os
-import numpy as np
 import re
 import argparse
 from collections import defaultdict, Counter
@@ -173,10 +171,10 @@ def run():
                 id = id.strip()
                 input = input.replace(r'<s>', '').strip()
                 gold = gold.strip().replace(r'\"', '"').replace(r'\/', '/')
-                if gold[0] == gold[-1] == '"':
+                if gold and gold[0] == gold[-1] == '"':
                     gold = gold[1:-1]
                 pred = pred.strip().replace(r'\"', '"').replace(r'\/', '/')
-                if pred[0] == pred[-1] == '"':
+                if pred and pred[0] == pred[-1] == '"':
                     pred = pred[1:-1]
 
                 out_raw.write(id + '\t' + input + '\t' + gold + '\t' + pred)
