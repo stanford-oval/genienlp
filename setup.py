@@ -48,7 +48,7 @@ setuptools.setup(
 
     install_requires=[
         'numpy',
-        'torch>=0.4.1,<2.0.0',
+        'torch>=0.4.1,<1.2.0',
         'revtok',
         'tqdm',
         'nltk',
