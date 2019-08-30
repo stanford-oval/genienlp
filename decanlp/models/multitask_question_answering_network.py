@@ -365,8 +365,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             pred_probs, preds = probs.max(-1)
             preds = preds.squeeze(1)
             eos_yet = eos_yet | (preds == self.field.decoder_stoi['<eos>'])
-            # outs[:, t] = preds.cpu().apply_(self.map_to_full)
-            outs[:, t] = preds.cpu()
+            outs[:, t] = preds.cpu().apply_(self.map_to_full)
             if eos_yet.all():
                 break
         return outs
