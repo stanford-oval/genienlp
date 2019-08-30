@@ -137,7 +137,6 @@ class Server():
         
         batch = self.numericalize_example(ex)
         _, prediction_batch = self.model(batch, iteration=0)
-        
         predictions = self.field.reverse(prediction_batch, detokenize=task.detokenize, field_name='answer')
         
         response = json.dumps(dict(id=request['id'], answer=predictions[0]))
