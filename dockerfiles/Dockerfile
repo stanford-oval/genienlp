@@ -18,19 +18,20 @@ RUN yum -y install python36 \
 	python36-pip \
 	python36-devel
 
-# add user decanlp
-RUN useradd -ms /bin/bash -r decanlp
-USER decanlp
-WORKDIR /home/decanlp
-
 # download embeddings
-RUN mkdir -p .embeddings
-WORKDIR .embeddings
+RUN mkdir -p /usr/local/share/decanlp/embeddings
+WORKDIR /usr/local/share/decanlp/embeddings
 RUN for v in charNgram glove.840B.300d ; do \
 		for f in vectors table itos ; do \
 			wget -c https://oval.cs.stanford.edu/data/glove/${v}.txt.${f}.npy ; \
 		done ; \
 	done
+
+# add user decanlp
+RUN useradd -ms /bin/bash -r decanlp
+USER decanlp
+WORKDIR /home/decanlp
+RUN ln -s /usr/local/share/decanlp/embeddings /home/decanlp/.embeddings
 
 # copy source and install
 USER root
