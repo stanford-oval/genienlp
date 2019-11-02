@@ -467,7 +467,7 @@ class GloVe(Vectors):
 
 class FastText(Vectors):
 
-    url_base = 'https://dl.fbaipublicfiles.com/fasttext/vectors-wiki/wiki.{}.vec'
+    url_base = 'https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.{}.vec'
 
     def __init__(self, language="en", **kwargs):
         url = self.url_base.format(language)
