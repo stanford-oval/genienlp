@@ -37,6 +37,7 @@ import sys
 from pprint import pformat
 
 from .text import torchtext
+from .utils.embeddings import load_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +46,7 @@ def get_args(argv):
     parser = ArgumentParser(prog=argv[0])
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
-    parser.add_argument('--small_glove', action='store_true', help='Cache glove.6B.50d')
-    parser.add_argument('--large_glove', action='store_true', help='Cache glove.840B.300d')
-    parser.add_argument('--char', action='store_true', help='Cache character embeddings')
+    parser.add_argument('--locale', default='en', help='locale to use for word embeddings')
 
     args = parser.parse_args(argv[1:])
     return args
@@ -62,10 +61,4 @@ def main(argv=sys.argv):
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    if args.char:
-        torchtext.vocab.CharNGram(cache=args.embeddings)
-    if args.small_glove:
-        torchtext.vocab.GloVe(cache=args.embeddings, name="6B", dim=50)
-    if args.large_glove:
-        torchtext.vocab.GloVe(cache=args.embeddings)
-
+    load_embeddings(args, load_almond_embeddings=False)

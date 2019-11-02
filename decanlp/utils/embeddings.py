@@ -66,7 +66,7 @@ class AlmondEmbeddings(torchtext.vocab.Vectors):
         self.dim = dim
 
 
-def load_embeddings(args, logger=_logger):
+def load_embeddings(args, logger=_logger, load_almond_embeddings=True):
     logger.info(f'Getting pretrained word vectors')
 
     if args.locale == 'en':
@@ -82,6 +82,6 @@ def load_embeddings(args, logger=_logger):
         # default to fastText
         vectors = [torchtext.vocab.FastText(cache=args.embeddings, language=args.locale)]
 
-    if args.almond_type_embeddings:
+    if load_almond_embeddings and args.almond_type_embeddings:
         vectors.append(AlmondEmbeddings())
     return vectors
