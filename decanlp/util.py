@@ -173,11 +173,13 @@ def load_config_json(args):
                     'max_generative_vocab', 'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
                     'use_maxmargin_loss', 'small_glove', 'almond_type_embeddings', 'almond_grammar',
                     'trainable_decoder_embedding', 'glove_decoder', 'pretrained_decoder_lm',
-                    'retrain_encoder_embedding', 'question', 'use_fastText', 'use_google_translate']
+                    'retrain_encoder_embedding', 'question', 'locale', 'use_google_translate']
 
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
+            elif r == 'locale':
+                setattr(args, r, 'en')
             elif r in ('cove', 'intermediate_cove', 'use_maxmargin_loss', 'small_glove',
                        'almond_type_embbedings'):
                 setattr(args, r, False)
