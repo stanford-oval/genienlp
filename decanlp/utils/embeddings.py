@@ -66,19 +66,24 @@ class AlmondEmbeddings(torchtext.vocab.Vectors):
         self.dim = dim
 
 
-def load_embeddings(args, logger=_logger):
+def load_embeddings(args, logger=_logger, load_almond_embeddings=True):
     logger.info(f'Getting pretrained word vectors')
-    final_vectors = []
-    if args.use_fastText:
-        vectors = [torchtext.vocab.FastText(cache=args.embeddings, language='fa')]
-    else:
+
+    language = args.locale.split('-')[0]
+
+    if language == 'en':
         char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
         if args.small_glove:
             glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings, name="6B", dim=50)
         else:
             glove_vectors = torchtext.vocab.GloVe(cache=args.embeddings)
         vectors = [char_vectors, glove_vectors]
-    final_vectors.extend(vectors)
-    if args.almond_type_embeddings:
-        final_vectors.append(AlmondEmbeddings())
-    return final_vectors
+    # elif args.locale == 'zh':
+    # Chinese word embeddings
+    else:
+        # default to fastText
+        vectors = [torchtext.vocab.FastText(cache=args.embeddings, language=language)]
+
+    if load_almond_embeddings and args.almond_type_embeddings:
+        vectors.append(AlmondEmbeddings())
+    return vectors
