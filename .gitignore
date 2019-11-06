@@ -20,7 +20,8 @@ text/.DS_Store
 src/
 decaNLP_models/
 workdir/
-
+Pipfile
+decaNLP-tests*
 
 # C extensions
 *.so
