@@ -58,7 +58,7 @@ setuptools.setup(
         'pyrouge',
         'sacrebleu',
         'orderedset',
-        'requests'
+        'requests',
         'fasttext'
     ]
 )
