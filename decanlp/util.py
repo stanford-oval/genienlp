@@ -173,7 +173,7 @@ def load_config_json(args):
                     'max_generative_vocab', 'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
                     'use_maxmargin_loss', 'small_glove', 'almond_type_embeddings', 'almond_grammar',
                     'trainable_decoder_embedding', 'glove_decoder', 'pretrained_decoder_lm',
-                    'retrain_encoder_embedding', 'question', 'locale', 'use_google_translate', 'use_fasttext']
+                    'retrain_encoder_embedding', 'question', 'locale', 'use_google_translate']
 
         for r in retrieve:
             if r in config:
