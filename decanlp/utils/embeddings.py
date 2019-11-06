@@ -29,9 +29,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import torch
-import os
-import sys
-import fasttext
 
 import logging
 from ..text import torchtext
@@ -69,11 +66,10 @@ class AlmondEmbeddings(torchtext.vocab.Vectors):
         self.dim = dim
 
 
-def load_embeddings(args, logger=_logger, load_almond_embeddings=True, is_fasttext=False):
-    logger.info(f'Getting pretrained word vectors or models (fasttext)')
+def load_embeddings(args, logger=_logger, load_almond_embeddings=True):
+    logger.info(f'Getting pretrained word vectors')
 
     language = args.locale.split('-')[0]
-    vectors = []
 
     if language == 'en':
         char_vectors = torchtext.vocab.CharNGram(cache=args.embeddings)
@@ -85,10 +81,9 @@ def load_embeddings(args, logger=_logger, load_almond_embeddings=True, is_fastte
     # elif args.locale == 'zh':
     # Chinese word embeddings
     else:
-        # vectors = [torchtext.vocab.FastText(cache=args.embeddings, language=language)]
-        pass
+        # default to fastText
+        vectors = [torchtext.vocab.FastText(cache=args.embeddings, language=language)]
 
     if load_almond_embeddings and args.almond_type_embeddings:
         vectors.append(AlmondEmbeddings())
-
     return vectors

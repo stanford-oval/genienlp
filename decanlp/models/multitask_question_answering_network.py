@@ -86,21 +86,6 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             if self.args.glove_and_char:
                 self.project_embeddings = Feedforward(2 * args.dimension, args.dimension, dropout=0.0)
 
-        if self.args.use_fasttext:
-            import fasttext
-            language = args.locale.split('-')[0]
-            if args.train_fasttext:
-                if not os.path.exists(args.fasttext_dataset):
-                    sys.exit('Please specify a valid path for fastText training dataset')
-                self.model_fasttext = fasttext.train_unsupervised(args.fasttext_dataset, model='skipgram')
-                self.model_fasttext.save_model(os.path.join(args.save, "model_fasttext_{}.bin".format(language)))
-            else:
-                self.model_fasttext = fasttext.load_model(os.path.join(args.save, "model_fasttext_{}.bin".format(language)))
-            fasstext_dim = 300
-            self.project_fasttext = Feedforward(300, args.dimension, dropout=0.0)
-            if self.args.glove_and_char:
-                self.project_embeddings = Feedforward(2 * args.dimension, args.dimension, dropout=0.0)
-
         if args.pretrained_decoder_lm:
             pretrained_save_dict = torch.load(os.path.join(args.embeddings, args.pretrained_decoder_lm), map_location=str(self.device))
 
@@ -179,16 +164,6 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             return limited_idx_to_full_idx[x]
         self.map_to_full = map_to_full
 
-        if self.args.use_fasttext:
-            context_final_list = []
-            for seq in context_tokens:
-                context_final_list.append(torch.tensor([self.model_fasttext[token] for token in seq]).to(context.device))
-            context_fasttext = self.project_fasttext(torch.stack(context_final_list, dim=0).detach())
-            question_final_list = []
-            for seq in question_tokens:
-                question_final_list.append(torch.tensor([self.model_fasttext[token] for token in seq]).to(context.device))
-            question_fasttext = self.project_fasttext(torch.stack(question_final_list, dim=0).detach())
-
         if -1 not in self.args.elmo:
             from allennlp.modules.elmo import batch_to_ids
 
@@ -207,9 +182,6 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             if -1 not in self.args.elmo:
                 context_embedded = self.project_embeddings(torch.cat([context_embedded, context_elmo], -1))
                 question_embedded = self.project_embeddings(torch.cat([question_embedded, question_elmo], -1))
-            if self.args.use_fasttext:
-                context_embedded = self.project_embeddings(torch.cat([context_embedded, context_fasttext], -1))
-                question_embedded = self.project_embeddings(torch.cat([question_embedded, question_fasttext], -1))
         else:
             context_embedded, question_embedded = context_elmo, question_elmo 
 

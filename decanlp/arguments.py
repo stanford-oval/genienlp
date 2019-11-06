@@ -110,10 +110,6 @@ def parse(argv):
     parser.add_argument('--no_glove_decoder', action='store_false', dest='glove_decoder', help='turn off GloVe embeddings from decoder')
     parser.add_argument('--pretrained_decoder_lm', help='pretrained language model to use as embedding layer for the decoder (omit to disable)')
 
-    parser.add_argument('--use_fasttext', action='store_true', help='')
-    parser.add_argument('--train_fasttext', action='store_true', help='')
-    parser.add_argument('--fasttext_dataset', action='store_true', help='')
-
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
     parser.add_argument('--beta0', default=0.9, type=float, help='alternative momentum for Adam (only when not using transformer_lr)')

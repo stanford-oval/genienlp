@@ -126,7 +126,7 @@ def prepare_data(args, field, logger):
             vocab_sets.extend(split)
 
     if args.load is None:
-        vectors = load_embeddings(args, logger, is_fasttext=args.use_fasttext)
+        vectors = load_embeddings(args, logger)
         vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
         logger.info(f'Building vocabulary')
         FIELD.build_vocab(*vocab_sets, max_size=args.max_effective_vocab, vectors=vectors)
