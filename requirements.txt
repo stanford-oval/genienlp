@@ -21,3 +21,5 @@ requests
 
 -e git+git://github.com/salesforce/cove.git#egg=cove
 allennlp
+
+fasttext

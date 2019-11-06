@@ -59,5 +59,6 @@ setuptools.setup(
         'sacrebleu',
         'orderedset',
         'requests'
+        'fasttext'
     ]
 )
