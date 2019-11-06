@@ -6,6 +6,8 @@ import logging
 import os
 import zipfile
 import numpy as np
+import gzip
+import shutil
 
 import six
 from six.moves.urllib.request import urlretrieve
@@ -358,9 +360,12 @@ class Vectors(object):
                 if ext == 'zip':
                     with zipfile.ZipFile(dest, "r") as zf:
                         zf.extractall(cache)
-                elif ext == 'gz':
+                elif dest.endswith('.tar.gz'):
                     with tarfile.open(dest, 'r:gz') as tar:
                         tar.extractall(path=cache)
+                elif ext == 'gz':
+                    with gzip.open(dest, 'rb') as fin, open(path, 'wb') as fout:
+                        shutil.copyfileobj(fin, fout)
             if not os.path.isfile(path):
                 raise RuntimeError('no vectors found at {}'.format(path))
 
@@ -467,11 +472,11 @@ class GloVe(Vectors):
 
 class FastText(Vectors):
 
-    url_base = 'https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.{}.vec'
+    url_base = 'https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.{}.300.vec.gz'
 
     def __init__(self, language="en", **kwargs):
         url = self.url_base.format(language)
-        name = os.path.basename(url)
+        name = os.path.basename(url)[:-3]
         super(FastText, self).__init__(name, url=url, **kwargs)
 
 
