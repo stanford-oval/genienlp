@@ -27,16 +27,14 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import logging
 import os
 import torch
-import sys
 from tqdm import tqdm
 
 from ..base import BaseTask
 from ..registry import register_task
 from .. import generic_dataset
-from ...text.torchtext import data
+from ..text import data
 from ...utils.lang_utils import *
 
 

@@ -43,8 +43,6 @@ from .utils.model_utils import init_model
 
 import torch
 
-from .text import torchtext
-
 from tensorboardX import SummaryWriter
 
 from . import arguments
@@ -81,7 +79,7 @@ def prepare_data(args, field, logger):
 
     if field is None:
         logger.info(f'Constructing field')
-        FIELD = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+        FIELD = decanlp.torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     else:
         FIELD = field
 
@@ -155,7 +153,7 @@ def to_iter(args, world_size, val_batch_size, data, device, train=True, token_te
     sort = sort if not token_testing else True
     shuffle = None if not token_testing else False
     reverse = args.reverse
-    Iterator = torchtext.data.BucketIterator if train else torchtext.data.Iterator
+    Iterator = decanlp.torchtext.data.BucketIterator if train else decanlp.torchtext.data.Iterator
     it = Iterator(data, batch_size=val_batch_size,
        device=device, batch_size_fn=batch_fn if train else None, 
        distributed=world_size>1, train=train, repeat=train, sort=sort,

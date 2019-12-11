@@ -29,7 +29,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-from .text import torchtext
 from argparse import ArgumentParser
 import ujson as json
 import torch
@@ -69,7 +68,7 @@ def get_all_splits(args, new_vocab):
 
 
 def prepare_data(args, FIELD):
-    new_vocab = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+    new_vocab = decanlp.torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     splits = get_all_splits(args, new_vocab)
     new_vocab.build_vocab(*splits)
     logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens from training')
@@ -86,7 +85,7 @@ def prepare_data(args, FIELD):
 
 
 def to_iter(data, bs, device):
-    Iterator = torchtext.data.Iterator
+    Iterator = decanlp.torchtext.data.Iterator
     it = Iterator(data, batch_size=bs, 
        device=device, batch_size_fn=None, 
        train=False, repeat=False, sort=False,

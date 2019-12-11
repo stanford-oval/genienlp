@@ -36,7 +36,6 @@ import logging
 import sys
 from pprint import pformat
 
-from .text import torchtext
 from .utils.embeddings import load_embeddings
 
 logger = logging.getLogger(__name__)

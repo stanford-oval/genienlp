@@ -30,7 +30,6 @@
 
 import os
 import re
-import revtok
 import torch
 import io
 import csv
@@ -40,11 +39,8 @@ import hashlib
 import unicodedata
 import logging
 
-from ..text.torchtext.datasets import imdb
-from ..text.torchtext.datasets import translation
-
-from ..text.torchtext import data
-
+from ..text.datasets import imdb, translation
+from ..text import data
 
 CONTEXT_SPECIAL = 'Context:'
 QUESTION_SPECIAL = 'Question:'
@@ -353,8 +349,8 @@ class SQuAD(CQA, data.Dataset):
             torch.save((examples, all_answers, q_ids), cache_name)
 
 
-        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False, 
-            lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
+        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False,
+                           lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
         fields.append(('context_spans', FIELD))
         fields.append(('answer_start', FIELD))
         fields.append(('answer_end', FIELD))
@@ -573,8 +569,8 @@ class WikiSQL(CQA, data.Dataset):
 
     def __init__(self, path, field, query_as_question=False, subsample=None, **kwargs):
         fields = [(x, field) for x in self.fields]
-        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False, 
-            lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
+        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False,
+                           lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
         fields.append(('wikisql_id', FIELD))
 
         cached_path = kwargs.pop('cached_path')
@@ -722,8 +718,8 @@ class SRL(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers), cache_name)
 
-        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False, 
-            lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
+        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False,
+                           lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
         fields.append(('squad_id', FIELD))
 
         super(SRL, self).__init__(examples, fields, **kwargs)
@@ -975,8 +971,8 @@ class WOZ(CQA, data.Dataset):
 
     def __init__(self, path, field, subsample=None, description='woz.en', **kwargs):
         fields = [(x, field) for x in self.fields]
-        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False, 
-            lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
+        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False,
+                           lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
         fields.append(('woz_id', FIELD))
 
         examples, all_answers = [], []

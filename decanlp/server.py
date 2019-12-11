@@ -42,7 +42,7 @@ from pprint import pformat
 
 from .util import set_seed, load_config_json
 from . import models
-from .text.torchtext.data import Example
+from .text.data import Example
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
 from .tasks.generic_dataset import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA

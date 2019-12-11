@@ -30,9 +30,8 @@
 
 
 import torch
-from .util import pad, tokenizer
+from .util import pad
 from .metrics import compute_metrics
-from .text.torchtext.data.utils import get_tokenizer
 
 
 def compute_validation_outputs(model, val_iter, field, iteration, optional_names=[]):

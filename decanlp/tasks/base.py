@@ -54,10 +54,10 @@ class BaseTask:
         """
         Load the train, test, eval datasets for this task
 
-        :param field: the torchtext.Field to use for tokenization, preprocessing and vocabulary construction
+        :param field: the text.Field to use for tokenization, preprocessing and vocabulary construction
         :param root: the base directory where data is stored
         :param kwargs: other arguments to pass to the Dataset
-        :return: a list of torchtext.Dataset
+        :return: a list of text.Dataset
         """
         return generic_dataset.JSON.splits(
             fields=field, root=root, name=self.name, **kwargs)
@@ -69,7 +69,7 @@ class BaseTask:
         The example should be modified in place.
         Return False if the example should be dropped from the dataset
 
-        :param ex: the torchtext.Example to preprocess
+        :param ex: the text.Example to preprocess
         :return: True if the example is valid, False otherwise
         """
         return True

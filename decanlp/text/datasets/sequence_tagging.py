@@ -9,7 +9,7 @@ class SequenceTaggingDataset(data.Dataset):
     form
     [I, love, PyTorch, .] paired with [PRON, VERB, PROPN, PUNCT]
 
-    See torchtext/test/sequence_tagging.py on how to use this class.
+    See text/test/sequence_tagging.py on how to use this class.
     """
 
     @staticmethod

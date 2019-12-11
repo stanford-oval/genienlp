@@ -4,7 +4,7 @@ torch>=0.4.1,<1.2.0
 # Revtok
 -e git+https://github.com/jekbradbury/revtok.git#egg=revtok
 
-# torchtext requirements
+# text requirements
 tqdm 
 nltk==3.2.5
 
