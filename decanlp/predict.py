@@ -43,6 +43,7 @@ from .metrics import compute_metrics
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
 from . import models
+from .text.data import Iterator, ReversibleField
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ def get_all_splits(args, new_vocab):
 
 
 def prepare_data(args, FIELD):
-    new_vocab = decanlp.torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+    new_vocab = ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     splits = get_all_splits(args, new_vocab)
     new_vocab.build_vocab(*splits)
     logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens from training')
@@ -85,7 +86,6 @@ def prepare_data(args, FIELD):
 
 
 def to_iter(data, bs, device):
-    Iterator = decanlp.torchtext.data.Iterator
     it = Iterator(data, batch_size=bs, 
        device=device, batch_size_fn=None, 
        train=False, repeat=False, sort=False,

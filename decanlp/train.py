@@ -51,6 +51,7 @@ from .multiprocess import Multiprocess
 from .util import elapsed_time, batch_fn, set_seed, preprocess_examples, get_trainable_params
 from .utils.saver import Saver
 from .utils.embeddings import load_embeddings
+from .text.data import ReversibleField, BucketIterator, Iterator
 
 
 def initialize_logger(args, rank='main'):
@@ -79,7 +80,7 @@ def prepare_data(args, field, logger):
 
     if field is None:
         logger.info(f'Constructing field')
-        FIELD = decanlp.torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+        FIELD = ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     else:
         FIELD = field
 
@@ -153,8 +154,8 @@ def to_iter(args, world_size, val_batch_size, data, device, train=True, token_te
     sort = sort if not token_testing else True
     shuffle = None if not token_testing else False
     reverse = args.reverse
-    Iterator = decanlp.torchtext.data.BucketIterator if train else decanlp.torchtext.data.Iterator
-    it = Iterator(data, batch_size=val_batch_size,
+    iteratorcls = BucketIterator if train else Iterator
+    it = iteratorcls(data, batch_size=val_batch_size,
        device=device, batch_size_fn=batch_fn if train else None, 
        distributed=world_size>1, train=train, repeat=train, sort=sort,
        shuffle=shuffle, reverse=reverse)
