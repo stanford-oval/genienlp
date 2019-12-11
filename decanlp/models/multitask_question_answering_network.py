@@ -63,20 +63,6 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                                                 project=True,
                                                 requires_grad=args.retrain_encoder_embedding)
     
-        if -1 not in self.args.elmo:
-
-            from allennlp.modules.elmo import Elmo, batch_to_ids
-            options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
-            weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
-            self.elmo = Elmo(options_file, weight_file, 3, dropout=0.0, do_layer_norm=False)
-            elmo_params = get_trainable_params(self.elmo)
-            for p in elmo_params:
-                p.requires_grad = False
-            elmo_dim = 1024 * len(self.args.elmo)
-            self.project_elmo = Feedforward(elmo_dim, args.dimension)
-            if self.args.glove_and_char:
-                self.project_embeddings = Feedforward(2 * args.dimension, args.dimension, dropout=0.0)
-
         if args.pretrained_decoder_lm:
             pretrained_save_dict = torch.load(os.path.join(args.embeddings, args.pretrained_decoder_lm), map_location=str(self.device))
 
@@ -155,23 +141,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             return limited_idx_to_full_idx[x]
         self.map_to_full = map_to_full
 
-        if -1 not in self.args.elmo:
-            from allennlp.modules.elmo import batch_to_ids
-
-            def elmo(z, layers, device):
-                e = self.elmo(batch_to_ids(z).to(device))['elmo_representations']
-                return torch.cat([e[x] for x in layers], -1)
-            context_elmo = self.project_elmo(elmo(context_tokens, self.args.elmo, context.device).detach())
-            question_elmo = self.project_elmo(elmo(question_tokens, self.args.elmo, question.device).detach())
-
-        if self.args.glove_and_char:
-            context_embedded = self.encoder_embeddings(context)
-            question_embedded = self.encoder_embeddings(question)
-            if -1 not in self.args.elmo:
-                context_embedded = self.project_embeddings(torch.cat([context_embedded, context_elmo], -1))
-                question_embedded = self.project_embeddings(torch.cat([question_embedded, question_elmo], -1))
-        else:
-            context_embedded, question_embedded = context_elmo, question_elmo 
+        context_embedded = self.encoder_embeddings(context)
+        question_embedded = self.encoder_embeddings(question)
 
         context_encoded = self.bilstm_before_coattention(context_embedded, context_lengths)[0]
         question_encoded = self.bilstm_before_coattention(question_embedded, question_lengths)[0]

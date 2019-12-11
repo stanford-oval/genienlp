@@ -170,7 +170,7 @@ def load_config_json(args):
         config = json.load(config_file)
         retrieve = ['model', 'transformer_layers', 'rnn_layers', 'transformer_hidden', 'world_size', 'dimension',
                     'load', 'max_val_context_length', 'val_batch_size', 'transformer_heads', 'max_output_length',
-                    'max_generative_vocab', 'lower', 'elmo', 'glove_and_char',
+                    'max_generative_vocab', 'lower', 'glove_and_char',
                     'use_maxmargin_loss', 'small_glove', 'almond_type_embeddings', 'almond_grammar',
                     'trainable_decoder_embedding', 'glove_decoder', 'pretrained_decoder_lm',
                     'retrain_encoder_embedding', 'question', 'locale', 'use_google_translate']
@@ -182,8 +182,6 @@ def load_config_json(args):
                 setattr(args, r, 'en')
             elif r in ('use_maxmargin_loss', 'small_glove', 'almond_type_embbedings'):
                 setattr(args, r, False)
-            elif 'elmo' in r:
-                setattr(args, r, [-1])
             elif r in ('glove_decoder', 'glove_and_char'):
                 setattr(args, r, True)
             elif r == 'trainable_decoder_embedding':

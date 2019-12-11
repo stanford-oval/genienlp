@@ -100,7 +100,6 @@ def parse(argv):
     parser.add_argument('--transformer_hidden', default=150, type=int, help='hidden size of the transformer modules')
     parser.add_argument('--transformer_heads', default=3, type=int, help='number of heads for transformer modules')
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
-    parser.add_argument('--elmo', default=[-1], nargs='+', type=int,  help='which layer(s) (0, 1, or 2) of ELMo (Peters et al. 2018) to use; -1 for none ')
     parser.add_argument('--no_glove_and_char', action='store_false', dest='glove_and_char', help='turn off GloVe and CharNGram embeddings')
     parser.add_argument('--locale', default='en', help='locale to use for word embeddings')
     parser.add_argument('--retrain_encoder_embedding', default=False, action='store_true', help='whether to retrain encoder embeddings')

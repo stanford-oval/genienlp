@@ -18,5 +18,3 @@ ujson
 sacrebleu
 orderedset
 requests
-
-allennlp
