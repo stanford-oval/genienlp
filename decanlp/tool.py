@@ -30,10 +30,9 @@
 
 import sys
 
-from . import convert_to_logical_forms, train, predict, server, cache_embeddings
+from . import train, predict, server, cache_embeddings
 
 subcommands = {
-    'convert-to-logical-froms': ('Convert to logical forms (for SQL tasks)', convert_to_logical_forms.main),
     'train': ('Train a model', train.main),
     'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.main),
     'server': ('Export RPC interface to predict', server.main),
