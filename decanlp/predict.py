@@ -296,12 +296,6 @@ def main(argv=sys.argv):
     Model = getattr(models, args.model)
     model = Model(field, args)
     model_dict = save_dict['model_state_dict']
-    backwards_compatible_cove_dict = {}
-    for k, v in model_dict.items():
-        if 'cove.rnn.' in k:
-            k = k.replace('cove.rnn.', 'cove.rnn1.')
-        backwards_compatible_cove_dict[k] = v
-    model_dict = backwards_compatible_cove_dict
     model.load_state_dict(model_dict)
     field, splits = prepare_data(args, field)
     if args.model != 'MultiLingualTranslationModel':

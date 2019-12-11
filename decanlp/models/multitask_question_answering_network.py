@@ -59,19 +59,10 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         
             self.encoder_embeddings = Embedding(field, args.dimension,
                                                 trained_dimension=0,
-                                                dropout=args.dropout_ratio, project=not args.cove,
+                                                dropout=args.dropout_ratio,
+                                                project=True,
                                                 requires_grad=args.retrain_encoder_embedding)
     
-            if self.args.cove or self.args.intermediate_cove:
-                from cove import MTLSTM
-
-                self.cove = MTLSTM(model_cache=args.embeddings, layer0=args.intermediate_cove, layer1=args.cove)
-                cove_params = get_trainable_params(self.cove) 
-                for p in cove_params:
-                    p.requires_grad = False
-                cove_dim = int(args.intermediate_cove) * 600 + int(args.cove) * 600 + 400 + int(args.almond_type_embeddings) * 18 # the last 400 is for GloVe and char n-gram embeddings
-                self.project_cove = Feedforward(cove_dim, args.dimension)
-
         if -1 not in self.args.elmo:
 
             from allennlp.modules.elmo import Elmo, batch_to_ids
@@ -176,9 +167,6 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         if self.args.glove_and_char:
             context_embedded = self.encoder_embeddings(context)
             question_embedded = self.encoder_embeddings(question)
-            if self.args.cove:
-                context_embedded = self.project_cove(torch.cat([self.cove(context_embedded[:, :, 100:400], context_lengths), context_embedded], -1).detach())
-                question_embedded = self.project_cove(torch.cat([self.cove(question_embedded[:, :, 100:400], question_lengths), question_embedded], -1).detach())
             if -1 not in self.args.elmo:
                 context_embedded = self.project_embeddings(torch.cat([context_embedded, context_elmo], -1))
                 question_embedded = self.project_embeddings(torch.cat([question_embedded, question_elmo], -1))
