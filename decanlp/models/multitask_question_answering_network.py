@@ -28,18 +28,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
-import math
-import numpy as np
-import json
-
-import torch
-from torch import nn
-from torch.nn import functional as F
 from collections import defaultdict
 
 from ..util import get_trainable_params, set_seed
-from ..modules import expectedBLEU, expectedMultiBleu, matrixBLEU
 
 from .common import *
 
@@ -203,18 +194,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 oov_to_limited_idx)
 
 
-            if self.args.use_bleu_loss and iteration >= self.args.loss_switch * max(self.args.train_iterations):
-                max_order = 4
-                targets = answer_indices[:, 1:].contiguous()
-                batch_size = targets.size(0)
-                reference_lengths = [l-1 for l in answer_lengths]
-                translation_len = max(reference_lengths)
-                translation_lengths = torch.tensor([translation_len] * batch_size, device=self.device)
-
-                bleu_loss_smoothed = expectedMultiBleu.bleu(probs, targets, translation_lengths, reference_lengths, max_order=max_order, smooth=True)
-                loss = -1 * bleu_loss_smoothed[0]
-
-            elif self.args.use_maxmargin_loss:
+            if self.args.use_maxmargin_loss:
                 targets = answer_indices[:, 1:].contiguous()
                 loss = max_margin_loss(probs, targets, pad_idx=pad_idx)
 
