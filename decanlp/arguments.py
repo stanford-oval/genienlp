@@ -137,11 +137,6 @@ def parse(argv):
     parser.add_argument('--curriculum_max_frac', default=1.0, type=float, help='max fraction of harder dataset to keep for curriculum')
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum')
-    parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
-    parser.add_argument('--almond_grammar', type=str,
-                        choices=['typeless.bottomup', 'typeless.topdown', 'plain.bottomup', 'plain.topdown', 'pos.typeless.bottomup', 'pos.typeless.topdown',
-                                 'pos.bottomup', 'pos.topdown', 'full.bottomup', 'full.topdown'],
-                        help="which grammar to use for Almond task (leave unspecified for no grammar)")
     parser.add_argument('--question', type=str, help='provide a fixed question')
     parser.add_argument('--use_google_translate', action='store_true', help='use google translate instead of pre-trained machine translator')
 

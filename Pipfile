@@ -15,7 +15,6 @@ python-dateutil = "*"
 ujson = "*"
 pyrouge = {editable = true,git = "git://github.com/andersjo/pyrouge.git"}
 sacrebleu = "*"
-orderedset = "*"
 records = "*"
 tabulate = "*"
 tensorboardX = "*"

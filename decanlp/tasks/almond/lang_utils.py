@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2017-2019, The Board of Trustees of the Leland Stanford Junior University
+# Copyright (c) 2019, The Board of Trustees of the Leland Stanford Junior University
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -28,19 +28,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-# special tokens start with a space
-# so they sort earlier than all other tokens
-PAD_TOKEN = ' 0PAD' 
-EOF_TOKEN = ' 1EOF'
-START_TOKEN = ' 2START'
-PAD_ID = 0
-EOF_ID = 1
-START_ID = 2
+def get_functions(program):
+    return [x for x in program.split(' ') if x.startswith('@')]
 
-# codes for actions in the action table
-# the values are chosen to be somewhat compatible with t2t's
-# opinion of what encodings should look like
-INVALID_CODE = PAD_ID
-ACCEPT_CODE = EOF_ID
-SHIFT_CODE = 2
-REDUCE_CODE = 3
+
+def get_devices(program):
+    return [x.rsplit('.', 1)[0] for x in program.split(' ') if x.startswith('@')]

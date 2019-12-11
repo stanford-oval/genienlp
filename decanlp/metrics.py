@@ -28,7 +28,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from subprocess import Popen, PIPE
-import logging
 import re
 import os
 import string
@@ -36,7 +35,7 @@ import numpy as np
 import collections
 from multiprocessing import Pool, cpu_count
 from contextlib import closing
-from .utils.lang_utils import *
+from decanlp.tasks.almond.lang_utils import *
 from .tasks.generic_dataset import Query
 
 from pyrouge import Rouge155

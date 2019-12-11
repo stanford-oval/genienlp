@@ -16,5 +16,4 @@ python-dateutil
 ujson
 -e git+git://github.com/andersjo/pyrouge.git#egg=pyrouge
 sacrebleu
-orderedset
 requests
