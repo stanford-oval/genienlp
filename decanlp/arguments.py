@@ -73,7 +73,8 @@ def parse(argv):
     parser.add_argument('--n_jump_start', default=0, type=int, help='how many tasks to jump start (presented in order)')    
     parser.add_argument('--num_print', default=15, type=int, help='how many validation examples with greedy output to print to std out')
 
-    parser.add_argument('--no_tensorboard', action='store_false', dest='tensorboard', help='Turn of tensorboard logging')
+    parser.add_argument('--no_tensorboard', action='store_false', dest='tensorboard', help='Turn off tensorboard logging')
+    parser.add_argument('--tensorboard_dir', default=None, help='Directory where to save Tensorboard logs (defaults to --save)')
     parser.add_argument('--max_to_keep', default=5, type=int, help='number of checkpoints to keep')
     parser.add_argument('--log_every', default=int(1e2), type=int, help='how often to log results in # of iterations')
     parser.add_argument('--save_every', default=int(1e3), type=int, help='how often to save a checkpoint in # of iterations')
@@ -188,6 +189,8 @@ def parse(argv):
         args.commit = ''
 
     args.log_dir = args.save
+    if args.tensorboard_dir is None:
+        args.tensorboard_dir = args.log_dir
     args.dist_sync_file = os.path.join(args.log_dir, 'distributed_sync_file')
     
     for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
