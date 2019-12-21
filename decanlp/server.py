@@ -42,10 +42,9 @@ from pprint import pformat
 
 from .util import set_seed, load_config_json
 from . import models
-from .text.data import Example
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
-from .tasks.generic_dataset import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
+from .tasks.generic_dataset import CQA, Example
 
 logger = logging.getLogger(__name__)
 
@@ -129,11 +128,9 @@ class Server():
         if not question:
             question = task.default_question
         answer = ''
-        tokenize = task.tokenize
-    
-        context_question = get_context_question(context, question)
-        fields = [(x, self.field) for x in CQA.fields]
-        ex = Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=tokenize)
+
+        ex = Example.from_raw(str(request['id']), context, question, answer,
+                              tokenize=task.tokenize, lower=self.field.lower)
         
         batch = self.numericalize_example(ex)
         _, prediction_batch = self.model(batch, iteration=0)

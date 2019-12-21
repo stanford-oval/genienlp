@@ -39,14 +39,38 @@ import hashlib
 import unicodedata
 import logging
 import xml.etree.ElementTree as ET
+from typing import NamedTuple, List
 
 from ..text import data
 
 logger = logging.getLogger(__name__)
 
-class CQA(data.Dataset):
 
-    fields = ['context', 'question', 'answer']
+class Example(NamedTuple):
+    example_id : List[str]
+    context : List[str]
+    question : List[str]
+    answer : List[str]
+
+    @staticmethod
+    def from_raw(example_id : str, context : str, question : str, answer : str, tokenize, lower=False):
+        args = [[example_id]]
+        for arg in (context, question, answer):
+            new_arg = tokenize(arg.rstrip('\n'))
+            if lower:
+                new_arg = [word.lower() for word in new_arg]
+            args.append(new_arg)
+        return Example(*args)
+
+
+def make_example_id(dataset, example_id):
+    return dataset.name + '/' + str(example_id)
+
+
+class CQA(data.Dataset):
+    def __init__(self, examples, field, **kwargs):
+        fields = [(x, field) for x in Example._fields]
+        super().__init__(examples, fields, **kwargs)
 
     @staticmethod
     def sort_key(ex):
@@ -63,7 +87,6 @@ class IMDb(CQA):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
     def __init__(self, path, field, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
         examples = []
         labels = {'neg': 'negative', 'pos': 'positive'}
         question = 'Is this review negative or positive?'
@@ -80,13 +103,15 @@ class IMDb(CQA):
                     with open(fname, 'r') as f:
                         context = f.readline()
                     answer = labels[label]
-                    examples.append(data.Example.fromlist([context, question, answer], fields))
+                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
+                                                     context, question, answer,
+                                                     tokenize=field.tokenize, lower=field.lower))
                     if subsample is not None and len(examples) > subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
-        super().__init__(examples, fields, **kwargs)
+        super().__init__(examples, field, **kwargs)
 
 
     @classmethod
@@ -121,7 +146,6 @@ class SST(CQA):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
     def __init__(self, path, field, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -139,8 +163,10 @@ class SST(CQA):
                 for line in f:
                     parsed = list(csv.reader([line.rstrip('\n')]))[0]
                     context = parsed[-1]
-                    answer = labels[int(parsed[0])] 
-                    examples.append(data.Example.fromlist([context, question, answer], fields))
+                    answer = labels[int(parsed[0])]
+                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
+                                                     context, question, answer,
+                                                     tokenize=field.tokenize, lower=field.lower))
 
                     if subsample is not None and len(examples) > subsample:
                         break
@@ -150,7 +176,7 @@ class SST(CQA):
             torch.save(examples, cache_name)
 
         self.examples = examples
-        super().__init__(examples, fields, **kwargs)
+        super().__init__(examples, field, **kwargs)
 
     @classmethod
     def splits(cls, fields, root='.data',
@@ -179,7 +205,7 @@ class TranslationDataset(CQA):
     def sort_key(ex):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
-    def __init__(self, path, exts, field, subsample=None, tokenize=None, **kwargs):
+    def __init__(self, path, exts, field, subsample=None, **kwargs):
         """Create a TranslationDataset given paths and fields.
 
         Arguments:
@@ -189,7 +215,6 @@ class TranslationDataset(CQA):
             Remaining keyword arguments: Passed to the constructor of
                 data.Dataset.
         """
-        fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -210,7 +235,9 @@ class TranslationDataset(CQA):
                     if src_line != '' and trg_line != '':
                         context = src_line
                         answer = trg_line
-                        examples.append(data.Example.fromlist([context, question, answer], fields, tokenize=tokenize))
+                        examples.append(Example.from_raw(make_example_id(self, len(examples)),
+                                                         context, question, answer,
+                                                         tokenize=field.tokenize, lower=field.lower))
                         if subsample is not None and len(examples) >= subsample:
                             break
 
@@ -218,7 +245,7 @@ class TranslationDataset(CQA):
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
-        super().__init__(examples, fields, **kwargs)
+        super().__init__(examples, field, **kwargs)
 
     @classmethod
     def splits(cls, exts, fields, root='.data',
@@ -353,7 +380,6 @@ class SQuAD(CQA, data.Dataset):
     dirname = ''
 
     def __init__(self, path, field, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -374,15 +400,13 @@ class SQuAD(CQA, data.Dataset):
                         for qa in qas:
                             question = ' '.join(qa['question'].split())
                             q_ids.append(qa['id'])
-                            squad_id = len(all_answers)
                             if len(qa['answers']) == 0:
                                 answer = 'unanswerable'
                                 all_answers.append(['unanswerable'])
                                 context = ' '.join(context.split())
-                                ex = data.Example.fromlist([context, question, answer], fields)
-                                ex.context_spans = [-1, -1]
-                                ex.answer_start = -1
-                                ex.answer_end = -1
+                                ex = Example.from_raw(make_example_id(self, qa['id']),
+                                                      context, question, answer,
+                                                      tokenize=str.split, lower=field.lower)
                             else:
                                 answer = qa['answers'][0]['text']
                                 all_answers.append([a['text'] for a in qa['answers']])
@@ -394,25 +418,25 @@ class SQuAD(CQA, data.Dataset):
                                 END = ' endanswer'
 
                                 tagged_context = context_before_answer + BEGIN + answer + END + context_after_answer
-                                ex = data.Example.fromlist([tagged_context, question, answer], fields)
+                                tagged_context = tagged_context.split()
 
-                                tokenized_answer = ex.answer
-                                for xi, x in enumerate(ex.context):
+                                tokenized_answer = answer.split()
+                                for xi, x in enumerate(tagged_context):
                                     if BEGIN in x: 
                                         answer_start = xi + 1
-                                        ex.context[xi] = x.replace(BEGIN, '')
+                                        tagged_context[xi] = x.replace(BEGIN, '')
                                     if END in x: 
                                         answer_end = xi
-                                        ex.context[xi] = x.replace(END, '')
+                                        tagged_context[xi] = x.replace(END, '')
                                 new_context = []
                                 original_answer_start = answer_start
                                 original_answer_end = answer_end
-                                indexed_with_spaces = ex.context[answer_start:answer_end]
+                                indexed_with_spaces = tagged_context[answer_start:answer_end]
                                 if len(indexed_with_spaces) != len(tokenized_answer):
                                     import pdb; pdb.set_trace()
 
                                 # remove spaces
-                                for xi, x in enumerate(ex.context):
+                                for xi, x in enumerate(tagged_context):
                                     if len(x.strip()) == 0:
                                         if xi <= original_answer_start:
                                             answer_start -= 1
@@ -420,24 +444,26 @@ class SQuAD(CQA, data.Dataset):
                                             answer_end -= 1
                                     else:
                                         new_context.append(x)
-                                ex.context = new_context
-                                ex.answer = [x for x in ex.answer if len(x.strip()) > 0] 
-                                if len(ex.context[answer_start:answer_end]) != len(ex.answer):
+                                tagged_context = new_context
+                                tokenized_answer = [x for x in tokenized_answer if len(x.strip()) > 0]
+                                if len(tagged_context[answer_start:answer_end]) != len(tokenized_answer):
                                     import pdb; pdb.set_trace()
-                                ex.context_spans = list(range(answer_start, answer_end)) 
-                                indexed_answer = ex.context[ex.context_spans[0]:ex.context_spans[-1]+1]
-                                if len(indexed_answer) != len(ex.answer):
+                                context_spans = list(range(answer_start, answer_end))
+                                indexed_answer = tagged_context[context_spans[0]:context_spans[-1]+1]
+                                if len(indexed_answer) != len(tokenized_answer):
                                     import pdb; pdb.set_trace()
                                 if field.eos_token is not None:
-                                    ex.context_spans += [len(ex.context)]
-                                for context_idx, answer_word in zip(ex.context_spans, ex.answer):
-                                    if context_idx == len(ex.context):
+                                    context_spans += [len(tagged_context)]
+                                for context_idx, answer_word in zip(context_spans, ex.answer):
+                                    if context_idx == len(tagged_context):
                                         continue
-                                    if ex.context[context_idx] != answer_word:
+                                    if tagged_context[context_idx] != answer_word:
                                         import pdb; pdb.set_trace()
-                                ex.answer_start = ex.context_spans[0]
-                                ex.answer_end = ex.context_spans[-1]
-                            ex.squad_id = squad_id
+
+                                ex = Example.from_raw(make_example_id(self, qa['id']),
+                                                      ' '.join(tagged_context), question, ' '.join(tokenized_answer),
+                                                      tokenize=str.split, lower=field.lower)
+
                             examples.append(ex)
                             if subsample is not None and len(examples) > subsample:
                                 break
@@ -450,15 +476,7 @@ class SQuAD(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers, q_ids), cache_name)
 
-
-        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False,
-                           lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
-        fields.append(('context_spans', FIELD))
-        fields.append(('answer_start', FIELD))
-        fields.append(('answer_end', FIELD))
-        fields.append(('squad_id', FIELD))
-
-        super(SQuAD, self).__init__(examples, fields, **kwargs)
+        super(SQuAD, self).__init__(examples, field, **kwargs)
         self.all_answers = all_answers
         self.q_ids = q_ids
 
@@ -516,7 +534,6 @@ class Summarization(CQA, data.Dataset):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
     def __init__(self, path, field, one_answer=True, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -531,15 +548,16 @@ class Summarization(CQA, data.Dataset):
                 for line in lines:
                     ex = json.loads(line)
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    ex = data.Example.fromlist([context, question, answer], fields)
-                    examples.append(ex)
-                    if subsample is not None and len(examples) >= subsample: 
+                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
+                                                     context, question, answer,
+                                                     tokenize=field.tokenize, lower=field.lower))
+                    if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super(Summarization, self).__init__(examples, fields, **kwargs)
+        super(Summarization, self).__init__(examples, field, **kwargs)
 
     @classmethod
     def cache_splits(cls, path):
@@ -669,11 +687,6 @@ class WikiSQL(CQA, data.Dataset):
     dirname = 'data'
 
     def __init__(self, path, field, query_as_question=False, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
-        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False,
-                           lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
-        fields.append(('wikisql_id', FIELD))
-
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', 'query_as_question' if query_as_question else 'query_as_context', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -706,9 +719,10 @@ class WikiSQL(CQA, data.Dataset):
                         question = human_query
                     else:
                         question = 'What is the translation from English to SQL?'
-                        context += f'-- {human_query}'  
-                    ex = data.Example.fromlist([context, question, answer, idx], fields)
-                    examples.append(ex)
+                        context += f'-- {human_query}'
+                    examples.append(Example.from_raw(make_example_id(self, idx),
+                                                     context, question, answer,
+                                                     tokenize=field.tokenize, lower=field.lower))
                     all_answers.append({'sql': sql, 'header': header, 'answer': answer, 'table': table})
                     if subsample is not None and len(examples) > subsample:
                         break
@@ -717,7 +731,7 @@ class WikiSQL(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers), cache_name)
 
-        super(WikiSQL, self).__init__(examples, fields, **kwargs)
+        super(WikiSQL, self).__init__(examples, field, **kwargs)
         self.all_answers = all_answers
 
 
@@ -791,7 +805,6 @@ class SRL(CQA, data.Dataset):
         return ' '.join(s.split()).strip()
 
     def __init__(self, path, field, one_answer=True, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -807,9 +820,9 @@ class SRL(CQA, data.Dataset):
                     t = ex['type']
                     aa = ex['all_answers']
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    ex = data.Example.fromlist([context, question, answer], fields)
-                    examples.append(ex)
-                    ex.squad_id = len(all_answers)
+                    examples.append(Example.from_raw(make_example_id(self, len(all_answers)),
+                                                     context, question, answer,
+                                                     tokenize=field.tokenize, lower=field.lower))
                     all_answers.append(aa)
                     if subsample is not None and len(examples) >= subsample: 
                         break
@@ -817,11 +830,7 @@ class SRL(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers), cache_name)
 
-        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False,
-                           lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
-        fields.append(('squad_id', FIELD))
-
-        super(SRL, self).__init__(examples, fields, **kwargs)
+        super(SRL, self).__init__(examples, field, **kwargs)
         self.all_answers = all_answers
 
 
@@ -949,8 +958,6 @@ class WinogradSchema(CQA, data.Dataset):
     dirname = ''
 
     def __init__(self, path, field, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
-
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -963,15 +970,16 @@ class WinogradSchema(CQA, data.Dataset):
                 for line in f:
                     ex = json.loads(line)
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    ex = data.Example.fromlist([context, question, answer], fields)
-                    examples.append(ex)
+                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
+                                                     context, question, answer,
+                                                     tokenize=field.tokenize, lower=field.lower))
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super(WinogradSchema, self).__init__(examples, fields, **kwargs)
+        super(WinogradSchema, self).__init__(examples, field, **kwargs)
 
     @classmethod
     def cache_splits(cls, path):
@@ -1068,11 +1076,6 @@ class WOZ(CQA, data.Dataset):
     dirname = ''
 
     def __init__(self, path, field, subsample=None, description='woz.en', **kwargs):
-        fields = [(x, field) for x in self.fields]
-        FIELD = data.Field(batch_first=True, use_vocab=False, sequential=False,
-                           lower=False, numerical=True, eos_token=field.eos_token, init_token=field.init_token)
-        fields.append(('woz_id', FIELD))
-
         examples, all_answers = [], []
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), description)
@@ -1087,8 +1090,9 @@ class WOZ(CQA, data.Dataset):
                     if example_dict['lang'] in description:
                         context, question, answer = ex['context'], ex['question'], ex['answer']
                         all_answers.append((ex['lang_dialogue_turn'], answer))
-                        ex = data.Example.fromlist([context, question, answer, woz_id], fields)
-                        examples.append(ex)
+                        examples.append(Example.from_raw(make_example_id(self, woz_id),
+                                                         context, question, answer,
+                                                         tokenize=field.tokenize, lower=field.lower))
 
                     if subsample is not None and len(examples) >= subsample: 
                         break
@@ -1096,7 +1100,7 @@ class WOZ(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers), cache_name)
 
-        super(WOZ, self).__init__(examples, fields, **kwargs)
+        super(WOZ, self).__init__(examples, field, **kwargs)
         self.all_answers = all_answers
 
     @classmethod
@@ -1194,8 +1198,6 @@ class MultiNLI(CQA, data.Dataset):
     dirname = 'multinli_1.0'
 
     def __init__(self, path, field, subsample=None, description='multinli.in.out', **kwargs):
-        fields = [(x, field) for x in self.fields]
-
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), description)
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -1209,15 +1211,16 @@ class MultiNLI(CQA, data.Dataset):
                     ex = example_dict = json.loads(line)
                     if example_dict['subtask'] in description:
                         context, question, answer = ex['context'], ex['question'], ex['answer']
-                        ex = data.Example.fromlist([context, question, answer], fields)
-                        examples.append(ex)
+                        examples.append(Example.from_raw(make_example_id(self, len(examples)),
+                                                         context, question, answer,
+                                                         tokenize=field.tokenize, lower=field.lower))
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super(MultiNLI, self).__init__(examples, fields, **kwargs)
+        super(MultiNLI, self).__init__(examples, field, **kwargs)
 
     @classmethod
     def cache_splits(cls, path, train='multinli_1.0_train', validation='mulinli_1.0_dev_{}', test='test'):
@@ -1279,8 +1282,6 @@ class ZeroShotRE(CQA, data.Dataset):
 
 
     def __init__(self, path, field, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
-
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -1293,8 +1294,9 @@ class ZeroShotRE(CQA, data.Dataset):
                 for line in f:
                     ex = example_dict = json.loads(line)
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    ex = data.Example.fromlist([context, question, answer], fields)
-                    examples.append(ex)
+                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
+                                                     context, question, answer,
+                                                     tokenize=field.tokenize, lower=field.lower))
 
                     if subsample is not None and len(examples) >= subsample: 
                         break
@@ -1302,7 +1304,7 @@ class ZeroShotRE(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super().__init__(examples, fields, **kwargs)
+        super().__init__(examples, field, **kwargs)
 
     @classmethod
     def cache_splits(cls, path, train='train', validation='dev', test='test'):
@@ -1365,9 +1367,9 @@ class OntoNotesNER(CQA, data.Dataset):
 
     @classmethod
     def clean(cls, s):
-        closing_punctuation = set([ ' .', ' ,', ' ;', ' !', ' ?', ' :', ' )', " '", " n't ", " %"])
-        opening_punctuation = set(['( ', '$ '])
-        both_sides = set([' - '])
+        closing_punctuation = {' .', ' ,', ' ;', ' !', ' ?', ' :', ' )', " '", " n't ", " %"}
+        opening_punctuation = {'( ', '$ '}
+        both_sides = {' - '}
         s = ' '.join(s.split()).strip()
         s = s.replace(' /.', ' .')
         s = s.replace(' /?', ' ?')
@@ -1412,7 +1414,6 @@ class OntoNotesNER(CQA, data.Dataset):
         return ' '.join(raw.split()).strip()
 
     def __init__(self, path, field, one_answer=True, subsample=None, path_to_files='.data/ontonotes-release-5.0/data/files', subtask='all', nones=True, **kwargs):
-        fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), subtask, str(nones))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -1430,8 +1431,9 @@ class OntoNotesNER(CQA, data.Dataset):
                         if a != 'None' or nones:
                             ex = example_dict
                             context, question, answer = ex['context'], ex['question'], ex['answer']
-                            ex = data.Example.fromlist([context, question, answer], fields)
-                            examples.append(ex)
+                            examples.append(Example.from_raw(make_example_id(self, len(examples)),
+                                                             context, question, answer,
+                                                             tokenize=field.tokenize, lower=field.lower))
 
                     if subsample is not None and len(examples) >= subsample: 
                         break
@@ -1439,7 +1441,7 @@ class OntoNotesNER(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super(OntoNotesNER, self).__init__(examples, fields, **kwargs)
+        super(OntoNotesNER, self).__init__(examples, field, **kwargs)
 
 
     @classmethod
@@ -1602,8 +1604,6 @@ class SNLI(CQA, data.Dataset):
 
 
     def __init__(self, path, field, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
-
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -1617,8 +1617,9 @@ class SNLI(CQA, data.Dataset):
                     example_dict = json.loads(line)
                     ex = example_dict
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    ex = data.Example.fromlist([context, question, answer], fields)
-                    examples.append(ex)
+                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
+                                                     context, question, answer,
+                                                     tokenize=field.tokenize, lower=field.lower))
 
                     if subsample is not None and len(examples) >= subsample: 
                         break
@@ -1626,7 +1627,7 @@ class SNLI(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super().__init__(examples, fields, **kwargs)
+        super().__init__(examples, field, **kwargs)
 
     @classmethod
     def cache_splits(cls, path, train='train', validation='dev', test='test'):
@@ -1674,7 +1675,6 @@ class JSON(CQA, data.Dataset):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
     def __init__(self, path, field, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -1689,15 +1689,16 @@ class JSON(CQA, data.Dataset):
                 for line in lines:
                     ex = json.loads(line)
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    ex = data.Example.fromlist([context, question, answer], fields)
-                    examples.append(ex)
+                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
+                                                     context, question, answer,
+                                                     tokenize=field.tokenize, lower=field.lower))
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super(JSON, self).__init__(examples, fields, **kwargs)
+        super(JSON, self).__init__(examples, field, **kwargs)
 
     @classmethod
     def splits(cls, fields, name, root='.data',

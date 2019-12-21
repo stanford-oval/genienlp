@@ -41,15 +41,7 @@ def compute_validation_outputs(model, val_iter, field, iteration, optional_names
         l, p = model(batch, iteration)
         loss.append(l)
         predictions.append(pad(p, 150, dim=-1, val=field.vocab.stoi['<pad>']))
-        a = None
-        if hasattr(batch, 'wikisql_id'):
-            a = batch.wikisql_id.data.cpu()
-        elif hasattr(batch, 'squad_id'):
-            a = batch.squad_id.data.cpu()
-        elif hasattr(batch, 'woz_id'):
-            a = batch.woz_id.data.cpu()
-        else:
-            a = pad(batch.answer.data.cpu(), 150, dim=-1, val=field.vocab.stoi['<pad>'])
+        a = pad(batch.answer.data.cpu(), 150, dim=-1, val=field.vocab.stoi['<pad>'])
         answers.append(a)
         for opt_idx, optional_name in enumerate(optional_names):
             outputs[opt_idx].append(getattr(batch, optional_name).data.cpu()) 
@@ -81,8 +73,7 @@ def all_reverse(tensor, world_size, task, field, field_name, clip, dim=0):
 def gather_results(model, val_iter, field, world_size, task, iteration, optional_names=[]):
     loss, predictions, answers, outputs = compute_validation_outputs(model, val_iter, field, iteration, optional_names=optional_names)
     clip = get_clip(val_iter)
-    if not hasattr(val_iter.dataset.examples[0], 'squad_id') and not hasattr(val_iter.dataset.examples[0], 'wikisql_id') and not hasattr(val_iter.dataset.examples[0], 'woz_id'):
-        answers = all_reverse(answers, world_size, task, field, field_name='answer', clip=clip)
+    answers = all_reverse(answers, world_size, task, field, field_name='answer', clip=clip)
     return loss, all_reverse(predictions, world_size, task, field, field_name='answer', clip=clip), answers, \
         [all_reverse(output, world_size, task, field, field_name, clip) for output, field_name in zip(outputs, optional_names)]
 
@@ -108,8 +99,6 @@ def validate(task, val_iter, model, logger, field, world_size, rank, iteration, 
         loss, predictions, answers, results = gather_results(model, val_iter, field, world_size, task, iteration, optional_names=optional_names)
         predictions = [p.replace('UNK', 'OOV') for p in predictions]
         names = required_names + optional_names 
-        if hasattr(val_iter.dataset.examples[0], 'wikisql_id') or hasattr(val_iter.dataset.examples[0], 'squad_id') or hasattr(val_iter.dataset.examples[0], 'woz_id'):
-            answers = [val_iter.dataset.all_answers[sid] for sid in answers.tolist()]
 
         metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)
         results = [predictions, answers] + results

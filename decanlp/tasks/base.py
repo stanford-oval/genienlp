@@ -66,13 +66,12 @@ class BaseTask:
         """
         Preprocess a given example, in a task specific way.
 
-        The example should be modified in place.
-        Return False if the example should be dropped from the dataset
+        Returns the modified example, or None if the example should be dropped from the dataset
 
         :param ex: the text.Example to preprocess
-        :return: True if the example is valid, False otherwise
+        :return: a new Example or None
         """
-        return True
+        return ex
 
     @property
     def metrics(self):

@@ -129,8 +129,7 @@ def run(args, field, val_sets, model):
                 answer_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.gold.txt')
                 results_file_name = answer_file_name.replace('gold', 'results')
                 context_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.context.txt')
-            if 'sql' in task.name or 'squad' in task.name:
-                ids_file_name = answer_file_name.replace('gold', 'ids')
+            ids_file_name = answer_file_name.replace('gold', 'ids')
             if os.path.exists(prediction_file_name):
                 logger.warning(f'** {prediction_file_name} already exists -- this is where predictions are stored **')
                 if args.overwrite:
@@ -160,7 +159,8 @@ def run(args, field, val_sets, model):
                 os.makedirs(os.path.dirname(x), exist_ok=True)
 
             if not os.path.exists(prediction_file_name) or args.overwrite:
-                with open(prediction_file_name, 'w') as prediction_file:
+                with open(prediction_file_name, 'w') as prediction_file, \
+                    open(ids_file_name, 'w') as id_file:
                     predictions = []
                     ids = []
                     for batch_idx, batch in enumerate(it):
@@ -169,42 +169,21 @@ def run(args, field, val_sets, model):
                         p = field.reverse(p, detokenize=task.detokenize, field_name='answer')
 
                         for i, pp in enumerate(p):
-                            if 'sql' in task.name:
-                                ids.append(int(batch.wikisql_id[i]))
-                            if 'squad' in task.name:
-                                ids.append(it.dataset.q_ids[int(batch.squad_id[i])])
-                            prediction_file.write(pp + '\n')
+                            ids.append(batch.example_id[i])
                             predictions.append(pp)
-                if 'sql' in task.name:
-                    with open(ids_file_name, 'w') as id_file:
-                        for i in ids:
-                            id_file.write(json.dumps(i) + '\n')
-                if 'squad' in task.name:
-                    with open(ids_file_name, 'w') as id_file:
-                        for i in ids:
-                            id_file.write(i + '\n')
+                            prediction_file.write(pp + '\n')
+                            id_file.write(str(batch.example_id[i]) + '\n')
             else:
                 with open(prediction_file_name) as prediction_file:
                     predictions = [x.strip() for x in prediction_file.readlines()]
-                if 'sql' in task.name or 'squad' in task.name:
-                    with open(ids_file_name) as id_file:
-                        ids = [int(x.strip()) for x in id_file.readlines()]
-
-            def from_all_answers(an):
-                return [it.dataset.all_answers[sid] for sid in an.tolist()]
+                with open(ids_file_name) as id_file:
+                    ids = [x.strip() for x in id_file.readlines()]
 
             if not os.path.exists(answer_file_name) or args.overwrite:
                 with open(answer_file_name, 'w') as answer_file:
                     answers = []
                     for batch_idx, batch in enumerate(it):
-                        if hasattr(batch, 'wikisql_id'):
-                            a = from_all_answers(batch.wikisql_id.data.cpu())
-                        elif hasattr(batch, 'squad_id'):
-                            a = from_all_answers(batch.squad_id.data.cpu())
-                        elif hasattr(batch, 'woz_id'):
-                            a = from_all_answers(batch.woz_id.data.cpu())
-                        else:
-                            a = field.reverse(batch.answer.data, detokenize=task.detokenize, field_name='answer')
+                        a = field.reverse(batch.answer.data, detokenize=task.detokenize, field_name='answer')
                         for aa in a:
                             answers.append(aa)
                             answer_file.write(aa + '\n')

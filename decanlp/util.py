@@ -43,8 +43,14 @@ logger = logging.getLogger(__name__)
 def tokenizer(s):
     return s.split()
 
-def get_context_question(ex, context, question, field):
-    return ex.context_special + ex.context + ex.question_special + ex.question
+
+def map_filter(callable, iterable):
+    output = []
+    for element in iterable:
+        new_element = callable(element)
+        if new_element is not None:
+            output.append(new_element)
+    return output
 
 
 def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
@@ -60,7 +66,8 @@ def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
             logger.info(f'{task.name} has {len(s.examples)} examples')
 
         l = len(s.examples)
-        s.examples = list(filter(lambda ex: task.preprocess_example(ex, train=train, max_context_length=max_context_length), s.examples))
+        s.examples = map_filter(lambda ex: task.preprocess_example(ex, train=train, max_context_length=max_context_length),
+                                s.examples)
 
         if train:
             l = len(s.examples)
@@ -84,16 +91,12 @@ def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
             logger.info(f'{task.name} question lengths (min, mean, max): {np.min(question_lengths)}, {int(np.mean(question_lengths))}, {np.max(question_lengths)}')
             logger.info(f'{task.name} answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}')
 
-        for x in s.examples:
-            x.context_question = get_context_question(x, x.context, x.question, field)
-
         if logger is not None:
             logger.info('Tokenized examples:')
             for ex in s.examples[:10]:
                 logger.info('Context: ' + ' '.join([token.strip() for token in ex.context]))
                 logger.info('Question: ' + ' '.join([token.strip() for token in ex.question]))
                 logger.info('Answer: ' + ' '.join([token.strip() for token in ex.answer]))
-
 
 
 def set_seed(args, rank=None):

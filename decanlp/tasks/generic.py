@@ -133,13 +133,11 @@ class BaseSummarizationTask(BaseTask):
         return ['avg_rouge', 'rouge1', 'rouge2', 'rougeL', 'em', 'nem', 'nf1']
 
     def preprocess_example(self, ex, train=False, max_context_length=None):
-        ex.context = ex.context[:max_context_length]
+        # Filter examples with a dummy summary
+        if train and 'This page includes the show' in ex.answer:
+            return None
 
-        if train:
-            # Filter examples with a dummy summary
-            return 'This page includes the show' not in ex.answer
-        else:
-            return True
+        return ex._replace(context=ex.context[:max_context_length])
 
 
 @register_task('cnn')
@@ -176,8 +174,7 @@ class SST(BaseTask):
 @register_task('imdb')
 class IMDB(BaseTask):
     def preprocess_example(self, ex, train=False, max_context_length=None):
-        ex.context = ex.context[:max_context_length]
-        return True
+        return ex._replace(context=ex.context[:max_context_length])
 
     def get_splits(self, field, root, **kwargs):
         kwargs['validation'] = None

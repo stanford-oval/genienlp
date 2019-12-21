@@ -47,7 +47,6 @@ class AlmondDataset(generic_dataset.CQA):
     base_url = None
 
     def __init__(self, path, field, tokenize, contextual=False, reverse_task=False, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -99,17 +98,16 @@ class AlmondDataset(generic_dataset.CQA):
                         context = sentence
                         answer = target_code
 
-                context_question = generic_dataset.get_context_question(context, question)
-                examples.append(data.Example.fromlist(
-                    [context, question, answer, generic_dataset.CONTEXT_SPECIAL, generic_dataset.QUESTION_SPECIAL, context_question], fields,
-                    tokenize=tokenize))
+                examples.append(generic_dataset.Example.from_raw('almond/' + _id,
+                                                                 context, question, answer,
+                                                                 tokenize=str.split, lower=field.lower))
                 if len(examples) >= max_examples:
                     break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super().__init__(examples, fields, **kwargs)
+        super().__init__(examples, field, **kwargs)
 
     @staticmethod
     def sort_key(ex):
