@@ -141,11 +141,11 @@ def prepare_data(args, field, logger):
 
     if args.use_curriculum:
         logger.info('Preprocessing auxiliary data for curriculum')
-        preprocess_examples(args, args.train_tasks, aux_sets, field, logger, train=True)
+        preprocess_examples(args, args.train_tasks, aux_sets, logger, train=True)
     logger.info('Preprocessing training data')
-    preprocess_examples(args, args.train_tasks, train_sets, field, logger, train=True)
+    preprocess_examples(args, args.train_tasks, train_sets, logger, train=True)
     logger.info('Preprocessing validation data')
-    preprocess_examples(args, args.val_tasks, val_sets, field, logger, train=args.val_filter)
+    preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
 
     return field, train_sets, val_sets, aux_sets
 

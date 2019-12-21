@@ -57,7 +57,7 @@ def map_filter(callable, iterable):
     return output
 
 
-def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
+def preprocess_examples(args, tasks, splits, logger=None, train=True):
     min_length = 1
     max_context_length = args.max_train_context_length if train else args.max_val_context_length
     is_too_long = lambda ex: (len(ex.answer) > args.max_answer_length or

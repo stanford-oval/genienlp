@@ -46,10 +46,12 @@ from .tasks.registry import get_tasks
 from . import models
 from .data.example import Example
 from .text.data import ReversibleField
+from .data.numericalizer import DecoderVocabulary
 
 logger = logging.getLogger(__name__)
 
-def get_all_splits(args, new_field):
+
+def get_all_splits(args, field):
     splits = []
     for task in args.tasks:
         logger.info(f'Loading {task}')
@@ -64,29 +66,26 @@ def get_all_splits(args, new_field):
         kwargs['skip_cache_bool'] = args.skip_cache_bool
         kwargs['cached_path'] = args.cached
         kwargs['subsample'] = args.subsample
-        s = task.get_splits(root=args.data, tokenize=new_field.tokenize, lower=args.lower, **kwargs)[0]
-        preprocess_examples(args, [task], [s], new_field, train=False)
+        s = task.get_splits(root=args.data, tokenize=field.tokenize, lower=args.lower, **kwargs)[0]
+        preprocess_examples(args, [task], [s], train=False)
         splits.append(s)
     return splits
 
 
-def prepare_data(args, FIELD):
-    new_field = ReversibleField(batch_first=True, lower=args.lower, include_lengths=True)
-    splits = get_all_splits(args, new_field)
+def prepare_data(args, field):
+    splits = get_all_splits(args, field)
     new_vocab = Vocab.build_from_data(Example.vocab_fields, *splits,
-                                      init_token=FIELD.init_token, eos_token=FIELD.eos_token,
-                                      pad_token=FIELD.pad_token, unk_token=FIELD.unk_token)
-    logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens from training')
-    args.max_generative_vocab = min(len(FIELD.vocab), args.max_generative_vocab)
-    FIELD.vocab.extend(new_vocab)
-    logger.info(f'Vocabulary has expanded to {len(FIELD.vocab)} tokens')
+                                      init_token=field.init_token, eos_token=field.eos_token,
+                                      pad_token=field.pad_token, unk_token=field.unk_token)
+    logger.info(f'Vocabulary has {len(field.vocab)} tokens from training')
+    args.max_generative_vocab = min(len(field.vocab), args.max_generative_vocab)
+    field.vocab.extend(new_vocab)
+    logger.info(f'Vocabulary has expanded to {len(field.vocab)} tokens')
     vectors = load_embeddings(args)
-    FIELD.vocab.load_vectors(vectors, True)
-    FIELD.decoder_to_vocab = {idx: FIELD.vocab.stoi[word] for idx, word in enumerate(FIELD.decoder_itos)}
-    FIELD.vocab_to_decoder = {idx: FIELD.decoder_stoi[word] for idx, word in enumerate(FIELD.vocab.itos) if word in FIELD.decoder_stoi}
-    splits = get_all_splits(args, FIELD)
+    field.vocab.load_vectors(vectors, True)
+    field.decoder_vocab = DecoderVocabulary(field.vocab.itos[:args.max_generative_vocab], field.vocab)
 
-    return FIELD, splits
+    return field, splits
 
 
 def run(args, field, val_sets, model):
