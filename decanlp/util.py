@@ -92,7 +92,6 @@ def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
             for ex in s.examples[:10]:
                 logger.info('Context: ' + ' '.join([token.strip() for token in ex.context]))
                 logger.info('Question: ' + ' '.join([token.strip() for token in ex.question]))
-                logger.info(' '.join([token.strip() for token in ex.context_question]))
                 logger.info('Answer: ' + ' '.join([token.strip() for token in ex.answer]))
 
 
