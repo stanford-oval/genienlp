@@ -41,6 +41,7 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 
+from .text.vocab import Vocab
 from . import arguments
 from .validate import validate
 from .multiprocess import Multiprocess
@@ -78,7 +79,7 @@ def log(rank='main'):
 def prepare_data(args, field, logger):
     if field is None:
         logger.info(f'Constructing field')
-        field = ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
+        field = ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', include_lengths=True)
 
     train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
     for task in args.train_tasks:
@@ -124,7 +125,13 @@ def prepare_data(args, field, logger):
         vectors = load_embeddings(args, logger)
         vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
         logger.info(f'Building vocabulary')
-        field.build_vocab(Example.vocab_fields, *vocab_sets, max_size=args.max_effective_vocab, vectors=vectors)
+        field.vocab = Vocab.build_from_data(Example.vocab_fields, *vocab_sets,
+                                            unk_token=field.unk_token,
+                                            init_token=field.init_token,
+                                            eos_token=field.eos_token,
+                                            pad_token=field.pad_token,
+                                            max_size=args.max_effective_vocab,
+                                            vectors=vectors)
 
     field.decoder_vocab = DecoderVocabulary(field.vocab.itos[:args.max_generative_vocab], field.vocab)
 

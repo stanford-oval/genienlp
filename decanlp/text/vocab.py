@@ -1,6 +1,6 @@
 from __future__ import unicode_literals
 import array
-from collections import defaultdict
+from collections import defaultdict, Counter
 import io
 import logging
 import os
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 MAX_WORD_LENGTH = 100
 
+
 class Vocab(object):
     """Defines a vocabulary object that will be used to numericalize a field.
 
@@ -31,7 +32,7 @@ class Vocab(object):
             numerical identifiers.
         itos: A list of token strings indexed by their numerical identifiers.
     """
-    def __init__(self, counter, max_size=None, min_freq=1, specials=['<pad>'],
+    def __init__(self, counter, max_size=None, min_freq=1, specials=('<pad>',),
                  vectors=None, cat_vectors=True):
         """Create a Vocab object from a collections.Counter.
 
@@ -175,47 +176,29 @@ class Vocab(object):
             else:
                 self.vectors[i] = unk_init(self.vectors[i])
 
-
-class SubwordVocab(Vocab):
-
-    def __init__(self, counter, max_size=None, specials=['<pad>'],
-                 vectors=None, unk_init=torch.Tensor.zero_, expand_vocab=False, cat_vectors=True):
-        """Create a revtok subword vocabulary from a collections.Counter.
+    @staticmethod
+    def build_from_data(field_names, *args, unk_token=None, pad_token=None, init_token=None, eos_token=None, **kwargs):
+        """Construct the Vocab object for this field from one or more datasets.
 
         Arguments:
-            counter: collections.Counter object holding the frequencies of
-                each word found in the data.
-            max_size: The maximum size of the subword vocabulary, or None for no
-                maximum. Default: None.
-            specials: The list of special tokens (e.g., padding or eos) that
-                will be prepended to the vocabulary in addition to an <unk>
-                token.
+            Positional arguments: Dataset objects or other iterable data
+                sources from which to construct the Vocab object that
+                represents the set of possible values for this field. If
+                a Dataset object is provided, all columns corresponding
+                to this field are used; individual columns can also be
+                provided directly.
+            Remaining keyword arguments: Passed to the constructor of Vocab.
         """
-        try:
-            import revtok
-        except ImportError:
-            print("Please install revtok.")
-            raise
-
-        self.stoi = defaultdict(_default_unk_index)
-        self.stoi.update({tok: i for i, tok in enumerate(specials)})
-        self.itos = specials
-
-        self.segment = revtok.SubwordSegmenter(counter, max_size)
-
-        max_size = None if max_size is None else max_size + len(self.itos)
-
-        # sort by frequency/entropy, then alphabetically
-        toks = sorted(self.segment.vocab.items(),
-                      key=lambda tup: (len(tup[0]) != 1, -tup[1], tup[0]))
-
-        for tok, _ in toks:
-            self.itos.append(tok)
-            self.stoi[tok] = len(self.itos) - 1
-
-        self.vectors = None
-        if vectors is not None:
-            self.load_vectors(vectors, cat=cat_vectors)
+        counter = Counter()
+        sources = []
+        for arg in args:
+            sources += [getattr(ex, name) for name in field_names for ex in arg]
+        for data in sources:
+            for x in data:
+                counter.update(x)
+        specials = [unk_token, pad_token, init_token, eos_token]
+        specials = [tok for tok in specials if tok is not None]
+        return Vocab(counter, specials=specials, **kwargs)
 
 
 def string_hash(x):

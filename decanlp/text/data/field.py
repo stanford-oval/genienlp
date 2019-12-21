@@ -1,13 +1,8 @@
 # coding: utf8
-from copy import deepcopy
-from collections import Counter, OrderedDict
-import six
 import torch
-from tqdm import tqdm
 
-from .dataset import Dataset
 from .utils import get_tokenizer
-from ..vocab import Vocab, SubwordVocab
+from ..vocab import Vocab
 
 
 class Field(object):
@@ -102,37 +97,6 @@ class Field(object):
         self.pad_token = pad_token if self.sequential else None
         self.pad_first = pad_first
 
-
-    def build_vocab(self, field_names, *args, **kwargs):
-        """Construct the Vocab object for this field from one or more datasets.
-
-        Arguments:
-            Positional arguments: Dataset objects or other iterable data
-                sources from which to construct the Vocab object that
-                represents the set of possible values for this field. If
-                a Dataset object is provided, all columns corresponding
-                to this field are used; individual columns can also be
-                provided directly.
-            Remaining keyword arguments: Passed to the constructor of Vocab.
-        """
-        counter = Counter()
-        sources = []
-        for arg in args:
-            sources += [getattr(ex, name) for name in field_names for ex in arg]
-        for data in sources:
-            for x in data:
-                if not self.sequential:
-                    x = [x]
-                counter.update(x)
-        specials = [self.unk_token, self.pad_token, self.init_token, self.eos_token]
-        specials = list(OrderedDict.fromkeys(tok for tok in specials if tok is not None))
-        self.vocab = self.vocab_cls(counter, specials=specials, **kwargs)
-
-    def append_vocab(self, other_field):
-        for w, count in other_field.vocab.stoi.items():
-            if w not in self.vocab.stoi:
-                self.vocab.stoi[w] = len(self.vocab.itos)
-                self.vocab.itos.append(w)
 
 
 class ReversibleField(Field):

@@ -38,6 +38,7 @@ import sys
 import logging
 from pprint import pformat
 
+from .text.vocab import Vocab
 from .util import set_seed, preprocess_examples, load_config_json, make_data_loader
 from .metrics import compute_metrics
 from .utils.embeddings import load_embeddings
@@ -70,12 +71,14 @@ def get_all_splits(args, new_field):
 
 
 def prepare_data(args, FIELD):
-    new_vocab = ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
-    splits = get_all_splits(args, new_vocab)
-    new_vocab.build_vocab(Example.vocab_fields, *splits)
+    new_field = ReversibleField(batch_first=True, lower=args.lower, include_lengths=True)
+    splits = get_all_splits(args, new_field)
+    new_vocab = Vocab.build_from_data(Example.vocab_fields, *splits,
+                                      init_token=FIELD.init_token, eos_token=FIELD.eos_token,
+                                      pad_token=FIELD.pad_token, unk_token=FIELD.unk_token)
     logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens from training')
     args.max_generative_vocab = min(len(FIELD.vocab), args.max_generative_vocab)
-    FIELD.append_vocab(new_vocab)
+    FIELD.vocab.extend(new_vocab)
     logger.info(f'Vocabulary has expanded to {len(FIELD.vocab)} tokens')
     vectors = load_embeddings(args)
     FIELD.vocab.load_vectors(vectors, True)
