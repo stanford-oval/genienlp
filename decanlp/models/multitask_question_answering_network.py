@@ -126,11 +126,9 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         context, context_lengths, context_limited, context_tokens     = batch.context,  batch.context_lengths,  batch.context_limited, batch.context_tokens
         question, question_lengths, question_limited, question_tokens = batch.question, batch.question_lengths, batch.question_limited, batch.question_tokens
         answer, answer_lengths, answer_limited, answer_tokens         = batch.answer,   batch.answer_lengths,   batch.answer_limited, batch.answer_tokens
-        oov_to_limited_idx, limited_idx_to_full_idx  = batch.oov_to_limited_idx, batch.limited_idx_to_full_idx
+        decoder_vocab  = batch.decoder_vocab
 
-        def map_to_full(x):
-            return limited_idx_to_full_idx[x]
-        self.map_to_full = map_to_full
+        self.map_to_full = decoder_vocab.decode
 
         context_embedded = self.encoder_embeddings(context)
         question_embedded = self.encoder_embeddings(question)
@@ -191,7 +189,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             probs = self.probs(self.out, rnn_output, vocab_pointer_switch, context_question_switch, 
                 context_attention, question_attention, 
                 context_indices, question_indices, 
-                oov_to_limited_idx)
+                decoder_vocab)
 
 
             if self.args.use_maxmargin_loss:
@@ -206,7 +204,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         else:
             return None, self.greedy(self_attended_context, final_context, final_question, 
                 context_indices, question_indices,
-                oov_to_limited_idx, rnn_state=context_rnn_state).data
+                decoder_vocab, rnn_state=context_rnn_state).data
  
     def reshape_rnn_state(self, h):
         return h.view(h.size(0) // 2, 2, h.size(1), h.size(2)) \
@@ -216,7 +214,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
     def probs(self, generator, outputs, vocab_pointer_switches, context_question_switches, 
         context_attention, question_attention, 
         context_indices, question_indices, 
-        oov_to_limited_idx):
+        decoder_vocab):
 
         size = list(outputs.size())
 
@@ -225,7 +223,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         p_vocab = F.softmax(scores, dim=scores.dim()-1)
         scaled_p_vocab = vocab_pointer_switches.expand_as(p_vocab) * p_vocab
 
-        effective_vocab_size = self.generative_vocab_size + len(oov_to_limited_idx)
+        effective_vocab_size = len(decoder_vocab)
         if self.generative_vocab_size < effective_vocab_size:
             size[-1] = effective_vocab_size - self.generative_vocab_size
             buff = scaled_p_vocab.new_full(size, EPSILON)
@@ -242,7 +240,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         return scaled_p_vocab
 
 
-    def greedy(self, self_attended_context, context, question, context_indices, question_indices, oov_to_limited_idx, rnn_state=None):
+    def greedy(self, self_attended_context, context, question, context_indices, question_indices, decoder_vocab, rnn_state=None):
         B, TC, C = context.size()
         T = self.args.max_output_length
         outs = context.new_full((B, T), self.field.decoder_stoi['<pad>'], dtype=torch.long)
@@ -300,7 +298,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             probs = self.probs(self.out, rnn_output, vocab_pointer_switch, context_question_switch, 
                 context_attention, question_attention, 
                 context_indices, question_indices, 
-                oov_to_limited_idx)
+                decoder_vocab)
             pred_probs, preds = probs.max(-1)
             preds = preds.squeeze(1)
             eos_yet = eos_yet | (preds == self.field.decoder_stoi['<eos>'])

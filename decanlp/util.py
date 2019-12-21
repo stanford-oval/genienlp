@@ -36,9 +36,13 @@ import random
 import numpy as np
 import ujson as json
 import logging
+from .data.numericalizer import SimpleNumericalizer
+from .data.example import Batch
+from .data.iterator import Iterator
 
 
 logger = logging.getLogger(__name__)
+
 
 def tokenizer(s):
     return s.split()
@@ -152,6 +156,21 @@ def batch_fn(new, i, sofar):
     prev_max_len = sofar / (i - 1) if i > 1 else 0
     return max(len(new.context), 5*len(new.answer), prev_max_len) * i
 
+
+def make_data_loader(dataset, field, batch_size, device=None, train=False):
+    numericalizer = SimpleNumericalizer(field.vocab, init_token=field.init_token, eos_token=field.eos_token,
+                                        pad_token=field.pad_token, unk_token=field.unk_token,
+                                        fix_length=field.fix_length, pad_first=field.pad_first)
+
+    iterator = Iterator(dataset, batch_size,
+                        batch_size_fn=batch_fn if train else None,
+                        shuffle=train,
+                        repeat=train,
+                        bucket_by_sort_key=train)
+    return torch.utils.data.DataLoader(iterator, batch_size=None,
+                                       collate_fn=lambda minibatch: Batch.from_examples(minibatch, numericalizer,
+                                                                                        field.decoder_vocab,
+                                                                                        device=device))
 
 def pad(x, new_channel, dim, val=None):
     if x.size(dim) > new_channel:

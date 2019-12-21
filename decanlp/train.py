@@ -48,10 +48,11 @@ from tensorboardX import SummaryWriter
 from . import arguments
 from .validate import validate
 from .multiprocess import Multiprocess
-from .util import elapsed_time, batch_fn, set_seed, preprocess_examples, get_trainable_params
+from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader
 from .utils.saver import Saver
 from .utils.embeddings import load_embeddings
-from .text.data import ReversibleField, BucketIterator, Iterator
+from .text.data import ReversibleField
+from .data.numericalizer import DecoderVocabulary
 
 
 def initialize_logger(args, rank='main'):
@@ -130,10 +131,7 @@ def prepare_data(args, field, logger):
         logger.info(f'Building vocabulary')
         FIELD.build_vocab(*vocab_sets, max_size=args.max_effective_vocab, vectors=vectors)
 
-    FIELD.decoder_itos = FIELD.vocab.itos[:args.max_generative_vocab]
-    FIELD.decoder_stoi = {word: idx for idx, word in enumerate(FIELD.decoder_itos)}
-    FIELD.decoder_to_vocab = {idx: FIELD.vocab.stoi[word] for idx, word in enumerate(FIELD.decoder_itos)}
-    FIELD.vocab_to_decoder = {idx: FIELD.decoder_stoi[word] for idx, word in enumerate(FIELD.vocab.itos) if word in FIELD.decoder_stoi}
+    FIELD.decoder_vocab = DecoderVocabulary(FIELD.vocab.itos[:args.max_generative_vocab], FIELD.vocab)
 
     logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens')
     logger.debug(f'The first 200 tokens:')
@@ -148,18 +146,6 @@ def prepare_data(args, field, logger):
     preprocess_examples(args, args.val_tasks, val_sets, FIELD, logger, train=args.val_filter)
 
     return FIELD, train_sets, val_sets, aux_sets
-
-
-def to_iter(args, world_size, val_batch_size, data, device, train=True, token_testing=False, sort=None):
-    sort = sort if not token_testing else True
-    shuffle = None if not token_testing else False
-    reverse = args.reverse
-    iteratorcls = BucketIterator if train else Iterator
-    it = iteratorcls(data, batch_size=val_batch_size,
-       device=device, batch_size_fn=batch_fn if train else None, 
-       distributed=world_size>1, train=train, repeat=train, sort=sort,
-       shuffle=shuffle, reverse=reverse)
-    return it
 
 
 def get_learning_rate(i, args):
@@ -231,17 +217,16 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
     epoch = 0
 
     logger.info(f'Preparing iterators')
-    train_iters = [(task, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
-                      for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
+    train_iters = [(task, make_data_loader(x, field, tok, device, train=True))
+                   for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(task, to_iter(args, world_size, tok, x, device, train=False, token_testing=args.token_testing, sort=False if 'sql' in task.name else None))
-                    for task, x, tok in zip(args.val_tasks, val_sets, args.val_batch_size)]
-
+    val_iters = [(task, make_data_loader(x, field, bs, device, train=False))
+                 for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     if args.use_curriculum:
-        aux_iters = [(name, to_iter(args, world_size, tok, x, device, token_testing=args.token_testing))
-                          for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
+        aux_iters = [(name, make_data_loader(x, field, tok, device, train=True))
+                     for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
 
     zero_loss = 0

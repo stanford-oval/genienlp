@@ -38,7 +38,7 @@ import sys
 import logging
 from pprint import pformat
 
-from .util import set_seed, preprocess_examples, load_config_json
+from .util import set_seed, preprocess_examples, load_config_json, make_data_loader
 from .metrics import compute_metrics
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
@@ -85,21 +85,12 @@ def prepare_data(args, FIELD):
     return FIELD, splits
 
 
-def to_iter(data, bs, device):
-    it = Iterator(data, batch_size=bs, 
-       device=device, batch_size_fn=None, 
-       train=False, repeat=False, sort=False,
-       shuffle=False, reverse=False)
-
-    return it
-
-
 def run(args, field, val_sets, model):
     device = set_seed(args)
     logger.info(f'Preparing iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
-    iters = [(name, to_iter(x, bs, device)) for name, x, bs in zip(args.tasks, val_sets, args.val_batch_size)]
+    iters = [(name, make_data_loader(x, field, bs, device)) for name, x, bs in zip(args.tasks, val_sets, args.val_batch_size)]
  
     def mult(ps):
         r = 0

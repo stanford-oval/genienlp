@@ -124,8 +124,6 @@ def parse(argv):
 
     parser.add_argument('--no_commit', action='store_false', dest='commit', help='do not track the git commit associated with this training run') 
     parser.add_argument('--exist_ok', action='store_true', help='Ok if the save directory already exists, i.e. overwrite is ok') 
-    parser.add_argument('--token_testing', action='store_true', help='if true, sorts all iterators') 
-    parser.add_argument('--reverse', action='store_true', help='if token_testing and true, sorts all iterators in reverse') 
 
     parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether to use exisiting cached splits or generate new ones')
     parser.add_argument('--lr_rate', default=0.001, type=float, help='initial_learning_rate')

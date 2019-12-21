@@ -39,28 +39,11 @@ import hashlib
 import unicodedata
 import logging
 import xml.etree.ElementTree as ET
-from typing import NamedTuple, List
 
 from ..text import data
+from decanlp.data.example import Example
 
 logger = logging.getLogger(__name__)
-
-
-class Example(NamedTuple):
-    example_id : List[str]
-    context : List[str]
-    question : List[str]
-    answer : List[str]
-
-    @staticmethod
-    def from_raw(example_id : str, context : str, question : str, answer : str, tokenize, lower=False):
-        args = [[example_id]]
-        for arg in (context, question, answer):
-            new_arg = tokenize(arg.rstrip('\n'))
-            if lower:
-                new_arg = [word.lower() for word in new_arg]
-            args.append(new_arg)
-        return Example(*args)
 
 
 def make_example_id(dataset, example_id):
