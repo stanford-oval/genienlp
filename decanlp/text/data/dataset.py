@@ -5,7 +5,6 @@ import tarfile
 
 import torch.utils.data
 
-from .example import Example
 from ..utils import download_from_url
 
 
@@ -137,45 +136,3 @@ class Dataset(torch.utils.data.Dataset):
                         tar.extractall(path=path, members=dirs)
 
         return os.path.join(path, cls.dirname)
-
-
-class TabularDataset(Dataset):
-    """Defines a Dataset of columns stored in CSV, TSV, or JSON format."""
-
-    def __init__(self, path, format, fields, skip_header=False, subsample=False, **kwargs):
-        """Create a TabularDataset given a path, file format, and field list.
-
-        Arguments:
-            path (str): Path to the data file.
-            format (str): The format of the data file. One of "CSV", "TSV", or
-                "JSON" (case-insensitive).
-            fields (list(tuple(str, Field)) or dict[str: tuple(str, Field)]: For CSV and
-                TSV formats, list of tuples of (name, field). The list should be in
-                the same order as the columns in the CSV or TSV file, while tuples of
-                (name, None) represent columns that will be ignored. For JSON format,
-                dictionary whose keys are the JSON keys and whose values are tuples of
-                (name, field). This allows the user to rename columns from their JSON key
-                names and also enables selecting a subset of columns to load
-                (since JSON keys not present in the input dictionary are ignored).
-            skip_header (bool): Whether to skip the first line of the input file.
-        """
-        make_example = {
-            'json': Example.fromJSON, 'dict': Example.fromdict,
-            'tsv': Example.fromTSV, 'csv': Example.fromCSV}[format.lower()]
-
-        examples = []
-        with io.open(os.path.expanduser(path), encoding="utf8") as f:
-            if skip_header:
-                next(f)
-            for line in f:
-                examples.append(make_example(line, fields))
-
-        if make_example in (Example.fromdict, Example.fromJSON):
-            fields, field_dict = [], fields
-            for field in field_dict.values():
-                if isinstance(field, list):
-                    fields.extend(field)
-                else:
-                    fields.append(field)
-
-        super(TabularDataset, self).__init__(examples, fields, **kwargs)
