@@ -38,8 +38,8 @@ import glob
 import hashlib
 import unicodedata
 import logging
+import xml.etree.ElementTree as ET
 
-from ..text.datasets import imdb, translation
 from ..text import data
 
 CONTEXT_SPECIAL = 'Context:'
@@ -60,7 +60,10 @@ class CQA(data.Dataset):
         return data.interleave_keys(len(ex.context), len(ex.answer))
  
 
-class IMDb(CQA, imdb.IMDb):
+class IMDb(CQA):
+    urls = ['http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz']
+    name = 'imdb'
+    dirname = 'aclImdb'
 
     @staticmethod
     def sort_key(ex):
@@ -91,7 +94,7 @@ class IMDb(CQA, imdb.IMDb):
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
-        super(imdb.IMDb, self).__init__(examples, fields, **kwargs)
+        super().__init__(examples, fields, **kwargs)
 
 
     @classmethod
@@ -179,7 +182,7 @@ class SST(CQA):
                      if d is not None)
 
 
-class TranslationDataset(translation.TranslationDataset):
+class TranslationDataset(CQA):
 
     @staticmethod
     def sort_key(ex):
@@ -225,15 +228,125 @@ class TranslationDataset(translation.TranslationDataset):
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
-        super(translation.TranslationDataset, self).__init__(examples, fields, **kwargs)
+        super().__init__(examples, fields, **kwargs)
+
+    @classmethod
+    def splits(cls, exts, fields, root='.data',
+               train='train', validation='val', test='test', **kwargs):
+        """Create dataset objects for splits of a TranslationDataset.
+
+        Arguments:
+
+            root: Root dataset storage directory. Default is '.data'.
+            exts: A tuple containing the extension to path for each language.
+            fields: A tuple containing the fields that will be used for data
+                in each language.
+            train: The prefix of the train data. Default: 'train'.
+            validation: The prefix of the validation data. Default: 'val'.
+            test: The prefix of the test data. Default: 'test'.
+            Remaining keyword arguments: Passed to the splits method of
+                Dataset.
+        """
+        path = cls.download(root)
+
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux_data = cls(os.path.join(path, 'aux'), exts, fields, **kwargs)
+
+        train_data = None if train is None else cls(
+            os.path.join(path, train), exts, fields, **kwargs)
+        val_data = None if validation is None else cls(
+            os.path.join(path, validation), exts, fields, **kwargs)
+        test_data = None if test is None else cls(
+            os.path.join(path, test), exts, fields, **kwargs)
+        return tuple(d for d in (train_data, val_data, test_data, aux_data)
+                     if d is not None)
 
 
-class Multi30k(TranslationDataset, CQA, translation.Multi30k):
-    pass
+class Multi30k(TranslationDataset, CQA):
+    urls = ['http://www.quest.dcs.shef.ac.uk/wmt16_files_mmt/training.tar.gz',
+            'http://www.quest.dcs.shef.ac.uk/wmt16_files_mmt/validation.tar.gz',
+            'http://www.quest.dcs.shef.ac.uk/'
+            'wmt17_files_mmt/mmt_task1_test2016.tar.gz']
+    name = 'multi30k'
+    dirname = ''
 
 
-class IWSLT(TranslationDataset, CQA, translation.IWSLT):
-    pass
+class IWSLT(TranslationDataset, CQA):
+    base_url = 'https://wit3.fbk.eu/archive/2016-01//texts/{}/{}/{}.tgz'
+    name = 'iwslt'
+    base_dirname = '{}-{}'
+
+    @classmethod
+    def splits(cls, exts, fields, root='.data',
+               train='train', validation='IWSLT16.TED.tst2013',
+               test='IWSLT16.TED.tst2014', **kwargs):
+        """Create dataset objects for splits of the IWSLT dataset.
+
+        Arguments:
+
+            root: Root dataset storage directory. Default is '.data'.
+            exts: A tuple containing the extension to path for each language.
+            fields: A tuple containing the fields that will be used for data
+                in each language.
+            train: The prefix of the train data. Default: 'train'.
+            validation: The prefix of the validation data. Default: 'val'.
+            test: The prefix of the test data. Default: 'test'.
+            Remaining keyword arguments: Passed to the splits method of
+                Dataset.
+        """
+        cls.dirname = cls.base_dirname.format(exts[0][1:], exts[1][1:])
+        cls.urls = [cls.base_url.format(exts[0][1:], exts[1][1:], cls.dirname)]
+        check = os.path.join(root, cls.name, cls.dirname)
+        path = cls.download(root, check=check)
+
+        aux_data = None
+        if kwargs.get('curriculum', False):
+            kwargs.pop('curriculum')
+            aux = '.'.join(['aux', cls.dirname])
+            aux_data = cls(os.path.join(path, aux), exts, fields, **kwargs)
+
+        if train is not None:
+            train = '.'.join([train, cls.dirname])
+        if validation is not None:
+            validation = '.'.join([validation, cls.dirname])
+        if test is not None:
+            test = '.'.join([test, cls.dirname])
+
+        if not os.path.exists(os.path.join(path, '.'.join(['train', cls.dirname])) + exts[0]):
+            cls.clean(path)
+
+        train_data = None if train is None else cls(
+            os.path.join(path, train), exts, fields, **kwargs)
+        val_data = None if validation is None else cls(
+            os.path.join(path, validation), exts, fields, **kwargs)
+        test_data = None if test is None else cls(
+            os.path.join(path, test), exts, fields, **kwargs)
+        return tuple(d for d in (train_data, val_data, test_data, aux_data)
+                     if d is not None)
+
+    @staticmethod
+    def clean(path):
+        for f_xml in glob.iglob(os.path.join(path, '*.xml')):
+            print(f_xml)
+            f_txt = os.path.splitext(f_xml)[0]
+            with io.open(f_txt, mode='w', encoding='utf-8') as fd_txt:
+                root = ET.parse(f_xml).getroot()[0]
+                for doc in root.findall('doc'):
+                    for e in doc.findall('seg'):
+                        fd_txt.write(e.text.strip() + '\n')
+
+        xml_tags = ['<url', '<keywords', '<talkid', '<description',
+                    '<reviewer', '<translator', '<title', '<speaker']
+        for f_orig in glob.iglob(os.path.join(path, 'train.tags*')):
+            print(f_orig)
+            f_txt = f_orig.replace('.tags', '')
+            with io.open(f_txt, mode='w', encoding='utf-8') as fd_txt, \
+                    io.open(f_orig, mode='r', encoding='utf-8') as fd_orig:
+                for l in fd_orig:
+                    if not any(tag in l for tag in xml_tags):
+                        fd_txt.write(l.strip() + '\n')
 
 
 class SQuAD(CQA, data.Dataset):
