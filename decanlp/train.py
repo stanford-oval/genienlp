@@ -34,15 +34,11 @@ import math
 import time
 import sys
 from copy import deepcopy
-
 import logging
 from pprint import pformat
 from logging import handlers
 import numpy as np
-from .utils.model_utils import init_model
-
 import torch
-
 from tensorboardX import SummaryWriter
 
 from . import arguments
@@ -53,6 +49,8 @@ from .utils.saver import Saver
 from .utils.embeddings import load_embeddings
 from .text.data import ReversibleField
 from .data.numericalizer import DecoderVocabulary
+from .data.example import Example
+from .utils.model_utils import init_model
 
 
 def initialize_logger(args, rank='main'):
@@ -78,12 +76,9 @@ def log(rank='main'):
 
 
 def prepare_data(args, field, logger):
-
     if field is None:
         logger.info(f'Constructing field')
-        FIELD = ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
-    else:
-        FIELD = field
+        field = ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
 
     train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
     for task in args.train_tasks:
@@ -97,7 +92,7 @@ def prepare_data(args, field, logger):
         kwargs['cached_path'] = args.cached
 
         logger.info(f'Adding {task.name} to training datasets')
-        split = task.get_splits(FIELD, args.data, **kwargs)
+        split = task.get_splits(args.data, tokenize=field.tokenize, lower=args.lower, **kwargs)
         if args.use_curriculum:
             assert len(split) == 2
             aux_sets.append(split[1])
@@ -118,7 +113,7 @@ def prepare_data(args, field, logger):
         kwargs['cached_path'] = args.cached
 
         logger.info(f'Adding {task.name} to validation datasets')
-        split = task.get_splits(FIELD, args.data, **kwargs)
+        split = task.get_splits(args.data, tokenize=field.tokenize, lower=args.lower, **kwargs)
         assert len(split) == 1
         logger.info(f'{task.name} has {len(split[0])} validation examples')
         val_sets.append(split[0])
@@ -129,23 +124,23 @@ def prepare_data(args, field, logger):
         vectors = load_embeddings(args, logger)
         vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
         logger.info(f'Building vocabulary')
-        FIELD.build_vocab(*vocab_sets, max_size=args.max_effective_vocab, vectors=vectors)
+        field.build_vocab(Example.vocab_fields, *vocab_sets, max_size=args.max_effective_vocab, vectors=vectors)
 
-    FIELD.decoder_vocab = DecoderVocabulary(FIELD.vocab.itos[:args.max_generative_vocab], FIELD.vocab)
+    field.decoder_vocab = DecoderVocabulary(field.vocab.itos[:args.max_generative_vocab], field.vocab)
 
-    logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens')
+    logger.info(f'Vocabulary has {len(field.vocab)} tokens')
     logger.debug(f'The first 200 tokens:')
-    logger.debug(FIELD.vocab.itos[:200])
+    logger.debug(field.vocab.itos[:200])
 
     if args.use_curriculum:
         logger.info('Preprocessing auxiliary data for curriculum')
-        preprocess_examples(args, args.train_tasks, aux_sets, FIELD, logger, train=True)
+        preprocess_examples(args, args.train_tasks, aux_sets, field, logger, train=True)
     logger.info('Preprocessing training data')
-    preprocess_examples(args, args.train_tasks, train_sets, FIELD, logger, train=True)
+    preprocess_examples(args, args.train_tasks, train_sets, field, logger, train=True)
     logger.info('Preprocessing validation data')
-    preprocess_examples(args, args.val_tasks, val_sets, FIELD, logger, train=args.val_filter)
+    preprocess_examples(args, args.val_tasks, val_sets, field, logger, train=args.val_filter)
 
-    return FIELD, train_sets, val_sets, aux_sets
+    return field, train_sets, val_sets, aux_sets
 
 
 def get_learning_rate(i, args):

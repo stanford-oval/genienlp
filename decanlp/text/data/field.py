@@ -244,7 +244,7 @@ class Field(RawField):
             return (padded, lengths)
         return padded
 
-    def build_vocab(self, *args, **kwargs):
+    def build_vocab(self, field_names, *args, **kwargs):
         """Construct the Vocab object for this field from one or more datasets.
 
         Arguments:
@@ -259,11 +259,7 @@ class Field(RawField):
         counter = Counter()
         sources = []
         for arg in args:
-            if hasattr(arg, 'fields'):
-                sources += [getattr(arg, name) for name, field in
-                            arg.fields.items() if field is self]
-            else:
-                sources.append(arg)
+            sources += [getattr(ex, name) for name in field_names for ex in arg]
         for data in sources:
             for x in data:
                 if not self.sequential:

@@ -51,10 +51,6 @@ def make_example_id(dataset, example_id):
 
 
 class CQA(data.Dataset):
-    def __init__(self, examples, field, **kwargs):
-        fields = [(x, field) for x in Example._fields]
-        super().__init__(examples, fields, **kwargs)
-
     @staticmethod
     def sort_key(ex):
         return data.interleave_keys(len(ex.context), len(ex.answer))
@@ -69,7 +65,7 @@ class IMDb(CQA):
     def sort_key(ex):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
-    def __init__(self, path, field, subsample=None, **kwargs):
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
         examples = []
         labels = {'neg': 'negative', 'pos': 'positive'}
         question = 'Is this review negative or positive?'
@@ -88,30 +84,29 @@ class IMDb(CQA):
                     answer = labels[label]
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=field.tokenize, lower=field.lower))
+                                                     tokenize=tokenize, lower=lower))
                     if subsample is not None and len(examples) > subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
-        super().__init__(examples, field, **kwargs)
+        super().__init__(examples, **kwargs)
 
 
     @classmethod
-    def splits(cls, fields, root='.data',
-               train='train', validation=None, test='test', **kwargs):
+    def splits(cls, root='.data', train='train', validation=None, test='test', **kwargs):
         assert validation is None
         path = cls.download(root)
 
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, f'{train}'), fields, **kwargs)
+            os.path.join(path, f'{train}'), **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, f'{test}'), fields, **kwargs)
+            os.path.join(path, f'{test}'), **kwargs)
         return tuple(d for d in (train_data, test_data, aux_data)
                      if d is not None)
 
@@ -128,7 +123,7 @@ class SST(CQA):
     def sort_key(ex):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
-    def __init__(self, path, field, subsample=None, **kwargs):
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -149,7 +144,7 @@ class SST(CQA):
                     answer = labels[int(parsed[0])]
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=field.tokenize, lower=field.lower))
+                                                     tokenize=tokenize, lower=lower))
 
                     if subsample is not None and len(examples) > subsample:
                         break
@@ -159,25 +154,24 @@ class SST(CQA):
             torch.save(examples, cache_name)
 
         self.examples = examples
-        super().__init__(examples, field, **kwargs)
+        super().__init__(examples, **kwargs)
 
     @classmethod
-    def splits(cls, fields, root='.data',
-               train='train', validation='dev', test='test', **kwargs):
+    def splits(cls, root='.data', train='train', validation='dev', test='test', **kwargs):
         path = cls.download(root)
         postfix = f'_binary_sent.csv'
 
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, f'aux{postfix}'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, f'aux{postfix}'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, f'{train}{postfix}'), fields, **kwargs)
+            os.path.join(path, f'{train}{postfix}'), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}{postfix}'), fields, **kwargs)
+            os.path.join(path, f'{validation}{postfix}'), **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, f'{test}{postfix}'), fields, **kwargs)
+            os.path.join(path, f'{test}{postfix}'), **kwargs)
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
@@ -188,7 +182,7 @@ class TranslationDataset(CQA):
     def sort_key(ex):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
-    def __init__(self, path, exts, field, subsample=None, **kwargs):
+    def __init__(self, path, exts, subsample=None, tokenize=None, lower=False, **kwargs):
         """Create a TranslationDataset given paths and fields.
 
         Arguments:
@@ -220,7 +214,7 @@ class TranslationDataset(CQA):
                         answer = trg_line
                         examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                          context, question, answer,
-                                                         tokenize=field.tokenize, lower=field.lower))
+                                                         tokenize=tokenize, lower=lower))
                         if subsample is not None and len(examples) >= subsample:
                             break
 
@@ -228,11 +222,10 @@ class TranslationDataset(CQA):
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
-        super().__init__(examples, field, **kwargs)
+        super().__init__(examples, **kwargs)
 
     @classmethod
-    def splits(cls, exts, fields, root='.data',
-               train='train', validation='val', test='test', **kwargs):
+    def splits(cls, exts, root='.data', train='train', validation='val', test='test', **kwargs):
         """Create dataset objects for splits of a TranslationDataset.
 
         Arguments:
@@ -252,14 +245,14 @@ class TranslationDataset(CQA):
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux'), exts, fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux'), exts, **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, train), exts, fields, **kwargs)
+            os.path.join(path, train), exts, **kwargs)
         val_data = None if validation is None else cls(
-            os.path.join(path, validation), exts, fields, **kwargs)
+            os.path.join(path, validation), exts, **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, test), exts, fields, **kwargs)
+            os.path.join(path, test), exts, **kwargs)
         return tuple(d for d in (train_data, val_data, test_data, aux_data)
                      if d is not None)
 
@@ -279,7 +272,7 @@ class IWSLT(TranslationDataset, CQA):
     base_dirname = '{}-{}'
 
     @classmethod
-    def splits(cls, exts, fields, root='.data',
+    def splits(cls, exts, root='.data',
                train='train', validation='IWSLT16.TED.tst2013',
                test='IWSLT16.TED.tst2014', **kwargs):
         """Create dataset objects for splits of the IWSLT dataset.
@@ -305,7 +298,7 @@ class IWSLT(TranslationDataset, CQA):
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
             aux = '.'.join(['aux', cls.dirname])
-            aux_data = cls(os.path.join(path, aux), exts, fields, **kwargs)
+            aux_data = cls(os.path.join(path, aux), exts, **kwargs)
 
         if train is not None:
             train = '.'.join([train, cls.dirname])
@@ -318,11 +311,11 @@ class IWSLT(TranslationDataset, CQA):
             cls.clean(path)
 
         train_data = None if train is None else cls(
-            os.path.join(path, train), exts, fields, **kwargs)
+            os.path.join(path, train), exts, **kwargs)
         val_data = None if validation is None else cls(
-            os.path.join(path, validation), exts, fields, **kwargs)
+            os.path.join(path, validation), exts, **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, test), exts, fields, **kwargs)
+            os.path.join(path, test), exts, **kwargs)
         return tuple(d for d in (train_data, val_data, test_data, aux_data)
                      if d is not None)
 
@@ -349,7 +342,7 @@ class IWSLT(TranslationDataset, CQA):
                         fd_txt.write(l.strip() + '\n')
 
 
-class SQuAD(CQA, data.Dataset):
+class SQuAD(CQA):
 
     @staticmethod
     def sort_key(ex):
@@ -362,7 +355,7 @@ class SQuAD(CQA, data.Dataset):
     name = 'squad'
     dirname = ''
 
-    def __init__(self, path, field, subsample=None, **kwargs):
+    def __init__(self, path, subsample=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -389,7 +382,7 @@ class SQuAD(CQA, data.Dataset):
                                 context = ' '.join(context.split())
                                 ex = Example.from_raw(make_example_id(self, qa['id']),
                                                       context, question, answer,
-                                                      tokenize=str.split, lower=field.lower)
+                                                      tokenize=str.split, lower=lower)
                             else:
                                 answer = qa['answers'][0]['text']
                                 all_answers.append([a['text'] for a in qa['answers']])
@@ -435,8 +428,7 @@ class SQuAD(CQA, data.Dataset):
                                 indexed_answer = tagged_context[context_spans[0]:context_spans[-1]+1]
                                 if len(indexed_answer) != len(tokenized_answer):
                                     import pdb; pdb.set_trace()
-                                if field.eos_token is not None:
-                                    context_spans += [len(tagged_context)]
+                                context_spans += [len(tagged_context)]
                                 for context_idx, answer_word in zip(context_spans, ex.answer):
                                     if context_idx == len(tagged_context):
                                         continue
@@ -445,7 +437,7 @@ class SQuAD(CQA, data.Dataset):
 
                                 ex = Example.from_raw(make_example_id(self, qa['id']),
                                                       ' '.join(tagged_context), question, ' '.join(tokenized_answer),
-                                                      tokenize=str.split, lower=field.lower)
+                                                      tokenize=str.split, lower=lower)
 
                             examples.append(ex)
                             if subsample is not None and len(examples) > subsample:
@@ -459,14 +451,13 @@ class SQuAD(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers, q_ids), cache_name)
 
-        super(SQuAD, self).__init__(examples, field, **kwargs)
+        super(SQuAD, self).__init__(examples, **kwargs)
         self.all_answers = all_answers
         self.q_ids = q_ids
 
 
     @classmethod
-    def splits(cls, fields, root='.data', description='squad1.1',
-               train='train', validation='dev', test=None, **kwargs):
+    def splits(cls, root='.data', description='squad1.1', train='train', validation='dev', test=None, **kwargs):
         """Create dataset objects for splits of the SQuAD dataset.
         Arguments:
             root: directory containing SQuAD data
@@ -484,15 +475,15 @@ class SQuAD(CQA, data.Dataset):
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
             aux = '-'.join(['aux', extension])
-            aux_data = cls(os.path.join(path, aux), fields, **kwargs)
+            aux_data = cls(os.path.join(path, aux), **kwargs)
 
         train = '-'.join([train, extension]) if train is not None else None
         validation = '-'.join([validation, extension]) if validation is not None else None
 
         train_data = None if train is None else cls(
-            os.path.join(path, train), fields, **kwargs)
+            os.path.join(path, train), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, validation), fields, **kwargs)
+            os.path.join(path, validation), **kwargs)
         return tuple(d for d in (train_data, validation_data, aux_data)
                      if d is not None)
 
@@ -510,13 +501,13 @@ def fix_missing_period(line):
   return line + "."
 
 
-class Summarization(CQA, data.Dataset):
+class Summarization(CQA):
 
     @staticmethod
     def sort_key(ex):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
-    def __init__(self, path, field, one_answer=True, subsample=None, **kwargs):
+    def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -533,14 +524,14 @@ class Summarization(CQA, data.Dataset):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=field.tokenize, lower=field.lower))
+                                                     tokenize=tokenize, lower=lower))
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super(Summarization, self).__init__(examples, field, **kwargs)
+        super(Summarization, self).__init__(examples, **kwargs)
 
     @classmethod
     def cache_splits(cls, path):
@@ -593,22 +584,21 @@ class Summarization(CQA, data.Dataset):
 
 
     @classmethod
-    def splits(cls, fields, root='.data',
-               train='training', validation='validation', test='test', **kwargs):
+    def splits(cls, root='.data', train='training', validation='validation', test='test', **kwargs):
         path = cls.download(root)
         cls.cache_splits(path)
 
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'auxiliary.jsonl'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'auxiliary.jsonl'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, 'training.jsonl'), fields, **kwargs)
+            os.path.join(path, 'training.jsonl'), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, 'validation.jsonl'), fields, one_answer=False, **kwargs)
+            os.path.join(path, 'validation.jsonl'), one_answer=False, **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, 'test.jsonl'), fields, one_answer=False, **kwargs)
+            os.path.join(path, 'test.jsonl'), one_answer=False, **kwargs)
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
@@ -659,7 +649,7 @@ class Query:
         return cls(sel_index=d['sel'], agg_index=d['agg'], columns=t, conditions=d['conds'])
 
 
-class WikiSQL(CQA, data.Dataset):
+class WikiSQL(CQA):
 
     @staticmethod
     def sort_key(ex):
@@ -669,7 +659,7 @@ class WikiSQL(CQA, data.Dataset):
     name = 'wikisql'
     dirname = 'data'
 
-    def __init__(self, path, field, query_as_question=False, subsample=None, **kwargs):
+    def __init__(self, path, query_as_question=False, subsample=None, tokenize=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', 'query_as_question' if query_as_question else 'query_as_context', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -705,7 +695,7 @@ class WikiSQL(CQA, data.Dataset):
                         context += f'-- {human_query}'
                     examples.append(Example.from_raw(make_example_id(self, idx),
                                                      context, question, answer,
-                                                     tokenize=field.tokenize, lower=field.lower))
+                                                     tokenize=tokenize, lower=lower))
                     all_answers.append({'sql': sql, 'header': header, 'answer': answer, 'table': table})
                     if subsample is not None and len(examples) > subsample:
                         break
@@ -714,13 +704,12 @@ class WikiSQL(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers), cache_name)
 
-        super(WikiSQL, self).__init__(examples, field, **kwargs)
+        super(WikiSQL, self).__init__(examples, **kwargs)
         self.all_answers = all_answers
 
 
     @classmethod
-    def splits(cls, fields, root='.data',
-               train='train.jsonl', validation='dev.jsonl', test='test.jsonl', **kwargs):
+    def splits(cls, root='.data', train='train.jsonl', validation='dev.jsonl', test='test.jsonl', **kwargs):
         """Create dataset objects for splits of the SQuAD dataset.
         Arguments:
             root: directory containing SQuAD data
@@ -735,19 +724,19 @@ class WikiSQL(CQA, data.Dataset):
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, train), fields, **kwargs)
+            os.path.join(path, train), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, validation), fields, **kwargs)
+            os.path.join(path, validation), **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, test), fields, **kwargs)
+            os.path.join(path, test), **kwargs)
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
-class SRL(CQA, data.Dataset):
+class SRL(CQA):
 
     @staticmethod
     def sort_key(ex):
@@ -762,9 +751,10 @@ class SRL(CQA, data.Dataset):
 
     @classmethod
     def clean(cls, s):
-        closing_punctuation = set([ ' .', ' ,', ' ;', ' !', ' ?', ' :', ' )', " 'll", " n't ", " %", " 't", " 's", " 'm", " 'd", " 're"])
-        opening_punctuation = set(['( ', '$ '])
-        both_sides = set([' - '])
+        closing_punctuation = {' .', ' ,', ' ;', ' !', ' ?', ' :', ' )', " 'll", " n't ", " %", " 't", " 's", " 'm",
+                               " 'd", " 're"}
+        opening_punctuation = {'( ', '$ '}
+        both_sides = {' - '}
         s = ' '.join(s.split()).strip()
         s = s.replace('-LRB-', '(')
         s = s.replace('-RRB-', ')')
@@ -787,7 +777,7 @@ class SRL(CQA, data.Dataset):
         s = s.replace(" '", '')
         return ' '.join(s.split()).strip()
 
-    def __init__(self, path, field, one_answer=True, subsample=None, **kwargs):
+    def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -805,7 +795,7 @@ class SRL(CQA, data.Dataset):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(all_answers)),
                                                      context, question, answer,
-                                                     tokenize=field.tokenize, lower=field.lower))
+                                                     tokenize=tokenize, lower=lower))
                     all_answers.append(aa)
                     if subsample is not None and len(examples) >= subsample: 
                         break
@@ -813,7 +803,7 @@ class SRL(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers), cache_name)
 
-        super(SRL, self).__init__(examples, field, **kwargs)
+        super(SRL, self).__init__(examples, **kwargs)
         self.all_answers = all_answers
 
 
@@ -909,22 +899,21 @@ class SRL(CQA, data.Dataset):
 
 
     @classmethod
-    def splits(cls, fields, root='.data',
-               train='train', validation='dev', test='test', **kwargs):
+    def splits(cls, root='.data', train='train', validation='dev', test='test', **kwargs):
         path = cls.download(root)
         cls.cache_splits(path)
 
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{train}.jsonl'), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), fields, one_answer=False, **kwargs)
+            os.path.join(path, f'{validation}.jsonl'), one_answer=False, **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), fields, one_answer=False, **kwargs)
+            os.path.join(path, f'{test}.jsonl'), one_answer=False, **kwargs)
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
@@ -940,7 +929,7 @@ class WinogradSchema(CQA, data.Dataset):
     name = 'schema'
     dirname = ''
 
-    def __init__(self, path, field, subsample=None, **kwargs):
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -955,14 +944,14 @@ class WinogradSchema(CQA, data.Dataset):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=field.tokenize, lower=field.lower))
+                                                     tokenize=tokenize, lower=lower))
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super(WinogradSchema, self).__init__(examples, field, **kwargs)
+        super(WinogradSchema, self).__init__(examples, **kwargs)
 
     @classmethod
     def cache_splits(cls, path):
@@ -1021,22 +1010,21 @@ class WinogradSchema(CQA, data.Dataset):
 
 
     @classmethod
-    def splits(cls, fields, root='.data',
-               train='train', validation='validation', test='test', **kwargs):
+    def splits(cls, root='.data', train='train', validation='validation', test='test', **kwargs):
         path = cls.download(root)
         cls.cache_splits(path)
 
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{train}.jsonl'), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{validation}.jsonl'), **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{test}.jsonl'), **kwargs)
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
@@ -1058,10 +1046,11 @@ class WOZ(CQA, data.Dataset):
     name = 'woz'
     dirname = ''
 
-    def __init__(self, path, field, subsample=None, description='woz.en', **kwargs):
+    def __init__(self, path, subsample=None,  tokenize=None, lower=False, description='woz.en', **kwargs):
         examples, all_answers = [], []
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), description)
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path),
+                                  str(subsample), description)
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             logger.info(f'Loading cached data from {cache_name}')
@@ -1075,7 +1064,7 @@ class WOZ(CQA, data.Dataset):
                         all_answers.append((ex['lang_dialogue_turn'], answer))
                         examples.append(Example.from_raw(make_example_id(self, woz_id),
                                                          context, question, answer,
-                                                         tokenize=field.tokenize, lower=field.lower))
+                                                         tokenize=tokenize, lower=lower))
 
                     if subsample is not None and len(examples) >= subsample: 
                         break
@@ -1083,7 +1072,7 @@ class WOZ(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save((examples, all_answers), cache_name)
 
-        super(WOZ, self).__init__(examples, field, **kwargs)
+        super(WOZ, self).__init__(examples, **kwargs)
         self.all_answers = all_answers
 
     @classmethod
@@ -1150,26 +1139,26 @@ class WOZ(CQA, data.Dataset):
 
 
     @classmethod
-    def splits(cls, fields, root='.data', train='train', validation='validate', test='test', **kwargs):
+    def splits(cls, root='.data', train='train', validation='validate', test='test', **kwargs):
         path = cls.download(root)
         cls.cache_splits(path)
 
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{train}.jsonl'), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{validation}.jsonl'), **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{test}.jsonl'), **kwargs)
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
-class MultiNLI(CQA, data.Dataset):
+class MultiNLI(CQA):
 
     @staticmethod
     def sort_key(ex):
@@ -1180,9 +1169,10 @@ class MultiNLI(CQA, data.Dataset):
     name = 'multinli'
     dirname = 'multinli_1.0'
 
-    def __init__(self, path, field, subsample=None, description='multinli.in.out', **kwargs):
+    def __init__(self, path, subsample=None,  tokenize=None, lower=False, description='multinli.in.out', **kwargs):
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), description)
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path),
+                                  str(subsample), description)
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             logger.info(f'Loading cached data from {cache_name}')
@@ -1196,14 +1186,14 @@ class MultiNLI(CQA, data.Dataset):
                         context, question, answer = ex['context'], ex['question'], ex['answer']
                         examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                          context, question, answer,
-                                                         tokenize=field.tokenize, lower=field.lower))
+                                                         tokenize=tokenize, lower=lower))
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super(MultiNLI, self).__init__(examples, field, **kwargs)
+        super(MultiNLI, self).__init__(examples, **kwargs)
 
     @classmethod
     def cache_splits(cls, path, train='multinli_1.0_train', validation='mulinli_1.0_dev_{}', test='test'):
@@ -1234,26 +1224,26 @@ class MultiNLI(CQA, data.Dataset):
 
 
     @classmethod
-    def splits(cls, fields, root='.data', train='train', validation='validation', test='test', **kwargs):
+    def splits(cls, root='.data', train='train', validation='validation', test='test', **kwargs):
         path = cls.download(root)
         cls.cache_splits(path)
 
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{train}.jsonl'), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{validation}.jsonl'), **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{test}.jsonl'), **kwargs)
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
-class ZeroShotRE(CQA, data.Dataset):
+class ZeroShotRE(CQA):
 
     @staticmethod
     def sort_key(ex):
@@ -1264,9 +1254,10 @@ class ZeroShotRE(CQA, data.Dataset):
     name = 'zre'
 
 
-    def __init__(self, path, field, subsample=None, **kwargs):
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path),
+                                  str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             logger.info(f'Loading cached data from {cache_name}')
@@ -1279,7 +1270,7 @@ class ZeroShotRE(CQA, data.Dataset):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=field.tokenize, lower=field.lower))
+                                                     tokenize=tokenize, lower=lower))
 
                     if subsample is not None and len(examples) >= subsample: 
                         break
@@ -1287,7 +1278,7 @@ class ZeroShotRE(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super().__init__(examples, field, **kwargs)
+        super().__init__(examples, **kwargs)
 
     @classmethod
     def cache_splits(cls, path, train='train', validation='dev', test='test'):
@@ -1316,21 +1307,21 @@ class ZeroShotRE(CQA, data.Dataset):
 
 
     @classmethod
-    def splits(cls, fields, root='.data', train='train', validation='dev', test='test', **kwargs):
+    def splits(cls, root='.data', train='train', validation='dev', test='test', **kwargs):
         path = cls.download(root)
         cls.cache_splits(path)
 
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{train}.jsonl'), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{validation}.jsonl'), **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{test}.jsonl'), **kwargs)
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
@@ -1396,7 +1387,9 @@ class OntoNotesNER(CQA, data.Dataset):
 
         return ' '.join(raw.split()).strip()
 
-    def __init__(self, path, field, one_answer=True, subsample=None, path_to_files='.data/ontonotes-release-5.0/data/files', subtask='all', nones=True, **kwargs):
+    def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False,
+                 path_to_files='.data/ontonotes-release-5.0/data/files',
+                 subtask='all', nones=True, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), subtask, str(nones))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -1416,7 +1409,7 @@ class OntoNotesNER(CQA, data.Dataset):
                             context, question, answer = ex['context'], ex['question'], ex['answer']
                             examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                              context, question, answer,
-                                                             tokenize=field.tokenize, lower=field.lower))
+                                                             tokenize=tokenize, lower=lower))
 
                     if subsample is not None and len(examples) >= subsample: 
                         break
@@ -1424,7 +1417,7 @@ class OntoNotesNER(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super(OntoNotesNER, self).__init__(examples, field, **kwargs)
+        super(OntoNotesNER, self).__init__(examples, **kwargs)
 
 
     @classmethod
@@ -1554,8 +1547,7 @@ class OntoNotesNER(CQA, data.Dataset):
 
 
     @classmethod
-    def splits(cls, fields, root='.data',
-               train='train', validation='development', test='test', **kwargs):
+    def splits(cls, root='.data', train='train', validation='development', test='test', **kwargs):
         path_to_files = os.path.join(root, 'ontonotes-release-5.0', 'data', 'files')
         assert os.path.exists(path_to_files)
         path = cls.download(root)
@@ -1564,18 +1556,18 @@ class OntoNotesNER(CQA, data.Dataset):
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{train}.jsonl'), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), fields, one_answer=False, **kwargs)
+            os.path.join(path, f'{validation}.jsonl'), one_answer=False, **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), fields, one_answer=False, **kwargs)
+            os.path.join(path, f'{test}.jsonl'), one_answer=False, **kwargs)
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
-class SNLI(CQA, data.Dataset):
+class SNLI(CQA):
 
     @staticmethod
     def sort_key(ex):
@@ -1586,9 +1578,10 @@ class SNLI(CQA, data.Dataset):
     name = 'snli'
 
 
-    def __init__(self, path, field, subsample=None, **kwargs):
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path),
+                                  str(subsample))
         skip_cache_bool = kwargs.pop('skip_cache_bool')
         if os.path.exists(cache_name) and not skip_cache_bool:
             logger.info(f'Loading cached data from {cache_name}')
@@ -1602,7 +1595,7 @@ class SNLI(CQA, data.Dataset):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=field.tokenize, lower=field.lower))
+                                                     tokenize=tokenize, lower=lower))
 
                     if subsample is not None and len(examples) >= subsample: 
                         break
@@ -1610,7 +1603,7 @@ class SNLI(CQA, data.Dataset):
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super().__init__(examples, field, **kwargs)
+        super().__init__(examples, **kwargs)
 
     @classmethod
     def cache_splits(cls, path, train='train', validation='dev', test='test'):
@@ -1632,34 +1625,36 @@ class SNLI(CQA, data.Dataset):
 
 
     @classmethod
-    def splits(cls, fields, root='.data', train='train', validation='dev', test='test', **kwargs):
+    def splits(cls, root='.data', train='train', validation='dev', test='test', **kwargs):
         path = cls.download(root)
         cls.cache_splits(path)
 
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{train}.jsonl'), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{validation}.jsonl'), **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), fields, **kwargs)
+            os.path.join(path, f'{test}.jsonl'), **kwargs)
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
 
-class JSON(CQA, data.Dataset):
+class JSON(CQA):
+    name = 'json'
 
     @staticmethod
     def sort_key(ex):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
-    def __init__(self, path, field, subsample=None, **kwargs):
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path),
+                                  str(subsample))
 
         examples = []
         skip_cache_bool = kwargs.pop('skip_cache_bool')
@@ -1674,30 +1669,29 @@ class JSON(CQA, data.Dataset):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=field.tokenize, lower=field.lower))
+                                                     tokenize=tokenize, lower=lower))
                     if subsample is not None and len(examples) >= subsample: 
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super(JSON, self).__init__(examples, field, **kwargs)
+        super(JSON, self).__init__(examples, **kwargs)
 
     @classmethod
-    def splits(cls, fields, name, root='.data',
-               train='train', validation='val', test='test', **kwargs):
+    def splits(cls, name, root='.data', train='train', validation='val', test='test', **kwargs):
         path = os.path.join(root, name)
 
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux.jsonl'), fields, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, 'train.jsonl'), fields, **kwargs)
+            os.path.join(path, 'train.jsonl'), **kwargs)
         validation_data = None if validation is None else cls(
-            os.path.join(path, 'val.jsonl'), fields, **kwargs)
+            os.path.join(path, 'val.jsonl'), **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, 'test.jsonl'), fields, **kwargs)
+            os.path.join(path, 'test.jsonl'), **kwargs)
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)

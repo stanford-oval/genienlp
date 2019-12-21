@@ -46,7 +46,7 @@ class AlmondDataset(generic_dataset.CQA):
 
     base_url = None
 
-    def __init__(self, path, field, tokenize, contextual=False, reverse_task=False, subsample=None, **kwargs):
+    def __init__(self, path, contextual=False, reverse_task=False, subsample=None, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -100,23 +100,21 @@ class AlmondDataset(generic_dataset.CQA):
 
                 examples.append(generic_dataset.Example.from_raw('almond/' + _id,
                                                                  context, question, answer,
-                                                                 tokenize=str.split, lower=field.lower))
+                                                                 tokenize=str.split, lower=False))
                 if len(examples) >= max_examples:
                     break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super().__init__(examples, field, **kwargs)
+        super().__init__(examples, **kwargs)
 
     @staticmethod
     def sort_key(ex):
         return data.interleave_keys(len(ex.context), len(ex.answer))
 
     @classmethod
-    def splits(cls, fields, root='.data',
-               train='train', validation='eval',
-               test='test', contextual=False, **kwargs):
+    def splits(cls, root='.data', train='train', validation='eval', test='test', contextual=False, **kwargs):
 
         """Create dataset objects for splits of the ThingTalk dataset.
         Arguments:
@@ -138,14 +136,14 @@ class AlmondDataset(generic_dataset.CQA):
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), fields, contextual=contextual, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), contextual=contextual, **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, train + '.tsv'), fields, contextual=contextual, **kwargs)
+            os.path.join(path, train + '.tsv'), contextual=contextual, **kwargs)
         val_data = None if validation is None else cls(
-            os.path.join(path, validation + '.tsv'), fields, contextual=contextual, **kwargs)
+            os.path.join(path, validation + '.tsv'), contextual=contextual, **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, test + '.tsv'), fields, contextual=contextual, **kwargs)
+            os.path.join(path, test + '.tsv'), contextual=contextual, **kwargs)
         return tuple(d for d in (train_data, val_data, test_data, aux_data)
                      if d is not None)
 
@@ -180,8 +178,7 @@ class Almond(BaseAlmondTask):
     i.e. natural language to formal language (ThingTalk) mapping"""
 
     def get_splits(self, field, root, **kwargs):
-        return AlmondDataset.splits(
-            fields=field, root=root, tokenize=self.tokenize, **kwargs)
+        return AlmondDataset.splits(root=root, lower=field.lower, **kwargs)
 
 
 @register_task('contextual_almond')

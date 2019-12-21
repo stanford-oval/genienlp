@@ -43,11 +43,12 @@ from .metrics import compute_metrics
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
 from . import models
-from .text.data import Iterator, ReversibleField
+from .data.example import Example
+from .text.data import ReversibleField
 
 logger = logging.getLogger(__name__)
 
-def get_all_splits(args, new_vocab):
+def get_all_splits(args, new_field):
     splits = []
     for task in args.tasks:
         logger.info(f'Loading {task}')
@@ -62,8 +63,8 @@ def get_all_splits(args, new_vocab):
         kwargs['skip_cache_bool'] = args.skip_cache_bool
         kwargs['cached_path'] = args.cached
         kwargs['subsample'] = args.subsample
-        s = task.get_splits(new_vocab, root=args.data, **kwargs)[0]
-        preprocess_examples(args, [task], [s], new_vocab, train=False)
+        s = task.get_splits(root=args.data, tokenize=new_field.tokenize, lower=args.lower, **kwargs)[0]
+        preprocess_examples(args, [task], [s], new_field, train=False)
         splits.append(s)
     return splits
 
@@ -71,7 +72,7 @@ def get_all_splits(args, new_vocab):
 def prepare_data(args, FIELD):
     new_vocab = ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
     splits = get_all_splits(args, new_vocab)
-    new_vocab.build_vocab(*splits)
+    new_vocab.build_vocab(Example.vocab_fields, *splits)
     logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens from training')
     args.max_generative_vocab = min(len(FIELD.vocab), args.max_generative_vocab)
     FIELD.append_vocab(new_vocab)

@@ -18,19 +18,14 @@ class Dataset(torch.utils.data.Dataset):
             fields: A dictionary containing the name of each column together with
             its corresponding Field object. Two columns with the same Field
             object will share a vocabulary.
-        fields (dict[str, Field]): Contains the name of each column or field, together
-            with the corresponding Field object. Two fields with the same Field object
-            will have a shared vocabulary.
     """
     sort_key = None
 
-    def __init__(self, examples, fields, filter_pred=None):
+    def __init__(self, examples, filter_pred=None, **kwargs):
         """Create a dataset from a list of Examples and Fields.
 
         Arguments:
             examples: List of Examples.
-            fields (List(tuple(str, Field))): The Fields to use in this tuple. The
-                string is a field name, and the Field is the associated field.
             filter_pred (callable or None): Use only examples for which
                 filter_pred(example) is True, or use all examples if None.
                 Default is None.
@@ -41,16 +36,13 @@ class Dataset(torch.utils.data.Dataset):
             if make_list:
                 examples = list(examples)
         self.examples = examples
-        self.fields = dict(fields)
 
     @classmethod
-    def splits(cls, path=None, root='.data', train=None, validation=None,
+    def splits(cls, root='.data', train=None, validation=None,
                test=None, **kwargs):
         """Create Dataset objects for multiple splits of a dataset.
 
         Arguments:
-            path (str): Common prefix of the splits' file paths, or None to use
-                the result of cls.download(root).
             root (str): Root dataset storage directory. Default is '.data'.
             train (str): Suffix to add to path for the train set, or None for no
                 train set. Default is None.
@@ -65,8 +57,7 @@ class Dataset(torch.utils.data.Dataset):
             split_datasets (tuple(Dataset)): Datasets for train, validation, and
                 test splits in that order, if provided.
         """
-        if path is None:
-            path = cls.download(root)
+        path = cls.download(root)
         train_data = None if train is None else cls(
             os.path.join(path, train), **kwargs)
         val_data = None if validation is None else cls(
@@ -88,11 +79,6 @@ class Dataset(torch.utils.data.Dataset):
     def __iter__(self):
         for x in self.examples:
             yield x
-
-    def __getattr__(self, attr):
-        if attr in self.fields:
-            for x in self.examples:
-                yield getattr(x, attr)
 
     @classmethod
     def download(cls, root, check=None):
