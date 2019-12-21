@@ -37,15 +37,3 @@ class Batch(object):
                         setattr(self, f'{name}_tokens', [[s.strip() for s in l] for l in raw])
             setattr(self, f'limited_idx_to_full_idx', limited_idx_to_full_idx)
             setattr(self, f'oov_to_limited_idx', oov_to_limited_idx)
-
-
-    @classmethod
-    def fromvars(cls, dataset, batch_size, train=True, **kwargs):
-        """Create a Batch directly from a number of Variables."""
-        batch = cls()
-        batch.batch_size = batch_size
-        batch.dataset = dataset
-        batch.train = train
-        for k, v in kwargs.items():
-            setattr(batch, k, v)
-        return batch
