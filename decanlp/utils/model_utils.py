@@ -18,6 +18,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from ..util import get_trainable_params, log_model_size
+from .. import models
+
 
 def init_model(args, field, logger, device, model_name=None):
     if not model_name:
@@ -32,5 +34,3 @@ def init_model(args, field, logger, device, model_name=None):
 
     model.params = params
     return model
-
-from decanlp import models # break import loop by importing models at the bottom of the script
