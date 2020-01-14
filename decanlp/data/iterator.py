@@ -31,6 +31,7 @@
 import torch
 import random
 
+from .example import Batch
 
 class Iterator(torch.utils.data.IterableDataset):
     def __init__(self,
@@ -58,8 +59,8 @@ class Iterator(torch.utils.data.IterableDataset):
         else:
             return len(self.dataset)
 
-    def __iter__(self):
-        while self.repeat:
+    def __iter__(self) -> Batch:
+        while True:
             if self.shuffle:
                 dataset = list(self.dataset)
                 random.shuffle(dataset)
@@ -73,6 +74,9 @@ class Iterator(torch.utils.data.IterableDataset):
 
             for minibatch in batches:
                 yield minibatch
+
+            if not self.repeat:
+                break
 
     def _batch(self, data, batch_size):
         """Yield elements from data in chunks of batch_size."""

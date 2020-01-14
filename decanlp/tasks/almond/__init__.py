@@ -177,16 +177,15 @@ class Almond(BaseAlmondTask):
     """The Almond semantic parsing task
     i.e. natural language to formal language (ThingTalk) mapping"""
 
-    def get_splits(self, field, root, **kwargs):
-        return AlmondDataset.splits(root=root, lower=field.lower, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return AlmondDataset.splits(root=root, **kwargs)
 
 
 @register_task('contextual_almond')
 class ContextualAlmond(BaseAlmondTask):
 
-    def get_splits(self, field, root, **kwargs):
-        return AlmondDataset.splits(
-            fields=field, root=root, tokenize=self.tokenize, contextual=True, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return AlmondDataset.splits(root=root, tokenize=self.tokenize, contextual=True, **kwargs)
 
 
 @register_task('reverse_almond')
@@ -198,6 +197,5 @@ class ReverseAlmond(BaseTask):
     def metrics(self):
         return ['bleu', 'em', 'nem', 'nf1']
 
-    def get_splits(self, field, root, **kwargs):
-        return AlmondDataset.splits(
-            fields=field, root=root, reverse_task=True, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return AlmondDataset.splits(root=root, reverse_task=True, **kwargs)

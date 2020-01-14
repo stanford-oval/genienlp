@@ -37,9 +37,10 @@ import random
 import asyncio
 import logging
 import sys
-from copy import deepcopy
 from pprint import pformat
 
+from .data.example import Batch
+from .data.numericalizer import SimpleNumericalizer
 from .util import set_seed, load_config_json
 from . import models
 from .utils.embeddings import load_embeddings
@@ -60,21 +61,20 @@ class Server():
 
         logger.info(f'Vocabulary has {len(self.field.vocab)} tokens from training')
         self._vector_collections = load_embeddings(args)
-        
-        self._limited_idx_to_full_idx = deepcopy(self.field.decoder_to_vocab) # should avoid this with a conditional in map to full
-        self._oov_to_limited_idx = {}
+
+        self.numericalizer = SimpleNumericalizer(field.vocab, init_token=field.init_token, eos_token=field.eos_token,
+                                                 pad_token=field.pad_token, unk_token=field.unk_token,
+                                                 fix_length=field.fix_length, pad_first=field.pad_first)
 
         self._cached_tasks = dict()
         
         assert self.field.include_lengths
 
     def numericalize_example(self, ex):
-        processed = ProcessedExample()
-        
         new_vectors = []
-        for name in CQA.fields:
+        for name in ('context', 'question', 'answer'):
             value = getattr(ex, name)
-            
+
             assert isinstance(value, list)
             # check if all the words are in the vocabulary, and if not
             # grow the vocabulary and the embedding matrix
@@ -82,34 +82,23 @@ class Server():
                 if word not in self.field.vocab.stoi:
                     self.field.vocab.stoi[word] = len(self.field.vocab.itos)
                     self.field.vocab.itos.append(word)
-                    
+
                     new_vector = [vec[word] for vec in self._vector_collections]
-                    
+
                     # charNgram returns  a [1, D] tensor, while Glove returns a [D] tensor
                     # normalize to [1, D] so we can concat along the second dimension
                     # and later concat all vectors along the first
                     new_vector = [vec if vec.dim() > 1 else vec.unsqueeze(0) for vec in new_vector]
                     new_vectors.append(torch.cat(new_vector, dim=1))
-            
-            # batch of size 1
-            batch = [value]            
-            entry, lengths, limited_entry, raw = self.field.process(batch, device=self.device, train=True, 
-                limited=self.field.decoder_stoi, l2f=self._limited_idx_to_full_idx, oov2l=self._oov_to_limited_idx)
-            setattr(processed, name, entry)
-            setattr(processed, f'{name}_lengths', lengths)
-            setattr(processed, f'{name}_limited', limited_entry)
-            setattr(processed, f'{name}_tokens', [[s.strip() for s in l] for l in raw])
 
-        processed.oov_to_limited_idx = self._oov_to_limited_idx
-        processed.limited_idx_to_full_idx = self._limited_idx_to_full_idx
-        
         if new_vectors:
             # concat the old embedding matrix and all the new vector along the first dimension
             new_embedding_matrix = torch.cat([self.field.vocab.vectors] + new_vectors, dim=0)
             self.field.vocab.vectors = new_embedding_matrix
             self.model.set_embeddings(new_embedding_matrix)
-            
-        return processed
+
+        # batch of size 1
+        return Batch.from_examples([ex], self.numericalizer, self.field.decoder_vocab, device=self.device)
     
     def handle_request(self, line):
         request = json.loads(line)

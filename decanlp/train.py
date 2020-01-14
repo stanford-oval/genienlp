@@ -360,9 +360,9 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                             local_train_metric_dict[metric_name] = metric_val / args.log_every
 
                     # train logs
-                    num_examples += batch.context.size(0)
-                    len_contexts += batch.context.size(1)
-                    len_answers += batch.answer.size(1)
+                    num_examples += batch.context.value.size(0)
+                    len_contexts += batch.context.value.size(1)
+                    len_answers += batch.answer.value.size(1)
 
                     if log_every is not None and (iteration % log_every == 0 % log_every):
                         local_loss /= args.log_every

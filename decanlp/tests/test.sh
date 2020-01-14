@@ -6,9 +6,10 @@ SRCDIR=`dirname $0`
 
 # functional tests
 
-function delete {
-    rm -rf $1
+function on_error {
+    rm -fr $workdir
 }
+trap on_error ERR INT TERM
 
 mkdir -p $SRCDIR/embeddings
 
@@ -55,5 +56,3 @@ done
 
         i=$((i+1))
     done
-
-trap "delete $workdir" TERM

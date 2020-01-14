@@ -38,7 +38,7 @@ setuptools.setup(
     
     packages=setuptools.find_packages(exclude=['tests']),
     entry_points= {
-        'console_scripts': ['decanlp=decanlp.tool:main'],
+        'console_scripts': ['decanlp=decanlp.__main__:main'],
     },    
     license='BSD-3-Clause',
     author="Salesforce Inc.",

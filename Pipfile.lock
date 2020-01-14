@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "25aa2669c208d1ec3a43721adf3f903a07a8e5f1a5b660232c24b4255d56a9a2"
+            "sha256": "b93f187c5ba34da9ca6aeb19ce27a3c8180162d588f24d1d0565c720d0b51c88"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -268,5 +268,9 @@
             "version": "==1.35"
         }
     },
-    "develop": {}
+    "develop": {
+        "decanlp": {
+            "path": "."
+        }
+    }
 }

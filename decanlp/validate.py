@@ -34,21 +34,25 @@ from .util import pad
 from .metrics import compute_metrics
 
 
-def compute_validation_outputs(model, val_iter, field, iteration, optional_names=[]):
-    loss, predictions, answers = [], [], []
-    outputs = [[] for _ in range(len(optional_names))]
+def compute_validation_outputs(model, val_iter, field, iteration):
+    loss, predictions, answers, contexts, questions = [], [], [], [], []
     for batch_idx, batch in enumerate(val_iter):
         l, p = model(batch, iteration)
         loss.append(l)
-        predictions.append(pad(p, 150, dim=-1, val=field.vocab.stoi['<pad>']))
-        a = pad(batch.answer.data.cpu(), 150, dim=-1, val=field.vocab.stoi['<pad>'])
+        predictions.append(pad(p, 150, dim=-1, val=field.vocab.stoi[field.pad_token]))
+        a = pad(batch.answer.value.data.cpu(), 150, dim=-1, val=field.vocab.stoi[field.pad_token])
         answers.append(a)
-        for opt_idx, optional_name in enumerate(optional_names):
-            outputs[opt_idx].append(getattr(batch, optional_name).data.cpu()) 
+        c = pad(batch.context.value.data.cpu(), 150, dim=-1, val=field.vocab.stoi[field.pad_token])
+        contexts.append(c)
+        q = pad(batch.question.value.data.cpu(), 150, dim=-1, val=field.vocab.stoi[field.pad_token])
+        questions.append(q)
+
     loss = torch.cat(loss, 0) if loss[0] is not None else None
     predictions = torch.cat(predictions, 0)
     answers = torch.cat(answers, 0)
-    return loss, predictions, answers, [torch.cat([pad(x, 150, dim=-1, val=field.vocab.stoi['<pad>']) for x in output], 0) for output in outputs]
+    contexts = torch.cat(contexts, 0)
+    questions = torch.cat(questions, 0)
+    return loss, predictions, answers, contexts, questions
 
 
 def get_clip(val_iter):
@@ -70,12 +74,15 @@ def all_reverse(tensor, world_size, task, field, field_name, clip, dim=0):
     return field.reverse(tensor, detokenize=task.detokenize, field_name=field_name)[:clip]
 
 
-def gather_results(model, val_iter, field, world_size, task, iteration, optional_names=[]):
-    loss, predictions, answers, outputs = compute_validation_outputs(model, val_iter, field, iteration, optional_names=optional_names)
+def gather_results(model, val_iter, field, world_size, task, iteration):
+    loss, predictions, answers, contexts, questions = compute_validation_outputs(model, val_iter, field, iteration)
     clip = get_clip(val_iter)
     answers = all_reverse(answers, world_size, task, field, field_name='answer', clip=clip)
-    return loss, all_reverse(predictions, world_size, task, field, field_name='answer', clip=clip), answers, \
-        [all_reverse(output, world_size, task, field, field_name, clip) for output, field_name in zip(outputs, optional_names)]
+    predictions = all_reverse(predictions, world_size, task, field, field_name='answer', clip=clip)
+    contexts = all_reverse(contexts, world_size, task, field, field_name='context', clip=clip)
+    questions = all_reverse(questions, world_size, task, field, field_name='question', clip=clip)
+
+    return loss, predictions, answers, contexts, questions
 
 
 def print_results(keys, values, rank=None, num_print=1):
@@ -94,14 +101,12 @@ def print_results(keys, values, rank=None, num_print=1):
 def validate(task, val_iter, model, logger, field, world_size, rank, iteration, num_print=10, args=None):
     with torch.no_grad():
         model.eval()
-        required_names = ['greedy', 'answer']
-        optional_names = ['context', 'question']
-        loss, predictions, answers, results = gather_results(model, val_iter, field, world_size, task, iteration, optional_names=optional_names)
+        names = ['greedy', 'answer', 'context', 'question']
+        loss, predictions, answers, contexts, questions = gather_results(model, val_iter, field, world_size, task, iteration)
         predictions = [p.replace('UNK', 'OOV') for p in predictions]
-        names = required_names + optional_names 
 
         metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)
-        results = [predictions, answers] + results
+        results = [predictions, answers, contexts, questions]
         print_results(names, results, rank=rank, num_print=num_print)
 
         return loss, metrics

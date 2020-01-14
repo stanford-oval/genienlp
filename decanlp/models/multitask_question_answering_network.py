@@ -123,9 +123,9 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
             self.decoder_embeddings.set_embeddings(embeddings)
 
     def forward(self, batch, iteration):
-        context, context_lengths, context_limited, context_tokens     = batch.context,  batch.context_lengths,  batch.context_limited, batch.context_tokens
-        question, question_lengths, question_limited, question_tokens = batch.question, batch.question_lengths, batch.question_limited, batch.question_tokens
-        answer, answer_lengths, answer_limited, answer_tokens         = batch.answer,   batch.answer_lengths,   batch.answer_limited, batch.answer_tokens
+        context, context_lengths, context_limited, context_tokens     = batch.context.value,  batch.context.length,  batch.context.limited, batch.context.tokens
+        question, question_lengths, question_limited, question_tokens = batch.question.value, batch.question.length, batch.question.limited, batch.question.tokens
+        answer, answer_lengths, answer_limited, answer_tokens         = batch.answer.value,   batch.answer.length,   batch.answer.limited, batch.answer.tokens
         decoder_vocab  = batch.decoder_vocab
 
         self.map_to_full = decoder_vocab.decode
@@ -157,7 +157,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
         question_indices = question_limited if question_limited is not None else question
         answer_indices = answer_limited if answer_limited is not None else answer
 
-        pad_idx = self.field.decoder_stoi[self.field.pad_token]
+        pad_idx = self.field.decoder_vocab.stoi[self.field.pad_token]
         context_padding = context_indices.data == pad_idx
         question_padding = question_indices.data == pad_idx
 
@@ -243,7 +243,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
     def greedy(self, self_attended_context, context, question, context_indices, question_indices, decoder_vocab, rnn_state=None):
         B, TC, C = context.size()
         T = self.args.max_output_length
-        outs = context.new_full((B, T), self.field.decoder_stoi['<pad>'], dtype=torch.long)
+        outs = context.new_full((B, T), self.field.decoder_vocab.stoi[self.field.pad_token], dtype=torch.long)
         hiddens = [self_attended_context[0].new_zeros((B, T, C))
                    for l in range(len(self.self_attentive_decoder.layers) + 1)]
         hiddens[0] = hiddens[0] + positional_encodings_like(hiddens[0])
@@ -301,7 +301,7 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 decoder_vocab)
             pred_probs, preds = probs.max(-1)
             preds = preds.squeeze(1)
-            eos_yet = eos_yet | (preds == self.field.decoder_stoi['<eos>'])
+            eos_yet = eos_yet | (preds == self.field.decoder_vocab.stoi[self.field.eos_token]).byte()
             outs[:, t] = preds.cpu().apply_(self.map_to_full)
             if eos_yet.all():
                 break

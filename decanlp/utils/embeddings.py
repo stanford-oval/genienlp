@@ -40,7 +40,7 @@ ENTITIES = ['DATE', 'DURATION', 'EMAIL_ADDRESS', 'HASHTAG',
             'TIME', 'URL', 'USERNAME', 'PATH_NAME', 'CURRENCY']
 MAX_ARG_VALUES = 5
 
-class AlmondEmbeddings(text.vocab.Vectors):
+class AlmondEmbeddings(vocab.Vectors):
     def __init__(self, name=None, cache=None, **kw):
         super().__init__(name, cache, **kw)
 

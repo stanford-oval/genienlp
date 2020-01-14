@@ -77,9 +77,9 @@ class DecoderVocabulary(object):
 
     def decode(self, lim_idx):
         if lim_idx < len(self.itos):
-            return self.itos[lim_idx]
+            return self.full_vocab.stoi[self.itos[lim_idx]]
         else:
-            return self.oov_itos[lim_idx-len(self.itos)]
+            return self.full_vocab.stoi[self.oov_itos[lim_idx-len(self.itos)]]
 
 
 class SimpleNumericalizer(object):
