@@ -44,7 +44,6 @@ from tensorboardX import SummaryWriter
 from .text.vocab import Vocab
 from . import arguments
 from .validate import validate
-from .multiprocess import Multiprocess
 from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader
 from .utils.saver import Saver
 from .utils.embeddings import load_embeddings
@@ -54,11 +53,11 @@ from .data.example import Example
 from .utils.model_utils import init_model
 
 
-def initialize_logger(args, rank='main'):
+def initialize_logger(args):
     # set up file logger
-    logger = logging.getLogger(f'process_{rank}')
+    logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
-    handler = handlers.RotatingFileHandler(os.path.join(args.log_dir, f'process_{rank}.log'), maxBytes=1024*1024*10, backupCount=1)
+    handler = handlers.RotatingFileHandler(os.path.join(args.log_dir, f'train.log'), maxBytes=1024*1024*10, backupCount=1)
     handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(name)s - %(message)s')
     handler.setFormatter(formatter)
@@ -70,10 +69,6 @@ def initialize_logger(args, rank='main'):
     logger.propagate = False
 
     return logger
-
-
-def log(rank='main'):
-    return logging.getLogger(f'process_{rank}')
 
 
 def prepare_data(args, field, logger):
@@ -157,13 +152,12 @@ def get_learning_rate(i, args):
         transformer_lr = transformer_lr * math.sqrt(args.dimension * args.warmup) * args.sgd_lr
     return transformer_lr
 
-def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, writer=None, it=None, rank=0):
+def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, writer=None, it=None, logger=None):
     model.train()
     opt.zero_grad()
     loss, predictions = model(batch, iteration)
     loss.backward()
     trainable_params = get_trainable_params(model, name=True)
-    logger = log(rank)
     Flag = False
     for name, param in trainable_params:
         if param.grad is not None and torch.isnan(param.grad).any():
@@ -194,13 +188,13 @@ def update_fraction(args, task_iteration):
 
     return fraction
 
-def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_size=1,
-    log_every=10, val_every=100, save_every=1000, rounds=False, val_sets=[], aux_sets=[], writer=None, start_iteration=1, rnd=1, best_decascore=None):
+def train(args, model, opt, train_sets, train_iterations, field, logger,
+          log_every=10, val_every=100, save_every=1000, rounds=False, val_sets=[], aux_sets=[], writer=None,
+          start_iteration=1, rnd=1, best_decascore=None):
     """main training function"""
 
     device = next(model.parameters()).device
 
-    logger = log(rank) 
     local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, start_iteration
 
     train_iter_deep = deepcopy(train_iterations)
@@ -215,7 +209,7 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
         task_done[task] = False
         task_fraction[task] = 0.0
 
-    saver = Saver(args.log_dir, world_size, args.max_to_keep)
+    saver = Saver(args.log_dir, args.max_to_keep)
     epoch = 0
 
     logger.info(f'Preparing iterators')
@@ -280,7 +274,7 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                         
                         deca_score = 0
                         for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-                            val_loss, metric_dict = validate(val_task, val_iter, model, logger, field, world_size, rank, iteration, num_print=args.num_print, args=args)
+                            val_loss, metric_dict = validate(val_task, val_iter, model, logger, field, iteration, num_print=args.num_print, args=args)
                             if val_loss is not None:
                                 log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}val_{val_task.name}:val_loss{val_loss.item():.4f}:'
                                 writer.add_scalar(f'loss/{val_task.name}/val', val_loss.item(), iteration)
@@ -306,28 +300,21 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
 
                     # saving
                     if save_every is not None and (iteration % args.save_every == 0):
-                        if rank is not None and rank == 0:
-                            should_save_best = False
-                            if deca_score is not None and (best_decascore is None or best_decascore < deca_score):
-                                best_decascore = deca_score
-                                should_save_best = True
-                                
-                            save_model_state_dict = {'model_state_dict': {k: v.cpu() for k, v in model.state_dict().items()}, 'field': field,
-                                               'best_decascore': best_decascore}
-                            save_opt_state_dict = opt.state_dict()
-                            save_opt_state_dict.update({'start_iteration': iteration})
+                        should_save_best = False
+                        if deca_score is not None and (best_decascore is None or best_decascore < deca_score):
+                            best_decascore = deca_score
+                            should_save_best = True
 
-                            if world_size > 1:
-                                torch.distributed.barrier()
-                            saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
-                            if should_save_best:
-                                logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}found new best model')
-                                torch.save(save_model_state_dict, os.path.join(args.log_dir, 'best.pth'))
-                                if world_size > 1:
-                                    torch.distributed.barrier()
-                                torch.save(save_opt_state_dict, os.path.join(args.log_dir, 'best_optim.pth'))
-                                if world_size > 1:
-                                    torch.distributed.barrier()
+                        save_model_state_dict = {'model_state_dict': {k: v.cpu() for k, v in model.state_dict().items()}, 'field': field,
+                                           'best_decascore': best_decascore}
+                        save_opt_state_dict = opt.state_dict()
+                        save_opt_state_dict.update({'start_iteration': iteration})
+
+                        saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
+                        if should_save_best:
+                            logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}found new best model')
+                            torch.save(save_model_state_dict, os.path.join(args.log_dir, 'best.pth'))
+                            torch.save(save_opt_state_dict, os.path.join(args.log_dir, 'best_optim.pth'))
 
                     # lr update
                     lr = opt.param_groups[0]['lr'] 
@@ -335,7 +322,9 @@ def train(args, model, opt, train_sets, train_iterations, field, rank=0, world_s
                         lr = get_learning_rate(iteration, args) 
 
                     # param update
-                    loss, train_metric_dict, grad_norm = step(model, batch, opt, iteration, field, task, lr=lr, grad_clip=args.grad_clip, writer=writer, it=train_iter, rank=rank)
+                    loss, train_metric_dict, grad_norm = step(model, batch, opt, iteration, field, task, lr=lr,
+                                                              grad_clip=args.grad_clip, writer=writer, it=train_iter,
+                                                              logger=logger)
                     if loss is None:
                         logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
                         continue
@@ -415,9 +404,8 @@ def init_opt(args, model):
         opt = torch.optim.SGD(model.params, lr=args.sgd_lr, weight_decay=args.weight_decay,)
     return opt
 
-def run(args, run_args, rank=0, world_size=1):
-    device = set_seed(args, rank=rank)
-    logger = initialize_logger(args, rank)
+def run(args, run_args, logger):
+    device = set_seed(args)
     field, train_sets, val_sets, aux_sets, save_dict = run_args
 
     logger.start = time.time()
@@ -428,7 +416,7 @@ def run(args, run_args, rank=0, world_size=1):
     else:
         writer = None
 
-    model = init_model(args, field, logger, world_size, device)
+    model = init_model(args, field, logger, device)
     opt = init_opt(args, model) 
     start_iteration = 1
 
@@ -445,10 +433,10 @@ def run(args, run_args, rank=0, world_size=1):
 
 
     train(args, model, opt, train_sets, args.train_iterations, field, val_sets=val_sets, aux_sets=aux_sets,
-        rank=rank, world_size=world_size, 
-        log_every=args.log_every, val_every=args.val_every, rounds=len(train_sets)>1,
-        writer=writer if rank==0 else None, save_every=args.save_every, start_iteration=start_iteration,
-        best_decascore=save_dict.get('best_decascore') if save_dict is not None else None)
+          logger=logger,
+          log_every=args.log_every, val_every=args.val_every, rounds=len(train_sets)>1,
+          writer=writer, save_every=args.save_every, start_iteration=start_iteration,
+          best_decascore=save_dict.get('best_decascore') if save_dict is not None else None)
 
 
 def main(argv=sys.argv):
@@ -468,13 +456,8 @@ def main(argv=sys.argv):
     if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):
         logging.error('sth unpleasant is happening with curriculum')
     run_args = (field, train_sets, val_sets, aux_sets, save_dict)
-    if len(args.devices) > 1:
-        logger.info(f'Multiprocessing')
-        mp = Multiprocess(run, args)
-        mp.run(run_args)
-    else:
-        logger.info(f'Processing')
-        run(args, run_args, world_size=args.world_size)
+    logger.info(f'Processing')
+    run(args, run_args, logger)
 
 
 if __name__ == '__main__':

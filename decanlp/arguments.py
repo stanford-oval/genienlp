@@ -119,8 +119,7 @@ def parse(argv):
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')
 
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used for training (multi-gpu currently WIP)')
-    parser.add_argument('--backend', default='gloo', type=str, help='backend for distributed training')
+    parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used for training')
 
     parser.add_argument('--no_commit', action='store_false', dest='commit', help='do not track the git commit associated with this training run') 
     parser.add_argument('--exist_ok', action='store_true', help='Ok if the save directory already exists, i.e. overwrite is ok') 
@@ -150,10 +149,6 @@ def parse(argv):
     if 'imdb' in args.val_task_names:
         args.val_task_names.remove('imdb')
 
-    args.world_size = len(args.devices) if args.devices[0] > -1 else -1
-    if args.world_size > 1:
-        logger.error('multi-gpu training is currently a work in progress')
-        return
     args.timestamp = '-'.join(datetime.datetime.now(tz=tz.tzoffset(None, -8*60*60)).strftime("%y/%m/%d/%H/%M/%S.%f").split())
 
     if args.use_google_translate:

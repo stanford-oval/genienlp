@@ -103,13 +103,11 @@ def preprocess_examples(args, tasks, splits, logger=None, train=True):
                 logger.info('Answer: ' + ' '.join([token.strip() for token in ex.answer]))
 
 
-def set_seed(args, rank=None):
+def set_seed(args):
     if not torch.cuda.is_available():
         ordinal = -1
-    elif rank is None and len(args.devices) > 0:
-        ordinal = args.devices[0]
     else:
-        ordinal = args.devices[rank] 
+        ordinal = args.devices[0]
     device = torch.device(f'cuda:{ordinal}' if ordinal > -1 else 'cpu')
     # device = torch.device(f'cuda:{ordinal}' if ordinal > -1 else 'cpu')
     logger.debug(f'device: {device}')
@@ -195,7 +193,7 @@ def load_config_json(args):
     args.almond_type_embeddings = False
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
-        retrieve = ['model', 'transformer_layers', 'rnn_layers', 'transformer_hidden', 'world_size', 'dimension',
+        retrieve = ['model', 'transformer_layers', 'rnn_layers', 'transformer_hidden', 'dimension',
                     'load', 'max_val_context_length', 'val_batch_size', 'transformer_heads', 'max_output_length',
                     'max_generative_vocab', 'lower', 'glove_and_char',
                     'use_maxmargin_loss', 'small_glove', 'almond_type_embeddings', 'almond_grammar',

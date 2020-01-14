@@ -55,32 +55,23 @@ def compute_validation_outputs(model, val_iter, field, iteration):
     return loss, predictions, answers, contexts, questions
 
 
-def all_reverse(tensor, world_size, task, field, field_name, dim=0):
-    
-    if world_size > 1:
-        tensor = tensor.float() # tensors must be on cpu and float for all_gather
-        all_tensors = [torch.zeros_like(tensor) for _ in range(world_size)]
-        torch.distributed.barrier() # all_gather is experimental for gloo, found that these barriers were necessary
-        torch.distributed.all_gather(all_tensors, tensor)
-        torch.distributed.barrier()
-        tensor = torch.cat(all_tensors, 0).long() # tensors must be long for reverse
-
+def all_reverse(tensor, task, field, field_name, dim=0):
     return field.reverse(tensor, detokenize=task.detokenize, field_name=field_name)
 
 
-def gather_results(model, val_iter, field, world_size, task, iteration):
+def gather_results(model, val_iter, field, task, iteration):
     loss, predictions, answers, contexts, questions = compute_validation_outputs(model, val_iter, field, iteration)
-    answers = all_reverse(answers, world_size, task, field, field_name='answer')
-    predictions = all_reverse(predictions, world_size, task, field, field_name='answer')
-    contexts = all_reverse(contexts, world_size, task, field, field_name='context')
-    questions = all_reverse(questions, world_size, task, field, field_name='question')
+    answers = all_reverse(answers, task, field, field_name='answer')
+    predictions = all_reverse(predictions, task, field, field_name='answer')
+    contexts = all_reverse(contexts, task, field, field_name='context')
+    questions = all_reverse(questions, task, field, field_name='question')
 
     return loss, predictions, answers, contexts, questions
 
 
-def print_results(keys, values, rank=None, num_print=1):
+def print_results(keys, values, num_print=1):
     print()
-    start = rank * num_print if rank is not None else 0
+    start = 0
     end = start + num_print
     values = [val[start:end] for val in values]
     for ex_idx in range(len(values[0])):
@@ -91,15 +82,15 @@ def print_results(keys, values, rank=None, num_print=1):
         print()
 
 
-def validate(task, val_iter, model, logger, field, world_size, rank, iteration, num_print=10, args=None):
+def validate(task, val_iter, model, logger, field, iteration, num_print=10, args=None):
     with torch.no_grad():
         model.eval()
         names = ['greedy', 'answer', 'context', 'question']
-        loss, predictions, answers, contexts, questions = gather_results(model, val_iter, field, world_size, task, iteration)
+        loss, predictions, answers, contexts, questions = gather_results(model, val_iter, field, task, iteration)
         predictions = [p.replace('UNK', 'OOV') for p in predictions]
 
         metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)
         results = [predictions, answers, contexts, questions]
-        print_results(names, results, rank=rank, num_print=num_print)
+        print_results(names, results, num_print=num_print)
 
         return loss, metrics

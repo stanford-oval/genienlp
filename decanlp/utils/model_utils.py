@@ -17,10 +17,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from decanlp.util import get_trainable_params, log_model_size
-from decanlp.multiprocess import Multiprocess, DistributedDataParallel
+from ..util import get_trainable_params, log_model_size
 
-def init_model(args, field, logger, world_size, device, model_name=None):
+def init_model(args, field, logger, device, model_name=None):
     if not model_name:
         model_name = args.model
     logger.info(f'Initializing {model_name}')
@@ -30,9 +29,6 @@ def init_model(args, field, logger, world_size, device, model_name=None):
     log_model_size(logger, model, model_name)
 
     model.to(device)
-    if world_size > 1:
-        logger.info(f'Wrapping model for distributed')
-        model = DistributedDataParallel(model)
 
     model.params = params
     return model

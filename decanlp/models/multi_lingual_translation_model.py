@@ -60,7 +60,7 @@ class MultiLingualTranslationModel(nn.Module):
 
             model_dict = torch.load(os.path.join(args.saved_models, f'{name}/best.pth'), map_location=self.device)
             model_field = model_dict['field']
-            model = init_model(args, model_field, _logger, args.world_size, self.device, model_name='MultitaskQuestionAnsweringNetwork')
+            model = init_model(args, model_field, _logger, self.device, model_name='MultitaskQuestionAnsweringNetwork')
             model.load_state_dict(model_dict['model_state_dict'])
             # model_opt_dict = torch.load(os.path.join(args.saved_models, f'{model}/best_optim.pth'), map_location=self.device)
             # model_opt = init_opt(args, model)
