@@ -126,7 +126,6 @@ def parse(argv):
 
     parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether to use exisiting cached splits or generate new ones')
     parser.add_argument('--lr_rate', default=0.001, type=float, help='initial_learning_rate')
-    parser.add_argument('--use_maxmargin_loss', action='store_true', help='whether to use max-margin loss or not')
     parser.add_argument('--small_glove', action='store_true', help='Use glove.6B.50d instead of glove.840B.300d')
     parser.add_argument('--almond_type_embeddings', action='store_true', help='Add type-based word embeddings for Almond task')
     parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')

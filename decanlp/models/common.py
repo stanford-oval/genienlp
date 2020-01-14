@@ -72,25 +72,6 @@ class LSTMDecoder(nn.Module):
 
         return input, (h_1, c_1)
 
-def max_margin_loss(probs, targets, pad_idx=1):
-
-    batch_size, max_length, depth = probs.size()
-    targets_mask = (targets != pad_idx).float()
-    flat_mask = targets_mask.view(batch_size*max_length,)
-    flat_preds = probs.view(batch_size*max_length, depth)
-
-    one_hot = torch.zeros_like(probs)
-    one_hot_gold = one_hot.scatter_(2, targets.unsqueeze(2), 1)
-
-    marginal_scores = probs - one_hot_gold + 1
-    marginal_scores = marginal_scores.view(batch_size*max_length, depth)
-    max_margin = torch.max(marginal_scores, dim=1)[0]
-
-    gold_score = torch.masked_select(flat_preds, one_hot_gold.view(batch_size*max_length, depth).byte())
-    margin = max_margin - gold_score
-
-    return torch.sum(margin*flat_mask) + 1e-8
-
 
 def positional_encodings_like(x, t=None):
     if t is None:

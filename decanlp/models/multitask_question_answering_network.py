@@ -192,13 +192,8 @@ class MultitaskQuestionAnsweringNetwork(nn.Module):
                 decoder_vocab)
 
 
-            if self.args.use_maxmargin_loss:
-                targets = answer_indices[:, 1:].contiguous()
-                loss = max_margin_loss(probs, targets, pad_idx=pad_idx)
-
-            else:
-                probs, targets = mask(answer_indices[:, 1:].contiguous(), probs.contiguous(), pad_idx=pad_idx)
-                loss = F.nll_loss(probs.log(), targets)
+            probs, targets = mask(answer_indices[:, 1:].contiguous(), probs.contiguous(), pad_idx=pad_idx)
+            loss = F.nll_loss(probs.log(), targets)
             return loss, None
 
         else:
