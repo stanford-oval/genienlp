@@ -41,7 +41,7 @@ from pprint import pformat
 
 from .data.example import Batch
 from .data.numericalizer import SimpleNumericalizer
-from .util import set_seed, load_config_json
+from .util import set_seed, load_config_json, log_model_size
 from . import models
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
@@ -165,17 +165,7 @@ class Server():
             pass
 
     def run(self):
-        def mult(ps):
-            r = 0
-            for p in ps:
-                this_r = 1
-                for s in p.size():
-                    this_r *= s
-                r += this_r
-            return r
-        params = list(filter(lambda p: p.requires_grad, self.model.parameters()))
-        num_param = mult(params)
-        logger.info(f'{self.args.model} has {num_param:,} parameters')
+        log_model_size(logger, self.model, self.args.model)
         self.model.to(self.device)
     
         self.model.eval()

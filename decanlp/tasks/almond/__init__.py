@@ -35,6 +35,7 @@ from tqdm import tqdm
 from ..base import BaseTask
 from ..registry import register_task
 from .. import generic_dataset
+from ...data.example import Example
 from ...text import data
 from .lang_utils import *
 
@@ -98,9 +99,8 @@ class AlmondDataset(generic_dataset.CQA):
                         context = sentence
                         answer = target_code
 
-                examples.append(generic_dataset.Example.from_raw('almond/' + _id,
-                                                                 context, question, answer,
-                                                                 tokenize=str.split, lower=False))
+                examples.append(Example.from_raw('almond/' + _id, context, question, answer,
+                                                 tokenize=str.split, lower=False))
                 if len(examples) >= max_examples:
                     break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)

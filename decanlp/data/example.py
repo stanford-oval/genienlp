@@ -36,7 +36,7 @@ from .numericalizer import DecoderVocabulary, SimpleNumericalizer, SequentialFie
 
 
 class Example(NamedTuple):
-    example_id : List[str]
+    example_id : str
     context : List[str]
     question : List[str]
     answer : List[str]
@@ -45,7 +45,7 @@ class Example(NamedTuple):
 
     @staticmethod
     def from_raw(example_id : str, context : str, question : str, answer : str, tokenize, lower=False):
-        args = [[example_id]]
+        args = [example_id]
         for arg in (context, question, answer):
             new_arg = tokenize(arg.rstrip('\n'))
             if lower:
@@ -63,6 +63,7 @@ class Batch(NamedTuple):
 
     @staticmethod
     def from_examples(examples, numericalizer : SimpleNumericalizer, decoder_vocab, device=None):
+        assert all(isinstance(ex.example_id, str) for ex in examples)
         example_ids = [ex.example_id for ex in examples]
         context_input = [ex.context for ex in examples]
         question_input = [ex.question for ex in examples]

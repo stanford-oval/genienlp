@@ -140,6 +140,12 @@ def get_trainable_params(model, name=False):
         return list(filter(lambda p: p.requires_grad, model.parameters()))
 
 
+def log_model_size(logger, model, model_name):
+    params = list(filter(lambda p: p.requires_grad, model.parameters()))
+    num_param = count_params(params)
+    logger.info(f'{model_name} has {num_param:,} parameters')
+
+
 def elapsed_time(log):
     t = time.time() - log.start
     day = int(t // (24 * 3600))

@@ -194,8 +194,7 @@ class Vocab(object):
         for arg in args:
             sources += [getattr(ex, name) for name in field_names for ex in arg]
         for data in sources:
-            for x in data:
-                counter.update(x)
+            counter.update(data)
         specials = [unk_token, pad_token, init_token, eos_token]
         specials = [tok for tok in specials if tok is not None]
         return Vocab(counter, specials=specials, **kwargs)

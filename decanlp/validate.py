@@ -55,11 +55,7 @@ def compute_validation_outputs(model, val_iter, field, iteration):
     return loss, predictions, answers, contexts, questions
 
 
-def get_clip(val_iter):
-    return -val_iter.extra if val_iter.extra > 0 else None
-
-
-def all_reverse(tensor, world_size, task, field, field_name, clip, dim=0):
+def all_reverse(tensor, world_size, task, field, field_name, dim=0):
     
     if world_size > 1:
         tensor = tensor.float() # tensors must be on cpu and float for all_gather
@@ -68,19 +64,16 @@ def all_reverse(tensor, world_size, task, field, field_name, clip, dim=0):
         torch.distributed.all_gather(all_tensors, tensor)
         torch.distributed.barrier()
         tensor = torch.cat(all_tensors, 0).long() # tensors must be long for reverse
-    
-    # for distributed training, dev sets are padded with extra examples so that the
-    # tensors are all of a predictable size for all_gather. `[:clip]` removes those extra examples
-    return field.reverse(tensor, detokenize=task.detokenize, field_name=field_name)[:clip]
+
+    return field.reverse(tensor, detokenize=task.detokenize, field_name=field_name)
 
 
 def gather_results(model, val_iter, field, world_size, task, iteration):
     loss, predictions, answers, contexts, questions = compute_validation_outputs(model, val_iter, field, iteration)
-    clip = get_clip(val_iter)
-    answers = all_reverse(answers, world_size, task, field, field_name='answer', clip=clip)
-    predictions = all_reverse(predictions, world_size, task, field, field_name='answer', clip=clip)
-    contexts = all_reverse(contexts, world_size, task, field, field_name='context', clip=clip)
-    questions = all_reverse(questions, world_size, task, field, field_name='question', clip=clip)
+    answers = all_reverse(answers, world_size, task, field, field_name='answer')
+    predictions = all_reverse(predictions, world_size, task, field, field_name='answer')
+    contexts = all_reverse(contexts, world_size, task, field, field_name='context')
+    questions = all_reverse(questions, world_size, task, field, field_name='question')
 
     return loss, predictions, answers, contexts, questions
 

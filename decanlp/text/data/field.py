@@ -82,7 +82,7 @@ class Field(object):
             eos_token=None, fix_length=None, tensor_type=torch.LongTensor,
             tokenize=(lambda s: s.split()), include_lengths=False,
             batch_first=False, pad_token="<pad>", unk_token="<unk>",
-            pad_first=False, decap=False, numerical=False):
+            pad_first=False, numerical=False):
         self.sequential = sequential
         self.numerical = numerical
         self.use_vocab = use_vocab
@@ -119,7 +119,7 @@ class ReversibleField(Field):
             self.detokenize = None
         super(ReversibleField, self).__init__(**kwargs)
 
-    def reverse(self, batch, detokenize=None, field_name=None, limited=False):
+    def reverse(self, batch, detokenize=None, field_name=None):
         
         if not self.batch_first:
             batch = batch.t()

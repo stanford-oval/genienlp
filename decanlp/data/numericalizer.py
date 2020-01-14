@@ -117,6 +117,7 @@ class SimpleNumericalizer(object):
                                  ([] if self.eos_token is None else [self.eos_token]) + \
                                  [self.pad_token] * max(0, max_len - len(example))
 
+            padded.append(padded_example)
             lengths.append(len(padded_example) - max(0, max_len - len(example)))
 
             numerical.append([self.vocab.stoi[word] for word in padded_example])
