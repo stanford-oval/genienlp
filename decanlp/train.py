@@ -43,14 +43,15 @@ from tensorboardX import SummaryWriter
 
 from .text.vocab import Vocab
 from . import arguments
+from . import models
 from .validate import validate
-from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader
+from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader, log_model_size, \
+    init_devices
 from .utils.saver import Saver
 from .utils.embeddings import load_embeddings
 from .text.data import ReversibleField
 from .data.numericalizer import DecoderVocabulary
 from .data.example import Example
-from .utils.model_utils import init_model
 
 
 def initialize_logger(args):
@@ -152,6 +153,7 @@ def get_learning_rate(i, args):
         transformer_lr = transformer_lr * math.sqrt(args.dimension * args.warmup) * args.sgd_lr
     return transformer_lr
 
+
 def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, writer=None, it=None, logger=None):
     model.train()
     opt.zero_grad()
@@ -188,13 +190,11 @@ def update_fraction(args, task_iteration):
 
     return fraction
 
-def train(args, model, opt, train_sets, train_iterations, field, logger,
+
+def train(args, devices, model, opt, train_sets, train_iterations, field, logger,
           log_every=10, val_every=100, save_every=1000, rounds=False, val_sets=[], aux_sets=[], writer=None,
           start_iteration=1, rnd=1, best_decascore=None):
     """main training function"""
-
-    device = next(model.parameters()).device
-
     local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, start_iteration
 
     train_iter_deep = deepcopy(train_iterations)
@@ -213,15 +213,16 @@ def train(args, model, opt, train_sets, train_iterations, field, logger,
     epoch = 0
 
     logger.info(f'Preparing iterators')
-    train_iters = [(task, make_data_loader(x, field, tok, device, train=True))
+    main_device = devices[0]
+    train_iters = [(task, make_data_loader(x, field, tok, main_device, train=True))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(task, make_data_loader(x, field, bs, device, train=False))
+    val_iters = [(task, make_data_loader(x, field, bs, main_device, train=False))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     if args.use_curriculum:
-        aux_iters = [(name, make_data_loader(x, field, tok, device, train=True))
+        aux_iters = [(name, make_data_loader(x, field, tok, main_device, train=True))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
 
@@ -305,8 +306,16 @@ def train(args, model, opt, train_sets, train_iterations, field, logger,
                             best_decascore = deca_score
                             should_save_best = True
 
-                        save_model_state_dict = {'model_state_dict': {k: v.cpu() for k, v in model.state_dict().items()}, 'field': field,
-                                           'best_decascore': best_decascore}
+                        # punch through the nn.DataParallel to access the real model, otherwise we won't be able
+                        # to load this model later
+                        model_state_dict = model.module.state_dict()
+                        model_state_dict = {k: v.cpu() for k, v in model_state_dict.items()}
+
+                        save_model_state_dict = {
+                            'model_state_dict': model_state_dict,
+                            'field': field,
+                            'best_decascore': best_decascore
+                        }
                         save_opt_state_dict = opt.state_dict()
                         save_opt_state_dict.update({'start_iteration': iteration})
 
@@ -393,8 +402,23 @@ def train(args, model, opt, train_sets, train_iterations, field, logger,
             logger.info(f'training is done after {epoch} epochs')
             break
 
+
+def init_model(args, field, devices, logger):
+    model_name = args.model
+    logger.info(f'Initializing {model_name}')
+    Model = getattr(models, model_name)
+    model = Model(field, args, devices)
+    params = get_trainable_params(model)
+    log_model_size(logger, model, model_name)
+
+    model.to(devices[0])
+    model = torch.nn.DataParallel(model, device_ids=devices)
+    model.params = params
+
+    return model
+
+
 def init_opt(args, model):
-    opt = None
     if 'adam' in args.optimizer.lower():
         if args.transformer_lr:
             opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
@@ -404,10 +428,27 @@ def init_opt(args, model):
         opt = torch.optim.SGD(model.params, lr=args.sgd_lr, weight_decay=args.weight_decay,)
     return opt
 
-def run(args, run_args, logger):
-    device = set_seed(args)
-    field, train_sets, val_sets, aux_sets, save_dict = run_args
 
+def main(argv=sys.argv):
+    args = arguments.parse(argv)
+    if args is None:
+        return
+
+    set_seed(args)
+    devices = init_devices(args, args.devices)
+    logger = initialize_logger(args)
+    logger.info(f'Arguments:\n{pformat(vars(args))}')
+
+    field, save_dict = None, None
+    if args.load is not None:
+        logger.info(f'Loading field from {os.path.join(args.save, args.load)}')
+        save_dict = torch.load(os.path.join(args.save, args.load))
+        field = save_dict['field']
+    field, train_sets, val_sets, aux_sets = prepare_data(args, field, logger)
+    if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):
+        logging.error('sth unpleasant is happening with curriculum')
+
+    logger.info(f'Processing')
     logger.start = time.time()
 
     if hasattr(args, 'tensorboard') and args.tensorboard:
@@ -416,8 +457,8 @@ def run(args, run_args, logger):
     else:
         writer = None
 
-    model = init_model(args, field, logger, device)
-    opt = init_opt(args, model) 
+    model = init_model(args, field, devices, logger)
+    opt = init_opt(args, model)
     start_iteration = 1
 
     if save_dict is not None:
@@ -431,33 +472,11 @@ def run(args, run_args, logger):
             logger.info(f'Starting iteration is {start_iteration}')
             opt.load_state_dict(opt_state_dict)
 
-
-    train(args, model, opt, train_sets, args.train_iterations, field, val_sets=val_sets, aux_sets=aux_sets,
+    train(args, devices, model, opt, train_sets, args.train_iterations, field, val_sets=val_sets, aux_sets=aux_sets,
           logger=logger,
-          log_every=args.log_every, val_every=args.val_every, rounds=len(train_sets)>1,
+          log_every=args.log_every, val_every=args.val_every, rounds=len(train_sets) > 1,
           writer=writer, save_every=args.save_every, start_iteration=start_iteration,
           best_decascore=save_dict.get('best_decascore') if save_dict is not None else None)
-
-
-def main(argv=sys.argv):
-    args = arguments.parse(argv)
-    if args is None:
-        return
-    set_seed(args)
-    logger = initialize_logger(args)
-    logger.info(f'Arguments:\n{pformat(vars(args))}')
-
-    field, save_dict = None, None
-    if args.load is not None:
-        logger.info(f'Loading field from {os.path.join(args.save, args.load)}')
-        save_dict = torch.load(os.path.join(args.save, args.load))
-        field = save_dict['field']
-    field, train_sets, val_sets, aux_sets = prepare_data(args, field, logger)
-    if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):
-        logging.error('sth unpleasant is happening with curriculum')
-    run_args = (field, train_sets, val_sets, aux_sets, save_dict)
-    logger.info(f'Processing')
-    run(args, run_args, logger)
 
 
 if __name__ == '__main__':

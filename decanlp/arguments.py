@@ -29,9 +29,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-from copy import deepcopy
-import types
-import sys
 from argparse import ArgumentParser
 import subprocess
 import json
@@ -137,6 +134,7 @@ def parse(argv):
     parser.add_argument('--use_google_translate', action='store_true', help='use google translate instead of pre-trained machine translator')
 
     args = parser.parse_args(argv[1:])
+
     if args.model is None:
         args.model = 'mcqa'
 

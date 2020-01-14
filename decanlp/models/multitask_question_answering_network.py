@@ -30,7 +30,7 @@
 
 from collections import defaultdict
 
-from ..util import get_trainable_params, set_seed
+from ..util import get_trainable_params
 
 from .common import *
 
@@ -118,13 +118,14 @@ class MQANEncoder(nn.Module):
 
 
 class MQANDecoder(nn.Module):
-    def __init__(self, field, args):
+    def __init__(self, field, args, devices):
         super().__init__()
         self.field = field
         self.args = args
+        self.devices = devices
 
         if args.pretrained_decoder_lm:
-            pretrained_save_dict = torch.load(os.path.join(args.embeddings, args.pretrained_decoder_lm), map_location=str(self.device))
+            pretrained_save_dict = torch.load(os.path.join(args.embeddings, args.pretrained_decoder_lm), map_location=devices[0])
 
             self.pretrained_decoder_vocab_itos = pretrained_save_dict['vocab']
             self.pretrained_decoder_vocab_stoi = defaultdict(lambda: 0, {
@@ -194,8 +195,7 @@ class MQANDecoder(nn.Module):
                     [self.pretrained_decoder_vocab_stoi[sentence[time]] for sentence in answer_tokens] for time in
                     range(len(answer_tokens[0]))
                 ]
-                answer_pretrained_numerical = torch.tensor(answer_pretrained_numerical, dtype=torch.long,
-                                                           device=self.device)
+                answer_pretrained_numerical = torch.tensor(answer_pretrained_numerical, dtype=torch.long)
 
                 with torch.no_grad():
                     answer_embedded, _ = self.pretrained_decoder_embeddings.encode(answer_pretrained_numerical)
@@ -294,7 +294,7 @@ class MQANDecoder(nn.Module):
                 if self.args.pretrained_decoder_lm:
                     current_token = [self.field.vocab.itos[x] for x in outs[:, t - 1]]
                     current_token_id = torch.tensor([[self.pretrained_decoder_vocab_stoi[x] for x in current_token]],
-                                                    dtype=torch.long, device=self.device, requires_grad=False)
+                                                    dtype=torch.long, requires_grad=False)
                     embedding, pretrained_lm_hidden = self.pretrained_decoder_embeddings.encode(current_token_id,
                                                                                                 pretrained_lm_hidden)
 
@@ -336,15 +336,14 @@ class MQANDecoder(nn.Module):
 
 class MultitaskQuestionAnsweringNetwork(nn.Module):
 
-    def __init__(self, field, args):
+    def __init__(self, field, args, devices):
         super().__init__()
         self.field = field
         self.args = args
         self.pad_idx = self.field.vocab.stoi[self.field.pad_token]
-        self.device = set_seed(args)
 
         self.encoder = MQANEncoder(field, args)
-        self.decoder = MQANDecoder(field, args)
+        self.decoder = MQANDecoder(field, args, devices)
 
 
     def set_embeddings(self, embeddings):

@@ -41,7 +41,7 @@ from pprint import pformat
 
 from .data.example import Batch
 from .data.numericalizer import SimpleNumericalizer
-from .util import set_seed, load_config_json, log_model_size
+from .util import set_seed, init_devices, load_config_json, log_model_size
 from . import models
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
@@ -53,9 +53,9 @@ class ProcessedExample():
     pass
 
 class Server():
-    def __init__(self, args, field, model):
-        self.device = set_seed(args)
+    def __init__(self, args, field, model, device):
         self.args = args
+        self.device = device
         self.field = field
         self.model = model
 
@@ -189,33 +189,26 @@ def get_args(argv):
 
     args = parser.parse_args(argv[1:])
     load_config_json(args)
+    set_seed(args)
     return args
 
 
 def main(argv=sys.argv):
     args = get_args(argv)
     logger.info(f'Arguments:\n{pformat(vars(args))}')
-
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-
     logger.info(f'Loading from {args.best_checkpoint}')
 
-    if torch.cuda.is_available():
-        save_dict = torch.load(args.best_checkpoint)
-    else:
-        save_dict = torch.load(args.best_checkpoint, map_location='cpu')
+    devices = init_devices(args)
+    save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
 
     field = save_dict['field']
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(field, args)
+    model = Model(field, args, devices)
     model_dict = save_dict['model_state_dict']
     model.load_state_dict(model_dict)
     
-    server = Server(args, field, model)
+    server = Server(args, field, model, devices[0])
     model.set_embeddings(field.vocab.vectors)
 
     server.run()

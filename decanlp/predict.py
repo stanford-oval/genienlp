@@ -39,7 +39,7 @@ import logging
 from pprint import pformat
 
 from .text.vocab import Vocab
-from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size
+from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices
 from .metrics import compute_metrics
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
@@ -88,8 +88,7 @@ def prepare_data(args, field):
     return field, splits
 
 
-def run(args, field, val_sets, model):
-    device = set_seed(args)
+def run(args, field, val_sets, model, device):
     logger.info(f'Preparing iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
@@ -179,6 +178,7 @@ def get_args(argv):
     args = parser.parse_args(argv[1:])
 
     load_config_json(args)
+    set_seed(args)
     args.tasks = get_tasks(args.task_names, args)
     return args
 
@@ -186,30 +186,22 @@ def get_args(argv):
 def main(argv=sys.argv):
     args = get_args(argv)
     logger.info(f'Arguments:\n{pformat(vars(args))}')
-
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-
     logger.info(f'Loading from {args.best_checkpoint}')
 
-    if torch.cuda.is_available():
-        save_dict = torch.load(args.best_checkpoint)
-    else:
-        save_dict = torch.load(args.best_checkpoint, map_location='cpu')
+    devices = init_devices(args)
+    save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
 
     field = save_dict['field']
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(field, args)
+    model = Model(field, args, devices)
     model_dict = save_dict['model_state_dict']
     model.load_state_dict(model_dict)
     field, splits = prepare_data(args, field)
     if args.model != 'MultiLingualTranslationModel':
         model.set_embeddings(field.vocab.vectors)
 
-    run(args, field, splits, model)
+    run(args, field, splits, model, devices[0])
 
 if __name__ == '__main__':
     main()

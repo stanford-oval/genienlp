@@ -103,20 +103,19 @@ def preprocess_examples(args, tasks, splits, logger=None, train=True):
                 logger.info('Answer: ' + ' '.join([token.strip() for token in ex.answer]))
 
 
-def set_seed(args):
+def init_devices(args, devices=None):
     if not torch.cuda.is_available():
-        ordinal = -1
-    else:
-        ordinal = args.devices[0]
-    device = torch.device(f'cuda:{ordinal}' if ordinal > -1 else 'cpu')
-    # device = torch.device(f'cuda:{ordinal}' if ordinal > -1 else 'cpu')
-    logger.debug(f'device: {device}')
+        return [torch.device('cpu')]
+    if not devices:
+        return [torch.device('cuda:0')]
+    return [torch.device(ordinal) for ordinal in devices]
+
+
+def set_seed(args):
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    with torch.cuda.device(ordinal):
-        torch.cuda.manual_seed(args.seed)
-    return device
+    torch.cuda.manual_seed_all(args.seed)
 
 
 def count_params(params):
