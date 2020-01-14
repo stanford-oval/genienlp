@@ -14,7 +14,7 @@ mkdir -p $SRCDIR/embeddings
 
 for v in glove.6B.50d charNgram ; do
     for f in vectors itos table ; do
-        curl -O "https://parmesan.stanford.edu/glove/${v}.txt.${f}.npy" ; mv ${v}.txt.${f}.npy $SRCDIR/embeddings/
+        wget -c "https://parmesan.stanford.edu/glove/${v}.txt.${f}.npy" -O $SRCDIR/embeddings/${v}.txt.${f}.npy
     done
 done
 
