@@ -93,7 +93,7 @@ class Server():
 
         if new_vectors:
             # concat the old embedding matrix and all the new vector along the first dimension
-            new_embedding_matrix = torch.cat([self.field.vocab.vectors] + new_vectors, dim=0)
+            new_embedding_matrix = torch.cat([self.field.vocab.vectors.cpu()] + new_vectors, dim=0)
             self.field.vocab.vectors = new_embedding_matrix
             self.model.set_embeddings(new_embedding_matrix)
 
@@ -119,7 +119,7 @@ class Server():
         answer = ''
 
         ex = Example.from_raw(str(request['id']), context, question, answer,
-                              tokenize=task.tokenize, lower=self.field.lower)
+                              tokenize=task.tokenize or self.field.tokenize, lower=self.args.lower)
         
         batch = self.numericalize_example(ex)
         _, prediction_batch = self.model(batch, iteration=0)
