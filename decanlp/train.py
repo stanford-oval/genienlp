@@ -41,6 +41,7 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 
+from .utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .text.vocab import Vocab
 from . import arguments
 from . import models
@@ -412,7 +413,7 @@ def init_model(args, field, devices, logger):
     log_model_size(logger, model, model_name)
 
     model.to(devices[0])
-    model = torch.nn.DataParallel(model, device_ids=devices)
+    model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
     model.params = params
 
     return model
