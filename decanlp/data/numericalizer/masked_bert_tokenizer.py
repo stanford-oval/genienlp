@@ -54,10 +54,10 @@ class MaskedWordPieceTokenizer:
 
     def tokenize(self, tokens, mask):
         output_tokens = []
-        for token, should_word_split in tokens, mask:
+        for token, should_word_split in zip(tokens, mask):
             if not should_word_split:
                 if token not in self.vocab and token not in self.added_tokens_encoder:
-                    token_id = len(self.added_tokens_encoder)
+                    token_id = len(self.vocab) + len(self.added_tokens_encoder)
                     self.added_tokens_encoder[token] = token_id
                     self.added_tokens_decoder[token_id] = token
                 output_tokens.append(token)
@@ -95,11 +95,60 @@ class MaskedWordPieceTokenizer:
         return output_tokens
 
 
+class IToSWrapper:
+    """Wrap the ordered dict vocabs to look like a list int -> str"""
+
+    def __init__(self, base_vocab, added_tokens):
+        self.base_vocab = base_vocab
+        self.added_tokens = added_tokens
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            return [self[key] for key in range(key.start or 0, key.stop or len(self), key.step or 1)]
+
+        if key < len(self.base_vocab):
+            return self.base_vocab[key]
+        else:
+            return self.added_tokens[key]
+
+    def __len__(self):
+        return len(self.base_vocab) + len(self.added_tokens)
+
+    def __iter__(self):
+        for key in range(len(self.base_vocab)):
+            yield self.base_vocab[key]
+        for key in range(len(self.base_vocab), len(self.base_vocab) + len(self.added_tokens)):
+            yield self.added_tokens[key]
+
+
+class SToIWrapper:
+    """Wrap the ordered dict vocabs to look like a single dictionary"""
+
+    def __init__(self, base_vocab, added_tokens):
+        self.base_vocab = base_vocab
+        self.added_tokens = added_tokens
+
+    def __getitem__(self, key):
+        if key in self.base_vocab:
+            return self.base_vocab[key]
+        else:
+            return self.added_tokens[key]
+
+    def __len__(self):
+        return len(self.base_vocab) + len(self.added_tokens)
+
+    def __iter__(self):
+        for key in self.base_vocab:
+            yield key
+        for key in self.added_tokens:
+            yield key
+
+
 class MaskedBertTokenizer(BertTokenizer):
     """
     A modified BertTokenizer that respects a mask deciding whether a token should be split or not.
     """
-    def __init__(self, *args, do_lower_case, do_basic_tokenize, **kwargs):
+    def __init__(self, *args, do_lower_case=False, do_basic_tokenize=False, **kwargs):
         # override do_lower_case and do_basic_tokenize unconditionally
         super().__init__(*args, do_lower_case=False, do_basic_tokenize=False, **kwargs)
 
@@ -109,14 +158,21 @@ class MaskedBertTokenizer(BertTokenizer):
                                                             added_tokens_decoder=self.added_tokens_decoder,
                                                             unk_token=self.unk_token)
 
+        self._itos = IToSWrapper(self.ids_to_tokens, self.added_tokens_decoder)
+        self._stoi = SToIWrapper(self.vocab, self.added_tokens_encoder)
+
     def tokenize(self, tokens, mask=None):
         return self.wordpiece_tokenizer.tokenize(tokens, mask)
 
-    # provide an interface that DecoderVocabulary can like
+    # provide an interface similar to Vocab
+
+    def __len__(self):
+        return len(self.vocab) + len(self.added_tokens_encoder)
+
     @property
     def stoi(self):
-        return self.vocab
+        return self._stoi
 
     @property
     def itos(self):
-        return self.ids_to_tokens
+        return self._itos

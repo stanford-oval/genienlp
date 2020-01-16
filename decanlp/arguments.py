@@ -82,7 +82,6 @@ def parse(argv):
 
     parser.add_argument('--vocab_tasks', nargs='+', type=str, help='tasks to use in the construction of the vocabulary')
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
-    parser.add_argument('--max_effective_vocab', default=int(1e6), type=int, help='max effective vocabulary size for pretrained embeddings')
     parser.add_argument('--max_generative_vocab', default=50000, type=int, help='max vocabulary for the generative softmax')
     parser.add_argument('--max_train_context_length', default=500, type=int, help='maximum length of the contexts during training')
     parser.add_argument('--max_val_context_length', default=500, type=int, help='maximum length of the contexts during validation')
@@ -90,19 +89,22 @@ def parse(argv):
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument('--preserve_case', action='store_false', dest='lower', help='whether to preserve casing for all text')
 
-    parser.add_argument('--model', type=str, default='MultitaskQuestionAnsweringNetwork', help='which model to import')
+    parser.add_argument('--model', type=str, choices=['Seq2Seq'], default='Seq2Seq', help='which model to import')
+    parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'Identity'], default='MQANEncoder',
+                        help='which encoder to use for the Seq2Seq model')
+    parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'], default='MQANDecoder',
+                        help='which decoder to use for the Seq2Seq model')
     parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules')
     parser.add_argument('--transformer_layers', default=2, type=int, help='number of layers for transformer modules')
     parser.add_argument('--transformer_hidden', default=150, type=int, help='hidden size of the transformer modules')
     parser.add_argument('--transformer_heads', default=3, type=int, help='number of heads for transformer modules')
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
-    parser.add_argument('--no_glove_and_char', action='store_false', dest='glove_and_char', help='turn off GloVe and CharNGram embeddings')
-    parser.add_argument('--locale', default='en', help='locale to use for word embeddings')
-    parser.add_argument('--retrain_encoder_embedding', default=False, action='store_true', help='whether to retrain encoder embeddings')
-    parser.add_argument('--trainable_decoder_embedding', default=0, type=int, help='size of trainable portion of decoder embedding (0 or omit to disable)')
-    parser.add_argument('--no_glove_decoder', action='store_false', dest='glove_decoder', help='turn off GloVe embeddings from decoder')
-    parser.add_argument('--pretrained_decoder_lm', help='pretrained language model to use as embedding layer for the decoder (omit to disable)')
+
+    parser.add_argument('--encoder_embeddings', default='glove+char', help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT; multiple embeddings can be concatenated with +')
+    parser.add_argument('--train_encoder_embeddings', action='store_true', default=False, help='back propagate into pretrained encoder embedding (recommended for BERT)')
+    parser.add_argument('--decoder_embeddings', default='glove+char', help='which pretrained word embedding to use on the decoder side')
+    parser.add_argument('--trainable_decoder_embeddings', default=0, type=int, help='size of trainable portion of decoder embedding (0 or omit to disable)')
 
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
@@ -123,8 +125,6 @@ def parse(argv):
 
     parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether to use exisiting cached splits or generate new ones')
     parser.add_argument('--lr_rate', default=0.001, type=float, help='initial_learning_rate')
-    parser.add_argument('--small_glove', action='store_true', help='Use glove.6B.50d instead of glove.840B.300d')
-    parser.add_argument('--almond_type_embeddings', action='store_true', help='Add type-based word embeddings for Almond task')
     parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')
     parser.add_argument('--aux_dataset', default='', type=str, help='path to auxiliary dataset (ignored if curriculum is not used)')
     parser.add_argument('--curriculum_max_frac', default=1.0, type=float, help='max fraction of harder dataset to keep for curriculum')

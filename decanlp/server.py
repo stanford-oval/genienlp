@@ -32,17 +32,15 @@
 from argparse import ArgumentParser
 import ujson as json
 import torch
-import numpy as np
-import random
 import asyncio
 import logging
 import sys
 from pprint import pformat
 
 from .data.example import Batch
-from .util import set_seed, init_devices, load_config_json, log_model_size, make_numericalizer
+from .util import set_seed, init_devices, load_config_json, log_model_size
 from . import models
-from .utils.embeddings import load_embeddings
+from .data.embeddings import load_embeddings
 from .tasks.registry import get_tasks
 from .tasks.generic_dataset import Example
 
@@ -52,27 +50,24 @@ class ProcessedExample():
     pass
 
 class Server():
-    def __init__(self, args, numericalizer, model, device):
+    def __init__(self, args, numericalizer, embeddings, model, device):
         self.args = args
         self.device = device
         self.numericalizer = numericalizer
         self.model = model
 
         logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens from training')
-        self._vector_collections = load_embeddings(args)
+        self._embeddings = embeddings
 
         self._cached_tasks = dict()
 
     def numericalize_example(self, ex):
-        new_vectors = self.numericalizer.grow_vocab([ex], self._vector_collections)
-        if new_vectors:
-            # concat the old embedding matrix and all the new vector along the first dimension
-            new_embedding_matrix = torch.cat([self.numericalizer.vocab.vectors.cpu()] + new_vectors, dim=0)
-            self.numericalizer.vocab.vectors = new_embedding_matrix
-            self.model.set_embeddings(new_embedding_matrix)
+        new_words = self.numericalizer.grow_vocab([ex])
+        for emb in self._embeddings:
+            emb.grow_for_vocab(self.numericalizer.vocab, new_words)
 
         # batch of size 1
-        return Batch.from_examples([ex], self.numericalizer, self.numericalizer.decoder_vocab, device=self.device)
+        return Batch.from_examples([ex], self.numericalizer, device=self.device)
     
     def handle_request(self, line):
         request = json.loads(line)
@@ -174,15 +169,19 @@ def main(argv=sys.argv):
     devices = init_devices(args)
     save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
 
-    numericalizer = make_numericalizer(args)
+    numericalizer, encoder_embeddings, decoder_embeddings = load_embeddings(args.embeddings, args.encoder_embeddings,
+                                                                            args.decoder_embeddings,
+                                                                            args.max_generative_vocab)
     numericalizer.load(args.path)
+    for emb in set(encoder_embeddings + decoder_embeddings):
+        emb.init_for_vocab(numericalizer.vocab)
 
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(numericalizer, args, devices)
+    model = Model(numericalizer, args, encoder_embeddings, decoder_embeddings)
     model_dict = save_dict['model_state_dict']
     model.load_state_dict(model_dict)
     
-    server = Server(args, numericalizer, model, devices[0])
+    server = Server(args, numericalizer, encoder_embeddings + decoder_embeddings, model, devices[0])
 
     server.run()

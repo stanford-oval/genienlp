@@ -29,14 +29,12 @@
 
 
 from argparse import ArgumentParser
-import torch
-import numpy as np
-import random
 import logging
 import sys
 from pprint import pformat
 
-from .utils.embeddings import load_embeddings
+from .util import set_seed
+from .data.embeddings import load_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +42,8 @@ logger = logging.getLogger(__name__)
 def get_args(argv):
     parser = ArgumentParser(prog=argv[0])
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
-    parser.add_argument('--locale', default='en', help='locale to use for word embeddings')
+    parser.add_argument('-d', '--destdir', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--embeddings', default='glove+char', help='which embeddings to download')
 
     args = parser.parse_args(argv[1:])
     return args
@@ -55,9 +53,5 @@ def main(argv=sys.argv):
     args = get_args(argv)
     logger.info(f'Arguments:\n{pformat(vars(args))}')
 
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-
-    load_embeddings(args, load_almond_embeddings=False)
+    set_seed(args.seed)
+    load_embeddings(args.destdir, args.embeddings, '')

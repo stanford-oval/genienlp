@@ -23,10 +23,12 @@ workdir=`mktemp -d $TMPDIR/decaNLP-tests-XXXXXX`
 trap on_error ERR INT TERM
 
 i=0
-for hparams in "" "--use_curriculum"; do
+for hparams in "--encoder_embeddings=small_glove+char --decoder_embeddings=small_glove+char" \
+               "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50" \
+               "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --rnn_layers=0" ; do
 
     # train
-    pipenv run python3 -m decanlp train --train_tasks almond  --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --small_glove --no_commit
+    pipenv run python3 -m decanlp train --train_tasks almond  --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --no_commit
 
     # greedy decode
     pipenv run python3 -m decanlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings

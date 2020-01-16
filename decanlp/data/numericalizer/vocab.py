@@ -20,8 +20,7 @@ class Vocab(object):
             numerical identifiers.
         itos: A list of token strings indexed by their numerical identifiers.
     """
-    def __init__(self, counter, max_size=None, min_freq=1, specials=('<pad>',),
-                 vectors=None, cat_vectors=True):
+    def __init__(self, counter, max_size=None, min_freq=1, specials=('<pad>',)):
         """Create a Vocab object from a collections.Counter.
 
         Arguments:
@@ -60,18 +59,12 @@ class Vocab(object):
             self.itos.append(word)
             self.stoi[word] = len(self.itos) - 1
 
-        self.vectors = None
-        if vectors is not None:
-            self.load_vectors(vectors, cat=cat_vectors)
-
     def __eq__(self, other):
         if self.freqs != other.freqs:
             return False
         if self.stoi != other.stoi:
             return False
         if self.itos != other.itos:
-            return False
-        if self.vectors != other.vectors:
             return False
         return True
 
@@ -84,54 +77,6 @@ class Vocab(object):
             if w not in self.stoi:
                 self.itos.append(w)
                 self.stoi[w] = len(self.itos) - 1
-
-    def load_vectors(self, vectors, cat=True):
-        """
-        Arguments:
-            vectors: one of or a list containing instantiations of the
-                GloVe, CharNGram, or Vectors classes.
-        """
-        if not isinstance(vectors, list):
-            vectors = [vectors]
-        if cat:
-            tot_dim = sum(v.dim for v in vectors)
-            self.vectors = torch.Tensor(len(self), tot_dim)
-            for ti, token in enumerate(self.itos):
-                start_dim = 0
-                for v in vectors:
-                    end_dim = start_dim + v.dim
-                    self.vectors[ti][start_dim:end_dim] = v[token.strip()]
-                    start_dim = end_dim
-                assert(start_dim == tot_dim)
-        else:
-            self.vectors = [torch.Tensor(len(self), v.dim) for v in vectors]
-            for ti, t in enumerate(self.itos):
-                for vi, v in enumerate(vectors):
-                    self.vectors[vi][ti] = v[t.strip()]
-
-    def set_vectors(self, stoi, vectors, dim, unk_init=torch.Tensor.zero_):
-        """
-        Set the vectors for the Vocab instance from a collection of Tensors.
-
-        Arguments:
-            stoi: A dictionary of string to the index of the associated vector
-                in the `vectors` input argument.
-            vectors: An indexed iterable (or other structure supporting __getitem__) that
-                given an input index, returns a FloatTensor representing the vector
-                for the token associated with the index. For example,
-                vector[stoi["string"]] should return the vector for "string".
-            dim: The dimensionality of the vectors.
-            unk_init (callback): by default, initialize out-of-vocabulary word vectors
-                to zero vectors; can be any function that takes in a Tensor and
-                returns a Tensor of the same size. Default: torch.Tensor.zero_
-        """
-        self.vectors = torch.Tensor(len(self), dim)
-        for i, token in enumerate(self.itos):
-            wv_index = stoi.get(token, None)
-            if wv_index is not None:
-                self.vectors[i] = vectors[wv_index]
-            else:
-                self.vectors[i] = unk_init(self.vectors[i])
 
     @staticmethod
     def build_from_data(field_names, *args, unk_token=None, pad_token=None, init_token=None, eos_token=None, **kwargs):

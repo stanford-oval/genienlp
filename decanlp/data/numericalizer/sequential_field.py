@@ -35,4 +35,3 @@ class SequentialField(NamedTuple):
     value : torch.tensor
     length : torch.tensor
     limited : torch.tensor
-    tokens : List[List[str]]

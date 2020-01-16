@@ -35,8 +35,7 @@ from .sequential_field import SequentialField
 from .decoder_vocab import DecoderVocabulary
 
 class SimpleNumericalizer(object):
-    def __init__(self, max_effective_vocab, max_generative_vocab, fix_length=None, pad_first=False):
-        self.max_effective_vocab = max_effective_vocab
+    def __init__(self, max_generative_vocab, fix_length=None, pad_first=False):
         self.max_generative_vocab = max_generative_vocab
 
         self.init_token = '<init>'
@@ -58,17 +57,15 @@ class SimpleNumericalizer(object):
     def save(self, save_dir):
         torch.save(self.vocab, os.path.join(save_dir, 'vocab.pth'))
 
-    def build_vocab(self, vectors, vocab_fields, vocab_sets):
+    def build_vocab(self, vocab_fields, vocab_sets):
         self.vocab = Vocab.build_from_data(vocab_fields, *vocab_sets,
                                            unk_token=self.unk_token,
                                            init_token=self.init_token,
                                            eos_token=self.eos_token,
-                                           pad_token=self.pad_token,
-                                           max_size=self.max_effective_vocab,
-                                           vectors=vectors)
+                                           pad_token=self.pad_token)
         self._init_vocab()
 
-    def _grow_vocab_one(self, sentence, vectors, new_vectors):
+    def _grow_vocab_one(self, sentence, new_words):
         assert isinstance(sentence, list)
 
         # check if all the words are in the vocabulary, and if not
@@ -77,22 +74,15 @@ class SimpleNumericalizer(object):
             if word not in self.vocab.stoi:
                 self.vocab.stoi[word] = len(self.vocab.itos)
                 self.vocab.itos.append(word)
+                new_words.append(word)
 
-                new_vector = [vec[word] for vec in vectors]
-
-                # charNgram returns  a [1, D] tensor, while Glove returns a [D] tensor
-                # normalize to [1, D] so we can concat along the second dimension
-                # and later concat all vectors along the first
-                new_vector = [vec if vec.dim() > 1 else vec.unsqueeze(0) for vec in new_vector]
-                new_vectors.append(torch.cat(new_vector, dim=1))
-
-    def grow_vocab(self, examples, vectors):
-        new_vectors = []
+    def grow_vocab(self, examples):
+        new_words = []
         for ex in examples:
-            self._grow_vocab_one(ex.context, vectors, new_vectors)
-            self._grow_vocab_one(ex.question, vectors, new_vectors)
-            self._grow_vocab_one(ex.answer, vectors, new_vectors)
-        return new_vectors
+            self._grow_vocab_one(ex.context, new_words)
+            self._grow_vocab_one(ex.question, new_words)
+            self._grow_vocab_one(ex.answer, new_words)
+        return new_words
 
     def _init_vocab(self):
         self.init_id = self.vocab.stoi[self.init_token]
@@ -113,7 +103,7 @@ class SimpleNumericalizer(object):
         if self.fix_length is None:
             max_len = max(len(x[0]) for x in minibatch)
         else:
-            max_len = self.fix_length + 2
+            max_len = self.fix_length
         padded = []
         lengths = []
         numerical = []
@@ -140,7 +130,7 @@ class SimpleNumericalizer(object):
         numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
         decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
 
-        return SequentialField(tokens=padded, length=length, value=numerical, limited=decoder_numerical)
+        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
 
     def decode(self, tensor):
         return [self.vocab.itos[idx] for idx in tensor]

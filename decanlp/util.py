@@ -187,34 +187,23 @@ def load_config_json(args):
     args.almond_type_embeddings = False
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
-        retrieve = ['model', 'transformer_layers', 'rnn_layers', 'transformer_hidden', 'dimension',
-                    'load', 'max_val_context_length', 'val_batch_size', 'transformer_heads', 'max_output_length',
-                    'max_effective_vocab', 'max_generative_vocab', 'lower', 'glove_and_char',
-                    'small_glove', 'almond_type_embeddings', 'almond_grammar',
-                    'trainable_decoder_embedding', 'glove_decoder', 'pretrained_decoder_lm',
-                    'retrain_encoder_embedding', 'question', 'locale', 'use_google_translate']
+        retrieve = ['model', 'seq2seq_encoder', 'seq2seq_decoder', 'transformer_layers', 'rnn_layers',
+                    'transformer_hidden', 'dimension', 'load', 'max_val_context_length', 'val_batch_size',
+                    'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower', 'encoder_embeddings',
+                    'decoder_embeddings', 'trainable_decoder_embeddings', 'train_encoder_embeddings',
+                    'question', 'locale', 'use_google_translate']
 
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
             elif r == 'locale':
                 setattr(args, r, 'en')
-            elif r in ('small_glove', 'almond_type_embbedings'):
-                setattr(args, r, False)
-            elif r in ('glove_decoder', 'glove_and_char'):
-                setattr(args, r, True)
             elif r == 'trainable_decoder_embedding':
                 setattr(args, r, 0)
-            elif r == 'retrain_encoder_embedding':
+            elif r == 'train_encoder_embedding':
                 setattr(args, r, False)
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
-
-
-def make_numericalizer(args):
-    return SimpleNumericalizer(max_effective_vocab=args.max_effective_vocab,
-                               max_generative_vocab=args.max_generative_vocab,
-                               pad_first=False)

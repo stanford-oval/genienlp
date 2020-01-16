@@ -36,10 +36,9 @@ import sys
 import logging
 from pprint import pformat
 
-from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
-    make_numericalizer
+from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices
 from .metrics import compute_metrics
-from .utils.embeddings import load_embeddings
+from .data.embeddings import load_embeddings
 from .tasks.registry import get_tasks
 from . import models
 
@@ -67,18 +66,16 @@ def get_all_splits(args):
     return splits
 
 
-def prepare_data(args, numericalizer):
+def prepare_data(args, numericalizer, embeddings):
     splits = get_all_splits(args)
-    vectors = load_embeddings(args)
     logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens from training')
-    new_vectors = []
+    new_words = []
     for split in splits:
-        new_vectors += numericalizer.grow_vocab(split, vectors)
-    logger.info(f'Vocabulary has expanded to {numericalizer.num_tokens} tokens')
-    if new_vectors:
-        # concat the old embedding matrix and all the new vector along the first dimension
-        new_embedding_matrix = torch.cat([numericalizer.vocab.vectors.cpu()] + new_vectors, dim=0)
-        numericalizer.vocab.vectors = new_embedding_matrix
+        new_words += numericalizer.grow_vocab(split)
+        logger.info(f'Vocabulary has expanded to {numericalizer.num_tokens} tokens')
+
+    for emb in embeddings:
+        emb.grow_for_vocab(numericalizer.vocab, new_words)
 
     return splits
 
@@ -186,17 +183,20 @@ def main(argv=sys.argv):
     devices = init_devices(args)
     save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
 
-    numericalizer = make_numericalizer(args)
+    numericalizer, encoder_embeddings, decoder_embeddings = load_embeddings(args.embeddings, args.encoder_embeddings,
+                                                                            args.decoder_embeddings,
+                                                                            args.max_generative_vocab,
+                                                                            logger)
     numericalizer.load(args.path)
+    for emb in set(encoder_embeddings + decoder_embeddings):
+        emb.init_for_vocab(numericalizer.vocab)
 
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(numericalizer, args, devices)
+    model = Model(numericalizer, args, encoder_embeddings, decoder_embeddings)
     model_dict = save_dict['model_state_dict']
     model.load_state_dict(model_dict)
-    splits = prepare_data(args, numericalizer)
-    if args.model != 'MultiLingualTranslationModel':
-        model.set_embeddings(numericalizer.vocab.vectors)
+    splits = prepare_data(args, numericalizer, set(encoder_embeddings + decoder_embeddings))
 
     run(args, numericalizer, splits, model, devices[0])
 
