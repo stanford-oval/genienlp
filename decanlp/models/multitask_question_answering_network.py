@@ -35,14 +35,13 @@ from ..util import get_trainable_params
 from .common import *
 
 class MQANEncoder(nn.Module):
-    def __init__(self, field, args):
+    def __init__(self, numericalizer, args):
         super().__init__()
-        self.field = field
         self.args = args
-        self.pad_idx = self.field.vocab.stoi[self.field.pad_token]
+        self.pad_idx = numericalizer.pad_id
 
         if self.args.glove_and_char:
-            self.encoder_embeddings = Embedding(field, args.dimension,
+            self.encoder_embeddings = Embedding(numericalizer, args.dimension,
                                                 trained_dimension=0,
                                                 dropout=args.dropout_ratio,
                                                 project=True,
@@ -118,9 +117,11 @@ class MQANEncoder(nn.Module):
 
 
 class MQANDecoder(nn.Module):
-    def __init__(self, field, args, devices):
+    def __init__(self, numericalizer, args, devices):
         super().__init__()
-        self.field = field
+        self.numericalizer = numericalizer
+        self.pad_idx = numericalizer.pad_id
+        self.init_idx = numericalizer.init_id
         self.args = args
         self.devices = devices
 
@@ -152,7 +153,7 @@ class MQANDecoder(nn.Module):
             self.pretrained_decoder_vocab_itos = None
             self.pretrained_decoder_vocab_stoi = None
             self.pretrained_decoder_embeddings = None
-            self.decoder_embeddings = Embedding(field, args.dimension,
+            self.decoder_embeddings = Embedding(self.numericalizer, args.dimension,
                                                 include_pretrained=args.glove_decoder,
                                                 trained_dimension=args.trainable_decoder_embedding,
                                                 dropout=args.dropout_ratio, project=True)
@@ -161,7 +162,7 @@ class MQANDecoder(nn.Module):
         self.dual_ptr_rnn_decoder = DualPtrRNNDecoder(args.dimension, args.dimension,
             dropout=args.dropout_ratio, num_layers=args.rnn_layers)
 
-        self.generative_vocab_size = min(len(field.vocab), args.max_generative_vocab)
+        self.generative_vocab_size = numericalizer.generative_vocab_size
         self.out = nn.Linear(args.dimension, self.generative_vocab_size)
 
     def set_embeddings(self, embeddings):
@@ -180,14 +181,13 @@ class MQANDecoder(nn.Module):
         question_indices = question_limited if question_limited is not None else question
         answer_indices = answer_limited if answer_limited is not None else answer
 
-        decoder_pad_idx = self.field.decoder_vocab.stoi[self.field.pad_token]
-        context_padding = context_indices.data == decoder_pad_idx
-        question_padding = question_indices.data == decoder_pad_idx
+        context_padding = context_indices.data == self.pad_idx
+        question_padding = question_indices.data == self.pad_idx
 
         self.dual_ptr_rnn_decoder.applyMasks(context_padding, question_padding)
 
         if self.training:
-            answer_padding = (answer_indices.data == decoder_pad_idx)[:, :-1]
+            answer_padding = (answer_indices.data == self.pad_idx)[:, :-1]
 
             if self.args.pretrained_decoder_lm:
                 # note that pretrained_decoder_embeddings is time first
@@ -218,7 +218,7 @@ class MQANDecoder(nn.Module):
                                context_indices, question_indices,
                                decoder_vocab)
 
-            probs, targets = mask(answer_indices[:, 1:].contiguous(), probs.contiguous(), pad_idx=decoder_pad_idx)
+            probs, targets = mask(answer_indices[:, 1:].contiguous(), probs.contiguous(), pad_idx=self.pad_idx)
             loss = F.nll_loss(probs.log(), targets)
             return loss, None
 
@@ -262,7 +262,7 @@ class MQANDecoder(nn.Module):
                rnn_state=None):
         B, TC, C = context.size()
         T = self.args.max_output_length
-        outs = context.new_full((B, T), self.field.decoder_vocab.stoi[self.field.pad_token], dtype=torch.long)
+        outs = context.new_full((B, T), self.pad_idx, dtype=torch.long)
         hiddens = [self_attended_context[0].new_zeros((B, T, C))
                    for l in range(len(self.self_attentive_decoder.layers) + 1)]
         hiddens[0] = hiddens[0] + positional_encodings_like(hiddens[0])
@@ -276,7 +276,7 @@ class MQANDecoder(nn.Module):
             if t == 0:
                 if self.args.pretrained_decoder_lm:
                     init_token = self_attended_context[-1].new_full((1, B),
-                                                                    self.pretrained_decoder_vocab_stoi['<init>'],
+                                                                    self.pretrained_decoder_vocab_stoi[self.numericalizer.init_token],
                                                                     dtype=torch.long)
 
                     # note that pretrained_decoder_embeddings is time first
@@ -287,12 +287,12 @@ class MQANDecoder(nn.Module):
                     if self.pretrained_decoder_embedding_projection is not None:
                         embedding = self.pretrained_decoder_embedding_projection(embedding)
                 else:
-                    init_token = self_attended_context[-1].new_full((B, 1), self.field.vocab.stoi['<init>'],
+                    init_token = self_attended_context[-1].new_full((B, 1), self.init_idx,
                                                                     dtype=torch.long)
                     embedding = self.decoder_embeddings(init_token, [1] * B)
             else:
                 if self.args.pretrained_decoder_lm:
-                    current_token = [self.field.vocab.itos[x] for x in outs[:, t - 1]]
+                    current_token = [self.numericalizer.decode([x])[0] for x in outs[:, t - 1]]
                     current_token_id = torch.tensor([[self.pretrained_decoder_vocab_stoi[x] for x in current_token]],
                                                     dtype=torch.long, requires_grad=False)
                     embedding, pretrained_lm_hidden = self.pretrained_decoder_embeddings.encode(current_token_id,
@@ -327,7 +327,7 @@ class MQANDecoder(nn.Module):
                                decoder_vocab)
             pred_probs, preds = probs.max(-1)
             preds = preds.squeeze(1)
-            eos_yet = eos_yet | (preds == self.field.decoder_vocab.stoi[self.field.eos_token]).byte()
+            eos_yet = eos_yet | (preds == self.numericalizer.eos_id).byte()
             outs[:, t] = preds.cpu().apply_(self.map_to_full)
             if eos_yet.all():
                 break
@@ -336,14 +336,12 @@ class MQANDecoder(nn.Module):
 
 class MultitaskQuestionAnsweringNetwork(nn.Module):
 
-    def __init__(self, field, args, devices):
+    def __init__(self, numericalizer, args, devices):
         super().__init__()
-        self.field = field
         self.args = args
-        self.pad_idx = self.field.vocab.stoi[self.field.pad_token]
 
-        self.encoder = MQANEncoder(field, args)
-        self.decoder = MQANDecoder(field, args, devices)
+        self.encoder = MQANEncoder(numericalizer, args)
+        self.decoder = MQANDecoder(numericalizer, args, devices)
 
 
     def set_embeddings(self, embeddings):

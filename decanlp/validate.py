@@ -34,17 +34,17 @@ from .util import pad
 from .metrics import compute_metrics
 
 
-def compute_validation_outputs(model, val_iter, field, iteration):
+def compute_validation_outputs(model, val_iter, numericalizer, iteration):
     loss, predictions, answers, contexts, questions = [], [], [], [], []
     for batch_idx, batch in enumerate(val_iter):
         l, p = model(batch, iteration)
         loss.append(l)
-        predictions.append(pad(p, 150, dim=-1, val=field.vocab.stoi[field.pad_token]))
-        a = pad(batch.answer.value.data.cpu(), 150, dim=-1, val=field.vocab.stoi[field.pad_token])
+        predictions.append(pad(p, 150, dim=-1, val=numericalizer.pad_id))
+        a = pad(batch.answer.value.data.cpu(), 150, dim=-1, val=numericalizer.pad_id)
         answers.append(a)
-        c = pad(batch.context.value.data.cpu(), 150, dim=-1, val=field.vocab.stoi[field.pad_token])
+        c = pad(batch.context.value.data.cpu(), 150, dim=-1, val=numericalizer.pad_id)
         contexts.append(c)
-        q = pad(batch.question.value.data.cpu(), 150, dim=-1, val=field.vocab.stoi[field.pad_token])
+        q = pad(batch.question.value.data.cpu(), 150, dim=-1, val=numericalizer.pad_id)
         questions.append(q)
 
     loss = torch.cat(loss, 0) if loss[0] is not None else None
@@ -55,16 +55,12 @@ def compute_validation_outputs(model, val_iter, field, iteration):
     return loss, predictions, answers, contexts, questions
 
 
-def all_reverse(tensor, task, field, field_name, dim=0):
-    return field.reverse(tensor, detokenize=task.detokenize, field_name=field_name)
-
-
-def gather_results(model, val_iter, field, task, iteration):
-    loss, predictions, answers, contexts, questions = compute_validation_outputs(model, val_iter, field, iteration)
-    answers = all_reverse(answers, task, field, field_name='answer')
-    predictions = all_reverse(predictions, task, field, field_name='answer')
-    contexts = all_reverse(contexts, task, field, field_name='context')
-    questions = all_reverse(questions, task, field, field_name='question')
+def gather_results(model, val_iter, numericalizer, task, iteration):
+    loss, predictions, answers, contexts, questions = compute_validation_outputs(model, val_iter, numericalizer, iteration)
+    answers = numericalizer.reverse(answers, detokenize=task.detokenize, field_name='answer')
+    predictions = numericalizer.reverse(predictions, detokenize=task.detokenize, field_name='answer')
+    contexts = numericalizer.reverse(contexts, detokenize=task.detokenize, field_name='context')
+    questions = numericalizer.reverse(questions, detokenize=task.detokenize, field_name='question')
 
     return loss, predictions, answers, contexts, questions
 
@@ -82,11 +78,11 @@ def print_results(keys, values, num_print=1):
         print()
 
 
-def validate(task, val_iter, model, logger, field, iteration, num_print=10, args=None):
+def validate(task, val_iter, model, logger, numericalizer, iteration, num_print=10, args=None):
     with torch.no_grad():
         model.eval()
         names = ['greedy', 'answer', 'context', 'question']
-        loss, predictions, answers, contexts, questions = gather_results(model, val_iter, field, task, iteration)
+        loss, predictions, answers, contexts, questions = gather_results(model, val_iter, numericalizer, task, iteration)
         predictions = [p.replace('UNK', 'OOV') for p in predictions]
 
         metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)

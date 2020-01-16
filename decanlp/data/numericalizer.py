@@ -27,16 +27,11 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
+import os
 import torch
-from typing import NamedTuple, List
 
-
-class SequentialField(NamedTuple):
-    value : torch.tensor
-    length : torch.tensor
-    limited : torch.tensor
-    tokens : List[str]
+from ..text.vocab import Vocab
+from .example import Example, SequentialField
 
 
 class DecoderVocabulary(object):
@@ -83,17 +78,80 @@ class DecoderVocabulary(object):
 
 
 class SimpleNumericalizer(object):
-    def __init__(self, vocab, init_token=None, eos_token=None, pad_token="<pad>", unk_token="<unk>",
-                 fix_length=None, pad_first=False):
-        self.vocab = vocab
-        self.init_token = init_token
-        self.eos_token = eos_token
-        self.unk_token = unk_token
-        self.pad_token = pad_token
+    def __init__(self, max_effective_vocab, max_generative_vocab, fix_length=None, pad_first=False):
+        self.max_effective_vocab = max_effective_vocab
+        self.max_generative_vocab = max_generative_vocab
+
+        self.init_token = '<init>'
+        self.eos_token = '<eos>'
+        self.unk_token = '<unk>'
+        self.pad_token = '<pad>'
+
         self.fix_length = fix_length
         self.pad_first = pad_first
 
-    def encode(self, minibatch, decoder_vocab : DecoderVocabulary, device=None):
+    @property
+    def num_tokens(self):
+        return len(self.vocab)
+
+    def load(self, save_dir):
+        self.vocab = torch.load(os.path.join(save_dir, 'vocab.pth'))
+        self._init_vocab()
+
+    def save(self, save_dir):
+        torch.save(self.vocab, os.path.join(save_dir, 'vocab.pth'))
+
+    def build_vocab(self, vectors, vocab_sets):
+        self.vocab = Vocab.build_from_data(Example.vocab_fields, *vocab_sets,
+                                           unk_token=self.unk_token,
+                                           init_token=self.init_token,
+                                           eos_token=self.eos_token,
+                                           pad_token=self.pad_token,
+                                           max_size=self.max_effective_vocab,
+                                           vectors=vectors)
+        self._init_vocab()
+
+    def _grow_vocab_one(self, sentence, vectors, new_vectors):
+        assert isinstance(sentence, list)
+
+        # check if all the words are in the vocabulary, and if not
+        # grow the vocabulary and the embedding matrix
+        for word in sentence:
+            if word not in self.vocab.stoi:
+                self.vocab.stoi[word] = len(self.vocab.itos)
+                self.vocab.itos.append(word)
+
+                new_vector = [vec[word] for vec in vectors]
+
+                # charNgram returns  a [1, D] tensor, while Glove returns a [D] tensor
+                # normalize to [1, D] so we can concat along the second dimension
+                # and later concat all vectors along the first
+                new_vector = [vec if vec.dim() > 1 else vec.unsqueeze(0) for vec in new_vector]
+                new_vectors.append(torch.cat(new_vector, dim=1))
+
+    def grow_vocab(self, examples, vectors):
+        new_vectors = []
+        for ex in examples:
+            self._grow_vocab_one(ex.context, vectors, new_vectors)
+            self._grow_vocab_one(ex.question, vectors, new_vectors)
+            self._grow_vocab_one(ex.answer, vectors, new_vectors)
+        return new_vectors
+
+    def _init_vocab(self):
+        self.init_id = self.vocab.stoi[self.init_token]
+        self.eos_id = self.vocab.stoi[self.eos_token]
+        self.unk_id = self.vocab.stoi[self.unk_token]
+        self.pad_id = self.vocab.stoi[self.pad_token]
+        self.generative_vocab_size = min(self.max_generative_vocab, len(self.vocab))
+
+        assert self.init_id < self.max_generative_vocab
+        assert self.eos_id < self.max_generative_vocab
+        assert self.unk_id < self.max_generative_vocab
+        assert self.pad_id < self.max_generative_vocab
+
+        self.decoder_vocab = DecoderVocabulary(self.vocab.itos[:self.max_generative_vocab], self.vocab)
+
+    def encode(self, minibatch, decoder_vocab, device=None):
         if not isinstance(minibatch, list):
             minibatch = list(minibatch)
         if self.fix_length is None:
@@ -131,3 +189,24 @@ class SimpleNumericalizer(object):
 
     def decode(self, tensor):
         return [self.vocab.itos[idx] for idx in tensor]
+
+    def reverse(self, batch, detokenize, field_name=None):
+        with torch.cuda.device_of(batch):
+            batch = batch.tolist()
+        batch = [self.decode(ex) for ex in batch]  # denumericalize
+
+        def trim(s, t):
+            sentence = []
+            for w in s:
+                if w == t:
+                    break
+                sentence.append(w)
+            return sentence
+
+        batch = [trim(ex, self.eos_token) for ex in batch]  # trim past frst eos
+
+        def filter_special(tok):
+            return tok not in (self.init_token, self.pad_token)
+
+        batch = [filter(filter_special, ex) for ex in batch]
+        return [detokenize(ex, field_name=field_name) for ex in batch]

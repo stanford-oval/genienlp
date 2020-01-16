@@ -160,11 +160,7 @@ def batch_fn(new, i, sofar):
     return max(len(new.context), 5*len(new.answer), prev_max_len) * i
 
 
-def make_data_loader(dataset, field, batch_size, device=None, train=False):
-    numericalizer = SimpleNumericalizer(field.vocab, init_token=field.init_token, eos_token=field.eos_token,
-                                        pad_token=field.pad_token, unk_token=field.unk_token,
-                                        fix_length=field.fix_length, pad_first=field.pad_first)
-
+def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False):
     iterator = Iterator(dataset, batch_size,
                         batch_size_fn=batch_fn if train else None,
                         shuffle=train,
@@ -172,7 +168,6 @@ def make_data_loader(dataset, field, batch_size, device=None, train=False):
                         bucket_by_sort_key=train)
     return torch.utils.data.DataLoader(iterator, batch_size=None,
                                        collate_fn=lambda minibatch: Batch.from_examples(minibatch, numericalizer,
-                                                                                        field.decoder_vocab,
                                                                                         device=device))
 
 def pad(x, new_channel, dim, val=None):
@@ -194,7 +189,7 @@ def load_config_json(args):
         config = json.load(config_file)
         retrieve = ['model', 'transformer_layers', 'rnn_layers', 'transformer_hidden', 'dimension',
                     'load', 'max_val_context_length', 'val_batch_size', 'transformer_heads', 'max_output_length',
-                    'max_generative_vocab', 'lower', 'glove_and_char',
+                    'max_effective_vocab', 'max_generative_vocab', 'lower', 'glove_and_char',
                     'small_glove', 'almond_type_embeddings', 'almond_grammar',
                     'trainable_decoder_embedding', 'glove_decoder', 'pretrained_decoder_lm',
                     'retrain_encoder_embedding', 'question', 'locale', 'use_google_translate']
@@ -217,3 +212,9 @@ def load_config_json(args):
         args.dropout_ratio = 0.0
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
+
+
+def make_numericalizer(args):
+    return SimpleNumericalizer(max_effective_vocab=args.max_effective_vocab,
+                               max_generative_vocab=args.max_generative_vocab,
+                               pad_first=False)

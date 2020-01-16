@@ -40,12 +40,11 @@ import sys
 from pprint import pformat
 
 from .data.example import Batch
-from .data.numericalizer import SimpleNumericalizer
-from .util import set_seed, init_devices, load_config_json, log_model_size
+from .util import set_seed, init_devices, load_config_json, log_model_size, make_numericalizer
 from . import models
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
-from .tasks.generic_dataset import CQA, Example
+from .tasks.generic_dataset import Example
 
 logger = logging.getLogger(__name__)
 
@@ -53,52 +52,27 @@ class ProcessedExample():
     pass
 
 class Server():
-    def __init__(self, args, field, model, device):
+    def __init__(self, args, numericalizer, model, device):
         self.args = args
         self.device = device
-        self.field = field
+        self.numericalizer = numericalizer
         self.model = model
 
-        logger.info(f'Vocabulary has {len(self.field.vocab)} tokens from training')
+        logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens from training')
         self._vector_collections = load_embeddings(args)
 
-        self.numericalizer = SimpleNumericalizer(field.vocab, init_token=field.init_token, eos_token=field.eos_token,
-                                                 pad_token=field.pad_token, unk_token=field.unk_token,
-                                                 fix_length=field.fix_length, pad_first=field.pad_first)
-
         self._cached_tasks = dict()
-        
-        assert self.field.include_lengths
 
     def numericalize_example(self, ex):
-        new_vectors = []
-        for name in ('context', 'question', 'answer'):
-            value = getattr(ex, name)
-
-            assert isinstance(value, list)
-            # check if all the words are in the vocabulary, and if not
-            # grow the vocabulary and the embedding matrix
-            for word in value:
-                if word not in self.field.vocab.stoi:
-                    self.field.vocab.stoi[word] = len(self.field.vocab.itos)
-                    self.field.vocab.itos.append(word)
-
-                    new_vector = [vec[word] for vec in self._vector_collections]
-
-                    # charNgram returns  a [1, D] tensor, while Glove returns a [D] tensor
-                    # normalize to [1, D] so we can concat along the second dimension
-                    # and later concat all vectors along the first
-                    new_vector = [vec if vec.dim() > 1 else vec.unsqueeze(0) for vec in new_vector]
-                    new_vectors.append(torch.cat(new_vector, dim=1))
-
+        new_vectors = self.numericalizer.grow_vocab([ex], self._vector_collections)
         if new_vectors:
             # concat the old embedding matrix and all the new vector along the first dimension
-            new_embedding_matrix = torch.cat([self.field.vocab.vectors.cpu()] + new_vectors, dim=0)
-            self.field.vocab.vectors = new_embedding_matrix
+            new_embedding_matrix = torch.cat([self.numericalizer.vocab.vectors.cpu()] + new_vectors, dim=0)
+            self.numericalizer.vocab.vectors = new_embedding_matrix
             self.model.set_embeddings(new_embedding_matrix)
 
         # batch of size 1
-        return Batch.from_examples([ex], self.numericalizer, self.field.decoder_vocab, device=self.device)
+        return Batch.from_examples([ex], self.numericalizer, self.numericalizer.decoder_vocab, device=self.device)
     
     def handle_request(self, line):
         request = json.loads(line)
@@ -118,12 +92,11 @@ class Server():
             question = task.default_question
         answer = ''
 
-        ex = Example.from_raw(str(request['id']), context, question, answer,
-                              tokenize=task.tokenize or self.field.tokenize, lower=self.args.lower)
+        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
         
         batch = self.numericalize_example(ex)
         _, prediction_batch = self.model(batch, iteration=0)
-        predictions = self.field.reverse(prediction_batch, detokenize=task.detokenize, field_name='answer')
+        predictions = self.numericalizer.reverse(prediction_batch, detokenize=task.detokenize, field_name='answer')
         
         response = json.dumps(dict(id=request['id'], answer=predictions[0]))
         return response + '\n'
@@ -201,14 +174,15 @@ def main(argv=sys.argv):
     devices = init_devices(args)
     save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
 
-    field = save_dict['field']
+    numericalizer = make_numericalizer(args)
+    numericalizer.load(args.path)
+
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(field, args, devices)
+    model = Model(numericalizer, args, devices)
     model_dict = save_dict['model_state_dict']
     model.load_state_dict(model_dict)
     
-    server = Server(args, field, model, devices[0])
-    model.set_embeddings(field.vocab.vectors)
+    server = Server(args, numericalizer, model, devices[0])
 
     server.run()

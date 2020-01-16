@@ -29,6 +29,7 @@
 
 
 from . import generic_dataset
+import revtok
 
 
 class BaseTask:
@@ -50,7 +51,15 @@ class BaseTask:
     def default_context(self):
         return ''
 
-    def get_splits(self, field, root, **kwargs):
+    def tokenize(self, sentence, field_name=None):
+        if not sentence:
+            return []
+        return revtok.tokenize(sentence)
+
+    def detokenize(self, tokenized, field_name=None):
+        return revtok.detokenize(tokenized)
+
+    def get_splits(self, root, **kwargs):
         """
         Load the train, test, eval datasets for this task
 
@@ -59,8 +68,7 @@ class BaseTask:
         :param kwargs: other arguments to pass to the Dataset
         :return: a list of text.Dataset
         """
-        return generic_dataset.JSON.splits(
-            fields=field, root=root, name=self.name, **kwargs)
+        return generic_dataset.JSON.splits(root=root, name=self.name, tokenize=self.tokenize, **kwargs)
 
     def preprocess_example(self, ex, train=False, max_context_length=None):
         """

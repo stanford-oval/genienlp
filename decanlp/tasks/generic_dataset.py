@@ -355,7 +355,7 @@ class SQuAD(CQA):
     name = 'squad'
     dirname = ''
 
-    def __init__(self, path, subsample=None, lower=False, **kwargs):
+    def __init__(self, path, subsample=None, lower=False, tokenize=None, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -382,7 +382,7 @@ class SQuAD(CQA):
                                 context = ' '.join(context.split())
                                 ex = Example.from_raw(make_example_id(self, qa['id']),
                                                       context, question, answer,
-                                                      tokenize=str.split, lower=lower)
+                                                      tokenize=tokenize, lower=lower)
                             else:
                                 answer = qa['answers'][0]['text']
                                 all_answers.append([a['text'] for a in qa['answers']])
@@ -437,7 +437,7 @@ class SQuAD(CQA):
 
                                 ex = Example.from_raw(make_example_id(self, qa['id']),
                                                       ' '.join(tagged_context), question, ' '.join(tokenized_answer),
-                                                      tokenize=str.split, lower=lower)
+                                                      tokenize=tokenize, lower=lower)
 
                             examples.append(ex)
                             if subsample is not None and len(examples) > subsample:

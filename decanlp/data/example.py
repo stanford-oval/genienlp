@@ -29,10 +29,14 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import torch
-import random
 from typing import NamedTuple, List
 
-from .numericalizer import DecoderVocabulary, SimpleNumericalizer, SequentialField
+
+class SequentialField(NamedTuple):
+    value : torch.tensor
+    length : torch.tensor
+    limited : torch.tensor
+    tokens : List[str]
 
 
 class Example(NamedTuple):
@@ -46,8 +50,8 @@ class Example(NamedTuple):
     @staticmethod
     def from_raw(example_id : str, context : str, question : str, answer : str, tokenize, lower=False):
         args = [example_id]
-        for arg in (context, question, answer):
-            new_arg = tokenize(arg.rstrip('\n'))
+        for argname, arg in (('context', context), ('question', question), ('answer', answer)):
+            new_arg = tokenize(arg.rstrip('\n'), field_name=argname)
             if lower:
                 new_arg = [word.lower() for word in new_arg]
             args.append(new_arg)
@@ -59,16 +63,16 @@ class Batch(NamedTuple):
     context : SequentialField
     question : SequentialField
     answer : SequentialField
-    decoder_vocab : DecoderVocabulary
+    decoder_vocab : object
 
     @staticmethod
-    def from_examples(examples, numericalizer : SimpleNumericalizer, decoder_vocab, device=None):
+    def from_examples(examples, numericalizer, device=None):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         example_ids = [ex.example_id for ex in examples]
         context_input = [ex.context for ex in examples]
         question_input = [ex.question for ex in examples]
         answer_input = [ex.answer for ex in examples]
-        decoder_vocab = decoder_vocab.clone()
+        decoder_vocab = numericalizer.decoder_vocab.clone()
 
         return Batch(example_ids,
                      numericalizer.encode(context_input, decoder_vocab, device=device),

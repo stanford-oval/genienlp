@@ -39,7 +39,8 @@ import logging
 from pprint import pformat
 
 from .text.vocab import Vocab
-from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices
+from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
+    make_numericalizer
 from .metrics import compute_metrics
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
@@ -51,7 +52,7 @@ from .data.numericalizer import DecoderVocabulary
 logger = logging.getLogger(__name__)
 
 
-def get_all_splits(args, field):
+def get_all_splits(args):
     splits = []
     for task in args.tasks:
         logger.info(f'Loading {task}')
@@ -66,33 +67,33 @@ def get_all_splits(args, field):
         kwargs['skip_cache_bool'] = args.skip_cache_bool
         kwargs['cached_path'] = args.cached
         kwargs['subsample'] = args.subsample
-        s = task.get_splits(root=args.data, tokenize=field.tokenize, lower=args.lower, **kwargs)[0]
+        s = task.get_splits(root=args.data, lower=args.lower, **kwargs)[0]
         preprocess_examples(args, [task], [s], train=False)
         splits.append(s)
     return splits
 
 
-def prepare_data(args, field):
-    splits = get_all_splits(args, field)
-    new_vocab = Vocab.build_from_data(Example.vocab_fields, *splits,
-                                      init_token=field.init_token, eos_token=field.eos_token,
-                                      pad_token=field.pad_token, unk_token=field.unk_token)
-    logger.info(f'Vocabulary has {len(field.vocab)} tokens from training')
-    args.max_generative_vocab = min(len(field.vocab), args.max_generative_vocab)
-    field.vocab.extend(new_vocab)
-    logger.info(f'Vocabulary has expanded to {len(field.vocab)} tokens')
+def prepare_data(args, numericalizer):
+    splits = get_all_splits(args)
     vectors = load_embeddings(args)
-    field.vocab.load_vectors(vectors, True)
-    field.decoder_vocab = DecoderVocabulary(field.vocab.itos[:args.max_generative_vocab], field.vocab)
+    logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens from training')
+    new_vectors = []
+    for split in splits:
+        new_vectors += numericalizer.grow_vocab(split, vectors)
+    logger.info(f'Vocabulary has expanded to {numericalizer.num_tokens} tokens')
+    if new_vectors:
+        # concat the old embedding matrix and all the new vector along the first dimension
+        new_embedding_matrix = torch.cat([numericalizer.vocab.vectors.cpu()] + new_vectors, dim=0)
+        numericalizer.vocab.vectors = new_embedding_matrix
 
-    return field, splits
+    return splits
 
 
-def run(args, field, val_sets, model, device):
+def run(args, numericalizer, val_sets, model, device):
     logger.info(f'Preparing iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
-    iters = [(name, make_data_loader(x, field, bs, device)) for name, x, bs in zip(args.tasks, val_sets, args.val_batch_size)]
+    iters = [(name, make_data_loader(x, numericalizer, bs, device)) for name, x, bs in zip(args.tasks, val_sets, args.val_batch_size)]
 
     log_model_size(logger, model, args.model)
     model.to(device)
@@ -125,9 +126,9 @@ def run(args, field, val_sets, model, device):
                 for batch_idx, batch in enumerate(it):
                     _, batch_prediction = model(batch, iteration=1)
 
-                    batch_prediction = field.reverse(batch_prediction, detokenize=task.detokenize, field_name='answer')
+                    batch_prediction = numericalizer.reverse(batch_prediction, detokenize=task.detokenize, field_name='answer')
                     predictions += batch_prediction
-                    batch_answer = field.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
+                    batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
                     answers += batch_answer
 
                     for i, example_prediction in enumerate(batch_prediction):
@@ -191,17 +192,19 @@ def main(argv=sys.argv):
     devices = init_devices(args)
     save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
 
-    field = save_dict['field']
+    numericalizer = make_numericalizer(args)
+    numericalizer.load(args.path)
+
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(field, args, devices)
+    model = Model(numericalizer, args, devices)
     model_dict = save_dict['model_state_dict']
     model.load_state_dict(model_dict)
-    field, splits = prepare_data(args, field)
+    splits = prepare_data(args, numericalizer)
     if args.model != 'MultiLingualTranslationModel':
-        model.set_embeddings(field.vocab.vectors)
+        model.set_embeddings(numericalizer.vocab.vectors)
 
-    run(args, field, splits, model, devices[0])
+    run(args, numericalizer, splits, model, devices[0])
 
 if __name__ == '__main__':
     main()

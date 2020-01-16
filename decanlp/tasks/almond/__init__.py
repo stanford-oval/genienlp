@@ -47,7 +47,7 @@ class AlmondDataset(generic_dataset.CQA):
 
     base_url = None
 
-    def __init__(self, path, contextual=False, reverse_task=False, subsample=None, **kwargs):
+    def __init__(self, path, contextual=False, reverse_task=False, subsample=None, tokenize=None, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -100,7 +100,7 @@ class AlmondDataset(generic_dataset.CQA):
                         answer = target_code
 
                 examples.append(Example.from_raw('almond/' + _id, context, question, answer,
-                                                 tokenize=str.split, lower=False))
+                                                 tokenize=tokenize, lower=False))
                 if len(examples) >= max_examples:
                     break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -178,7 +178,7 @@ class Almond(BaseAlmondTask):
     i.e. natural language to formal language (ThingTalk) mapping"""
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.splits(root=root, **kwargs)
+        return AlmondDataset.splits(root=root, tokenize=self.tokenize, **kwargs)
 
 
 @register_task('contextual_almond')
@@ -198,4 +198,4 @@ class ReverseAlmond(BaseTask):
         return ['bleu', 'em', 'nem', 'nf1']
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.splits(root=root, reverse_task=True, **kwargs)
+        return AlmondDataset.splits(root=root, reverse_task=True, tokenize=self.tokenize, **kwargs)

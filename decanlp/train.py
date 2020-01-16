@@ -42,17 +42,14 @@ import torch
 from tensorboardX import SummaryWriter
 
 from .utils.parallel_utils import NamedTupleCompatibleDataParallel
-from .text.vocab import Vocab
 from . import arguments
 from . import models
 from .validate import validate
 from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader, log_model_size, \
-    init_devices
+    init_devices, make_numericalizer
 from .utils.saver import Saver
 from .utils.embeddings import load_embeddings
-from .text.data import ReversibleField
-from .data.numericalizer import DecoderVocabulary
-from .data.example import Example
+from .data.numericalizer import SimpleNumericalizer
 
 
 def initialize_logger(args):
@@ -73,11 +70,7 @@ def initialize_logger(args):
     return logger
 
 
-def prepare_data(args, field, logger):
-    if field is None:
-        logger.info(f'Constructing field')
-        field = ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', include_lengths=True)
-
+def prepare_data(args, logger):
     train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
     for task in args.train_tasks:
         logger.info(f'Loading {task.name}')
@@ -90,7 +83,7 @@ def prepare_data(args, field, logger):
         kwargs['cached_path'] = args.cached
 
         logger.info(f'Adding {task.name} to training datasets')
-        split = task.get_splits(args.data, tokenize=field.tokenize, lower=args.lower, **kwargs)
+        split = task.get_splits(args.data, lower=args.lower, **kwargs)
         if args.use_curriculum:
             assert len(split) == 2
             aux_sets.append(split[1])
@@ -111,30 +104,26 @@ def prepare_data(args, field, logger):
         kwargs['cached_path'] = args.cached
 
         logger.info(f'Adding {task.name} to validation datasets')
-        split = task.get_splits(args.data, tokenize=field.tokenize, lower=args.lower, **kwargs)
+        split = task.get_splits(args.data, lower=args.lower, **kwargs)
         assert len(split) == 1
         logger.info(f'{task.name} has {len(split[0])} validation examples')
         val_sets.append(split[0])
         if args.vocab_tasks is not None and task.name in args.vocab_tasks:
             vocab_sets.extend(split)
 
-    if args.load is None:
+    numericalizer = make_numericalizer(args)
+    if args.load is not None:
+        numericalizer.load(args.save)
+    else:
         vectors = load_embeddings(args, logger)
         vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
         logger.info(f'Building vocabulary')
-        field.vocab = Vocab.build_from_data(Example.vocab_fields, *vocab_sets,
-                                            unk_token=field.unk_token,
-                                            init_token=field.init_token,
-                                            eos_token=field.eos_token,
-                                            pad_token=field.pad_token,
-                                            max_size=args.max_effective_vocab,
-                                            vectors=vectors)
+        numericalizer.build_vocab(vectors, vocab_sets)
+        numericalizer.save(args.save)
 
-    field.decoder_vocab = DecoderVocabulary(field.vocab.itos[:args.max_generative_vocab], field.vocab)
-
-    logger.info(f'Vocabulary has {len(field.vocab)} tokens')
+    logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens')
     logger.debug(f'The first 200 tokens:')
-    logger.debug(field.vocab.itos[:200])
+    logger.debug(numericalizer.vocab.itos[:200])
 
     if args.use_curriculum:
         logger.info('Preprocessing auxiliary data for curriculum')
@@ -144,7 +133,7 @@ def prepare_data(args, field, logger):
     logger.info('Preprocessing validation data')
     preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
 
-    return field, train_sets, val_sets, aux_sets
+    return numericalizer, train_sets, val_sets, aux_sets
 
 
 def get_learning_rate(i, args):
@@ -155,7 +144,7 @@ def get_learning_rate(i, args):
     return transformer_lr
 
 
-def step(model, batch, opt, iteration, field, task, lr=None, grad_clip=None, writer=None, it=None, logger=None):
+def step(model, batch, opt, iteration, lr=None, grad_clip=None, logger=None):
     model.train()
     opt.zero_grad()
     loss, predictions = model(batch, iteration)
@@ -192,7 +181,7 @@ def update_fraction(args, task_iteration):
     return fraction
 
 
-def train(args, devices, model, opt, train_sets, train_iterations, field, logger,
+def train(args, devices, model, opt, train_sets, train_iterations, numericalizer, logger,
           log_every=10, val_every=100, save_every=1000, rounds=False, val_sets=[], aux_sets=[], writer=None,
           start_iteration=1, rnd=1, best_decascore=None):
     """main training function"""
@@ -215,15 +204,15 @@ def train(args, devices, model, opt, train_sets, train_iterations, field, logger
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
-    train_iters = [(task, make_data_loader(x, field, tok, main_device, train=True))
+    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, train=True))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(task, make_data_loader(x, field, bs, main_device, train=False))
+    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     if args.use_curriculum:
-        aux_iters = [(name, make_data_loader(x, field, tok, main_device, train=True))
+        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
 
@@ -256,7 +245,8 @@ def train(args, devices, model, opt, train_sets, train_iterations, field, logger
                 prob = np.random.choice(['train', 'aux'], p=[1-task_fraction[task], task_fraction[task]])
                 if prob == 'aux':
                     batch = next(aux_iter)
-                elif prob == 'train':
+                else:
+                    assert prob == 'train'
                     batch = next(train_iter)
 
             else:
@@ -276,7 +266,7 @@ def train(args, devices, model, opt, train_sets, train_iterations, field, logger
                         
                         deca_score = 0
                         for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-                            val_loss, metric_dict = validate(val_task, val_iter, model, logger, field, iteration, num_print=args.num_print, args=args)
+                            val_loss, metric_dict = validate(val_task, val_iter, model, logger, numericalizer, iteration, num_print=args.num_print, args=args)
                             if val_loss is not None:
                                 log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}val_{val_task.name}:val_loss{val_loss.item():.4f}:'
                                 writer.add_scalar(f'loss/{val_task.name}/val', val_loss.item(), iteration)
@@ -314,7 +304,6 @@ def train(args, devices, model, opt, train_sets, train_iterations, field, logger
 
                         save_model_state_dict = {
                             'model_state_dict': model_state_dict,
-                            'field': field,
                             'best_decascore': best_decascore
                         }
                         save_opt_state_dict = opt.state_dict()
@@ -332,9 +321,8 @@ def train(args, devices, model, opt, train_sets, train_iterations, field, logger
                         lr = get_learning_rate(iteration, args) 
 
                     # param update
-                    loss, train_metric_dict, grad_norm = step(model, batch, opt, iteration, field, task, lr=lr,
-                                                              grad_clip=args.grad_clip, writer=writer, it=train_iter,
-                                                              logger=logger)
+                    loss, train_metric_dict, grad_norm = step(model, batch, opt, iteration, lr=lr,
+                                                              grad_clip=args.grad_clip, logger=logger)
                     if loss is None:
                         logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
                         continue
@@ -404,11 +392,11 @@ def train(args, devices, model, opt, train_sets, train_iterations, field, logger
             break
 
 
-def init_model(args, field, devices, logger):
+def init_model(args, numericalizer, devices, logger):
     model_name = args.model
     logger.info(f'Initializing {model_name}')
     Model = getattr(models, model_name)
-    model = Model(field, args, devices)
+    model = Model(numericalizer, args, devices)
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
 
@@ -440,12 +428,11 @@ def main(argv=sys.argv):
     logger = initialize_logger(args)
     logger.info(f'Arguments:\n{pformat(vars(args))}')
 
-    field, save_dict = None, None
+    save_dict = None
     if args.load is not None:
-        logger.info(f'Loading field from {os.path.join(args.save, args.load)}')
+        logger.info(f'Loading vocab from {os.path.join(args.save, args.load)}')
         save_dict = torch.load(os.path.join(args.save, args.load))
-        field = save_dict['field']
-    field, train_sets, val_sets, aux_sets = prepare_data(args, field, logger)
+    numericalizer, train_sets, val_sets, aux_sets = prepare_data(args, logger)
     if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):
         logging.error('sth unpleasant is happening with curriculum')
 
@@ -458,7 +445,7 @@ def main(argv=sys.argv):
     else:
         writer = None
 
-    model = init_model(args, field, devices, logger)
+    model = init_model(args, numericalizer, devices, logger)
     opt = init_opt(args, model)
     start_iteration = 1
 
@@ -473,7 +460,7 @@ def main(argv=sys.argv):
             logger.info(f'Starting iteration is {start_iteration}')
             opt.load_state_dict(opt_state_dict)
 
-    train(args, devices, model, opt, train_sets, args.train_iterations, field, val_sets=val_sets, aux_sets=aux_sets,
+    train(args, devices, model, opt, train_sets, args.train_iterations, numericalizer, val_sets=val_sets, aux_sets=aux_sets,
           logger=logger,
           log_every=args.log_every, val_every=args.val_every, rounds=len(train_sets) > 1,
           writer=writer, save_every=args.save_every, start_iteration=start_iteration,

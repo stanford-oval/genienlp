@@ -356,13 +356,12 @@ class Feedforward(nn.Module):
 
 class Embedding(nn.Module):
 
-    def __init__(self, field, output_dimension, include_pretrained=True, trained_dimension=0, dropout=0.0, project=True, requires_grad=False):
+    def __init__(self, numericalizer, output_dimension, include_pretrained=True, trained_dimension=0, dropout=0.0, project=True, requires_grad=False):
         super().__init__()
-        self.field = field
         self.project = project
         self.requires_grad = requires_grad
         dimension = 0
-        pretrained_dimension = field.vocab.vectors.size(-1)
+        pretrained_dimension = numericalizer.vocab.vectors.size(-1)
 
         if include_pretrained:
             # NOTE: this must be a list so that pytorch will not iterate into the module when
@@ -371,8 +370,8 @@ class Embedding(nn.Module):
             # actual embedding, which will stay on CPU; this is necessary because a) we call
             # set_embeddings() sometimes with CPU-only tensors, and b) the embedding tensor
             # is too big for the GPU anyway
-            self.pretrained_embeddings = [nn.Embedding(len(field.vocab), pretrained_dimension)]
-            self.pretrained_embeddings[0].weight.data = field.vocab.vectors
+            self.pretrained_embeddings = [nn.Embedding(numericalizer.num_tokens, pretrained_dimension)]
+            self.pretrained_embeddings[0].weight.data = numericalizer.vocab.vectors
             self.pretrained_embeddings[0].weight.requires_grad = self.requires_grad
             dimension += pretrained_dimension
         else:
@@ -382,7 +381,7 @@ class Embedding(nn.Module):
         # (ie, potentially on GPU), because the saving when applying gradient outweights
         # the cost, and hopefully the embedding is small enough to fit in GPU memory
         if trained_dimension > 0:
-            self.trained_embeddings = nn.Embedding(len(field.vocab), trained_dimension)
+            self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
             dimension += trained_dimension
         else:
             self.trained_embeddings = None
