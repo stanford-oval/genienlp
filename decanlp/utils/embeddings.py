@@ -31,7 +31,7 @@
 import torch
 
 import logging
-from ..text import vocab
+from ..data import word_vectors
 
 _logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ ENTITIES = ['DATE', 'DURATION', 'EMAIL_ADDRESS', 'HASHTAG',
             'TIME', 'URL', 'USERNAME', 'PATH_NAME', 'CURRENCY']
 MAX_ARG_VALUES = 5
 
-class AlmondEmbeddings(vocab.Vectors):
+class AlmondEmbeddings(word_vectors.Vectors):
     def __init__(self, name=None, cache=None, **kw):
         super().__init__(name, cache, **kw)
 
@@ -72,17 +72,17 @@ def load_embeddings(args, logger=_logger, load_almond_embeddings=True):
     language = args.locale.split('-')[0]
 
     if language == 'en':
-        char_vectors = vocab.CharNGram(cache=args.embeddings)
+        char_vectors = word_vectors.CharNGram(cache=args.embeddings)
         if args.small_glove:
-            glove_vectors = vocab.GloVe(cache=args.embeddings, name="6B", dim=50)
+            glove_vectors = word_vectors.GloVe(cache=args.embeddings, name="6B", dim=50)
         else:
-            glove_vectors = vocab.GloVe(cache=args.embeddings)
+            glove_vectors = word_vectors.GloVe(cache=args.embeddings)
         vectors = [char_vectors, glove_vectors]
     # elif args.locale == 'zh':
     # Chinese word embeddings
     else:
         # default to fastText
-        vectors = [vocab.FastText(cache=args.embeddings, language=language)]
+        vectors = [word_vectors.FastText(cache=args.embeddings, language=language)]
 
     if load_almond_embeddings and args.almond_type_embeddings:
         vectors.append(AlmondEmbeddings())

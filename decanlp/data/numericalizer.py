@@ -30,7 +30,7 @@
 import os
 import torch
 
-from ..text.vocab import Vocab
+from .vocab import Vocab
 from .example import Example, SequentialField
 
 

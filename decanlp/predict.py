@@ -32,22 +32,16 @@ import os
 from argparse import ArgumentParser
 import ujson as json
 import torch
-import numpy as np
-import random
 import sys
 import logging
 from pprint import pformat
 
-from .text.vocab import Vocab
 from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
     make_numericalizer
 from .metrics import compute_metrics
 from .utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
 from . import models
-from .data.example import Example
-from .text.data import ReversibleField
-from .data.numericalizer import DecoderVocabulary
 
 logger = logging.getLogger(__name__)
 

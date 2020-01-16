@@ -40,8 +40,8 @@ import unicodedata
 import logging
 import xml.etree.ElementTree as ET
 
-from ..text import data
-from decanlp.data.example import Example
+from .dataset import Dataset, interleave_keys
+from ..data.example import Example
 
 logger = logging.getLogger(__name__)
 
@@ -50,20 +50,16 @@ def make_example_id(dataset, example_id):
     return dataset.name + '/' + str(example_id)
 
 
-class CQA(data.Dataset):
+class CQA(Dataset):
     @staticmethod
     def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
+        return interleave_keys(len(ex.context), len(ex.answer))
  
 
 class IMDb(CQA):
     urls = ['http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz']
     name = 'imdb'
     dirname = 'aclImdb'
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
 
     def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
         examples = []
@@ -119,10 +115,6 @@ class SST(CQA):
     name = 'sst'
     dirname = ''
 
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
     def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
@@ -177,11 +169,6 @@ class SST(CQA):
 
 
 class TranslationDataset(CQA):
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
     def __init__(self, path, exts, subsample=None, tokenize=None, lower=False, **kwargs):
         """Create a TranslationDataset given paths and fields.
 
@@ -189,8 +176,7 @@ class TranslationDataset(CQA):
             path: Common prefix of paths to the data files for both languages.
             exts: A tuple containing the extension to path for each language.
             fields$: fields for handling all columns
-            Remaining keyword arguments: Passed to the constructor of
-                data.Dataset.
+            Remaining keyword arguments: Passed to the constructor of Dataset.
         """
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
@@ -343,11 +329,6 @@ class IWSLT(TranslationDataset, CQA):
 
 
 class SQuAD(CQA):
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
     urls = ['https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v1.1.json',
             'https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json',
             'https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v2.0.json',
@@ -502,11 +483,6 @@ def fix_missing_period(line):
 
 
 class Summarization(CQA):
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
     def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
@@ -650,11 +626,6 @@ class Query:
 
 
 class WikiSQL(CQA):
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
     urls = ['https://github.com/salesforce/WikiSQL/raw/master/data.tar.bz2']
     name = 'wikisql'
     dirname = 'data'
@@ -737,11 +708,6 @@ class WikiSQL(CQA):
 
 
 class SRL(CQA):
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
     urls = ['https://dada.cs.washington.edu/qasrl/data/wiki1.train.qa',
             'https://dada.cs.washington.edu/qasrl/data/wiki1.dev.qa',
             'https://dada.cs.washington.edu/qasrl/data/wiki1.test.qa']
@@ -918,12 +884,7 @@ class SRL(CQA):
                      if d is not None)
 
 
-class WinogradSchema(CQA, data.Dataset):
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
+class WinogradSchema(CQA):
     urls = ['https://s3.amazonaws.com/research.metamind.io/decaNLP/data/schema.txt']
 
     name = 'schema'
@@ -1029,12 +990,7 @@ class WinogradSchema(CQA, data.Dataset):
                      if d is not None)
 
 
-class WOZ(CQA, data.Dataset):
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
+class WOZ(CQA):
     urls = ['https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_train_en.json',
             'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_test_de.json',
             'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_test_en.json',
@@ -1159,11 +1115,6 @@ class WOZ(CQA, data.Dataset):
 
 
 class MultiNLI(CQA):
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
     urls = ['http://www.nyu.edu/projects/bowman/multinli/multinli_1.0.zip']
 
     name = 'multinli'
@@ -1244,11 +1195,6 @@ class MultiNLI(CQA):
 
 
 class ZeroShotRE(CQA):
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
     urls = ['http://nlp.cs.washington.edu/zeroshot/relation_splits.tar.bz2']
     dirname = 'relation_splits'
     name = 'zre'
@@ -1326,12 +1272,7 @@ class ZeroShotRE(CQA):
                      if d is not None)
 
 
-class OntoNotesNER(CQA, data.Dataset):
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
+class OntoNotesNER(CQA):
     urls = ['http://conll.cemantix.org/2012/download/ids/english/all/train.id',
             'http://conll.cemantix.org/2012/download/ids/english/all/development.id',
             'http://conll.cemantix.org/2012/download/ids/english/all/test.id']
@@ -1568,11 +1509,6 @@ class OntoNotesNER(CQA, data.Dataset):
                      if d is not None)
 
 class SNLI(CQA):
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
-
     urls = ['http://nlp.stanford.edu/projects/snli/snli_1.0.zip']
     dirname = 'snli_1.0'
     name = 'snli'
@@ -1646,10 +1582,6 @@ class SNLI(CQA):
 
 class JSON(CQA):
     name = 'json'
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
 
     def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
         cached_path = kwargs.pop('cached_path')

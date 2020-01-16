@@ -36,7 +36,6 @@ from ..base import BaseTask
 from ..registry import register_task
 from .. import generic_dataset
 from ...data.example import Example
-from ...text import data
 from .lang_utils import *
 
 logger = logging.getLogger(__name__)
@@ -108,10 +107,6 @@ class AlmondDataset(generic_dataset.CQA):
             torch.save(examples, cache_name)
 
         super().__init__(examples, **kwargs)
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
 
     @classmethod
     def splits(cls, root='.data', train='train', validation='eval', test='test', contextual=False, **kwargs):
