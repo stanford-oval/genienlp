@@ -68,8 +68,8 @@ class SQuAD(BaseTask):
 
     def tokenize(self, sentence, field_name=None):
         if not sentence:
-            return []
-        return sentence.split()
+            return [], None
+        return sentence.split(), None
 
     def detokenize(self, tokenized, field_name=None):
         return ' '.join(tokenized)

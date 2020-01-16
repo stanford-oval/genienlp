@@ -79,8 +79,8 @@ class MQANEncoder(nn.Module):
         self.encoder_embeddings.set_embeddings(embeddings)
 
     def forward(self, batch):
-        context, context_lengths, context_limited, context_tokens = batch.context.value, batch.context.length, batch.context.limited, batch.context.tokens
-        question, question_lengths, question_limited, question_tokens = batch.question.value, batch.question.length, batch.question.limited, batch.question.tokens
+        context, context_lengths = batch.context.value, batch.context.length
+        question, question_lengths = batch.question.value, batch.question.length
 
         context_embedded = self.encoder_embeddings(context)
         question_embedded = self.encoder_embeddings(question)

@@ -90,11 +90,11 @@ class AlmondDataset(generic_dataset.CQA):
                     # the question is irrelevant, so the question says English and ThingTalk even if we're doing
                     # a different language (like Chinese)
                     if reverse_task:
-                        question = 'Translate from ThingTalk to English'
+                        question = 'translate from thingtalk to english'
                         context = target_code
                         answer = sentence
                     else:
-                        question = 'Translate from English to ThingTalk'
+                        question = 'translate from english to thingtalk'
                         context = sentence
                         answer = target_code
 
@@ -147,6 +147,10 @@ class AlmondDataset(generic_dataset.CQA):
         pass
 
 
+def is_entity(token):
+    return token[0].isupper()
+
+
 class BaseAlmondTask(BaseTask):
     """Base class for the Almond semantic parsing task
         i.e. natural language to formal language (ThingTalk) mapping"""
@@ -158,10 +162,31 @@ class BaseAlmondTask(BaseTask):
     def metrics(self):
         return ['em', 'nem', 'nf1', 'fm', 'dm', 'bleu']
 
+    def _is_program_field(self, field_name):
+        raise NotImplementedError()
+
     def tokenize(self, sentence, field_name=None):
         if not sentence:
-            return []
-        return sentence.split(' ')
+            return [], []
+
+        if self._is_program_field(field_name):
+            mask = []
+            in_string = False
+            tokens = sentence.split(' ')
+            for token in tokens:
+                if token == '"':
+                    in_string = not in_string
+                    mask.append(False)
+                else:
+                    mask.append(in_string)
+
+            assert len(tokens) == len(mask)
+            return tokens, mask
+
+        else:
+            tokens = sentence.split(' ')
+            mask = [not is_entity(token) for token in tokens]
+            return tokens, mask
 
     def detokenize(self, tokenized, field_name=None):
         return ' '.join(tokenized)
@@ -172,12 +197,17 @@ class Almond(BaseAlmondTask):
     """The Almond semantic parsing task
     i.e. natural language to formal language (ThingTalk) mapping"""
 
+    def _is_program_field(self, field_name):
+        return field_name == 'answer'
+
     def get_splits(self, root, **kwargs):
         return AlmondDataset.splits(root=root, tokenize=self.tokenize, **kwargs)
 
 
 @register_task('contextual_almond')
 class ContextualAlmond(BaseAlmondTask):
+    def _is_program_field(self, field_name):
+        return field_name in ('answer', 'context')
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.splits(root=root, tokenize=self.tokenize, contextual=True, **kwargs)
@@ -191,6 +221,9 @@ class ReverseAlmond(BaseTask):
     @property
     def metrics(self):
         return ['bleu', 'em', 'nem', 'nf1']
+
+    def _is_program_field(self, field_name):
+        return field_name == 'context'
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.splits(root=root, reverse_task=True, tokenize=self.tokenize, **kwargs)

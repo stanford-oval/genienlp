@@ -53,8 +53,8 @@ class BaseTask:
 
     def tokenize(self, sentence, field_name=None):
         if not sentence:
-            return []
-        return revtok.tokenize(sentence)
+            return [], None
+        return revtok.tokenize(sentence), None
 
     def detokenize(self, tokenized, field_name=None):
         return revtok.detokenize(tokenized)
@@ -92,6 +92,3 @@ class BaseTask:
         :return: a list of metric names
         """
         return ['em', 'nem', 'nf1']
-
-    tokenize = None
-    detokenize = None

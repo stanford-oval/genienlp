@@ -41,6 +41,7 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 
+from .data.example import Example
 from .utils.parallel_utils import NamedTupleCompatibleDataParallel
 from . import arguments
 from . import models
@@ -49,7 +50,6 @@ from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_par
     init_devices, make_numericalizer
 from .utils.saver import Saver
 from .utils.embeddings import load_embeddings
-from .data.numericalizer import SimpleNumericalizer
 
 
 def initialize_logger(args):
@@ -118,7 +118,7 @@ def prepare_data(args, logger):
         vectors = load_embeddings(args, logger)
         vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
         logger.info(f'Building vocabulary')
-        numericalizer.build_vocab(vectors, vocab_sets)
+        numericalizer.build_vocab(vectors, Example.vocab_fields, vocab_sets)
         numericalizer.save(args.save)
 
     logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens')

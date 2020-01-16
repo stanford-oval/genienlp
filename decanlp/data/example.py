@@ -1,6 +1,5 @@
 #
-# Copyright (c) 2018, Salesforce, Inc.
-#                     The Board of Trustees of the Leland Stanford Junior University
+# Copyright (c) 2019-2020 The Board of Trustees of the Leland Stanford Junior University
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -31,19 +30,21 @@
 import torch
 from typing import NamedTuple, List
 
-
-class SequentialField(NamedTuple):
-    value : torch.tensor
-    length : torch.tensor
-    limited : torch.tensor
-    tokens : List[str]
+from .numericalizer import SequentialField
 
 
 class Example(NamedTuple):
     example_id : str
+
+    # for each field in the example, we store the tokenized sentence, and a boolean mask
+    # indicating whether the token is a real word (subject to word-piece tokenization)
+    # or it should be treated as an opaque symbol
     context : List[str]
+    context_word_mask : List[bool]
     question : List[str]
+    question_word_mask : List[bool]
     answer : List[str]
+    answer_word_mask : List[bool]
 
     vocab_fields = ['context', 'question', 'answer']
 
@@ -51,10 +52,13 @@ class Example(NamedTuple):
     def from_raw(example_id : str, context : str, question : str, answer : str, tokenize, lower=False):
         args = [example_id]
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
-            new_arg = tokenize(arg.rstrip('\n'), field_name=argname)
+            words, mask = tokenize(arg.rstrip('\n'), field_name=argname)
+            if mask is None:
+                mask = [True for _ in words]
             if lower:
-                new_arg = [word.lower() for word in new_arg]
-            args.append(new_arg)
+                words = [word.lower() for word in words]
+            args.append(words)
+            args.append(mask)
         return Example(*args)
 
 
@@ -69,9 +73,9 @@ class Batch(NamedTuple):
     def from_examples(examples, numericalizer, device=None):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         example_ids = [ex.example_id for ex in examples]
-        context_input = [ex.context for ex in examples]
-        question_input = [ex.question for ex in examples]
-        answer_input = [ex.answer for ex in examples]
+        context_input = [(ex.context, ex.context_word_mask) for ex in examples]
+        question_input = [(ex.question, ex.question_word_mask) for ex in examples]
+        answer_input = [(ex.answer, ex.answer_word_mask) for ex in examples]
         decoder_vocab = numericalizer.decoder_vocab.clone()
 
         return Batch(example_ids,

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2018, The Board of Trustees of the Leland Stanford Junior University
+# Copyright (c) 2019-2020 The Board of Trustees of the Leland Stanford Junior University
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -31,51 +31,8 @@ import os
 import torch
 
 from .vocab import Vocab
-from .example import Example, SequentialField
-
-
-class DecoderVocabulary(object):
-    def __init__(self, words, full_vocab):
-        self.full_vocab = full_vocab
-        if words is not None:
-            self.itos = words
-            self.stoi = { word: idx for idx, word in enumerate(words) }
-        else:
-            self.itos = []
-            self.stoi = dict()
-        self.oov_itos = []
-        self.oov_stoi = dict()
-
-    @property
-    def max_generative_vocab(self):
-        return len(self.itos)
-
-    def clone(self):
-        new_subset = DecoderVocabulary(None, self.full_vocab)
-        new_subset.itos = self.itos
-        new_subset.stoi = self.stoi
-        return new_subset
-
-    def __len__(self):
-        return len(self.itos) + len(self.oov_itos)
-
-    def encode(self, word):
-        if word in self.stoi:
-            lim_idx = self.stoi[word]
-        elif word in self.oov_stoi:
-            lim_idx = self.oov_stoi[word]
-        else:
-            lim_idx = len(self)
-            self.oov_itos.append(word)
-            self.oov_stoi[word] = lim_idx
-        return lim_idx
-
-    def decode(self, lim_idx):
-        if lim_idx < len(self.itos):
-            return self.full_vocab.stoi[self.itos[lim_idx]]
-        else:
-            return self.full_vocab.stoi[self.oov_itos[lim_idx-len(self.itos)]]
-
+from .sequential_field import SequentialField
+from .decoder_vocab import DecoderVocabulary
 
 class SimpleNumericalizer(object):
     def __init__(self, max_effective_vocab, max_generative_vocab, fix_length=None, pad_first=False):
@@ -101,8 +58,8 @@ class SimpleNumericalizer(object):
     def save(self, save_dir):
         torch.save(self.vocab, os.path.join(save_dir, 'vocab.pth'))
 
-    def build_vocab(self, vectors, vocab_sets):
-        self.vocab = Vocab.build_from_data(Example.vocab_fields, *vocab_sets,
+    def build_vocab(self, vectors, vocab_fields, vocab_sets):
+        self.vocab = Vocab.build_from_data(vocab_fields, *vocab_sets,
                                            unk_token=self.unk_token,
                                            init_token=self.init_token,
                                            eos_token=self.eos_token,
@@ -152,31 +109,29 @@ class SimpleNumericalizer(object):
         self.decoder_vocab = DecoderVocabulary(self.vocab.itos[:self.max_generative_vocab], self.vocab)
 
     def encode(self, minibatch, decoder_vocab, device=None):
-        if not isinstance(minibatch, list):
-            minibatch = list(minibatch)
+        assert isinstance(minibatch, list)
         if self.fix_length is None:
-            max_len = max(len(x) for x in minibatch)
+            max_len = max(len(x[0]) for x in minibatch)
         else:
-            max_len = self.fix_length + (
-                self.init_token, self.eos_token).count(None) - 2
+            max_len = self.fix_length + 2
         padded = []
         lengths = []
         numerical = []
         decoder_numerical = []
-        for example in minibatch:
+        for tokens, _mask in minibatch:
             if self.pad_first:
-                padded_example = [self.pad_token] * max(0, max_len - len(example)) + \
-                    ([] if self.init_token is None else [self.init_token]) + \
-                    list(example[:max_len]) + \
-                    ([] if self.eos_token is None else [self.eos_token])
+                padded_example = [self.pad_token] * max(0, max_len - len(tokens)) + \
+                    [self.init_token] + \
+                    list(tokens[:max_len]) + \
+                    [self.eos_token]
             else:
-                padded_example = ([] if self.init_token is None else [self.init_token]) + \
-                                 list(example[:max_len]) + \
-                                 ([] if self.eos_token is None else [self.eos_token]) + \
-                                 [self.pad_token] * max(0, max_len - len(example))
+                padded_example = [self.init_token] + \
+                                 list(tokens[:max_len]) + \
+                                 [self.eos_token] + \
+                                 [self.pad_token] * max(0, max_len - len(tokens))
 
             padded.append(padded_example)
-            lengths.append(len(padded_example) - max(0, max_len - len(example)))
+            lengths.append(len(padded_example) - max(0, max_len - len(tokens)))
 
             numerical.append([self.vocab.stoi[word] for word in padded_example])
             decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
