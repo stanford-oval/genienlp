@@ -30,7 +30,7 @@
 
 
 from argparse import ArgumentParser
-import ujson as json
+import json
 import torch
 import asyncio
 import logging

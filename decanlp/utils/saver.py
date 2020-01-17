@@ -33,7 +33,7 @@ Created on Mar 3, 2019
 '''
 
 import torch
-import ujson as json
+import json
 import os
 import logging
 

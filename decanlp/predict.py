@@ -30,7 +30,7 @@
 
 import os
 from argparse import ArgumentParser
-import ujson as json
+import json
 import torch
 import sys
 import logging

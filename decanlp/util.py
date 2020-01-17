@@ -34,7 +34,7 @@ import os
 import torch
 import random
 import numpy as np
-import ujson as json
+import json
 import logging
 from .data.numericalizer import SimpleNumericalizer
 from .data.example import Batch
