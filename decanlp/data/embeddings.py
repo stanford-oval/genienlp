@@ -61,8 +61,10 @@ class WordVectorEmbedding(torch.nn.Module):
         for ti, token in enumerate(vocab.itos):
             vectors[ti] = self._vec_collection[token.strip()]
 
-        self.embedding = torch.nn.Embedding(len(vocab.itos), self.dim)
-        self.embedding.weight.data = vectors
+        # wrap in a list so it will not be saved by torch.save and it will not
+        # be moved around by .to() and similar methods
+        self.embedding = [torch.nn.Embedding(len(vocab.itos), self.dim)]
+        self.embedding[0].weight.data = vectors
 
     def grow_for_vocab(self, vocab, new_words):
         if not new_words:
@@ -77,10 +79,11 @@ class WordVectorEmbedding(torch.nn.Module):
             new_vector = new_vector if new_vector.dim() > 1 else new_vector.unsqueeze(0)
             new_vectors.append(new_vector)
 
-        self.embedding.weight.data = torch.cat([self.embedding.weight.data.cpu()] + new_vectors, dim=0)
+        if new_vectors:
+            self.embedding[0].weight.data = torch.cat([self.embedding[0].weight.data.cpu()] + new_vectors, dim=0)
 
     def forward(self, input : torch.Tensor, padding=None):
-        last_layer = self.embedding(input.cpu()).to(input.device)
+        last_layer = self.embedding[0](input.cpu()).to(input.device)
         return EmbeddingOutput(all_layers=[last_layer], last_layer=last_layer)
 
     def to(self, *args, **kwargs):
