@@ -27,20 +27,16 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import logging
 import os
 import torch
-import sys
+import logging
 from tqdm import tqdm
 
 from ..base import BaseTask
 from ..registry import register_task
 from .. import generic_dataset
-from ...text.torchtext import data
-from ...utils.lang_utils import *
-
-
-from .grammar import thingtalk, plainthingtalk, posthingtalk
+from ...data.example import Example
+from .lang_utils import *
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +46,7 @@ class AlmondDataset(generic_dataset.CQA):
 
     base_url = None
 
-    def __init__(self, path, field, tokenize, contextual=False, thingpedia_in_context=False, reverse_task=False, subsample=None, **kwargs):
-        fields = [(x, field) for x in self.fields]
+    def __init__(self, path, contextual=False, reverse_task=False, subsample=None, tokenize=None, **kwargs):
         cached_path = kwargs.pop('cached_path')
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
@@ -66,12 +61,6 @@ class AlmondDataset(generic_dataset.CQA):
             with open(path, 'r', encoding='utf-8') as fp:
                 for line in fp:
                     n += 1
-
-            if thingpedia_in_context:
-                thingpedia = kwargs.pop('thingpedia')
-                words_list = extract_words(thingpedia)
-            else:
-                words_list = None
 
             max_examples = min(n, subsample) if subsample is not None else n
             for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
@@ -90,13 +79,7 @@ class AlmondDataset(generic_dataset.CQA):
                 if sentence.startswith('\ufeff'):
                     sentence = sentence[1:]
 
-                if thingpedia_in_context:
-                    if contextual:
-                        context = ' '.join(words_list) + ' || ' + context
-                    else:
-                        context = ' '.join(words_list)
-
-                if contextual or thingpedia_in_context:
+                if contextual:
                     if reverse_task:
                         answer = sentence
                         question = target_code
@@ -107,34 +90,26 @@ class AlmondDataset(generic_dataset.CQA):
                     # the question is irrelevant, so the question says English and ThingTalk even if we're doing
                     # a different language (like Chinese)
                     if reverse_task:
-                        question = 'Translate from ThingTalk to English'
+                        question = 'translate from thingtalk to english'
                         context = target_code
                         answer = sentence
                     else:
-                        question = 'Translate from English to ThingTalk'
+                        question = 'translate from english to thingtalk'
                         context = sentence
                         answer = target_code
 
-                context_question = generic_dataset.get_context_question(context, question)
-                examples.append(data.Example.fromlist(
-                    [context, question, answer, generic_dataset.CONTEXT_SPECIAL, generic_dataset.QUESTION_SPECIAL, context_question], fields,
-                    tokenize=tokenize))
+                examples.append(Example.from_raw('almond/' + _id, context, question, answer,
+                                                 tokenize=tokenize, lower=False))
                 if len(examples) >= max_examples:
                     break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
-        super().__init__(examples, fields, **kwargs)
-
-    @staticmethod
-    def sort_key(ex):
-        return data.interleave_keys(len(ex.context), len(ex.answer))
+        super().__init__(examples, **kwargs)
 
     @classmethod
-    def splits(cls, fields, root='.data',
-               train='train', validation='eval',
-               test='test', contextual=False, **kwargs):
+    def splits(cls, root='.data', train='train', validation='eval', test='test', contextual=False, **kwargs):
 
         """Create dataset objects for splits of the ThingTalk dataset.
         Arguments:
@@ -156,20 +131,24 @@ class AlmondDataset(generic_dataset.CQA):
         aux_data = None
         if kwargs.get('curriculum', False):
             kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), fields, contextual=contextual, **kwargs)
+            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), contextual=contextual, **kwargs)
 
         train_data = None if train is None else cls(
-            os.path.join(path, train + '.tsv'), fields, contextual=contextual, **kwargs)
+            os.path.join(path, train + '.tsv'), contextual=contextual, **kwargs)
         val_data = None if validation is None else cls(
-            os.path.join(path, validation + '.tsv'), fields, contextual=contextual, **kwargs)
+            os.path.join(path, validation + '.tsv'), contextual=contextual, **kwargs)
         test_data = None if test is None else cls(
-            os.path.join(path, test + '.tsv'), fields, contextual=contextual, **kwargs)
+            os.path.join(path, test + '.tsv'), contextual=contextual, **kwargs)
         return tuple(d for d in (train_data, val_data, test_data, aux_data)
                      if d is not None)
 
     @staticmethod
     def clean(path):
         pass
+
+
+def is_entity(token):
+    return token[0].isupper()
 
 
 class BaseAlmondTask(BaseTask):
@@ -179,46 +158,38 @@ class BaseAlmondTask(BaseTask):
     def __init__(self, name, args):
         super().__init__(name, args)
 
-        self._thingpedia = args.thingpedia
-        self._grammar = None
-        self._grammar_direction = None
-
-        if args.almond_grammar:
-            self._grammar_direction = args.almond_grammar.split('.')[-1]
-            if args.almond_grammar.startswith('typeless.'):
-                self._grammar = plainthingtalk.PlainThingTalkGrammar(self._thingpedia, grammar_include_types=False,
-                                                                     logger=logger)
-            elif args.almond_grammar.startswith('plain.'):
-                self._grammar = plainthingtalk.PlainThingTalkGrammar(self._thingpedia, grammar_include_types=True,
-                                                                     logger=logger)
-            elif args.almond_grammar.startswith('pos.typeless.'):
-                self._grammar = posthingtalk.PosThingTalkGrammar(self._thingpedia, grammar_include_types=False,
-                                                                 logger=logger)
-            elif args.almond_grammar.startswith('pos.'):
-                self._grammar = posthingtalk.PosThingTalkGrammar(self._thingpedia, grammar_include_types=True,
-                                                                 logger=logger)
-            else:
-                self._grammar = thingtalk.ThingTalkGrammar(self._thingpedia, logger=logger)
-
     @property
     def metrics(self):
         return ['em', 'nem', 'nf1', 'fm', 'dm', 'bleu']
 
+    def _is_program_field(self, field_name):
+        raise NotImplementedError()
+
     def tokenize(self, sentence, field_name=None):
         if not sentence:
-            return []
-        tokenized = sentence.split(' ')
+            return [], []
 
-        if self._grammar is None or field_name != 'answer':
-            return tokenized
+        if self._is_program_field(field_name):
+            mask = []
+            in_string = False
+            tokens = sentence.split(' ')
+            for token in tokens:
+                if token == '"':
+                    in_string = not in_string
+                    mask.append(False)
+                else:
+                    mask.append(in_string)
+
+            assert len(tokens) == len(mask)
+            return tokens, mask
+
         else:
-            return self._grammar.preprocess_program(tokenized, direction=self._grammar_direction)
+            tokens = sentence.split(' ')
+            mask = [not is_entity(token) for token in tokens]
+            return tokens, mask
 
     def detokenize(self, tokenized, field_name=None):
-        if self._grammar is None or field_name != 'answer':
-            return ' '.join(tokenized)
-        else:
-            return ' '.join(self._grammar.reconstruct_program(tokenized, direction=self._grammar_direction, ignore_errors=True))
+        return ' '.join(tokenized)
 
 
 @register_task('almond')
@@ -226,33 +197,20 @@ class Almond(BaseAlmondTask):
     """The Almond semantic parsing task
     i.e. natural language to formal language (ThingTalk) mapping"""
 
-    def get_splits(self, field, root, **kwargs):
-        return AlmondDataset.splits(
-            fields=field, root=root, tokenize=self.tokenize, **kwargs)
+    def _is_program_field(self, field_name):
+        return field_name == 'answer'
 
-
-@register_task('almond_with_thingpedia_as_context')
-class AlmondWithThingpediaAsContext(BaseAlmondTask):
-
-    def __init__(self, name, args):
-        super().__init__(name, args)
-        self._default_context = ' '.join(extract_words(self._thingpedia))
-
-    @property
-    def default_context(self):
-        return self._default_context
-
-    def get_splits(self, field, root, **kwargs):
-        return AlmondDataset.splits(
-            fields=field, root=root, tokenize=self.tokenize, thingpedia_in_context=True, thingpedia=self._thingpedia, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return AlmondDataset.splits(root=root, tokenize=self.tokenize, **kwargs)
 
 
 @register_task('contextual_almond')
 class ContextualAlmond(BaseAlmondTask):
+    def _is_program_field(self, field_name):
+        return field_name in ('answer', 'context')
 
-    def get_splits(self, field, root, **kwargs):
-        return AlmondDataset.splits(
-            fields=field, root=root, tokenize=self.tokenize, contextual=True, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return AlmondDataset.splits(root=root, tokenize=self.tokenize, contextual=True, **kwargs)
 
 
 @register_task('reverse_almond')
@@ -264,6 +222,8 @@ class ReverseAlmond(BaseTask):
     def metrics(self):
         return ['bleu', 'em', 'nem', 'nf1']
 
-    def get_splits(self, field, root, **kwargs):
-        return AlmondDataset.splits(
-            fields=field, root=root, reverse_task=True, **kwargs)
+    def _is_program_field(self, field_name):
+        return field_name == 'context'
+
+    def get_splits(self, root, **kwargs):
+        return AlmondDataset.splits(root=root, reverse_task=True, tokenize=self.tokenize, **kwargs)

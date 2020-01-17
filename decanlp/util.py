@@ -36,18 +36,28 @@ import random
 import numpy as np
 import ujson as json
 import logging
+from .data.numericalizer import SimpleNumericalizer
+from .data.example import Batch
+from .data.iterator import Iterator
 
 
 logger = logging.getLogger(__name__)
 
+
 def tokenizer(s):
     return s.split()
 
-def get_context_question(ex, context, question, field):
-    return ex.context_special + ex.context + ex.question_special + ex.question
+
+def map_filter(callable, iterable):
+    output = []
+    for element in iterable:
+        new_element = callable(element)
+        if new_element is not None:
+            output.append(new_element)
+    return output
 
 
-def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
+def preprocess_examples(args, tasks, splits, logger=None, train=True):
     min_length = 1
     max_context_length = args.max_train_context_length if train else args.max_val_context_length
     is_too_long = lambda ex: (len(ex.answer) > args.max_answer_length or
@@ -60,7 +70,8 @@ def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
             logger.info(f'{task.name} has {len(s.examples)} examples')
 
         l = len(s.examples)
-        s.examples = list(filter(lambda ex: task.preprocess_example(ex, train=train, max_context_length=max_context_length), s.examples))
+        s.examples = map_filter(lambda ex: task.preprocess_example(ex, train=train, max_context_length=max_context_length),
+                                s.examples)
 
         if train:
             l = len(s.examples)
@@ -84,35 +95,27 @@ def preprocess_examples(args, tasks, splits, field, logger=None, train=True):
             logger.info(f'{task.name} question lengths (min, mean, max): {np.min(question_lengths)}, {int(np.mean(question_lengths))}, {np.max(question_lengths)}')
             logger.info(f'{task.name} answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}')
 
-        for x in s.examples:
-            x.context_question = get_context_question(x, x.context, x.question, field)
-
         if logger is not None:
             logger.info('Tokenized examples:')
             for ex in s.examples[:10]:
                 logger.info('Context: ' + ' '.join([token.strip() for token in ex.context]))
                 logger.info('Question: ' + ' '.join([token.strip() for token in ex.question]))
-                logger.info(' '.join([token.strip() for token in ex.context_question]))
                 logger.info('Answer: ' + ' '.join([token.strip() for token in ex.answer]))
 
 
-
-def set_seed(args, rank=None):
+def init_devices(args, devices=None):
     if not torch.cuda.is_available():
-        ordinal = -1
-    elif rank is None and len(args.devices) > 0:
-        ordinal = args.devices[0]
-    else:
-        ordinal = args.devices[rank] 
-    device = torch.device(f'cuda:{ordinal}' if ordinal > -1 else 'cpu')
-    # device = torch.device(f'cuda:{ordinal}' if ordinal > -1 else 'cpu')
-    logger.debug(f'device: {device}')
+        return [torch.device('cpu')]
+    if not devices:
+        return [torch.device('cuda:0')]
+    return [torch.device(ordinal) for ordinal in devices]
+
+
+def set_seed(args):
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    with torch.cuda.device(ordinal):
-        torch.cuda.manual_seed(args.seed)
-    return device
+    torch.cuda.manual_seed_all(args.seed)
 
 
 def count_params(params):
@@ -134,6 +137,12 @@ def get_trainable_params(model, name=False):
         return list(filter(lambda p: p.requires_grad, model.parameters()))
 
 
+def log_model_size(logger, model, model_name):
+    params = list(filter(lambda p: p.requires_grad, model.parameters()))
+    num_param = count_params(params)
+    logger.info(f'{model_name} has {num_param:,} parameters')
+
+
 def elapsed_time(log):
     t = time.time() - log.start
     day = int(t // (24 * 3600))
@@ -150,6 +159,16 @@ def batch_fn(new, i, sofar):
     prev_max_len = sofar / (i - 1) if i > 1 else 0
     return max(len(new.context), 5*len(new.answer), prev_max_len) * i
 
+
+def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False):
+    iterator = Iterator(dataset, batch_size,
+                        batch_size_fn=batch_fn if train else None,
+                        shuffle=train,
+                        repeat=train,
+                        bucket_by_sort_key=train)
+    return torch.utils.data.DataLoader(iterator, batch_size=None,
+                                       collate_fn=lambda minibatch: Batch.from_examples(minibatch, numericalizer,
+                                                                                        device=device))
 
 def pad(x, new_channel, dim, val=None):
     if x.size(dim) > new_channel:
@@ -168,28 +187,20 @@ def load_config_json(args):
     args.almond_type_embeddings = False
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
-        retrieve = ['model', 'transformer_layers', 'rnn_layers', 'transformer_hidden', 'world_size', 'dimension',
-                    'load', 'max_val_context_length', 'val_batch_size', 'transformer_heads', 'max_output_length',
-                    'max_generative_vocab', 'lower', 'cove', 'intermediate_cove', 'elmo', 'glove_and_char',
-                    'use_maxmargin_loss', 'small_glove', 'almond_type_embeddings', 'almond_grammar',
-                    'trainable_decoder_embedding', 'glove_decoder', 'pretrained_decoder_lm',
-                    'retrain_encoder_embedding', 'question', 'locale', 'use_google_translate']
+        retrieve = ['model', 'seq2seq_encoder', 'seq2seq_decoder', 'transformer_layers', 'rnn_layers',
+                    'transformer_hidden', 'dimension', 'load', 'max_val_context_length', 'val_batch_size',
+                    'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower', 'encoder_embeddings',
+                    'decoder_embeddings', 'trainable_decoder_embeddings', 'train_encoder_embeddings',
+                    'question', 'locale', 'use_google_translate']
 
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
             elif r == 'locale':
                 setattr(args, r, 'en')
-            elif r in ('cove', 'intermediate_cove', 'use_maxmargin_loss', 'small_glove',
-                       'almond_type_embbedings'):
-                setattr(args, r, False)
-            elif 'elmo' in r:
-                setattr(args, r, [-1])
-            elif r in ('glove_decoder', 'glove_and_char'):
-                setattr(args, r, True)
             elif r == 'trainable_decoder_embedding':
                 setattr(args, r, 0)
-            elif r == 'retrain_encoder_embedding':
+            elif r == 'train_encoder_embedding':
                 setattr(args, r, False)
             else:
                 setattr(args, r, None)

@@ -38,10 +38,12 @@ class Multi30K(BaseTask):
     def metrics(self):
         return ['bleu', 'em', 'nem', 'nf1']
 
-    def get_splits(self, field, root, **kwargs):
+    def get_splits(self, root, **kwargs):
         src, trg = ['.' + x for x in self.name.split('.')[1:]]
         return generic_dataset.Multi30k.splits(exts=(src, trg),
-                                               fields=field, root=root, **kwargs)
+                                               root=root,
+                                               tokenize=self.tokenize,
+                                               **kwargs)
 
 
 @register_task('iwslt')
@@ -50,10 +52,12 @@ class IWSLT(BaseTask):
     def metrics(self):
         return ['bleu', 'em', 'nem', 'nf1']
 
-    def get_splits(self, field, root, **kwargs):
+    def get_splits(self, root, **kwargs):
         src, trg = ['.' + x for x in self.name.split('.')[1:]]
         return generic_dataset.IWSLT.splits(exts=(src, trg),
-                                            fields=field, root=root, **kwargs)
+                                            root=root,
+                                            tokenize=self.tokenize,
+                                            **kwargs)
 
 
 @register_task('squad')
@@ -62,9 +66,19 @@ class SQuAD(BaseTask):
     def metrics(self):
         return ['nf1', 'em', 'nem']
 
-    def get_splits(self, field, root, **kwargs):
-        return generic_dataset.SQuAD.splits(
-            fields=field, root=root, description=self.name, **kwargs)
+    def tokenize(self, sentence, field_name=None):
+        if not sentence:
+            return [], None
+        return sentence.split(), None
+
+    def detokenize(self, tokenized, field_name=None):
+        return ' '.join(tokenized)
+
+    def get_splits(self, root, **kwargs):
+        return generic_dataset.SQuAD.splits(root=root,
+                                            description=self.name,
+                                            tokenize=self.tokenize,
+                                            **kwargs)
 
 
 @register_task('wikisql')
@@ -73,19 +87,24 @@ class WikiSQL(BaseTask):
     def metrics(self):
         return ['lfem', 'em', 'nem', 'nf1']
 
-    def get_splits(self, field, root, **kwargs):
+    def get_splits(self, root, **kwargs):
         return generic_dataset.WikiSQL.splits(
-            fields=field, root=root, query_as_question='query_as_question' in self.name, **kwargs)
+            root=root,
+            query_as_question='query_as_question' in self.name,
+            tokenize=self.tokenize,
+            **kwargs)
 
 
 @register_task('ontonotes')
 class OntoNotesNER(BaseTask):
-    def get_splits(self, field, root, **kwargs):
+    def get_splits(self, root, **kwargs):
         split_task = self.name.split('.')
         _, _, subtask, nones, counting = split_task
         return generic_dataset.OntoNotesNER.splits(
             subtask=subtask, nones=True if nones == 'nones' else False,
-            fields=field, root=root, **kwargs)
+            root=root,
+            tokenize=self.tokenize,
+            **kwargs)
 
 
 @register_task('woz')
@@ -94,16 +113,21 @@ class WoZ(BaseTask):
     def metrics(self):
         return ['joint_goal_em', 'turn_request_em', 'turn_goal_em', 'avg_dialogue', 'em', 'nem', 'nf1']
 
-    def get_splits(self, field, root, **kwargs):
+    def get_splits(self, root, **kwargs):
         return generic_dataset.WOZ.splits(description=self.name,
-                                          fields=field, root=root, **kwargs)
+                                          root=root,
+                                          tokenize=self.tokenize,
+                                          **kwargs)
 
 
 @register_task('multinli')
 class MultiNLI(BaseTask):
-    def get_splits(self, field, root, **kwargs):
+    def get_splits(self, root, **kwargs):
         return generic_dataset.MultiNLI.splits(description=self.name,
-                                               fields=field, root=root, **kwargs)
+                                               root=root,
+                                               tokenize=self.tokenize,
+                                               **kwargs)
+
 
 @register_task('srl')
 class SRL(BaseTask):
@@ -111,20 +135,20 @@ class SRL(BaseTask):
     def metrics(self):
         return ['nf1', 'em', 'nem']
 
-    def get_splits(self, field, root, **kwargs):
-        return generic_dataset.SRL.splits(fields=field, root=root, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return generic_dataset.SRL.splits(root=root, tokenize=self.tokenize, **kwargs)
 
 
 @register_task('snli')
 class SNLI(BaseTask):
-    def get_splits(self, field, root, **kwargs):
-        return generic_dataset.SNLI.splits(fields=field, root=root, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return generic_dataset.SNLI.splits(root=root, tokenize=self.tokenize, **kwargs)
 
 
 @register_task('schema')
 class WinogradSchema(BaseTask):
-    def get_splits(self, field, root, **kwargs):
-        return generic_dataset.WinogradSchema.splits(fields=field, root=root, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return generic_dataset.WinogradSchema.splits(root=root, tokenize=self.tokenize, **kwargs)
 
 
 class BaseSummarizationTask(BaseTask):
@@ -133,34 +157,30 @@ class BaseSummarizationTask(BaseTask):
         return ['avg_rouge', 'rouge1', 'rouge2', 'rougeL', 'em', 'nem', 'nf1']
 
     def preprocess_example(self, ex, train=False, max_context_length=None):
-        ex.context = ex.context[:max_context_length]
+        # Filter examples with a dummy summary
+        if train and 'This page includes the show' in ex.answer:
+            return None
 
-        if train:
-            # Filter examples with a dummy summary
-            return 'This page includes the show' not in ex.answer
-        else:
-            return True
+        return ex._replace(context=ex.context[:max_context_length])
 
 
 @register_task('cnn')
 class CNN(BaseSummarizationTask):
-    def get_splits(self, field, root, **kwargs):
-        return generic_dataset.CNN.splits(fields=field, root=root, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return generic_dataset.CNN.splits(root=root, tokenize=self.tokenize, **kwargs)
 
 
 @register_task('dailymail')
 class DailyMail(BaseSummarizationTask):
-    def get_splits(self, field, root, **kwargs):
-        return generic_dataset.DailyMail.splits(fields=field, root=root, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return generic_dataset.DailyMail.splits(root=root, tokenize=self.tokenize, **kwargs)
 
 
 @register_task('cnn_dailymail')
 class CNNDailyMail(BaseSummarizationTask):
-    def get_splits(self, field, root, **kwargs):
-        split_cnn = generic_dataset.CNN.splits(
-            fields=field, root=root, **kwargs)
-        split_dm = generic_dataset.DailyMail.splits(
-            fields=field, root=root, **kwargs)
+    def get_splits(self, root, **kwargs):
+        split_cnn = generic_dataset.CNN.splits(root=root, tokenize=self.tokenize, **kwargs)
+        split_dm = generic_dataset.DailyMail.splits(root=root, tokenize=self.tokenize, **kwargs)
         for scnn, sdm in zip(split_cnn, split_dm):
             scnn.examples.extend(sdm)
         return split_cnn
@@ -168,20 +188,18 @@ class CNNDailyMail(BaseSummarizationTask):
 
 @register_task('sst')
 class SST(BaseTask):
-    def get_splits(self, field, root, **kwargs):
-        return generic_dataset.SST.splits(
-            fields=field, root=root, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return generic_dataset.SST.splits(root=root, tokenize=self.tokenize, **kwargs)
 
 
 @register_task('imdb')
 class IMDB(BaseTask):
     def preprocess_example(self, ex, train=False, max_context_length=None):
-        ex.context = ex.context[:max_context_length]
-        return True
+        return ex._replace(context=ex.context[:max_context_length])
 
-    def get_splits(self, field, root, **kwargs):
+    def get_splits(self, root, **kwargs):
         kwargs['validation'] = None
-        return generic_dataset.IMDb.splits(fields=field, root=root, **kwargs)
+        return generic_dataset.IMDb.splits(root=root, tokenize=self.tokenize, **kwargs)
 
 
 @register_task('zre')
@@ -190,5 +208,5 @@ class ZRE(BaseTask):
     def metrics(self):
         return ['corpus_f1', 'precision', 'recall', 'em', 'nem', 'nf1']
 
-    def get_splits(self, field, root, **kwargs):
-        return generic_dataset.ZeroShotRE.splits(fields=field, root=root, **kwargs)
+    def get_splits(self, root, **kwargs):
+        return generic_dataset.ZeroShotRE.splits(root=root, tokenize=self.tokenize, **kwargs)

@@ -29,25 +29,23 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-from .text import torchtext
 from argparse import ArgumentParser
 import ujson as json
 import torch
-import numpy as np
-import random
 import sys
 import logging
 from pprint import pformat
 
-from .util import set_seed, preprocess_examples, load_config_json
+from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices
 from .metrics import compute_metrics
-from .utils.embeddings import load_embeddings
+from .data.embeddings import load_embeddings
 from .tasks.registry import get_tasks
 from . import models
 
 logger = logging.getLogger(__name__)
 
-def get_all_splits(args, new_vocab):
+
+def get_all_splits(args):
     splits = []
     for task in args.tasks:
         logger.info(f'Loading {task}')
@@ -62,174 +60,75 @@ def get_all_splits(args, new_vocab):
         kwargs['skip_cache_bool'] = args.skip_cache_bool
         kwargs['cached_path'] = args.cached
         kwargs['subsample'] = args.subsample
-        s = task.get_splits(new_vocab, root=args.data, **kwargs)[0]
-        preprocess_examples(args, [task], [s], new_vocab, train=False)
+        s = task.get_splits(root=args.data, lower=args.lower, **kwargs)[0]
+        preprocess_examples(args, [task], [s], train=False)
         splits.append(s)
     return splits
 
 
-def prepare_data(args, FIELD):
-    new_vocab = torchtext.data.ReversibleField(batch_first=True, init_token='<init>', eos_token='<eos>', lower=args.lower, include_lengths=True)
-    splits = get_all_splits(args, new_vocab)
-    new_vocab.build_vocab(*splits)
-    logger.info(f'Vocabulary has {len(FIELD.vocab)} tokens from training')
-    args.max_generative_vocab = min(len(FIELD.vocab), args.max_generative_vocab)
-    FIELD.append_vocab(new_vocab)
-    logger.info(f'Vocabulary has expanded to {len(FIELD.vocab)} tokens')
-    vectors = load_embeddings(args)
-    FIELD.vocab.load_vectors(vectors, True)
-    FIELD.decoder_to_vocab = {idx: FIELD.vocab.stoi[word] for idx, word in enumerate(FIELD.decoder_itos)}
-    FIELD.vocab_to_decoder = {idx: FIELD.decoder_stoi[word] for idx, word in enumerate(FIELD.vocab.itos) if word in FIELD.decoder_stoi}
-    splits = get_all_splits(args, FIELD)
+def prepare_data(args, numericalizer, embeddings):
+    splits = get_all_splits(args)
+    logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens from training')
+    new_words = []
+    for split in splits:
+        new_words += numericalizer.grow_vocab(split)
+        logger.info(f'Vocabulary has expanded to {numericalizer.num_tokens} tokens')
 
-    return FIELD, splits
+    for emb in embeddings:
+        emb.grow_for_vocab(numericalizer.vocab, new_words)
+
+    return splits
 
 
-def to_iter(data, bs, device):
-    Iterator = torchtext.data.Iterator
-    it = Iterator(data, batch_size=bs, 
-       device=device, batch_size_fn=None, 
-       train=False, repeat=False, sort=False,
-       shuffle=False, reverse=False)
-
-    return it
-
-
-def run(args, field, val_sets, model):
-    device = set_seed(args)
+def run(args, numericalizer, val_sets, model, device):
     logger.info(f'Preparing iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
-    iters = [(name, to_iter(x, bs, device)) for name, x, bs in zip(args.tasks, val_sets, args.val_batch_size)]
- 
-    def mult(ps):
-        r = 0
-        for p in ps:
-            this_r = 1
-            for s in p.size():
-                this_r *= s
-            r += this_r
-        return r
-    params = list(filter(lambda p: p.requires_grad, model.parameters()))
-    num_param = mult(params)
-    logger.info(f'{args.model} has {num_param:,} parameters')
+    iters = [(name, make_data_loader(x, numericalizer, bs, device)) for name, x, bs in zip(args.tasks, val_sets, args.val_batch_size)]
+
+    log_model_size(logger, model, args.model)
     model.to(device)
 
     decaScore = []
     model.eval()
+
+    eval_dir = os.path.join(args.eval_dir, args.evaluate)
+    os.makedirs(eval_dir, exist_ok=True)
+
     with torch.no_grad():
         for task, it in iters:
             logger.info(task.name)
-            if args.eval_dir:
-                prediction_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task.name + '.txt'))
-                answer_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task.name + '.gold.txt'))
-                results_file_name = answer_file_name.replace('gold', 'results')
-                context_file_name = os.path.join(args.eval_dir, os.path.join(args.evaluate, task.name + '.context.txt'))
-            else:
-                prediction_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.txt')
-                answer_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.gold.txt')
-                results_file_name = answer_file_name.replace('gold', 'results')
-                context_file_name = os.path.join(os.path.splitext(args.best_checkpoint)[0], args.evaluate, task.name + '.context.txt')
-            if 'sql' in task.name or 'squad' in task.name:
-                ids_file_name = answer_file_name.replace('gold', 'ids')
+            prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
+            results_file_name = os.path.join(eval_dir, task.name + '.results.json')
             if os.path.exists(prediction_file_name):
-                logger.warning(f'** {prediction_file_name} already exists -- this is where predictions are stored **')
                 if args.overwrite:
-                    logger.warning(f'**** overwriting {prediction_file_name} ****')
-            if os.path.exists(answer_file_name):
-                logger.warning(f'** {answer_file_name} already exists -- this is where ground truth answers are stored **')
-                if args.overwrite:
-                    logger.warning(f'**** overwriting {answer_file_name} ****')
-            if os.path.exists(context_file_name):
-                logger.warning(f'** {context_file_name} already exists -- this is where context sentences are stored **')
-                if args.overwrite:
-                    logger.warning(f'**** overwriting {context_file_name} ****')
-            if os.path.exists(results_file_name):
-                logger.warning(f'** {results_file_name} already exists -- this is where metrics are stored **')
-                if args.overwrite:
-                    logger.warning(f'**** overwriting {results_file_name} ****')
+                    logger.warning(f'{prediction_file_name} already exists -- overwriting **')
                 else:
-                    lines = open(results_file_name).readlines()
-                    if not args.silent:
-                        for l in lines:
-                            logger.warning(l)
-                    metrics = json.loads(lines[0])
-                    decaScore.append(metrics[task.metrics[0]])
-                    continue
+                    raise OSError(f'{prediction_file_name} already exists')
+            if os.path.exists(results_file_name):
+                if args.overwrite:
+                    logger.warning(f'{results_file_name} already exists -- overwriting **')
+                else:
+                    raise OSError(f'{results_file_name} already exists')
 
-            for x in [prediction_file_name, answer_file_name, results_file_name, context_file_name]:
-                os.makedirs(os.path.dirname(x), exist_ok=True)
+            predictions = []
+            answers = []
+            with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
+                for batch_idx, batch in enumerate(it):
+                    _, batch_prediction = model(batch, iteration=1)
 
-            if not os.path.exists(prediction_file_name) or args.overwrite:
-                with open(prediction_file_name, 'w') as prediction_file:
-                    predictions = []
-                    ids = []
-                    for batch_idx, batch in enumerate(it):
-                        _, p = model(batch, iteration=1)
+                    batch_prediction = numericalizer.reverse(batch_prediction, detokenize=task.detokenize, field_name='answer')
+                    predictions += batch_prediction
+                    batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
+                    answers += batch_answer
 
-                        p = field.reverse(p, detokenize=task.detokenize, field_name='answer')
-
-                        for i, pp in enumerate(p):
-                            if 'sql' in task.name:
-                                ids.append(int(batch.wikisql_id[i]))
-                            if 'squad' in task.name:
-                                ids.append(it.dataset.q_ids[int(batch.squad_id[i])])
-                            prediction_file.write(pp + '\n')
-                            predictions.append(pp)
-                if 'sql' in task.name:
-                    with open(ids_file_name, 'w') as id_file:
-                        for i in ids:
-                            id_file.write(json.dumps(i) + '\n')
-                if 'squad' in task.name:
-                    with open(ids_file_name, 'w') as id_file:
-                        for i in ids:
-                            id_file.write(i + '\n')
-            else:
-                with open(prediction_file_name) as prediction_file:
-                    predictions = [x.strip() for x in prediction_file.readlines()]
-                if 'sql' in task.name or 'squad' in task.name:
-                    with open(ids_file_name) as id_file:
-                        ids = [int(x.strip()) for x in id_file.readlines()]
-
-            def from_all_answers(an):
-                return [it.dataset.all_answers[sid] for sid in an.tolist()]
-
-            if not os.path.exists(answer_file_name) or args.overwrite:
-                with open(answer_file_name, 'w') as answer_file:
-                    answers = []
-                    for batch_idx, batch in enumerate(it):
-                        if hasattr(batch, 'wikisql_id'):
-                            a = from_all_answers(batch.wikisql_id.data.cpu())
-                        elif hasattr(batch, 'squad_id'):
-                            a = from_all_answers(batch.squad_id.data.cpu())
-                        elif hasattr(batch, 'woz_id'):
-                            a = from_all_answers(batch.woz_id.data.cpu())
-                        else:
-                            a = field.reverse(batch.answer.data, detokenize=task.detokenize, field_name='answer')
-                        for aa in a:
-                            answers.append(aa)
-                            answer_file.write(aa + '\n')
-            else:
-                with open(answer_file_name) as answer_file:
-                    answers = [json.loads(x.strip()) for x in answer_file.readlines()]
-
-            if not os.path.exists(context_file_name) or args.overwrite:
-                with open(context_file_name, 'w') as context_file:
-                    contexts = []
-                    for batch_idx, batch in enumerate(it):
-                        c = field.reverse(batch.context.data, detokenize=task.detokenize, field_name='context')
-                        for cc in c:
-                            contexts.append(cc)
-                            context_file.write(cc + '\n')
+                    for i, example_prediction in enumerate(batch_prediction):
+                        prediction_file.write(batch.example_id[i] + '\t' + example_prediction + '\n')
 
             if len(answers) > 0:
-                if not os.path.exists(results_file_name) or args.overwrite:
-                    metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)
-                    with open(results_file_name, 'w') as results_file:
-                        results_file.write(json.dumps(metrics) + '\n')
-                else:
-                    with open(results_file_name) as results_file:
-                        metrics = json.loads(results_file.readlines()[0])
+                metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)
+                with open(results_file_name, 'w' + ('' if args.overwrite else 'x')) as results_file:
+                    results_file.write(json.dumps(metrics) + '\n')
 
                 if not args.silent:
                     for i, (p, a) in enumerate(zip(predictions, answers)):
@@ -248,7 +147,7 @@ def run(args, field, val_sets, model):
 def get_args(argv):
     parser = ArgumentParser(prog=argv[0])
     parser.add_argument('--path', required=True)
-    parser.add_argument('--evaluate', type=str, required=True)
+    parser.add_argument('--evaluate', type=str, required=True, help='Which dataset to evaluate (test or dev)')
     parser.add_argument('--tasks', default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst','srl', 'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
@@ -261,7 +160,7 @@ def get_args(argv):
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
 
     parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether use exisiting cached splits or generate new ones')
-    parser.add_argument('--eval_dir', type=str, default=None, help='use this directory to store eval results')
+    parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
     parser.add_argument('--cached', default='', type=str, help='where to save cached files')
     parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
 
@@ -271,6 +170,7 @@ def get_args(argv):
     args = parser.parse_args(argv[1:])
 
     load_config_json(args)
+    set_seed(args)
     args.tasks = get_tasks(args.task_names, args)
     return args
 
@@ -278,36 +178,27 @@ def get_args(argv):
 def main(argv=sys.argv):
     args = get_args(argv)
     logger.info(f'Arguments:\n{pformat(vars(args))}')
-
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-
     logger.info(f'Loading from {args.best_checkpoint}')
 
-    if torch.cuda.is_available():
-        save_dict = torch.load(args.best_checkpoint)
-    else:
-        save_dict = torch.load(args.best_checkpoint, map_location='cpu')
+    devices = init_devices(args)
+    save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
 
-    field = save_dict['field']
+    numericalizer, encoder_embeddings, decoder_embeddings = load_embeddings(args.embeddings, args.encoder_embeddings,
+                                                                            args.decoder_embeddings,
+                                                                            args.max_generative_vocab,
+                                                                            logger)
+    numericalizer.load(args.path)
+    for emb in set(encoder_embeddings + decoder_embeddings):
+        emb.init_for_vocab(numericalizer.vocab)
+
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(field, args)
+    model = Model(numericalizer, args, encoder_embeddings, decoder_embeddings)
     model_dict = save_dict['model_state_dict']
-    backwards_compatible_cove_dict = {}
-    for k, v in model_dict.items():
-        if 'cove.rnn.' in k:
-            k = k.replace('cove.rnn.', 'cove.rnn1.')
-        backwards_compatible_cove_dict[k] = v
-    model_dict = backwards_compatible_cove_dict
     model.load_state_dict(model_dict)
-    field, splits = prepare_data(args, field)
-    if args.model != 'MultiLingualTranslationModel':
-        model.set_embeddings(field.vocab.vectors)
+    splits = prepare_data(args, numericalizer, set(encoder_embeddings + decoder_embeddings))
 
-    run(args, field, splits, model)
+    run(args, numericalizer, splits, model, devices[0])
 
 if __name__ == '__main__':
     main()

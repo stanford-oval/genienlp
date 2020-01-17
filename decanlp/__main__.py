@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright 2019 The Board of Trustees of the Leland Stanford Junior University
 #
 # Author: Giovanni Campagna <gcampagn@cs.stanford.edu>
@@ -27,36 +28,33 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import setuptools
+import sys
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+from . import train, predict, server, cache_embeddings
 
-setuptools.setup(
-    name='decanlp',
-    version='0.1dev',
+subcommands = {
+    'train': ('Train a model', train.main),
+    'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.main),
+    'server': ('Export RPC interface to predict', server.main),
+    'cache-embeddings': ('Download and cache embeddings', cache_embeddings.main)
+}
+
+def usage():
+    print('Usage: %s SUBCOMMAND [OPTIONS]' % (sys.argv[0]), file=sys.stderr)
+    print(file=sys.stderr)
+    print('Available subcommands:', file=sys.stderr)
+    for subcommand,(help_text,_) in subcommands.items():
+        print('  %s - %s' % (subcommand, help_text), file=sys.stderr)
+    sys.exit(1)
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] not in subcommands:
+        usage()
+        return
     
-    packages=setuptools.find_packages(exclude=['tests']),
-    entry_points= {
-        'console_scripts': ['decanlp=decanlp.__main__:main'],
-    },    
-    license='BSD-3-Clause',
-    author="Salesforce Inc.",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/salesforce/decaNLP",
+    main_fn = subcommands[sys.argv[1]][1]
+    canned_argv = ['decanlp-' + sys.argv[1]] + sys.argv[2:]
+    main_fn(canned_argv)
 
-    install_requires=[
-        'numpy',
-        'torch>=0.4.1,<1.2.0',
-        'revtok',
-        'tqdm',
-        'nltk',
-        'tensorboardX',
-        'python-dateutil',
-        'ujson',
-        'pyrouge',
-        'sacrebleu',
-        'requests'
-    ]
-)
+if __name__ == '__main__':
+    main()

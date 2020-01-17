@@ -4,7 +4,7 @@ torch>=0.4.1,<1.2.0
 # Revtok
 -e git+https://github.com/jekbradbury/revtok.git#egg=revtok
 
-# torchtext requirements
+# text requirements
 tqdm 
 nltk==3.2.5
 
@@ -16,8 +16,4 @@ python-dateutil
 ujson
 -e git+git://github.com/andersjo/pyrouge.git#egg=pyrouge
 sacrebleu
-orderedset
 requests
-
--e git+git://github.com/salesforce/cove.git#egg=cove
-allennlp

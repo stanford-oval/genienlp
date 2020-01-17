@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2018, Salesforce, Inc.
+# Copyright (c) 2019, The Board of Trustees of the Leland Stanford Junior University
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -27,4 +27,10 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from .general_seq2seq import Seq2Seq
+
+def get_functions(program):
+    return [x for x in program.split(' ') if x.startswith('@')]
+
+
+def get_devices(program):
+    return [x.rsplit('.', 1)[0] for x in program.split(' ') if x.startswith('@')]

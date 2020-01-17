@@ -29,6 +29,7 @@
 
 
 from . import generic_dataset
+import revtok
 
 
 class BaseTask:
@@ -50,29 +51,35 @@ class BaseTask:
     def default_context(self):
         return ''
 
-    def get_splits(self, field, root, **kwargs):
+    def tokenize(self, sentence, field_name=None):
+        if not sentence:
+            return [], None
+        return revtok.tokenize(sentence), None
+
+    def detokenize(self, tokenized, field_name=None):
+        return revtok.detokenize(tokenized)
+
+    def get_splits(self, root, **kwargs):
         """
         Load the train, test, eval datasets for this task
 
-        :param field: the torchtext.Field to use for tokenization, preprocessing and vocabulary construction
+        :param field: the text.Field to use for tokenization, preprocessing and vocabulary construction
         :param root: the base directory where data is stored
         :param kwargs: other arguments to pass to the Dataset
-        :return: a list of torchtext.Dataset
+        :return: a list of text.Dataset
         """
-        return generic_dataset.JSON.splits(
-            fields=field, root=root, name=self.name, **kwargs)
+        return generic_dataset.JSON.splits(root=root, name=self.name, tokenize=self.tokenize, **kwargs)
 
     def preprocess_example(self, ex, train=False, max_context_length=None):
         """
         Preprocess a given example, in a task specific way.
 
-        The example should be modified in place.
-        Return False if the example should be dropped from the dataset
+        Returns the modified example, or None if the example should be dropped from the dataset
 
-        :param ex: the torchtext.Example to preprocess
-        :return: True if the example is valid, False otherwise
+        :param ex: the text.Example to preprocess
+        :return: a new Example or None
         """
-        return True
+        return ex
 
     @property
     def metrics(self):
@@ -85,6 +92,3 @@ class BaseTask:
         :return: a list of metric names
         """
         return ['em', 'nem', 'nf1']
-
-    tokenize = None
-    detokenize = None

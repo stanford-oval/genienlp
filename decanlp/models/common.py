@@ -37,18 +37,24 @@ import os
 import sys
 import numpy as np
 import torch.nn as nn
+from typing import NamedTuple, List
 
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
 from torch.nn.utils.rnn import pack_padded_sequence as pack
 
 
+class EmbeddingOutput(NamedTuple):
+    all_layers: List[torch.Tensor]
+    last_layer: torch.Tensor
+
+
 INF = 1e10
 EPSILON = 1e-10
 
-class LSTMDecoder(nn.Module):
 
+class MultiLSTMCell(nn.Module):
     def __init__(self, num_layers, input_size, rnn_size, dropout):
-        super(LSTMDecoder, self).__init__()
+        super(MultiLSTMCell, self).__init__()
         self.dropout = nn.Dropout(dropout)
         self.num_layers = num_layers
         self.layers = nn.ModuleList()
@@ -71,25 +77,6 @@ class LSTMDecoder(nn.Module):
         c_1 = torch.stack(c_1)
 
         return input, (h_1, c_1)
-
-def max_margin_loss(probs, targets, pad_idx=1):
-
-    batch_size, max_length, depth = probs.size()
-    targets_mask = (targets != pad_idx).float()
-    flat_mask = targets_mask.view(batch_size*max_length,)
-    flat_preds = probs.view(batch_size*max_length, depth)
-
-    one_hot = torch.zeros_like(probs)
-    one_hot_gold = one_hot.scatter_(2, targets.unsqueeze(2), 1)
-
-    marginal_scores = probs - one_hot_gold + 1
-    marginal_scores = marginal_scores.view(batch_size*max_length, depth)
-    max_margin = torch.max(marginal_scores, dim=1)[0]
-
-    gold_score = torch.masked_select(flat_preds, one_hot_gold.view(batch_size*max_length, depth).byte())
-    margin = max_margin - gold_score
-
-    return torch.sum(margin*flat_mask) + 1e-8
 
 
 def positional_encodings_like(x, t=None):
@@ -323,6 +310,7 @@ class LinearFeedforward(nn.Module):
     def forward(self, x):
         return self.dropout(self.linear(self.feedforward(x)))
 
+
 class PackedLSTM(nn.Module):
 
     def __init__(self, d_in, d_out, bidirectional=False, num_layers=1, 
@@ -373,68 +361,77 @@ class Feedforward(nn.Module):
         return self.activation(self.linear(self.dropout(x)))
 
 
-class Embedding(nn.Module):
+class CombinedEmbedding(nn.Module):
 
-    def __init__(self, field, output_dimension, include_pretrained=True, trained_dimension=0, dropout=0.0, project=True, requires_grad=False):
+    def __init__(self, numericalizer, pretrained_embeddings,
+                 output_dimension,
+                 finetune_pretrained=False,
+                 trained_dimension=0,
+                 project=True):
         super().__init__()
-        self.field = field
         self.project = project
-        self.requires_grad = requires_grad
+        self.finetune_pretrained = finetune_pretrained
+        self.pretrained_embeddings = tuple(pretrained_embeddings)
+
         dimension = 0
-        pretrained_dimension = field.vocab.vectors.size(-1)
+        for idx, embedding in enumerate(self.pretrained_embeddings):
+            dimension += embedding.dim
+            self.add_module('pretrained_' + str(idx), embedding)
 
-        if include_pretrained:
-            # NOTE: this must be a list so that pytorch will not iterate into the module when
-            # traversing this module
-            # in turn, this means that moving this Embedding() to the GPU will not move the
-            # actual embedding, which will stay on CPU; this is necessary because a) we call
-            # set_embeddings() sometimes with CPU-only tensors, and b) the embedding tensor
-            # is too big for the GPU anyway
-            self.pretrained_embeddings = [nn.Embedding(len(field.vocab), pretrained_dimension)]
-            self.pretrained_embeddings[0].weight.data = field.vocab.vectors
-            self.pretrained_embeddings[0].weight.requires_grad = self.requires_grad
-            dimension += pretrained_dimension
-        else:
-            self.pretrained_embeddings = None
-
-        # OTOH, if we have a trained embedding, we move it around together with the module
-        # (ie, potentially on GPU), because the saving when applying gradient outweights
-        # the cost, and hopefully the embedding is small enough to fit in GPU memory
         if trained_dimension > 0:
-            self.trained_embeddings = nn.Embedding(len(field.vocab), trained_dimension)
+            self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
             dimension += trained_dimension
         else:
             self.trained_embeddings = None
         if self.project:
             self.projection = Feedforward(dimension, output_dimension)
-        self.dropout = nn.Dropout(dropout)
+        else:
+            assert dimension == output_dimension
         self.dimension = output_dimension
 
-    def forward(self, x, lengths=None, device=-1):
+    def _combine_embeddings(self, embeddings):
+        if len(embeddings) == 1:
+            all_layers = embeddings[0].all_layers
+            last_layer = embeddings[0].last_layer
+            if self.project:
+                last_layer = self.projection(last_layer)
+            return EmbeddingOutput(all_layers=all_layers, last_layer=last_layer)
+
+        all_layers = None
+        last_layer = []
+        for emb in embeddings:
+            if all_layers is None:
+                all_layers = [[layer] for layer in emb.all_layers]
+            elif len(all_layers) != len(emb.all_layers):
+                raise ValueError('Cannot combine embeddings that use different numbers of layers')
+            else:
+                for layer_list, layer in zip(all_layers, emb.all_layers):
+                    layer_list.append(layer)
+            last_layer.append(emb.last_layer)
+
+        all_layers = [torch.cat(layer, dim=2) for layer in all_layers]
+        last_layer = torch.cat(last_layer, dim=2)
+        if self.project:
+            last_layer = self.projection(last_layer)
+        return EmbeddingOutput(all_layers=all_layers, last_layer=last_layer)
+
+    def forward(self, x, padding=None):
+        embedded = []
         if self.pretrained_embeddings is not None:
-            pretrained_embeddings = self.pretrained_embeddings[0](x.cpu()).to(x.device).detach()
-        else:
-            pretrained_embeddings = None
+            if self.finetune_pretrained:
+                embedded += [emb(x, padding=padding) for emb in self.pretrained_embeddings]
+            else:
+                with torch.no_grad():
+                    embedded += [emb(x, padding=padding) for emb in self.pretrained_embeddings]
+
         if self.trained_embeddings is not None:
             trained_vocabulary_size = self.trained_embeddings.weight.size()[0]
             valid_x = torch.lt(x, trained_vocabulary_size)
             masked_x = torch.where(valid_x, x, torch.zeros_like(x))
-            trained_embeddings = self.trained_embeddings(masked_x)
-        else:
-            trained_embeddings = None
-        if pretrained_embeddings is not None and trained_embeddings is not None:
-            embeddings = torch.cat((pretrained_embeddings, trained_embeddings), dim=2)
-        elif pretrained_embeddings is not None:
-            embeddings = pretrained_embeddings
-        else:
-            embeddings = trained_embeddings
+            output = self.trained_embeddings(masked_x)
+            embedded.append(EmbeddingOutput(all_layers=[output], last_layer=output))
 
-        return self.projection(embeddings) if self.project else embeddings
-
-    def set_embeddings(self, w):
-        if self.pretrained_embeddings is not None:
-            self.pretrained_embeddings[0].weight.data = w
-            self.pretrained_embeddings[0].weight.requires_grad = self.requires_grad
+        return self._combine_embeddings(embedded)
 
 
 class SemanticFusionUnit(nn.Module):
@@ -463,23 +460,38 @@ class LSTMDecoderAttention(nn.Module):
         self.dot = dot
 
     def applyMasks(self, context_mask):
-        self.context_mask = context_mask
+        # context_mask is batch x encoder_time, convert it to batch x 1 x encoder_time
+        self.context_mask = context_mask.unsqueeze(1)
 
-    def forward(self, input, context):
+    def forward(self, input : torch.Tensor, context : torch.Tensor):
+        # input is batch x decoder_time x dim
+        # context is batch x encoder_time x dim
+        # output will be batch x decoder_time x dim
+        # context_attention will be batch x decoder_time x encoder_time
+
         if not self.dot:
-            targetT = self.linear_in(input).unsqueeze(2)  # batch x dim x 1
+            targetT = self.linear_in(input)  # batch x decoder_time x dim x 1
         else:
-            targetT = input.unsqueeze(2)
+            targetT = input
 
-        context_scores = torch.bmm(context, targetT).squeeze(2)
+        x = input.shape
+        transposed_context = torch.transpose(context, 2, 1)
+        x = transposed_context.shape
+        context_scores = torch.matmul(targetT, transposed_context)
         context_scores.masked_fill_(self.context_mask, -float('inf'))
         context_attention = F.softmax(context_scores, dim=-1) + EPSILON
-        context_alignment = torch.bmm(context_attention.unsqueeze(1), context).squeeze(1)
 
-        combined_representation = torch.cat([input, context_alignment], 1)
+        # convert context_attention to batch x decoder_time x 1 x encoder_time
+        # convert context to batch x 1 x encoder_time x dim
+        # context_alignment will be batch x decoder_time x 1 x dim
+        context_alignment = torch.matmul(context_attention.unsqueeze(2), context.unsqueeze(1))
+        # squeeze out the extra dimension
+        context_alignment = context_alignment.squeeze(2)
+
+        combined_representation = torch.cat([input, context_alignment], 2)
         output = self.tanh(self.linear_out(combined_representation))
 
-        return output, context_attention, context_alignment
+        return output, context_attention
 
 
 class CoattentiveLayer(nn.Module):
@@ -491,8 +503,8 @@ class CoattentiveLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, context, question, context_padding, question_padding): 
-        context_padding = torch.cat([context.new_zeros((context.size(0), 1), dtype=torch.long)==1, context_padding], 1)
-        question_padding = torch.cat([question.new_zeros((question.size(0), 1), dtype=torch.long)==1, question_padding], 1)
+        context_padding = torch.cat([context.new_zeros((context.size(0), 1), dtype=torch.bool), context_padding], 1)
+        question_padding = torch.cat([question.new_zeros((question.size(0), 1), dtype=torch.bool), question_padding], 1)
 
         context_sentinel = self.embed_sentinel(context.new_zeros((context.size(0), 1), dtype=torch.long))
         context = torch.cat([context_sentinel, self.dropout(context)], 1) # batch_size x (context_length + 1) x features
@@ -523,94 +535,3 @@ class CoattentiveLayer(nn.Module):
         return F.softmax(raw_scores, dim=1)
 
 
-# The following code was copied and adapted from github.com/floyhub/world-language-model
-#
-# BSD 3-Clause License
-#
-# Copyright (c) 2017,
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-# * Redistributions of source code must retain the above copyright notice, this
-#   list of conditions and the following disclaimer.
-#
-# * Redistributions in binary form must reproduce the above copyright notice,
-#   this list of conditions and the following disclaimer in the documentation
-#   and/or other materials provided with the distribution.
-#
-# * Neither the name of the copyright holder nor the names of its
-#   contributors may be used to endorse or promote products derived from
-#   this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-class PretrainedDecoderLM(nn.Module):
-    """Container module with an encoder, a recurrent module, and a decoder."""
-
-    def __init__(self, rnn_type, ntoken, emsize, nhid, nlayers, dropout=0.5, tie_weights=False):
-        super(PretrainedDecoderLM, self).__init__()
-        self.drop = nn.Dropout(dropout)
-        self.encoder = nn.Embedding(ntoken, emsize) # Token2Embeddings
-        if rnn_type in ['LSTM', 'GRU']:
-            self.rnn = getattr(nn, rnn_type)(emsize, nhid, nlayers, dropout=dropout)
-        else:
-            try:
-                nonlinearity = {'RNN_TANH': 'tanh', 'RNN_RELU': 'relu'}[rnn_type]
-            except KeyError:
-                raise ValueError( """An invalid option for `--model` was supplied,
-                                 options are ['LSTM', 'GRU', 'RNN_TANH' or 'RNN_RELU']""")
-            self.rnn = nn.RNN(emsize, nhid, nlayers, nonlinearity=nonlinearity, dropout=dropout)
-        self.decoder = nn.Linear(nhid, ntoken)
-
-        # Optionally tie weights as in:
-        # "Using the Output Embedding to Improve Language Models" (Press & Wolf 2016)
-        # https://arxiv.org/abs/1608.05859
-        # and
-        # "Tying Word Vectors and Word Classifiers: A Loss Framework for Language Modeling" (Inan et al. 2016)
-        # https://arxiv.org/abs/1611.01462
-        if tie_weights:
-            if nhid != emsize:
-                raise ValueError('When using the tied flag, nhid must be equal to emsize')
-            self.decoder.weight = self.encoder.weight
-
-        self.init_weights()
-
-        self.rnn_type = rnn_type
-        self.nhid = nhid
-        self.nlayers = nlayers
-
-    def init_weights(self):
-        initrange = 0.1
-        self.encoder.weight.data.uniform_(-initrange, initrange)
-        self.decoder.bias.data.fill_(0)
-        self.decoder.weight.data.uniform_(-initrange, initrange)
-
-    def encode(self, input, hidden=None):
-        emb = self.drop(self.encoder(input))
-        output, hidden = self.rnn(emb, hidden)
-        output = self.drop(output)
-        return output, hidden
-
-    def forward(self, input, hidden=None):
-        encoded, hidden = self.encode(input, hidden)
-        decoded = self.decoder(encoded.view(encoded.size(0)*encoded.size(1), encoded.size(2)))
-        return decoded.view(encoded.size(0), encoded.size(1), decoded.size(1)), hidden
-
-    def init_hidden(self, bsz):
-        weight = next(self.parameters()).data
-        if self.rnn_type == 'LSTM':
-            return (weight.new(self.nlayers, bsz, self.nhid).zero_(),
-                    weight.new(self.nlayers, bsz, self.nhid).zero_())
-        else:
-            return weight.new(self.nlayers, bsz, self.nhid).zero_()

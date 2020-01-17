@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2018, Salesforce, Inc.
+#                     The Board of Trustees of the Leland Stanford Junior University
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -27,4 +28,32 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from .general_seq2seq import Seq2Seq
+from torch import nn
+
+from .mqan_encoder import MQANEncoder
+from .identity_encoder import IdentityEncoder
+from .mqan_decoder import MQANDecoder
+
+ENCODERS = {
+    'MQANEncoder': MQANEncoder,
+    'Identity': IdentityEncoder
+}
+DECODERS = {
+    'MQANDecoder': MQANDecoder
+}
+
+class Seq2Seq(nn.Module):
+    def __init__(self, numericalizer, args, encoder_embeddings, decoder_embeddings):
+        super().__init__()
+        self.args = args
+
+        self.encoder = ENCODERS[args.seq2seq_encoder](numericalizer, args, encoder_embeddings)
+        self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings)
+
+    def forward(self, batch, iteration):
+        self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
+
+        loss, predictions = self.decoder(batch, self_attended_context, final_context, context_rnn_state,
+                                         final_question, question_rnn_state)
+
+        return loss, predictions

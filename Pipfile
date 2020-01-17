@@ -15,13 +15,12 @@ python-dateutil = "*"
 ujson = "*"
 pyrouge = {editable = true,git = "git://github.com/andersjo/pyrouge.git"}
 sacrebleu = "*"
-orderedset = "*"
 records = "*"
 tabulate = "*"
-cove = {editable = true,git = "git://github.com/salesforce/cove.git"}
-allennlp = "*"
 tensorboardX = "*"
 Babel = "*"
+requests = "*"
+transformers = "*"
 
 [requires]
-python_version = "3.6"
+python_version = "3.7"

@@ -32,20 +32,17 @@
 from argparse import ArgumentParser
 import ujson as json
 import torch
-import numpy as np
-import random
 import asyncio
 import logging
 import sys
-from copy import deepcopy
 from pprint import pformat
 
-from .util import set_seed, load_config_json
+from .data.example import Batch
+from .util import set_seed, init_devices, load_config_json, log_model_size
 from . import models
-from .text.torchtext.data import Example
-from .utils.embeddings import load_embeddings
+from .data.embeddings import load_embeddings
 from .tasks.registry import get_tasks
-from .tasks.generic_dataset import CONTEXT_SPECIAL, QUESTION_SPECIAL, get_context_question, CQA
+from .tasks.generic_dataset import Example
 
 logger = logging.getLogger(__name__)
 
@@ -53,64 +50,24 @@ class ProcessedExample():
     pass
 
 class Server():
-    def __init__(self, args, field, model):
-        self.device = set_seed(args)
+    def __init__(self, args, numericalizer, embeddings, model, device):
         self.args = args
-        self.field = field
+        self.device = device
+        self.numericalizer = numericalizer
         self.model = model
 
-        logger.info(f'Vocabulary has {len(self.field.vocab)} tokens from training')
-        self._vector_collections = load_embeddings(args)
-        
-        self._limited_idx_to_full_idx = deepcopy(self.field.decoder_to_vocab) # should avoid this with a conditional in map to full
-        self._oov_to_limited_idx = {}
+        logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens from training')
+        self._embeddings = embeddings
 
         self._cached_tasks = dict()
-        
-        assert self.field.include_lengths
 
     def numericalize_example(self, ex):
-        processed = ProcessedExample()
-        
-        new_vectors = []
-        for name in CQA.fields:
-            value = getattr(ex, name)
-            
-            assert isinstance(value, list)
-            # check if all the words are in the vocabulary, and if not
-            # grow the vocabulary and the embedding matrix
-            for word in value:
-                if word not in self.field.vocab.stoi:
-                    self.field.vocab.stoi[word] = len(self.field.vocab.itos)
-                    self.field.vocab.itos.append(word)
-                    
-                    new_vector = [vec[word] for vec in self._vector_collections]
-                    
-                    # charNgram returns  a [1, D] tensor, while Glove returns a [D] tensor
-                    # normalize to [1, D] so we can concat along the second dimension
-                    # and later concat all vectors along the first
-                    new_vector = [vec if vec.dim() > 1 else vec.unsqueeze(0) for vec in new_vector]
-                    new_vectors.append(torch.cat(new_vector, dim=1))
-            
-            # batch of size 1
-            batch = [value]            
-            entry, lengths, limited_entry, raw = self.field.process(batch, device=self.device, train=True, 
-                limited=self.field.decoder_stoi, l2f=self._limited_idx_to_full_idx, oov2l=self._oov_to_limited_idx)
-            setattr(processed, name, entry)
-            setattr(processed, f'{name}_lengths', lengths)
-            setattr(processed, f'{name}_limited', limited_entry)
-            setattr(processed, f'{name}_tokens', [[s.strip() for s in l] for l in raw])
+        new_words = self.numericalizer.grow_vocab([ex])
+        for emb in self._embeddings:
+            emb.grow_for_vocab(self.numericalizer.vocab, new_words)
 
-        processed.oov_to_limited_idx = self._oov_to_limited_idx
-        processed.limited_idx_to_full_idx = self._limited_idx_to_full_idx
-        
-        if new_vectors:
-            # concat the old embedding matrix and all the new vector along the first dimension
-            new_embedding_matrix = torch.cat([self.field.vocab.vectors] + new_vectors, dim=0)
-            self.field.vocab.vectors = new_embedding_matrix
-            self.model.set_embeddings(new_embedding_matrix)
-            
-        return processed
+        # batch of size 1
+        return Batch.from_examples([ex], self.numericalizer, device=self.device)
     
     def handle_request(self, line):
         request = json.loads(line)
@@ -129,15 +86,12 @@ class Server():
         if not question:
             question = task.default_question
         answer = ''
-        tokenize = task.tokenize
-    
-        context_question = get_context_question(context, question)
-        fields = [(x, self.field) for x in CQA.fields]
-        ex = Example.fromlist([context, question, answer, CONTEXT_SPECIAL, QUESTION_SPECIAL, context_question], fields, tokenize=tokenize)
+
+        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
         
         batch = self.numericalize_example(ex)
         _, prediction_batch = self.model(batch, iteration=0)
-        predictions = self.field.reverse(prediction_batch, detokenize=task.detokenize, field_name='answer')
+        predictions = self.numericalizer.reverse(prediction_batch, detokenize=task.detokenize, field_name='answer')
         
         response = json.dumps(dict(id=request['id'], answer=predictions[0]))
         return response + '\n'
@@ -179,17 +133,7 @@ class Server():
             pass
 
     def run(self):
-        def mult(ps):
-            r = 0
-            for p in ps:
-                this_r = 1
-                for s in p.size():
-                    this_r *= s
-                r += this_r
-            return r
-        params = list(filter(lambda p: p.requires_grad, self.model.parameters()))
-        num_param = mult(params)
-        logger.info(f'{self.args.model} has {num_param:,} parameters')
+        log_model_size(logger, self.model, self.args.model)
         self.model.to(self.device)
     
         self.model.eval()
@@ -213,39 +157,31 @@ def get_args(argv):
 
     args = parser.parse_args(argv[1:])
     load_config_json(args)
+    set_seed(args)
     return args
 
 
 def main(argv=sys.argv):
     args = get_args(argv)
     logger.info(f'Arguments:\n{pformat(vars(args))}')
-
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-
     logger.info(f'Loading from {args.best_checkpoint}')
 
-    if torch.cuda.is_available():
-        save_dict = torch.load(args.best_checkpoint)
-    else:
-        save_dict = torch.load(args.best_checkpoint, map_location='cpu')
+    devices = init_devices(args)
+    save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
 
-    field = save_dict['field']
+    numericalizer, encoder_embeddings, decoder_embeddings = load_embeddings(args.embeddings, args.encoder_embeddings,
+                                                                            args.decoder_embeddings,
+                                                                            args.max_generative_vocab)
+    numericalizer.load(args.path)
+    for emb in set(encoder_embeddings + decoder_embeddings):
+        emb.init_for_vocab(numericalizer.vocab)
+
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(field, args)
+    model = Model(numericalizer, args, encoder_embeddings, decoder_embeddings)
     model_dict = save_dict['model_state_dict']
-    backwards_compatible_cove_dict = {}
-    for k, v in model_dict.items():
-        if 'cove.rnn.' in k:
-            k = k.replace('cove.rnn.', 'cove.rnn1.')
-        backwards_compatible_cove_dict[k] = v
-    model_dict = backwards_compatible_cove_dict
     model.load_state_dict(model_dict)
     
-    server = Server(args, field, model)
-    model.set_embeddings(field.vocab.vectors)
+    server = Server(args, numericalizer, encoder_embeddings + decoder_embeddings, model, devices[0])
 
     server.run()

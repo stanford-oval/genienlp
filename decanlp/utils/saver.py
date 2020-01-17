@@ -47,10 +47,9 @@ class Saver(object):
     and creating checkpoint files to keep track of which saves are valid and which are not.
     '''
 
-    def __init__(self, savedir, world_size, max_to_keep=5):
+    def __init__(self, savedir, max_to_keep=5):
         self._savedir = savedir
         self._max_to_keep = max_to_keep
-        self.world_size = world_size
         assert max_to_keep >= 1
         
         self._loaded_last_checkpoints = False
@@ -89,13 +88,7 @@ class Saver(object):
                 os.unlink(os.path.join(self._savedir, opt_todelete))
             except (OSError, IOError) as e:
                 logging.warning('Failed to delete old checkpoint: %s', e)
-        if self.world_size > 1:
-            torch.distributed.barrier()
         torch.save(save_model_state_dict, os.path.join(self._savedir, model_name))
-        if self.world_size > 1:
-            torch.distributed.barrier()
         torch.save(save_opt_state_dict, os.path.join(self._savedir, opt_name))
-        if self.world_size > 1:
-            torch.distributed.barrier()
         with open(os.path.join(self._savedir, 'checkpoint.json'), 'w') as fp:
             json.dump(dict(all=self._all_checkpoints, latest=self._latest_checkpoint), fp)
