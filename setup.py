@@ -48,15 +48,15 @@ setuptools.setup(
 
     install_requires=[
         'numpy',
-        'torch>=0.4.1,<1.2.0',
-        'revtok',
-        'tqdm',
-        'nltk',
-        'tensorboardX',
+        'torch~=1.4',
+        'revtok==0.0.3',
+        'tqdm~=4.0',
+        'tensorboardX==2.0.*',
         'python-dateutil',
         'ujson',
-        'pyrouge',
-        'sacrebleu',
-        'requests'
+        'pyrouge>=0.1.3',
+        'sacrebleu~=1.0',
+        'requests~=2.22',
+        'transformers~=2.3'
     ]
 )

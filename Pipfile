@@ -7,20 +7,16 @@ verify_ssl = true
 
 [packages]
 numpy = "*"
-torch = "<2.0.0,>=0.4.1"
-revtok = {editable = true,git = "https://github.com/jekbradbury/revtok.git"}
-tqdm = "*"
-nltk = "==3.2.5"
+torch = "~=1.4"
+revtok = "==0.0.3"
+tqdm = "~=4.0"
 python-dateutil = "*"
 ujson = "*"
-pyrouge = {editable = true,git = "git://github.com/andersjo/pyrouge.git"}
-sacrebleu = "*"
-records = "*"
-tabulate = "*"
-tensorboardX = "*"
-Babel = "*"
-requests = "*"
-transformers = "*"
+pyrouge = ">=0.1.3"
+sacrebleu = "~=1.0"
+tensorboardX = "==2.0.*"
+requests = "~=2.22"
+transformers = "~=2.3"
 
 [requires]
 python_version = "3.7"
