@@ -33,7 +33,6 @@ from argparse import ArgumentParser
 import subprocess
 import json
 import datetime
-from dateutil import tz
 import logging
 
 from .tasks.registry import get_tasks
@@ -147,7 +146,7 @@ def parse(argv):
     if 'imdb' in args.val_task_names:
         args.val_task_names.remove('imdb')
 
-    args.timestamp = '-'.join(datetime.datetime.now(tz=tz.tzoffset(None, -8*60*60)).strftime("%y/%m/%d/%H/%M/%S.%f").split())
+    args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
 
     if args.use_google_translate:
         args.data = args.data + '_google_translate'

@@ -52,7 +52,6 @@ setuptools.setup(
         'revtok==0.0.3',
         'tqdm~=4.0',
         'tensorboardX==2.0.*',
-        'python-dateutil',
         'ujson',
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
