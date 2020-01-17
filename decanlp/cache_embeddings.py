@@ -53,5 +53,5 @@ def main(argv=sys.argv):
     args = get_args(argv)
     logger.info(f'Arguments:\n{pformat(vars(args))}')
 
-    set_seed(args.seed)
+    set_seed(args)
     load_embeddings(args.destdir, args.embeddings, '')
