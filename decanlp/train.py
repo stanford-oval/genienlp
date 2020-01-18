@@ -155,17 +155,9 @@ def step(model, batch, opt, iteration, lr=None, grad_clip=None, logger=None):
     model.train()
     opt.zero_grad()
     loss, predictions = model(batch, iteration)
+    if torch.isnan(loss).any():
+        raise RuntimeError('Got NaN loss')
     loss.backward()
-    trainable_params = get_trainable_params(model, name=True)
-    Flag = False
-    for name, param in trainable_params:
-        if param.grad is not None and torch.isnan(param.grad).any():
-            logger.warning(f'param name is: {name}')
-            logger.warning(f'param value is: {param}')
-            logger.warning(f'param gradient is: {param.grad}')
-            Flag = True
-    if Flag:
-        return None, {}, None
     if lr is not None:
         opt.param_groups[0]['lr'] = lr
     grad_norm = None
