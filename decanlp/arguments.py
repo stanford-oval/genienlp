@@ -110,7 +110,8 @@ def parse(argv):
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
     parser.add_argument('--beta0', default=0.9, type=float, help='alternative momentum for Adam (only when not using transformer_lr)')
     parser.add_argument('--optimizer', default='adam', type=str, help='Adam or SGD')
-    parser.add_argument('--no_transformer_lr', action='store_false', dest='transformer_lr', help='turns off the transformer learning rate strategy') 
+    parser.add_argument('--no_transformer_lr', action='store_false', dest='transformer_lr', help='turns off the transformer learning rate strategy')
+    parser.add_argument('--transformer_lr_multiply', default=1.0, type=float, help='multiplier for transformer learning rate')
     parser.add_argument('--sgd_lr', default=1.0, type=float, help='learning rate for SGD (if not using Adam)')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
 

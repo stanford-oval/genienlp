@@ -144,7 +144,9 @@ def prepare_data(args, logger):
 def get_learning_rate(i, args):
     transformer_lr = 1. / math.sqrt(args.dimension) * min(
         1 / math.sqrt(i), i / (args.warmup * math.sqrt(args.warmup)))
-    if 'adam' not in args.optimizer.lower():
+    if 'adam' in args.optimizer.lower():
+        transformer_lr *= args.transformer_lr_multiply
+    else:
         transformer_lr = transformer_lr * math.sqrt(args.dimension * args.warmup) * args.sgd_lr
     return transformer_lr
 
