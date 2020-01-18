@@ -273,7 +273,6 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                             logger.info(log_entry + metric_entry)
                             if writer is not None:
                                 for metric_key, metric_value in metric_dict.items():
-                                    writer.add_scalar(f'{metric_key}/{val_task.name}/val', metric_value, iteration)
                                     writer.add_scalar(f'{val_task.name}/{metric_key}/val', metric_value, iteration)
                         if writer is not None:
                             writer.add_scalar('deca/val', deca_score, iteration)
@@ -343,6 +342,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     
                         if writer is not None:
                             writer.add_scalar(f'loss/{task.name}/train', local_loss, iteration)
+                            writer.add_scalar(f'training/loss/{task.name}', local_loss, iteration)
 
                             if lr_scheduler is not None:
                                 writer.add_scalar(f'training/lr', lr_scheduler.get_last_lr(), iteration)
