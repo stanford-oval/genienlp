@@ -27,6 +27,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import torch
 from torch import nn
 
 from .common import CombinedEmbedding
@@ -39,8 +40,6 @@ class IdentityEncoder(nn.Module):
 
         if sum(emb.dim for emb in encoder_embeddings) != args.dimension:
             raise ValueError('Hidden dimension must be equal to the sum of the embedding sizes to use IdentityEncoder')
-        if args.rnn_layers > 0:
-            raise ValueError('Cannot have RNN layers with IdentityEncoder')
 
         self.encoder_embeddings = CombinedEmbedding(numericalizer, encoder_embeddings, args.dimension,
                                                     trained_dimension=0,
@@ -62,7 +61,15 @@ class IdentityEncoder(nn.Module):
         self_attended_context = context_embedded.all_layers[:-(self.args.transformer_layers+1)]
         final_context = context_embedded.last_layer
         final_question = question_embedded.last_layer
+
         context_rnn_state = None
         question_rnn_state = None
+        if self.args.rnn_layers > 0:
+            batch_size = context.size(0)
+
+            zero = torch.zeros(self.args.rnn_layers, batch_size, self.args.dimension,
+                               dtype=torch.float, requires_grad=False)
+            context_rnn_state = (zero, zero)
+            question_rnn_state = (zero, zero)
 
         return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state

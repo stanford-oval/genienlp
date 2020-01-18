@@ -28,7 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import numpy as np
-import tqdm
+from tqdm import tqdm
 
 def string_hash(x):
     """ Simple deterministic string hash

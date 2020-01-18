@@ -103,6 +103,12 @@ class MQANEncoder(nn.Module):
         return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state
 
     def reshape_rnn_state(self, h):
+        # h is (num_layers * num_directions, batch, hidden_size)
+        # we reshape to (num_layers, num_directions, batch, hidden_size)
+        # transpose to (num_layers, batch, num_directions, hidden_size)
+        # reshape to (num_layers, batch, num_directions * hidden_size)
+        # also note that hidden_size is half the value of args.dimension
+
         return h.view(h.size(0) // 2, 2, h.size(1), h.size(2)) \
             .transpose(1, 2).contiguous() \
             .view(h.size(0) // 2, h.size(1), h.size(2) * 2).contiguous()
