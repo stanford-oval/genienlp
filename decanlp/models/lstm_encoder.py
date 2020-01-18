@@ -27,12 +27,11 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import torch
 from torch import nn
 
-from .common import CombinedEmbedding
+from .common import CombinedEmbedding, PackedLSTM
 
-class IdentityEncoder(nn.Module):
+class BiLSTMEncoder(nn.Module):
     def __init__(self, numericalizer, args, encoder_embeddings):
         super().__init__()
         self.args = args
@@ -41,10 +40,21 @@ class IdentityEncoder(nn.Module):
         if sum(emb.dim for emb in encoder_embeddings) != args.dimension:
             raise ValueError('Hidden dimension must be equal to the sum of the embedding sizes to use IdentityEncoder')
 
+        def dp(args):
+            return args.dropout_ratio if args.rnn_layers > 1 else 0.
+
         self.encoder_embeddings = CombinedEmbedding(numericalizer, encoder_embeddings, args.dimension,
                                                     trained_dimension=0,
                                                     project=False,
                                                     finetune_pretrained=args.train_encoder_embeddings)
+
+        self.bilstm_context = PackedLSTM(args.dimension, args.dimension,
+                                         batch_first=True, bidirectional=True, num_layers=args.rnn_layers,
+                                         dropout=dp(args))
+
+        self.bilstm_question = PackedLSTM(args.dimension, args.dimension,
+                                          batch_first=True, bidirectional=True, num_layers=args.rnn_layers,
+                                          dropout=dp(args))
 
     def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length
@@ -62,14 +72,21 @@ class IdentityEncoder(nn.Module):
         final_context = context_embedded.last_layer
         final_question = question_embedded.last_layer
 
-        context_rnn_state = None
-        question_rnn_state = None
-        if self.args.rnn_layers > 0:
-            batch_size = context.size(0)
+        final_context, context_rnn_state = self.bilstm_context(final_context, context_lengths)
+        context_rnn_state = tuple(self.reshape_rnn_state(x) for x in context_rnn_state)
 
-            zero = torch.zeros(self.args.rnn_layers, batch_size, self.args.dimension,
-                               dtype=torch.float, requires_grad=False, device=context.device)
-            context_rnn_state = (zero, zero)
-            question_rnn_state = (zero, zero)
+        final_question, question_rnn_state = self.bilstm_question(final_question, question_lengths)
+        question_rnn_state = tuple(self.reshape_rnn_state(x) for x in question_rnn_state)
 
         return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state
+
+    def reshape_rnn_state(self, h):
+        # h is (num_layers * num_directions, batch, hidden_size)
+        # we reshape to (num_layers, num_directions, batch, hidden_size)
+        # transpose to (num_layers, batch, num_directions, hidden_size)
+        # reshape to (num_layers, batch, num_directions * hidden_size)
+        # also note that hidden_size is half the value of args.dimension
+
+        return h.view(h.size(0) // 2, 2, h.size(1), h.size(2)) \
+            .transpose(1, 2).contiguous() \
+            .view(h.size(0) // 2, h.size(1), h.size(2) * 2).contiguous()

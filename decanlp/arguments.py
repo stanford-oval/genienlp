@@ -90,8 +90,8 @@ def parse(argv):
     parser.add_argument('--preserve_case', action='store_false', dest='lower', help='whether to preserve casing for all text')
 
     parser.add_argument('--model', type=str, choices=['Seq2Seq'], default='Seq2Seq', help='which model to import')
-    parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'Identity'], default='MQANEncoder',
-                        help='which encoder to use for the Seq2Seq model')
+    parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity'],
+                        default='MQANEncoder', help='which encoder to use for the Seq2Seq model')
     parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'], default='MQANDecoder',
                         help='which decoder to use for the Seq2Seq model')
     parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')

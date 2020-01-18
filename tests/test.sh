@@ -25,7 +25,8 @@ trap on_error ERR INT TERM
 i=0
 for hparams in "--encoder_embeddings=small_glove+char --decoder_embeddings=small_glove+char" \
                "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50" \
-               "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" ; do
+               "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
+               "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=BiLSTM --dimension=768" ; do
 
     # train
     pipenv run python3 -m decanlp train --train_tasks almond  --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --no_commit
@@ -41,3 +42,5 @@ for hparams in "--encoder_embeddings=small_glove+char --decoder_embeddings=small
 
     i=$((i+1))
 done
+
+rm -fr $workdir
