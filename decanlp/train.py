@@ -165,7 +165,7 @@ def step(model, batch, opt, iteration, lr=None, grad_clip=None, logger=None):
         grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
     opt.step()
 
-    return loss.item(), {}, grad_norm
+    return loss.item(), grad_norm
 
 
 def update_fraction(args, task_iteration):
@@ -187,7 +187,6 @@ def train(args, devices, model, opt, train_sets, train_iterations, numericalizer
     local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, start_iteration
 
     train_iter_deep = deepcopy(train_iterations)
-    local_train_metric_dict = dict()
 
     task_iteration = dict()
     task_done = dict()
@@ -320,8 +319,8 @@ def train(args, devices, model, opt, train_sets, train_iterations, numericalizer
                         lr = get_learning_rate(iteration, args) 
 
                     # param update
-                    loss, train_metric_dict, grad_norm = step(model, batch, opt, iteration, lr=lr,
-                                                              grad_clip=args.grad_clip, logger=logger)
+                    loss, grad_norm = step(model, batch, opt, iteration, lr=lr,
+                                           grad_clip=args.grad_clip, logger=logger)
                     if loss is None:
                         logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
                         continue
@@ -339,11 +338,6 @@ def train(args, devices, model, opt, train_sets, train_iterations, numericalizer
 
                     # train metrics
                     local_loss += loss
-                    for metric_name, metric_val in train_metric_dict.items():
-                        if metric_name in local_train_metric_dict:
-                            local_train_metric_dict[metric_name] += metric_val / args.log_every
-                        else:
-                            local_train_metric_dict[metric_name] = metric_val / args.log_every
 
                     # train logs
                     num_examples += batch.context.value.size(0)
@@ -356,11 +350,7 @@ def train(args, devices, model, opt, train_sets, train_iterations, numericalizer
                         len_contexts /= args.log_every
                         len_answers /= args.log_every
                         avg_batch_size = f'avbatch_{num_examples:.0f}_{len_contexts:.0f}_{len_answers:.0f}:'
-                        metric_entry = ''
-                        for metric_key, metric_value in local_train_metric_dict.items():
-                            metric_entry += f'{metric_key}_{metric_value:.2f}:'
-                        metric_entry = f'{metric_entry[:-1]}'
-                        logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}{avg_batch_size}loss_{local_loss:.4f}{metric_entry}')
+                        logger.info(f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}{avg_batch_size}loss_{local_loss:.4f}')
                         num_examples = 0 
                         len_contexts = 0 
                         len_answers = 0  
@@ -370,12 +360,8 @@ def train(args, devices, model, opt, train_sets, train_iterations, numericalizer
                             writer.add_scalar(f'training/lr', lr, iteration)
                             if grad_norm is not None:
                                 writer.add_scalar(f'training/norm', grad_norm, iteration)
-                            for metric_key, metric_value in local_train_metric_dict.items():
-                                writer.add_scalar(f'{metric_key}/{task.name}/train', metric_value, iteration)
-                                writer.add_scalar(f'{task.name}/{metric_key}/train', metric_value, iteration)
 
                         local_loss = 0
-                        local_train_metric_dict = {}
                         num_examples = 0
                     
                 # book keeping
