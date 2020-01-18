@@ -160,7 +160,7 @@ class BaseAlmondTask(BaseTask):
 
     @property
     def metrics(self):
-        return ['em', 'nem', 'nf1', 'fm', 'dm', 'bleu']
+        return ['em', 'bleu']
 
     def _is_program_field(self, field_name):
         raise NotImplementedError()
@@ -220,7 +220,7 @@ class ReverseAlmond(BaseTask):
 
     @property
     def metrics(self):
-        return ['bleu', 'em', 'nem', 'nf1']
+        return ['bleu', 'em', 'nf1']
 
     def _is_program_field(self, field_name):
         return field_name == 'context'
