@@ -96,7 +96,8 @@ class SimpleNumericalizer(object):
         assert self.unk_id < self.max_generative_vocab
         assert self.pad_id < self.max_generative_vocab
 
-        self.decoder_vocab = DecoderVocabulary(self.vocab.itos[:self.max_generative_vocab], self.vocab)
+        self.decoder_vocab = DecoderVocabulary(self.vocab.itos[:self.max_generative_vocab], self.vocab,
+                                               pad_token=self.pad_token, eos_token=self.eos_token)
 
     def encode(self, minibatch, decoder_vocab, device=None):
         assert isinstance(minibatch, list)

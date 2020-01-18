@@ -29,21 +29,29 @@
 
 
 class DecoderVocabulary(object):
-    def __init__(self, words, full_vocab):
+    def __init__(self, words, full_vocab, pad_token, eos_token):
         self.full_vocab = full_vocab
+        self.pad_token = pad_token
+        self.eos_token = eos_token
         if words is not None:
             self.itos = words
             self.stoi = { word: idx for idx, word in enumerate(words) }
+            self.pad_idx = self.stoi[pad_token]
+            self.eos_idx = self.stoi[eos_token]
         else:
             self.itos = []
             self.stoi = dict()
+            self.pad_idx = -1
+            self.eos_idx = -1
         self.oov_itos = []
         self.oov_stoi = dict()
 
     def clone(self):
-        new_subset = DecoderVocabulary(None, self.full_vocab)
+        new_subset = DecoderVocabulary(None, self.full_vocab, self.pad_token, self.eos_token)
         new_subset.itos = self.itos
         new_subset.stoi = self.stoi
+        new_subset.pad_idx = self.stoi[self.pad_token]
+        new_subset.eos_idx = self.stoi[self.eos_token]
         return new_subset
 
     def __len__(self):

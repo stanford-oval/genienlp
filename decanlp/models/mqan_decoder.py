@@ -76,12 +76,8 @@ class MQANDecoder(nn.Module):
 
         self.map_to_full = decoder_vocab.decode
 
-        context_indices = context_limited if context_limited is not None else context
-        question_indices = question_limited if question_limited is not None else question
-        answer_indices = answer_limited if answer_limited is not None else answer
-
-        context_padding = context_indices.data == self.pad_idx
-        question_padding = question_indices.data == self.pad_idx
+        context_padding = context.data == self.pad_idx
+        question_padding = question.data == self.pad_idx
 
         if self.args.rnn_layers > 0:
             self.rnn_decoder.applyMasks(context_padding, question_padding)
@@ -90,7 +86,7 @@ class MQANDecoder(nn.Module):
             self.question_attn.applyMasks(question_padding)
 
         if self.training:
-            answer_padding = (answer_indices.data == self.pad_idx)[:, :-1]
+            answer_padding = (answer.data == self.pad_idx)[:, :-1]
 
             answer_embedded = self.decoder_embeddings(answer[:, :-1], padding=answer_padding).last_layer
             self_attended_decoded = self.self_attentive_decoder(answer_embedded,
@@ -118,16 +114,16 @@ class MQANDecoder(nn.Module):
 
             probs = self.probs(self.out, decoder_output, vocab_pointer_switch, context_question_switch,
                                context_attention, question_attention,
-                               context_indices, question_indices,
+                               context_limited, question_limited,
                                decoder_vocab)
 
-            probs, targets = mask(answer_indices[:, 1:].contiguous(), probs.contiguous(), pad_idx=self.pad_idx)
+            probs, targets = mask(answer_limited[:, 1:].contiguous(), probs.contiguous(), pad_idx=decoder_vocab.pad_idx)
             loss = F.nll_loss(probs.log(), targets)
             return loss, None
 
         else:
             return None, self.greedy(self_attended_context, final_context, final_question,
-                                     context_indices, question_indices,
+                                     context_limited, question_limited,
                                      decoder_vocab, rnn_state=context_rnn_state).data
 
     def probs(self, generator, outputs, vocab_pointer_switches, context_question_switches,
@@ -213,7 +209,7 @@ class MQANDecoder(nn.Module):
                                context_indices, question_indices, decoder_vocab)
             pred_probs, preds = probs.max(-1)
             preds = preds.squeeze(1)
-            eos_yet = eos_yet | (preds == self.numericalizer.eos_id).byte()
+            eos_yet = eos_yet | (preds == decoder_vocab.eos_idx).byte()
             outs[:, t] = preds.cpu().apply_(self.map_to_full)
             if eos_yet.all():
                 break

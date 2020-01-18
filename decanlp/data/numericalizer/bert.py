@@ -96,13 +96,12 @@ class BertNumericalizer(object):
         decoder_words = collections.Counter()
         for dataset in vocab_sets:
             for example in dataset:
-                self._tokenizer.tokenize(example.context, example.context_word_mask)
-                self._tokenizer.tokenize(example.question, example.question_word_mask)
+                decoder_words.update(self._tokenizer.tokenize(example.context, example.context_word_mask))
+                decoder_words.update(self._tokenizer.tokenize(example.question, example.question_word_mask))
+                decoder_words.update(self._tokenizer.tokenize(example.answer, example.answer_word_mask))
 
-                tokens = self._tokenizer.tokenize(example.answer, example.answer_word_mask)
-                decoder_words.update(tokens)
-
-        self._decoder_words = [word for word, _freq in decoder_words.most_common(self.max_generative_vocab)]
+        self._decoder_words = ['[PAD]', '[CLS]', '[SEP]', '[UNK]'] + \
+                              [word for word, _freq in decoder_words.most_common(self.max_generative_vocab)]
 
         self._init()
 
@@ -135,7 +134,8 @@ class BertNumericalizer(object):
         assert self.unk_id < self.generative_vocab_size
         assert self.pad_id < self.generative_vocab_size
 
-        self.decoder_vocab = DecoderVocabulary(self._decoder_words, self._tokenizer)
+        self.decoder_vocab = DecoderVocabulary(self._decoder_words, self._tokenizer,
+                                               pad_token=self.pad_token, eos_token=self.eos_token)
 
     def encode(self, minibatch, decoder_vocab, device=None):
         assert isinstance(minibatch, list)
