@@ -35,6 +35,7 @@ import time
 import sys
 from copy import deepcopy
 import logging
+from functools import partial
 from pprint import pformat
 from logging import handlers
 import numpy as np
@@ -141,29 +142,19 @@ def prepare_data(args, logger):
     return numericalizer, encoder_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
 
-def get_learning_rate(i, args):
-    transformer_lr = 1. / math.sqrt(args.dimension) * min(
-        1 / math.sqrt(i), i / (args.warmup * math.sqrt(args.warmup)))
-    if 'adam' in args.optimizer.lower():
-        transformer_lr *= args.transformer_lr_multiply
-    else:
-        transformer_lr = transformer_lr * math.sqrt(args.dimension * args.warmup) * args.sgd_lr
-    return transformer_lr
-
-
-def step(model, batch, opt, iteration, lr=None, grad_clip=None, logger=None):
+def step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, logger=None):
     model.train()
     opt.zero_grad()
     loss, predictions = model(batch, iteration)
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss')
     loss.backward()
-    if lr is not None:
-        opt.param_groups[0]['lr'] = lr
     grad_norm = None
     if grad_clip > 0.0:
         grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
     opt.step()
+    if lr_scheduler is not None:
+        lr_scheduler.step()
 
     return loss.item(), grad_norm
 
@@ -180,7 +171,7 @@ def update_fraction(args, task_iteration):
     return fraction
 
 
-def train(args, devices, model, opt, train_sets, train_iterations, numericalizer, logger,
+def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations, numericalizer, logger,
           log_every=10, val_every=100, save_every=1000, rounds=False, val_sets=[], aux_sets=[], writer=None,
           start_iteration=1, rnd=1, best_decascore=None):
     """main training function"""
@@ -313,13 +304,8 @@ def train(args, devices, model, opt, train_sets, train_iterations, numericalizer
                             torch.save(save_model_state_dict, os.path.join(args.log_dir, 'best.pth'))
                             torch.save(save_opt_state_dict, os.path.join(args.log_dir, 'best_optim.pth'))
 
-                    # lr update
-                    lr = opt.param_groups[0]['lr'] 
-                    if args.warmup > 0 and args.transformer_lr:
-                        lr = get_learning_rate(iteration, args) 
-
                     # param update
-                    loss, grad_norm = step(model, batch, opt, iteration, lr=lr,
+                    loss, grad_norm = step(model, batch, iteration, opt, lr_scheduler=lr_scheduler,
                                            grad_clip=args.grad_clip, logger=logger)
                     if loss is None:
                         logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
@@ -357,7 +343,11 @@ def train(args, devices, model, opt, train_sets, train_iterations, numericalizer
     
                         if writer is not None:
                             writer.add_scalar(f'loss/{task.name}/train', local_loss, iteration)
-                            writer.add_scalar(f'training/lr', lr, iteration)
+
+                            if lr_scheduler is not None:
+                                writer.add_scalar(f'training/lr', lr_scheduler.get_last_lr(), iteration)
+                            else:
+                                writer.add_scalar(f'training/lr', args.lr_rate)
                             if grad_norm is not None:
                                 writer.add_scalar(f'training/norm', grad_norm, iteration)
 
@@ -392,15 +382,33 @@ def init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devi
     return model
 
 
+def get_transformer_learning_rate(i, *, dimension, warmup):
+    i += 1
+    return 1. / math.sqrt(dimension) * min(1 / math.sqrt(i), i / (warmup * math.sqrt(warmup)))
+
+def get_sgd_learning_rate(i, *, warmup):
+    i += 1
+    return min(math.sqrt(warmup) / math.sqrt(i), i / warmup)
+
 def init_opt(args, model):
     if 'adam' in args.optimizer.lower():
         if args.transformer_lr:
-            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
+            opt = torch.optim.Adam(model.params, lr=args.transformer_lr_multiply, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
+            lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
+            scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
         else:
             opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
+            scheduler = None
     else:
-        opt = torch.optim.SGD(model.params, lr=args.sgd_lr, weight_decay=args.weight_decay,)
-    return opt
+        if args.transformer_lr:
+            opt = torch.optim.SGD(model.params, lr=args.transformer_lr_multiply, weight_decay=args.weight_decay,)
+            lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
+            scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
+        else:
+            opt = torch.optim.SGD(model.params, lr=args.lr_rate, weight_decay=args.weight_decay, )
+            scheduler = None
+
+    return opt, scheduler
 
 
 def main(argv=sys.argv):
@@ -431,7 +439,7 @@ def main(argv=sys.argv):
         writer = None
 
     model = init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devices, logger)
-    opt = init_opt(args, model)
+    opt, lr_scheduler = init_opt(args, model)
     start_iteration = 1
 
     if save_dict is not None:
@@ -445,7 +453,7 @@ def main(argv=sys.argv):
             logger.info(f'Starting iteration is {start_iteration}')
             opt.load_state_dict(opt_state_dict)
 
-    train(args, devices, model, opt, train_sets, args.train_iterations, numericalizer, val_sets=val_sets, aux_sets=aux_sets,
+    train(args, devices, model, opt, lr_scheduler, train_sets, args.train_iterations, numericalizer, val_sets=val_sets, aux_sets=aux_sets,
           logger=logger,
           log_every=args.log_every, val_every=args.val_every, rounds=len(train_sets) > 1,
           writer=writer, save_every=args.save_every, start_iteration=start_iteration,
