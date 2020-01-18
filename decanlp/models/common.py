@@ -370,11 +370,12 @@ class CombinedEmbedding(nn.Module):
                  project=True):
         super().__init__()
         self.project = project
-        self.finetune_pretrained = finetune_pretrained
         self.pretrained_embeddings = tuple(pretrained_embeddings)
 
         dimension = 0
         for idx, embedding in enumerate(self.pretrained_embeddings):
+            if not finetune_pretrained:
+                embedding.requires_grad_(False)
             dimension += embedding.dim
             self.add_module('pretrained_' + str(idx), embedding)
 
@@ -418,11 +419,7 @@ class CombinedEmbedding(nn.Module):
     def forward(self, x, padding=None):
         embedded = []
         if self.pretrained_embeddings is not None:
-            if self.finetune_pretrained:
-                embedded += [emb(x, padding=padding) for emb in self.pretrained_embeddings]
-            else:
-                with torch.no_grad():
-                    embedded += [emb(x, padding=padding) for emb in self.pretrained_embeddings]
+            embedded += [emb(x, padding=padding) for emb in self.pretrained_embeddings]
 
         if self.trained_embeddings is not None:
             trained_vocabulary_size = self.trained_embeddings.weight.size()[0]
