@@ -157,8 +157,15 @@ class Attention(nn.Module):
         if query.dim() == 3 and self.causal:
             tri = key.new_ones((key.size(1), key.size(1))).triu(1) * INF
             dot_products.sub_(tri.unsqueeze(0))
-        if not padding is None:
-            dot_products.masked_fill_(padding.unsqueeze(1).expand_as(dot_products), -INF)
+        if padding is not None:
+            if dot_products.dim() == 3:
+                # dot_products is batch x query time x key time
+                # padding is batch x key time
+                # unsqueeze to batch x 1 x key time then broadcast
+                dot_products.masked_fill_(padding.unsqueeze(1).expand_as(dot_products), -INF)
+            else:
+                # dot_products is batch x key time and is directly compatible with padding
+                dot_products.masked_fill_(padding, -INF)
         return matmul(self.dropout(F.softmax(dot_products / self.scale, dim=-1)), value)
 
 
