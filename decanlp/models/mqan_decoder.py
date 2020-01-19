@@ -44,10 +44,13 @@ class MQANDecoder(nn.Module):
                                                     project=True,
                                                     finetune_pretrained=False)
 
-        self.self_attentive_decoder = TransformerDecoder(args.dimension, args.transformer_heads,
-                                                         args.transformer_hidden,
-                                                         args.transformer_layers,
-                                                         args.dropout_ratio)
+        if args.transformer_layers > 0:
+            self.self_attentive_decoder = TransformerDecoder(args.dimension, args.transformer_heads,
+                                                             args.transformer_hidden,
+                                                             args.transformer_layers,
+                                                             args.dropout_ratio)
+        else:
+            self.self_attentive_decoder = None
 
         if args.rnn_layers > 0:
             self.rnn_decoder = LSTMDecoder(args.dimension, args.rnn_dimension,
@@ -89,11 +92,15 @@ class MQANDecoder(nn.Module):
             answer_padding = (answer.data == self.pad_idx)[:, :-1]
 
             answer_embedded = self.decoder_embeddings(answer[:, :-1], padding=answer_padding).last_layer
-            self_attended_decoded = self.self_attentive_decoder(answer_embedded,
-                                                                self_attended_context,
-                                                                context_padding=context_padding,
-                                                                answer_padding=answer_padding,
-                                                                positional_encodings=True)
+
+            if self.args.transformer_layers > 0:
+                self_attended_decoded = self.self_attentive_decoder(answer_embedded,
+                                                                    self_attended_context,
+                                                                    context_padding=context_padding,
+                                                                    answer_padding=answer_padding,
+                                                                    positional_encodings=True)
+            else:
+                self_attended_decoded = answer_embedded
 
             if self.args.rnn_layers > 0:
                 rnn_decoder_outputs = self.rnn_decoder(self_attended_decoded, final_context, final_question,
@@ -162,9 +169,11 @@ class MQANDecoder(nn.Module):
         batch_size = context.size()[0]
         max_decoder_time = self.args.max_output_length
         outs = context.new_full((batch_size, max_decoder_time), self.pad_idx, dtype=torch.long)
-        hiddens = [self_attended_context[0].new_zeros((batch_size, max_decoder_time, self.args.dimension))
-                   for l in range(len(self.self_attentive_decoder.layers) + 1)]
-        hiddens[0] = hiddens[0] + positional_encodings_like(hiddens[0])
+
+        if self.args.transformer_layers > 0:
+            hiddens = [self_attended_context[0].new_zeros((batch_size, max_decoder_time, self.args.dimension))
+                       for l in range(len(self.self_attentive_decoder.layers) + 1)]
+            hiddens[0] = hiddens[0] + positional_encodings_like(hiddens[0])
         eos_yet = context.new_zeros((batch_size,)).byte()
 
         decoder_output = None
@@ -176,14 +185,18 @@ class MQANDecoder(nn.Module):
                 current_token_id = outs[:, t - 1].unsqueeze(1)
                 embedding = self.decoder_embeddings(current_token_id).last_layer
 
-            hiddens[0][:, t] = hiddens[0][:, t] + \
-                               (math.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)
-            for l in range(len(self.self_attentive_decoder.layers)):
-                hiddens[l + 1][:, t] = self.self_attentive_decoder.layers[l](hiddens[l][:, t], self_attended_context[l],
-                                                                             selfattn_keys=hiddens[l][:, :t + 1],
-                                                                             context_padding=context_padding)
+            if self.args.transformer_layers > 0:
+                hiddens[0][:, t] = hiddens[0][:, t] + \
+                                   (math.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)
+                for l in range(len(self.self_attentive_decoder.layers)):
+                    hiddens[l + 1][:, t] = self.self_attentive_decoder.layers[l](hiddens[l][:, t], self_attended_context[l],
+                                                                                 selfattn_keys=hiddens[l][:, :t + 1],
+                                                                                 context_padding=context_padding)
 
-            self_attended_decoded = hiddens[-1][:, t].unsqueeze(1)
+                self_attended_decoded = hiddens[-1][:, t].unsqueeze(1)
+            else:
+                self_attended_decoded = embedding
+
             if self.args.rnn_layers > 0:
                 rnn_decoder_outputs = self.rnn_decoder(self_attended_decoded, context, question,
                                                        hidden=rnn_state, output=decoder_output)
