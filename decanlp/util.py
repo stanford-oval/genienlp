@@ -188,7 +188,7 @@ def load_config_json(args):
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
         retrieve = ['model', 'seq2seq_encoder', 'seq2seq_decoder', 'transformer_layers', 'rnn_layers',
-                    'transformer_hidden', 'dimension', 'load', 'max_val_context_length', 'val_batch_size',
+                    'transformer_hidden', 'dimension', 'rnn_dimension', 'load', 'max_val_context_length', 'val_batch_size',
                     'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower', 'encoder_embeddings',
                     'decoder_embeddings', 'trainable_decoder_embeddings', 'train_encoder_embeddings',
                     'question', 'locale', 'use_google_translate']
@@ -202,6 +202,8 @@ def load_config_json(args):
                 setattr(args, r, 0)
             elif r == 'train_encoder_embedding':
                 setattr(args, r, False)
+            elif r == 'rnn_dimension':
+                setattr(args, r, args.dimension)
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0

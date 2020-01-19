@@ -38,13 +38,17 @@ class IdentityEncoder(nn.Module):
         self.args = args
         self.pad_idx = numericalizer.pad_id
 
-        if sum(emb.dim for emb in encoder_embeddings) != args.dimension:
-            raise ValueError('Hidden dimension must be equal to the sum of the embedding sizes to use IdentityEncoder')
-
         self.encoder_embeddings = CombinedEmbedding(numericalizer, encoder_embeddings, args.dimension,
                                                     trained_dimension=0,
                                                     project=False,
                                                     finetune_pretrained=args.train_encoder_embeddings)
+
+        if self.args.rnn_layers > 0 and self.args.rnn_dimension != self.args.dimension:
+            self.dropout = nn.Dropout(args.dropout_ratio)
+            self.projection = nn.Linear(self.encoder_embeddings.dimension, self.args.rnn_dimension, bias=False)
+        else:
+            self.dropout = None
+            self.projection = None
 
     def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length
@@ -62,12 +66,19 @@ class IdentityEncoder(nn.Module):
         final_context = context_embedded.last_layer
         final_question = question_embedded.last_layer
 
+        if self.projection is not None:
+            final_context = self.dropout(final_context)
+            final_context = self.projection(final_context)
+
+            final_question = self.dropout(final_question)
+            final_question = self.projection(final_question)
+
         context_rnn_state = None
         question_rnn_state = None
         if self.args.rnn_layers > 0:
             batch_size = context.size(0)
 
-            zero = torch.zeros(self.args.rnn_layers, batch_size, self.args.dimension,
+            zero = torch.zeros(self.args.rnn_layers, batch_size, self.args.rnn_dimension,
                                dtype=torch.float, requires_grad=False, device=context.device)
             context_rnn_state = (zero, zero)
             question_rnn_state = (zero, zero)

@@ -95,6 +95,7 @@ def parse(argv):
     parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'], default='MQANDecoder',
                         help='which decoder to use for the Seq2Seq model')
     parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
+    parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules')
     parser.add_argument('--transformer_layers', default=2, type=int, help='number of layers for transformer modules')
     parser.add_argument('--transformer_hidden', default=150, type=int, help='hidden size of the transformer modules')
@@ -135,9 +136,6 @@ def parse(argv):
 
     args = parser.parse_args(argv[1:])
 
-    if args.model is None:
-        args.model = 'mcqa'
-
     if args.val_task_names is None:
         args.val_task_names = []
         for t in args.train_task_names:
@@ -166,6 +164,9 @@ def parse(argv):
         args.commit = get_commit()
     else:
         args.commit = ''
+
+    if args.rnn_dimension is None:
+        args.rnn_dimension = args.dimension
 
     args.log_dir = args.save
     if args.tensorboard_dir is None:

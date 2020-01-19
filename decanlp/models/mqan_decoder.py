@@ -50,9 +50,9 @@ class MQANDecoder(nn.Module):
                                                          args.dropout_ratio)
 
         if args.rnn_layers > 0:
-            self.rnn_decoder = LSTMDecoder(args.dimension, args.dimension,
+            self.rnn_decoder = LSTMDecoder(args.dimension, args.rnn_dimension,
                 dropout=args.dropout_ratio, num_layers=args.rnn_layers)
-            switch_input_len = 3 * args.dimension
+            switch_input_len = 2 * args.rnn_dimension + args.dimension
         else:
             self.context_attn = LSTMDecoderAttention(args.dimension, dot=True)
             self.question_attn = LSTMDecoderAttention(args.dimension, dot=True)
@@ -62,7 +62,7 @@ class MQANDecoder(nn.Module):
         self.context_question_switch = nn.Sequential(Feedforward(switch_input_len, 1), nn.Sigmoid())
 
         self.generative_vocab_size = numericalizer.generative_vocab_size
-        self.out = nn.Linear(args.dimension, self.generative_vocab_size)
+        self.out = nn.Linear(args.rnn_dimension if args.rnn_layers > 0 else args.dimension, self.generative_vocab_size)
 
     def set_embeddings(self, embeddings):
         if self.decoder_embeddings is not None:
@@ -112,7 +112,7 @@ class MQANDecoder(nn.Module):
             vocab_pointer_switch = self.vocab_pointer_switch(vocab_pointer_switch_input)
             context_question_switch = self.context_question_switch(context_question_switch_input)
 
-            probs = self.probs(self.out, decoder_output, vocab_pointer_switch, context_question_switch,
+            probs = self.probs(decoder_output, vocab_pointer_switch, context_question_switch,
                                context_attention, question_attention,
                                context_limited, question_limited,
                                decoder_vocab)
@@ -126,7 +126,7 @@ class MQANDecoder(nn.Module):
                                      context_limited, question_limited,
                                      decoder_vocab, rnn_state=context_rnn_state).data
 
-    def probs(self, generator, outputs, vocab_pointer_switches, context_question_switches,
+    def probs(self, outputs, vocab_pointer_switches, context_question_switches,
               context_attention, question_attention,
               context_indices, question_indices,
               decoder_vocab):
@@ -134,7 +134,7 @@ class MQANDecoder(nn.Module):
         size = list(outputs.size())
 
         size[-1] = self.generative_vocab_size
-        scores = generator(outputs.view(-1, outputs.size(-1))).view(size)
+        scores = self.out(outputs.view(-1, outputs.size(-1))).view(size)
         p_vocab = F.softmax(scores, dim=scores.dim() - 1)
         scaled_p_vocab = vocab_pointer_switches.expand_as(p_vocab) * p_vocab
 
@@ -159,26 +159,25 @@ class MQANDecoder(nn.Module):
 
     def greedy(self, self_attended_context, context, question, context_indices, question_indices, decoder_vocab,
                rnn_state=None):
-        B, TC, C = context.size()
-        T = self.args.max_output_length
-        outs = context.new_full((B, T), self.pad_idx, dtype=torch.long)
-        hiddens = [self_attended_context[0].new_zeros((B, T, C))
+        batch_size = context.size()[0]
+        max_decoder_time = self.args.max_output_length
+        outs = context.new_full((batch_size, max_decoder_time), self.pad_idx, dtype=torch.long)
+        hiddens = [self_attended_context[0].new_zeros((batch_size, max_decoder_time, self.args.dimension))
                    for l in range(len(self.self_attentive_decoder.layers) + 1)]
         hiddens[0] = hiddens[0] + positional_encodings_like(hiddens[0])
-        eos_yet = context.new_zeros((B,)).byte()
+        eos_yet = context.new_zeros((batch_size,)).byte()
 
         decoder_output = None
-        for t in range(T):
+        for t in range(max_decoder_time):
             if t == 0:
-                init_token = self_attended_context[-1].new_full((B, 1), self.init_idx,
-                                                                dtype=torch.long)
+                init_token = self_attended_context[-1].new_full((batch_size, 1), self.init_idx, dtype=torch.long)
                 embedding = self.decoder_embeddings(init_token).last_layer
             else:
                 current_token_id = outs[:, t - 1].unsqueeze(1)
                 embedding = self.decoder_embeddings(current_token_id).last_layer
 
-            hiddens[0][:, t] = hiddens[0][:, t] + (math.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(
-                1)
+            hiddens[0][:, t] = hiddens[0][:, t] + \
+                               (math.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)
             for l in range(len(self.self_attentive_decoder.layers)):
                 hiddens[l + 1][:, t] = self.self_attentive_decoder.layers[l].feedforward(
                     self.self_attentive_decoder.layers[l].attention(
@@ -204,7 +203,7 @@ class MQANDecoder(nn.Module):
             vocab_pointer_switch = self.vocab_pointer_switch(vocab_pointer_switch_input)
             context_question_switch = self.context_question_switch(context_question_switch_input)
 
-            probs = self.probs(self.out, decoder_output, vocab_pointer_switch, context_question_switch,
+            probs = self.probs(decoder_output, vocab_pointer_switch, context_question_switch,
                                context_attention, question_attention,
                                context_indices, question_indices, decoder_vocab)
             pred_probs, preds = probs.max(-1)
