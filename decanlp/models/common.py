@@ -310,11 +310,11 @@ class Highway(torch.nn.Module):
 
 class LinearFeedforward(nn.Module):
 
-    def __init__(self, d_in, d_hid, d_out, activation='relu'):
+    def __init__(self, d_in, d_hid, d_out, activation='relu', dropout=0.2):
         super().__init__()
         self.feedforward = Feedforward(d_in, d_hid, activation=activation)
         self.linear = Linear(d_hid, d_out)
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         return self.dropout(self.linear(self.feedforward(x)))

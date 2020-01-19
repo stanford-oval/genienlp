@@ -187,7 +187,7 @@ def load_config_json(args):
     args.almond_type_embeddings = False
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
-        retrieve = ['model', 'seq2seq_encoder', 'seq2seq_decoder', 'transformer_layers', 'rnn_layers',
+        retrieve = ['model', 'seq2seq_encoder', 'seq2seq_decoder', 'transformer_layers', 'rnn_layers', 'rnn_zero_state',
                     'transformer_hidden', 'dimension', 'rnn_dimension', 'load', 'max_val_context_length', 'val_batch_size',
                     'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower', 'encoder_embeddings',
                     'decoder_embeddings', 'trainable_decoder_embeddings', 'train_encoder_embeddings',

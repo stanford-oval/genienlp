@@ -30,7 +30,7 @@
 import torch
 from torch import nn
 
-from .common import CombinedEmbedding
+from .common import CombinedEmbedding, LayerNorm, LinearFeedforward
 
 class IdentityEncoder(nn.Module):
     def __init__(self, numericalizer, args, encoder_embeddings):
@@ -49,6 +49,14 @@ class IdentityEncoder(nn.Module):
         else:
             self.dropout = None
             self.projection = None
+
+        if self.args.rnn_layers > 0 and self.args.rnn_zero_state == 'average':
+            self.pool = LinearFeedforward(args.dimension, args.dimension, 2*args.rnn_dimension*args.rnn_layers,
+                                          dropout=args.dropout_ratio)
+            self.norm = LayerNorm(2*args.rnn_dimension)
+        else:
+            self.pool = None
+            self.norm = None
 
     def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length
@@ -76,11 +84,31 @@ class IdentityEncoder(nn.Module):
         context_rnn_state = None
         question_rnn_state = None
         if self.args.rnn_layers > 0:
-            batch_size = context.size(0)
+            if self.args.rnn_zero_state == 'zero':
+                batch_size = context.size(0)
 
-            zero = torch.zeros(self.args.rnn_layers, batch_size, self.args.rnn_dimension,
-                               dtype=torch.float, requires_grad=False, device=context.device)
-            context_rnn_state = (zero, zero)
-            question_rnn_state = (zero, zero)
+                zero = torch.zeros(self.args.rnn_layers, batch_size, self.args.rnn_dimension,
+                                   dtype=torch.float, requires_grad=False, device=context.device)
+                context_rnn_state = (zero, zero)
+                question_rnn_state = (zero, zero)
+            else:
+                assert self.args.rnn_zero_state == 'average'
+                batch_size = context.size(0)
+
+                masked_final_context = context_embedded.last_layer.masked_fill(context_padding.unsqueeze(2), 0)
+                summed_context = torch.sum(masked_final_context, dim=1)
+                average_context = summed_context / context_lengths.unsqueeze(1)
+
+                packed_rnn_state = self.norm(self.pool(average_context))
+
+                # packed_rnn_state is (batch, 2 * rnn_layers * rnn_dim)
+                packed_rnn_state = packed_rnn_state.reshape(batch_size, 2, self.args.rnn_layers, self.args.rnn_dimension)
+                # transpose to (2, batch, rnn_layers, rnn_dimension)
+                packed_rnn_state = packed_rnn_state.transpose(0, 1)
+                # transpose to (2, rnn_layers, batch, rnn_dimension)
+                packed_rnn_state = packed_rnn_state.transpose(1, 2)
+                # convert to a tuple of two (rnn_layers, batch, rnn_dimension) tensors
+                context_rnn_state = tuple(x.squeeze(0) for x in packed_rnn_state.chunk(2, dim=0))
+
 
         return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state
