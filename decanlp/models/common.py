@@ -240,8 +240,10 @@ class TransformerDecoderLayer(nn.Module):
             LinearReLU(dimension, hidden),
             dimension, dropout)
 
-    def forward(self, x, encoding, context_padding=None, answer_padding=None):
-        x = self.selfattn(x, x, x, padding=answer_padding)
+    def forward(self, x, encoding, selfattn_keys=None, context_padding=None, answer_padding=None):
+        if selfattn_keys is None:
+            selfattn_keys = x
+        x = self.selfattn(x, selfattn_keys, selfattn_keys, padding=answer_padding)
         return self.feedforward(self.attention(x, encoding, encoding, padding=context_padding))
 
 

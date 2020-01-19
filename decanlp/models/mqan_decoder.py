@@ -122,7 +122,7 @@ class MQANDecoder(nn.Module):
             return loss, None
 
         else:
-            return None, self.greedy(self_attended_context, final_context, final_question,
+            return None, self.greedy(self_attended_context, final_context, context_padding, final_question,
                                      context_limited, question_limited,
                                      decoder_vocab, rnn_state=context_rnn_state).data
 
@@ -157,8 +157,8 @@ class MQANDecoder(nn.Module):
 
         return scaled_p_vocab
 
-    def greedy(self, self_attended_context, context, question, context_indices, question_indices, decoder_vocab,
-               rnn_state=None):
+    def greedy(self, self_attended_context, context, context_padding, question, context_indices, question_indices,
+               decoder_vocab, rnn_state=None):
         batch_size = context.size()[0]
         max_decoder_time = self.args.max_output_length
         outs = context.new_full((batch_size, max_decoder_time), self.pad_idx, dtype=torch.long)
@@ -179,11 +179,9 @@ class MQANDecoder(nn.Module):
             hiddens[0][:, t] = hiddens[0][:, t] + \
                                (math.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)
             for l in range(len(self.self_attentive_decoder.layers)):
-                hiddens[l + 1][:, t] = self.self_attentive_decoder.layers[l].feedforward(
-                    self.self_attentive_decoder.layers[l].attention(
-                        self.self_attentive_decoder.layers[l].selfattn(hiddens[l][:, t], hiddens[l][:, :t + 1],
-                                                                       hiddens[l][:, :t + 1])
-                        , self_attended_context[l], self_attended_context[l]))
+                hiddens[l + 1][:, t] = self.self_attentive_decoder.layers[l](hiddens[l][:, t], self_attended_context[l],
+                                                                             selfattn_keys=hiddens[l][:, :t + 1],
+                                                                             context_padding=context_padding)
 
             self_attended_decoded = hiddens[-1][:, t].unsqueeze(1)
             if self.args.rnn_layers > 0:
