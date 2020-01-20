@@ -40,6 +40,7 @@ from pprint import pformat
 from logging import handlers
 import numpy as np
 import torch
+import radam
 from tensorboardX import SummaryWriter
 
 from .data.example import Example
@@ -390,8 +391,8 @@ def get_sgd_learning_rate(i, *, warmup):
     i += 1
     return min(math.sqrt(warmup) / math.sqrt(i), i / warmup)
 
-def init_opt(args, model):
-    if 'adam' in args.optimizer.lower():
+def init_opt(args, model, logger):
+    if args.optimizer == 'adam':
         if args.transformer_lr:
             opt = torch.optim.Adam(model.params, lr=args.transformer_lr_multiply, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
             lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
@@ -399,7 +400,13 @@ def init_opt(args, model):
         else:
             opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
             scheduler = None
+    elif args.optimizer == 'radam':
+        if args.transformer_lr:
+            logger.warning('--transformer_lr has no effect with RAdam optimizer, warmup is never applied')
+        opt = radam.RAdam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
+        scheduler = None
     else:
+        assert args.optimizer == 'sgd'
         if args.transformer_lr:
             opt = torch.optim.SGD(model.params, lr=args.transformer_lr_multiply, weight_decay=args.weight_decay,)
             lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
@@ -439,7 +446,7 @@ def main(argv=sys.argv):
         writer = None
 
     model = init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devices, logger)
-    opt, lr_scheduler = init_opt(args, model)
+    opt, lr_scheduler = init_opt(args, model, logger)
     start_iteration = 1
 
     if save_dict is not None:

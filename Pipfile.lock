@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "31b73f746a52946e1ca1cf3dee92c32acf94a80fc06fe7a498f515ce1b8a9ab3"
+            "sha256": "266cfde8801291a400e37a75791a4d05d2757b2a4d11101e5f3b09b1527038ce"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -18,17 +18,17 @@
     "default": {
         "boto3": {
             "hashes": [
-                "sha256:589675488d3d42783098321619ddf7a8ec06dd11e9b73db19deb063cfb05eec6",
-                "sha256:c8cc6d8d5474e46f0826ba1156356c583961c2df8c4324f4373df7a83bbce627"
+                "sha256:7aaccacc199cd633b5ac14f0d544c9d592c53275a79cf4d230a9f66215331665",
+                "sha256:ca36aabfa5e7fa9ee8f84f82c3faffb4ffe078923f935f572f70dc49154ef6a0"
             ],
-            "version": "==1.11.4"
+            "version": "==1.11.5"
         },
         "botocore": {
             "hashes": [
-                "sha256:91a39d0ede1676c22cf6158bbbc4f85cc3385ab9201b5190c25e3770967f94c0",
-                "sha256:cf29118fb62513712888f2f3dd337c0933a3e253b952f0bbe6d8d4c4fd4be5be"
+                "sha256:96a16e64c96d34fa2e535c1d5a0024bf55eee853b939be0331318cd060b3d395",
+                "sha256:f0feffde6e1312c6361a96e24385a58889683a3d6a007be4d4804bc209384b3f"
             ],
-            "version": "==1.14.4"
+            "version": "==1.14.5"
         },
         "certifi": {
             "hashes": [
@@ -150,6 +150,10 @@
                 "sha256:75bb3f31ea686f1197762692a9ee6a7550b59fc6ca3a1f4b5d7e32fb98e2da2a"
             ],
             "version": "==2.8.1"
+        },
+        "radam": {
+            "git": "https://github.com/gcampax/RAdam",
+            "ref": "ba9e04c1f153d8b67fef92ed95a43291d1c81fef"
         },
         "regex": {
             "hashes": [
