@@ -56,6 +56,6 @@ setuptools.setup(
         'sacrebleu~=1.0',
         'requests~=2.22',
         'transformers~=2.3',
-        'git+https://github.com/gcampax/RAdam#egg=radam'
+        'radam @ git+https://github.com/gcampax/RAdam#egg=radam'
     ]
 )
