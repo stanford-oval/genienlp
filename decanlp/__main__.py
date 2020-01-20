@@ -30,13 +30,14 @@
 
 import sys
 
-from . import train, predict, server, cache_embeddings
+from . import train, predict, server, cache_embeddings, script
 
 subcommands = {
     'train': ('Train a model', train.main),
     'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.main),
     'server': ('Export RPC interface to predict', server.main),
-    'cache-embeddings': ('Download and cache embeddings', cache_embeddings.main)
+    'cache-embeddings': ('Download and cache embeddings', cache_embeddings.main),
+    'script': ('Compile a model to TorchScript', script.main)
 }
 
 def usage():
