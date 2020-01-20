@@ -30,7 +30,7 @@
 
 import argparse
 
-from . import arguments, train, predict, server, cache_embeddings, export
+from . import arguments, train, predict, server, cache_embeddings, export, script
 from .paraphrase import run_lm_finetuning, run_generation
 
 subcommands = {
@@ -40,7 +40,8 @@ subcommands = {
     'server': ('Export RPC interface to predict', server.parse_argv, server.main),
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
     'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.parse_argv, run_lm_finetuning.main),
-    'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main)
+    'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main),
+    'script': ('Compile a model to TorchScript', script.parse_argv, script.main),
 }
 
 
