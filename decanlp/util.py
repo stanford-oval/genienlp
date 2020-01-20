@@ -204,6 +204,8 @@ def load_config_json(args):
                 setattr(args, r, False)
             elif r == 'rnn_dimension':
                 setattr(args, r, args.dimension)
+            elif r == 'rnn_zero_state':
+                setattr(args, r, 'zero')
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0
