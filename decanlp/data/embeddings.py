@@ -32,7 +32,7 @@ import torch
 import os
 from collections import defaultdict
 import logging
-from transformers import AutoTokenizer, AutoModel, BertConfig
+from transformers import AutoTokenizer, AutoModel, BertConfig, BertModel
 from typing import NamedTuple, List
 
 from .numericalizer import SimpleNumericalizer, BertNumericalizer
@@ -179,7 +179,7 @@ def _name_to_vector(emb_name, cachedir):
         raise ValueError(f'Unrecognized embedding name {emb_name}')
 
 
-def load_embeddings(cachedir, encoder_emb_names, decoder_emb_names, max_generative_vocab=50000, logger=_logger):
+def load_embeddings(cachedir, encoder_emb_names, decoder_emb_names, max_generative_vocab=50000, use_pretrained_bert=True, logger=_logger):
     logger.info(f'Getting pretrained word vectors and pretrained models')
 
     encoder_emb_names = encoder_emb_names.split('+')
@@ -204,7 +204,12 @@ def load_embeddings(cachedir, encoder_emb_names, decoder_emb_names, max_generati
             # load the tokenizer once to ensure all files are downloaded
             AutoTokenizer.from_pretrained(emb_name, cache_dir=cachedir)
 
-            encoder_vectors.append(BertEmbedding(AutoModel.from_pretrained(emb_name, config=config, cache_dir=cachedir)))
+            if use_pretrained_bert:
+                model = AutoModel.from_pretrained(emb_name, config=config, cache_dir=cachedir)
+            else:
+                model = BertModel(config) # randomly initialize BERT
+
+            encoder_vectors.append(BertEmbedding(model))
         else:
             if numericalizer is not None:
                 logger.warning('Combining BERT embeddings with other pretrained embeddings is unlikely to work')

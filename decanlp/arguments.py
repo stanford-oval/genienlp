@@ -128,6 +128,8 @@ def parse(argv):
                              'multiple embeddings can be concatenated with +')
     parser.add_argument('--train_encoder_embeddings', action='store_true', default=False,
                         help='back propagate into pretrained encoder embedding (recommended for BERT)')
+    parser.add_argument('--no_pretrained_bert', action='store_false', default=True, dest='use_pretrained_bert',
+                        help='whether to load pretraind BERT weights, or randomly initialize it.')
     parser.add_argument('--decoder_embeddings', default='glove+char',
                         help='which pretrained word embedding to use on the decoder side')
     parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,

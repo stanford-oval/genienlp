@@ -116,6 +116,7 @@ def prepare_data(args, logger):
     numericalizer, encoder_embeddings, decoder_embeddings = load_embeddings(args.embeddings, args.encoder_embeddings,
                                                                             args.decoder_embeddings,
                                                                             args.max_generative_vocab,
+                                                                            args.use_pretrained_bert,
                                                                             logger)
     if args.load is not None:
         numericalizer.load(args.save)
