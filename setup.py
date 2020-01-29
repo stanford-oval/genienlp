@@ -33,12 +33,12 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name='decanlp',
+    name='genienlp',
     version='0.1dev',
     
     packages=setuptools.find_packages(exclude=['tests']),
     entry_points= {
-        'console_scripts': ['decanlp=decanlp.__main__:main'],
+        'console_scripts': ['genienlp=genienlp.__main__:main'],
     },    
     license='BSD-3-Clause',
     author="Salesforce Inc.",

@@ -32,12 +32,13 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.autograd import Variable
+from torch.jit import Final
 import math
 import os
 import sys
 import numpy as np
 import torch.nn as nn
-from typing import NamedTuple, List
+from typing import NamedTuple, List, Tuple, Union
 
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
 from torch.nn.utils.rnn import pack_padded_sequence as pack
@@ -371,6 +372,8 @@ class Feedforward(nn.Module):
 
 
 class CombinedEmbedding(nn.Module):
+    project : Final[bool]
+    dimension : Final[int]
 
     def __init__(self, numericalizer, pretrained_embeddings,
                  output_dimension,
@@ -379,14 +382,13 @@ class CombinedEmbedding(nn.Module):
                  project=True):
         super().__init__()
         self.project = project
-        self.pretrained_embeddings = tuple(pretrained_embeddings)
+        self.pretrained_embeddings = nn.ModuleList(pretrained_embeddings)
 
         dimension = 0
         for idx, embedding in enumerate(self.pretrained_embeddings):
             if not finetune_pretrained:
                 embedding.requires_grad_(False)
             dimension += embedding.dim
-            self.add_module('pretrained_' + str(idx), embedding)
 
         if trained_dimension > 0:
             self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
@@ -426,7 +428,7 @@ class CombinedEmbedding(nn.Module):
         return EmbeddingOutput(all_layers=all_layers, last_layer=last_layer)
 
     def forward(self, x, padding=None):
-        embedded = []
+        embedded : List[EmbeddingOutput] = []
         if self.pretrained_embeddings is not None:
             embedded += [emb(x, padding=padding) for emb in self.pretrained_embeddings]
 

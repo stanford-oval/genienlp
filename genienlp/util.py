@@ -191,7 +191,7 @@ def load_config_json(args):
                     'transformer_hidden', 'dimension', 'rnn_dimension', 'load', 'max_val_context_length', 'val_batch_size',
                     'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower', 'encoder_embeddings',
                     'decoder_embeddings', 'trainable_decoder_embeddings', 'train_encoder_embeddings',
-                    'question', 'locale', 'use_google_translate']
+                    'question', 'locale', 'use_google_translate', 'use_pretrained_bert']
 
         for r in retrieve:
             if r in config:
@@ -206,6 +206,8 @@ def load_config_json(args):
                 setattr(args, r, args.dimension)
             elif r == 'rnn_zero_state':
                 setattr(args, r, 'zero')
+            elif r == 'use_pretrained_bert':
+                setattr(args, r, True)
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0
