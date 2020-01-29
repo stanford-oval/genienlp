@@ -34,7 +34,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='genienlp',
-    version='0.1.0',
+    version='0.1.1',
     
     packages=setuptools.find_packages(exclude=['tests']),
     entry_points= {
