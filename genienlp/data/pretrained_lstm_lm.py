@@ -32,20 +32,21 @@
 
 from torch import nn
 
+
 class PretrainedLTSMLM(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
     def __init__(self, rnn_type, ntoken, emsize, nhid, nlayers, dropout=0.5, tie_weights=False):
         super(PretrainedLTSMLM, self).__init__()
         self.drop = nn.Dropout(dropout)
-        self.encoder = nn.Embedding(ntoken, emsize) # Token2Embeddings
+        self.encoder = nn.Embedding(ntoken, emsize)  # Token2Embeddings
         if rnn_type in ['LSTM', 'GRU']:
             self.rnn = getattr(nn, rnn_type)(emsize, nhid, nlayers, dropout=dropout)
         else:
             try:
                 nonlinearity = {'RNN_TANH': 'tanh', 'RNN_RELU': 'relu'}[rnn_type]
             except KeyError:
-                raise ValueError( """An invalid option for `--model` was supplied,
+                raise ValueError("""An invalid option for `--model` was supplied,
                                  options are ['LSTM', 'GRU', 'RNN_TANH' or 'RNN_RELU']""")
             self.rnn = nn.RNN(emsize, nhid, nlayers, nonlinearity=nonlinearity, dropout=dropout)
         self.decoder = nn.Linear(nhid, ntoken)
@@ -81,7 +82,7 @@ class PretrainedLTSMLM(nn.Module):
 
     def forward(self, input, hidden=None):
         encoded, hidden = self.encode(input, hidden)
-        decoded = self.decoder(encoded.view(encoded.size(0)*encoded.size(1), encoded.size(2)))
+        decoded = self.decoder(encoded.view(encoded.size(0) * encoded.size(1), encoded.size(2)))
         return decoded.view(encoded.size(0), encoded.size(1), decoded.size(1)), hidden
 
     def init_hidden(self, bsz):

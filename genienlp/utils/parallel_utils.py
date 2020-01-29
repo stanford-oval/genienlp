@@ -30,6 +30,7 @@
 import torch
 from torch.nn.parallel.scatter_gather import scatter as orig_scatter
 
+
 # The following code was copied from pytorch
 # Copyright 2016-2019 The PyTorch Authors
 #
@@ -68,6 +69,7 @@ def scatter(inputs, target_gpus, dim=0):
     distributes them across given GPUs. Duplicates
     references to objects that are not tensors.
     """
+
     def scatter_map(obj):
         if isinstance(obj, torch.Tensor):
             return orig_scatter(obj, target_gpus, dim=dim)
@@ -79,7 +81,7 @@ def scatter(inputs, target_gpus, dim=0):
             return list(map(list, zip(*map(scatter_map, obj))))
         if isinstance(obj, dict) and len(obj) > 0:
             return list(map(type(obj), zip(*map(scatter_map, obj.items()))))
-        return [obj for targets in target_gpus]
+        return [obj for _ in target_gpus]
 
     # After scatter_map is called, a scatter_map cell will exist. This cell
     # has a reference to the actual function scatter_map, which has references
@@ -92,6 +94,7 @@ def scatter(inputs, target_gpus, dim=0):
         scatter_map = None
     return res
 
+
 def scatter_kwargs(inputs, kwargs, target_gpus, dim=0):
     r"""Scatter with support for kwargs dictionary"""
     inputs = scatter(inputs, target_gpus, dim) if inputs else []
@@ -103,6 +106,7 @@ def scatter_kwargs(inputs, kwargs, target_gpus, dim=0):
     inputs = tuple(inputs)
     kwargs = tuple(kwargs)
     return inputs, kwargs
+
 
 class NamedTupleCompatibleDataParallel(torch.nn.DataParallel):
     def scatter(self, inputs, kwargs, device_ids):

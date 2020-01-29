@@ -35,7 +35,7 @@ class DecoderVocabulary(object):
         self.eos_token = eos_token
         if words is not None:
             self.itos = words
-            self.stoi = { word: idx for idx, word in enumerate(words) }
+            self.stoi = {word: idx for idx, word in enumerate(words)}
             self.pad_idx = self.stoi[pad_token]
             self.eos_idx = self.stoi[eos_token]
         else:
@@ -72,4 +72,4 @@ class DecoderVocabulary(object):
         if lim_idx < len(self.itos):
             return self.full_vocab.stoi[self.itos[lim_idx]]
         else:
-            return self.full_vocab.stoi[self.oov_itos[lim_idx-len(self.itos)]]
+            return self.full_vocab.stoi[self.oov_itos[lim_idx - len(self.itos)]]

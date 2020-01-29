@@ -34,6 +34,7 @@ from .vocab import Vocab
 from .sequential_field import SequentialField
 from .decoder_vocab import DecoderVocabulary
 
+
 class SimpleNumericalizer(object):
     def __init__(self, max_generative_vocab, fix_length=None, pad_first=False):
         self.max_generative_vocab = max_generative_vocab
@@ -112,9 +113,9 @@ class SimpleNumericalizer(object):
         for tokens, _mask in minibatch:
             if self.pad_first:
                 padded_example = [self.pad_token] * max(0, max_len - len(tokens)) + \
-                    [self.init_token] + \
-                    list(tokens[:max_len]) + \
-                    [self.eos_token]
+                                 [self.init_token] + \
+                                 list(tokens[:max_len]) + \
+                                 [self.eos_token]
             else:
                 padded_example = [self.init_token] + \
                                  list(tokens[:max_len]) + \

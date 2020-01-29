@@ -36,6 +36,7 @@ def reporthook(t):
             t.total = tsize
         t.update((b - last_b[0]) * bsize)
         last_b[0] = b
+
     return inner
 
 
@@ -197,7 +198,6 @@ class GloVe(Vectors):
 
 
 class FastText(Vectors):
-
     url_base = 'https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.{}.300.vec.gz'
 
     def __init__(self, language="en", **kwargs):
@@ -207,7 +207,6 @@ class FastText(Vectors):
 
 
 class CharNGram(Vectors):
-
     name = 'charNgram.txt'
     url = ('http://www.logos.t.u-tokyo.ac.jp/~hassy/publications/arxiv2016jmt/'
            'jmt_pre-trained_embeddings.tar.gz')

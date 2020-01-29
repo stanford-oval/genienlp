@@ -33,7 +33,6 @@ import json
 import logging
 import os
 import subprocess
-from argparse import ArgumentParser
 
 from .tasks.registry import get_tasks
 
@@ -162,9 +161,6 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'],
                         help='growth strategy for curriculum')
-    parser.add_argument('--question', type=str, help='provide a fixed question')
-    parser.add_argument('--use_google_translate', action='store_true',
-                        help='use google translate instead of pre-trained machine translator')
 
 
 def post_parse(args):
@@ -177,9 +173,6 @@ def post_parse(args):
         args.val_task_names.remove('imdb')
 
     args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
-
-    if args.use_google_translate:
-        args.data = args.data + '_google_translate'
 
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:

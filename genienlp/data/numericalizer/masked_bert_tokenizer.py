@@ -44,6 +44,7 @@
 
 from transformers import BertTokenizer
 
+
 class MaskedWordPieceTokenizer:
     def __init__(self, vocab, added_tokens_encoder, added_tokens_decoder, unk_token, max_input_chars_per_word=100):
         self.vocab = vocab
@@ -148,6 +149,7 @@ class MaskedBertTokenizer(BertTokenizer):
     """
     A modified BertTokenizer that respects a mask deciding whether a token should be split or not.
     """
+
     def __init__(self, *args, do_lower_case=False, do_basic_tokenize=False, **kwargs):
         # override do_lower_case and do_basic_tokenize unconditionally
         super().__init__(*args, do_lower_case=False, do_basic_tokenize=False, **kwargs)

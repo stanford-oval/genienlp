@@ -29,27 +29,25 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-from argparse import ArgumentParser
-import json
-import torch
 import asyncio
+import json
 import logging
 import sys
 from pprint import pformat
 
-from .data.example import Batch
-from .util import set_seed, init_devices, load_config_json, log_model_size
+import torch
+
 from . import models
 from .data.embeddings import load_embeddings
-from .tasks.registry import get_tasks
+from .data.example import Batch
 from .tasks.generic_dataset import Example
+from .tasks.registry import get_tasks
+from .util import set_seed, init_devices, load_config_json, log_model_size
 
 logger = logging.getLogger(__name__)
 
-class ProcessedExample():
-    pass
 
-class Server():
+class Server:
     def __init__(self, args, numericalizer, embeddings, model, device):
         self.args = args
         self.device = device
@@ -68,7 +66,7 @@ class Server():
 
         # batch of size 1
         return Batch.from_examples([ex], self.numericalizer, device=self.device)
-    
+
     def handle_request(self, line):
         request = json.loads(line)
 
@@ -78,7 +76,7 @@ class Server():
         else:
             task = get_tasks([task_name], self.args)[0]
             self._cached_tasks[task_name] = task
-        
+
         context = request['context']
         if not context:
             context = task.default_context
@@ -87,12 +85,13 @@ class Server():
             question = task.default_question
         answer = ''
 
-        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
-        
+        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize,
+                              lower=self.args.lower)
+
         batch = self.numericalize_example(ex)
         _, prediction_batch = self.model(batch, iteration=0)
         predictions = self.numericalizer.reverse(prediction_batch, detokenize=task.detokenize, field_name='answer')
-        
+
         response = json.dumps(dict(id=request['id'], answer=predictions[0]))
         return response + '\n'
 
@@ -102,7 +101,7 @@ class Server():
             while line:
                 client_writer.write(self.handle_request(line).encode('utf-8'))
                 line = await client_reader.readline()
-    
+
         except IOError:
             logger.info('Connection to client_reader closed')
             try:
@@ -120,7 +119,7 @@ class Server():
         server.close()
         loop.run_until_complete(server.wait_closed())
         loop.close()
-    
+
     def _run_stdin(self):
         try:
             while True:
@@ -135,7 +134,7 @@ class Server():
     def run(self):
         log_model_size(logger, self.model, self.args.model)
         self.model.to(self.device)
-    
+
         self.model.eval()
         with torch.no_grad():
             if self.args.stdin:
@@ -146,11 +145,12 @@ class Server():
 
 def parse_argv(parser):
     parser.add_argument('--path', required=True)
-    parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
+    parser.add_argument('--devices', default=[0], nargs='+', type=int,
+                        help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
-    parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
-    parser.add_argument('--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)')
+    parser.add_argument('--checkpoint_name', default='best.pth',
+                        help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
 
@@ -177,7 +177,7 @@ def main(args):
     model = Model(numericalizer, args, encoder_embeddings, decoder_embeddings)
     model_dict = save_dict['model_state_dict']
     model.load_state_dict(model_dict)
-    
+
     server = Server(args, numericalizer, encoder_embeddings + decoder_embeddings, model, devices[0])
 
     server.run()

@@ -36,7 +36,6 @@ from ..base import BaseTask
 from ..registry import register_task
 from .. import generic_dataset
 from ...data.example import Example
-from .lang_utils import *
 
 logger = logging.getLogger(__name__)
 

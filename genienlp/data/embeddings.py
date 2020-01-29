@@ -82,7 +82,7 @@ class WordVectorEmbedding(torch.nn.Module):
         if new_vectors:
             self.embedding[0].weight.data = torch.cat([self.embedding[0].weight.data.cpu()] + new_vectors, dim=0)
 
-    def forward(self, input : torch.Tensor, padding=None):
+    def forward(self, input: torch.Tensor, padding=None):
         last_layer = self.embedding[0](input.cpu()).to(input.device)
         return EmbeddingOutput(all_layers=[last_layer], last_layer=last_layer)
 
@@ -110,7 +110,7 @@ class BertEmbedding(torch.nn.Module):
     def grow_for_vocab(self, vocab, new_words):
         self.model.resize_token_embeddings(len(vocab))
 
-    def forward(self, input : torch.Tensor, padding=None):
+    def forward(self, input: torch.Tensor, padding=None):
         last_hidden_state, _pooled, hidden_states = self.model(input, attention_mask=(~padding).to(dtype=torch.float))
 
         return EmbeddingOutput(all_layers=hidden_states, last_layer=last_hidden_state)
@@ -151,7 +151,7 @@ class PretrainedLMEmbedding(torch.nn.Module):
     def grow_for_vocab(self, vocab, new_words):
         self.init_for_vocab(vocab)
 
-    def forward(self, input : torch.Tensor, padding=None):
+    def forward(self, input: torch.Tensor, padding=None):
         pretrained_indices = torch.gather(self.vocab_to_pretrained, dim=0, index=input)
         rnn_output = self.model(pretrained_indices)
         return EmbeddingOutput(all_layers=[rnn_output], last_layer=rnn_output)
@@ -199,12 +199,14 @@ def load_embeddings(cachedir, encoder_emb_names, decoder_emb_names, max_generati
 
             config = BertConfig.from_pretrained(emb_name, cache_dir=cachedir)
             config.output_hidden_states = True
-            numericalizer = BertNumericalizer(config, emb_name, max_generative_vocab=max_generative_vocab, cache=cachedir)
+            numericalizer = BertNumericalizer(config, emb_name, max_generative_vocab=max_generative_vocab,
+                                              cache=cachedir)
 
             # load the tokenizer once to ensure all files are downloaded
             AutoTokenizer.from_pretrained(emb_name, cache_dir=cachedir)
 
-            encoder_vectors.append(BertEmbedding(AutoModel.from_pretrained(emb_name, config=config, cache_dir=cachedir)))
+            encoder_vectors.append(
+                BertEmbedding(AutoModel.from_pretrained(emb_name, config=config, cache_dir=cachedir)))
         else:
             if numericalizer is not None:
                 logger.warning('Combining BERT embeddings with other pretrained embeddings is unlikely to work')

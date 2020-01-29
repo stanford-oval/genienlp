@@ -27,20 +27,19 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from subprocess import Popen, PIPE
-import re
-import os
-import string
-import numpy as np
 import collections
-from multiprocessing import Pool, cpu_count
+import os
+import re
+import string
 from contextlib import closing
-from .tasks.almond.lang_utils import *
-from .tasks.generic_dataset import Query
+from multiprocessing import Pool, cpu_count
+from subprocess import Popen, PIPE
 
+import numpy as np
 from pyrouge import Rouge155
 from sacrebleu import corpus_bleu
 
+from .tasks.generic_dataset import Query
 
 
 def to_lf(s, table):
@@ -74,7 +73,7 @@ def to_lf(s, table):
         for idx, col in enumerate(headers):
             condition_s = condition_s.replace(' ' + col[0] + ' ', ' Col{} '.format(col[1]))
         condition_s = condition_s.strip()
- 
+
         for idx, col in enumerate(conditionals):
             new_s = []
             for t in condition_s.split():
@@ -86,7 +85,7 @@ def to_lf(s, table):
         s = condition_s
         conds = re.split('(Col\d+ Cond\d+)', s)
         if len(conds) == 0:
-            conds = [s] 
+            conds = [s]
         conds = [x for x in conds if len(x.strip()) > 0]
         full_conditions = []
         for i, x in enumerate(conds):
@@ -165,8 +164,10 @@ def score(answer, gold):
 
 
 def simplify(answer):
-    return set(''.join(c for c in t if c not in string.punctuation) for t in answer.strip().lower().split()) - {'the', 'a', 'an', 'and', ''}
-     
+    simplified = answer.strip().lower().split()
+    simplified = (''.join(c for c in t if c not in string.punctuation) for t in simplified)
+    return set(simplified) - {'the', 'a', 'an', 'and', ''}
+
 
 # http://nlp.cs.washington.edu/zeroshot/evaluate.py
 def computeCF1(greedy, answer):
@@ -174,7 +175,6 @@ def computeCF1(greedy, answer):
     for g, a in zip(greedy, answer):
         scores += score(g, a)
     tp, tn, sys_pos, real_pos = scores.tolist()
-    total = len(answer)
     if tp == 0:
         p = r = f = 0.0
     else:
@@ -182,24 +182,31 @@ def computeCF1(greedy, answer):
         r = tp / float(real_pos)
         f = 2 * p * r / (p + r)
 
-    return f * 100, p * 100, r * 100 
+    return f * 100, p * 100, r * 100
+
 
 def normalize_text(s):
     """Lower text and remove punctuation, articles and extra whitespace."""
+
     def remove_articles(text):
         return re.sub(r'\b(a|an|the)\b', ' ', text)
+
     def white_space_fix(text):
         return ' '.join(text.split())
+
     def remove_punc(text):
         exclude = set(string.punctuation)
         return ''.join(ch for ch in text if ch not in exclude)
+
     def lower(text):
         return text.lower()
+
     return white_space_fix(remove_articles(remove_punc(lower(s))))
 
+
 def f1_score(prediction, ground_truth):
-    prediction_tokens =  prediction.split()
-    ground_truth_tokens =  ground_truth.split()
+    prediction_tokens = prediction.split()
+    ground_truth_tokens = ground_truth.split()
     common = collections.Counter(prediction_tokens) & collections.Counter(ground_truth_tokens)
     num_same = sum(common.values())
     if num_same == 0:
@@ -209,24 +216,10 @@ def f1_score(prediction, ground_truth):
     f1 = (2 * precision * recall) / (precision + recall)
     return f1
 
-def fm_score(prediction, ground_truth):
-    pred_funcs = get_functions(prediction)
-    ground_truth = get_functions(ground_truth)
-    common = collections.Counter(pred_funcs) & collections.Counter(ground_truth)
-    if not len(ground_truth):
-        return 1.0
-    return len(common) / len(ground_truth)
-
-def dm_score(prediction, ground_truth):
-    pred_funcs = get_devices(prediction)
-    ground_truth = get_devices(ground_truth)
-    common = collections.Counter(pred_funcs) & collections.Counter(ground_truth)
-    if not len(ground_truth):
-        return 1.0
-    return len(common) / len(ground_truth)
 
 def exact_match(prediction, ground_truth):
     return prediction == ground_truth
+
 
 def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
     scores_for_ground_truths = []
@@ -235,28 +228,21 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
         scores_for_ground_truths.append(score)
     return max(scores_for_ground_truths)
 
+
 def computeF1(outputs, targets):
-    return sum([metric_max_over_ground_truths(f1_score, o, t) for o, t in zip(outputs, targets)])/len(outputs) * 100
+    return sum([metric_max_over_ground_truths(f1_score, o, t) for o, t in zip(outputs, targets)]) / len(outputs) * 100
+
 
 def computeEM(outputs, targets):
     outs = [metric_max_over_ground_truths(exact_match, o, t) for o, t in zip(outputs, targets)]
-    return sum(outs)/len(outputs) * 100
-
-
-def computeFM(outputs, targets):
-    outs = [metric_max_over_ground_truths(fm_score, o, t) for o, t in zip(outputs, targets)]
-    return sum(outs) / len(outputs) * 100
-
-def computeDM(outputs, targets):
-    outs = [metric_max_over_ground_truths(dm_score, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
 
 
 def computeBLEU(outputs, targets):
     targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
     return corpus_bleu(outputs, targets, lowercase=True).score
-       
-                
+
+
 class Rouge(Rouge155):
     """Rouge calculator class with custom command-line options."""
 
@@ -296,16 +282,16 @@ class Rouge(Rouge155):
     def _run_rouge(self):
         # Get full options
         options = (
-            ['-e', self._rouge_data] +
-            list(map(str, self.options)) +
-            [os.path.join(self._config_dir, "settings.xml")])
+                ['-e', self._rouge_data] +
+                list(map(str, self.options)) +
+                [os.path.join(self._config_dir, "settings.xml")])
 
-        logging.info("Running ROUGE with options {}".format(" ".join(options)))
+        #logging.info("Running ROUGE with options {}".format(" ".join(options)))
         # print([self._rouge_bin] + list(options))
         pipes = Popen([self._rouge_bin] + options, stdout=PIPE, stderr=PIPE)
         std_out, std_err = pipes.communicate()
 
-        div_by_zero_error = std_err.decode("utf-8").\
+        div_by_zero_error = std_err.decode("utf-8"). \
             startswith("Illegal division by zero")
         if pipes.returncode == 0 or div_by_zero_error:
             # Still returns the correct output even with div by zero
@@ -332,15 +318,16 @@ def split_sentences(txt, splitchar=".", include_splitchar=False):
     out = [s.split() for s in txt.strip().split(splitchar) if len(s) > 0]
     return out
 
+
 def compute_rouge_scores(summs, refs, splitchar='.', options=None, parallel=True):
     assert len(summs) == len(refs)
     options = [
-            '-a',  # evaluate all systems
-            '-c', 95,  # confidence interval
-            '-m',  # use Porter stemmer
-            '-n', 2,  # max-ngram
-            '-w', 1.3,  # weight (weighting factor for WLCS)
-        ] 
+        '-a',  # evaluate all systems
+        '-c', 95,  # confidence interval
+        '-m',  # use Porter stemmer
+        '-n', 2,  # max-ngram
+        '-w', 1.3,  # weight (weighting factor for WLCS)
+    ]
     rr = Rouge(options=options)
     rouge_args = []
     for summ, ref in zip(summs, refs):
@@ -352,7 +339,7 @@ def compute_rouge_scores(summs, refs, splitchar='.', options=None, parallel=True
         s = [x for x in split_sentences(summ, splitchar) if len(x) > 0]
         rouge_args.append((s, ref_dict))
     if parallel:
-        with closing(Pool(cpu_count()//2)) as pool:
+        with closing(Pool(cpu_count() // 2)) as pool:
             rouge_scores = pool.starmap(rr.score_summary, rouge_args)
     else:
         rouge_scores = []
@@ -396,6 +383,7 @@ def dict_cmp(d1, d2):
                 if v1 != b[k1]:
                     return False
         return True
+
     return cmp(d1, d2) and cmp(d2, d1)
 
 
@@ -430,7 +418,7 @@ def computeDialogue(greedy, answer):
     answer.sort()
     answer = [[x[1]] for x in answer]
     return joint_goal_em, turn_request_em, turn_goal_em, answer
-        
+
 
 def compute_metrics(greedy, answer, requested_metrics, args=None):
     metric_keys = []
@@ -464,14 +452,6 @@ def compute_metrics(greedy, answer, requested_metrics, args=None):
     nem = computeEM(norm_greedy, norm_answer)
     metric_keys.extend(['nf1', 'nem'])
     metric_values.extend([nf1, nem])
-    if 'fm' in requested_metrics:
-        function_accuracy = computeFM(greedy, answer)
-        metric_keys.append('fm')
-        metric_values.append(function_accuracy)
-    if 'dm' in requested_metrics:
-        device_accuracy = computeDM(greedy, answer)
-        metric_keys.append('dm')
-        metric_values.append(device_accuracy)
 
     if 'corpus_f1' in requested_metrics:
         corpus_f1, precision, recall = computeCF1(norm_greedy, norm_answer)

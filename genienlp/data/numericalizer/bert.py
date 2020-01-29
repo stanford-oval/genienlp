@@ -28,12 +28,12 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import collections
 import os
-import torch
-from transformers import BertConfig
 
-from .sequential_field import SequentialField
+import torch
+
 from .decoder_vocab import DecoderVocabulary
 from .masked_bert_tokenizer import MaskedBertTokenizer
+from .sequential_field import SequentialField
 
 
 class BertNumericalizer(object):
@@ -76,7 +76,8 @@ class BertNumericalizer(object):
                 fp.write(word + '\n')
 
     def build_vocab(self, vocab_fields, vocab_sets):
-        self._tokenizer = MaskedBertTokenizer.from_pretrained(self._pretrained_name, config=self.config, cache_dir=self._cache)
+        self._tokenizer = MaskedBertTokenizer.from_pretrained(self._pretrained_name, config=self.config,
+                                                              cache_dir=self._cache)
         # HACK we cannot save the tokenizer without this
         del self._tokenizer.init_kwargs['config']
 
@@ -156,9 +157,9 @@ class BertNumericalizer(object):
         for wp_tokens in wp_tokenized:
             if self.pad_first:
                 padded_example = [self.pad_token] * max(0, max_len - len(wp_tokens)) + \
-                    [self.init_token] + \
-                    list(wp_tokens[:max_len]) + \
-                    [self.eos_token]
+                                 [self.init_token] + \
+                                 list(wp_tokens[:max_len]) + \
+                                 [self.eos_token]
             else:
                 padded_example = [self.init_token] + \
                                  list(wp_tokens[:max_len]) + \

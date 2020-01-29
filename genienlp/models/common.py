@@ -28,20 +28,16 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import math
+from typing import NamedTuple, List
+
 import torch
-from torch import nn
-from torch.nn import functional as F
+import torch.nn as nn
 from torch.autograd import Variable
 from torch.jit import Final
-import math
-import os
-import sys
-import numpy as np
-import torch.nn as nn
-from typing import NamedTuple, List, Tuple, Union
-
-from torch.nn.utils.rnn import pad_packed_sequence as unpack
+from torch.nn import functional as F
 from torch.nn.utils.rnn import pack_padded_sequence as pack
+from torch.nn.utils.rnn import pad_packed_sequence as unpack
 
 
 class EmbeddingOutput(NamedTuple):
@@ -284,9 +280,6 @@ def mask(targets, out, squash=True, pad_idx=1):
     return out_after, targets_after
 
 
-
-
-
 class Highway(torch.nn.Module):
     def __init__(self, d_in, activation='relu', n_layers=1):
         super(Highway, self).__init__()
@@ -301,9 +294,11 @@ class Highway(torch.nn.Module):
         for layer in self._layers:
             projected_input = layer(current_input)
             linear_part = current_input
-            nonlinear_part = projected_input[:, :self.d_in] if projected_input.dim() == 2 else projected_input[:, :, :self.d_in]
+            nonlinear_part = projected_input[:, :self.d_in] if projected_input.dim() == 2 \
+                else projected_input[:, :, :self.d_in]
             nonlinear_part = self.activation(nonlinear_part)
-            gate = projected_input[:, self.d_in:(2 * self.d_in)] if projected_input.dim() == 2 else projected_input[:, :, self.d_in:(2 * self.d_in)]
+            gate = projected_input[:, self.d_in:(2 * self.d_in)] if projected_input.dim() == 2 \
+                else projected_input[:, :, self.d_in:(2 * self.d_in)]
             gate = F.sigmoid(gate)
             current_input = gate * linear_part + (1 - gate) * nonlinear_part
         return current_input
@@ -323,8 +318,8 @@ class LinearFeedforward(nn.Module):
 
 class PackedLSTM(nn.Module):
 
-    def __init__(self, d_in, d_out, bidirectional=False, num_layers=1, 
-        dropout=0.0, batch_first=True):
+    def __init__(self, d_in, d_out, bidirectional=False, num_layers=1,
+                 dropout=0.0, batch_first=True):
         """A wrapper class that packs input sequences and unpacks output sequences"""
         super().__init__()
         if bidirectional:
@@ -338,9 +333,9 @@ class PackedLSTM(nn.Module):
 
     def forward(self, inputs, lengths, hidden=None):
         lens, indices = torch.sort(lengths.clone().detach(), 0, True)
-        inputs = inputs[indices] if self.batch_first else inputs[:, indices] 
-        outputs, (h, c) = self.rnn(pack(inputs, lens.tolist(), 
-            batch_first=self.batch_first), hidden)
+        inputs = inputs[indices] if self.batch_first else inputs[:, indices]
+        outputs, (h, c) = self.rnn(pack(inputs, lens.tolist(),
+                                        batch_first=self.batch_first), hidden)
         outputs = unpack(outputs, batch_first=self.batch_first)[0]
         _, _indices = torch.sort(indices, 0)
         outputs = outputs[_indices] if self.batch_first else outputs[:, _indices]
@@ -372,8 +367,8 @@ class Feedforward(nn.Module):
 
 
 class CombinedEmbedding(nn.Module):
-    project : Final[bool]
-    dimension : Final[int]
+    project: Final[bool]
+    dimension: Final[int]
 
     def __init__(self, numericalizer, pretrained_embeddings,
                  output_dimension,
@@ -428,7 +423,7 @@ class CombinedEmbedding(nn.Module):
         return EmbeddingOutput(all_layers=all_layers, last_layer=last_layer)
 
     def forward(self, x, padding=None):
-        embedded : List[EmbeddingOutput] = []
+        embedded: List[EmbeddingOutput] = []
         if self.pretrained_embeddings is not None:
             embedded += [emb(x, padding=padding) for emb in self.pretrained_embeddings]
 
@@ -443,13 +438,13 @@ class CombinedEmbedding(nn.Module):
 
 
 class SemanticFusionUnit(nn.Module):
- 
+
     def __init__(self, d, l):
         super().__init__()
-        self.r_hat = Feedforward(d*l, d, 'tanh')
-        self.g = Feedforward(d*l, d, 'sigmoid')
+        self.r_hat = Feedforward(d * l, d, 'tanh')
+        self.g = Feedforward(d * l, d, 'sigmoid')
         self.dropout = nn.Dropout(0.2)
- 
+
     def forward(self, x):
         c = self.dropout(torch.cat(x, -1))
         r_hat = self.r_hat(c)
@@ -471,7 +466,7 @@ class LSTMDecoderAttention(nn.Module):
         # context_mask is batch x encoder_time, convert it to batch x 1 x encoder_time
         self.context_mask = context_mask.unsqueeze(1)
 
-    def forward(self, input : torch.Tensor, context : torch.Tensor):
+    def forward(self, input: torch.Tensor, context: torch.Tensor):
         # input is batch x decoder_time x dim
         # context is batch x encoder_time x dim
         # output will be batch x decoder_time x dim
@@ -482,9 +477,7 @@ class LSTMDecoderAttention(nn.Module):
         else:
             targetT = input
 
-        x = input.shape
         transposed_context = torch.transpose(context, 2, 1)
-        x = transposed_context.shape
         context_scores = torch.matmul(targetT, transposed_context)
         context_scores.masked_fill_(self.context_mask, -float('inf'))
         context_attention = F.softmax(context_scores, dim=-1) + EPSILON
@@ -510,36 +503,38 @@ class CoattentiveLayer(nn.Module):
         self.embed_sentinel = nn.Embedding(2, d)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, context, question, context_padding, question_padding): 
+    def forward(self, context, question, context_padding, question_padding):
         context_padding = torch.cat([context.new_zeros((context.size(0), 1), dtype=torch.bool), context_padding], 1)
         question_padding = torch.cat([question.new_zeros((question.size(0), 1), dtype=torch.bool), question_padding], 1)
 
         context_sentinel = self.embed_sentinel(context.new_zeros((context.size(0), 1), dtype=torch.long))
-        context = torch.cat([context_sentinel, self.dropout(context)], 1) # batch_size x (context_length + 1) x features
+        context = torch.cat([context_sentinel, self.dropout(context)],
+                            1)  # batch_size x (context_length + 1) x features
 
         question_sentinel = self.embed_sentinel(question.new_ones((question.size(0), 1), dtype=torch.long))
-        question = torch.cat([question_sentinel, question], 1) # batch_size x (question_length + 1) x features
-        question = torch.tanh(self.proj(question)) # batch_size x (question_length + 1) x features
+        question = torch.cat([question_sentinel, question], 1)  # batch_size x (question_length + 1) x features
+        question = torch.tanh(self.proj(question))  # batch_size x (question_length + 1) x features
 
-        affinity = context.bmm(question.transpose(1,2)) # batch_size x (context_length + 1) x (question_length + 1)
-        attn_over_context = self.normalize(affinity, context_padding) # batch_size x (context_length + 1) x 1
-        attn_over_question = self.normalize(affinity.transpose(1,2), question_padding) # batch_size x (question_length + 1) x 1
-        sum_of_context = self.attn(attn_over_context, context) # batch_size x (question_length + 1) x features
-        sum_of_question = self.attn(attn_over_question, question) # batch_size x (context_length + 1) x features
-        coattn_context = self.attn(attn_over_question, sum_of_context) # batch_size x (context_length + 1) x features
-        coattn_question = self.attn(attn_over_context, sum_of_question) # batch_size x (question_length + 1) x features
-        return torch.cat([coattn_context, sum_of_question], 2)[:, 1:], torch.cat([coattn_question, sum_of_context], 2)[:, 1:]
+        affinity = context.bmm(question.transpose(1, 2))  # batch_size x (context_length + 1) x (question_length + 1)
+        attn_over_context = self.normalize(affinity, context_padding)  # batch_size x (context_length + 1) x 1
+        attn_over_question = self.normalize(affinity.transpose(1, 2),
+                                            question_padding)  # batch_size x (question_length + 1) x 1
+        sum_of_context = self.attn(attn_over_context, context)  # batch_size x (question_length + 1) x features
+        sum_of_question = self.attn(attn_over_question, question)  # batch_size x (context_length + 1) x features
+        coattn_context = self.attn(attn_over_question, sum_of_context)  # batch_size x (context_length + 1) x features
+        coattn_question = self.attn(attn_over_context, sum_of_question)  # batch_size x (question_length + 1) x features
+        return torch.cat([coattn_context, sum_of_question], 2)[:, 1:], torch.cat([coattn_question, sum_of_context], 2)[
+                                                                       :, 1:]
 
     @staticmethod
     def attn(weights, candidates):
         w1, w2, w3 = weights.size()
         c1, c2, c3 = candidates.size()
-        return weights.unsqueeze(3).expand(w1, w2, w3, c3).mul(candidates.unsqueeze(2).expand(c1, c2, w3, c3)).sum(1).squeeze(1)
+        return weights.unsqueeze(3).expand(w1, w2, w3, c3).mul(candidates.unsqueeze(2).expand(c1, c2, w3, c3)) \
+            .sum(1).squeeze(1)
 
     @staticmethod
     def normalize(original, padding):
         raw_scores = original.clone()
         raw_scores.masked_fill_(padding.unsqueeze(-1).expand_as(raw_scores), -INF)
         return F.softmax(raw_scores, dim=1)
-
-

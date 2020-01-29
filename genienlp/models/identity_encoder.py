@@ -32,6 +32,7 @@ from torch import nn
 
 from .common import CombinedEmbedding, LayerNorm, LinearFeedforward
 
+
 class IdentityEncoder(nn.Module):
     def __init__(self, numericalizer, args, encoder_embeddings):
         super().__init__()
@@ -51,9 +52,9 @@ class IdentityEncoder(nn.Module):
             self.projection = None
 
         if self.args.rnn_layers > 0 and self.args.rnn_zero_state == 'average':
-            self.pool = LinearFeedforward(args.dimension, args.dimension, 2*args.rnn_dimension*args.rnn_layers,
+            self.pool = LinearFeedforward(args.dimension, args.dimension, 2 * args.rnn_dimension * args.rnn_layers,
                                           dropout=args.dropout_ratio)
-            self.norm = LayerNorm(2*args.rnn_dimension)
+            self.norm = LayerNorm(2 * args.rnn_dimension)
         else:
             self.pool = None
             self.norm = None
@@ -70,7 +71,7 @@ class IdentityEncoder(nn.Module):
 
         # pick the top-most N transformer layers to pass to the decoder for cross-attention
         # (add 1 to account for the embedding layer - the decoder will drop it later)
-        self_attended_context = context_embedded.all_layers[-(self.args.transformer_layers+1):]
+        self_attended_context = context_embedded.all_layers[-(self.args.transformer_layers + 1):]
         final_context = context_embedded.last_layer
         final_question = question_embedded.last_layer
 
@@ -102,7 +103,8 @@ class IdentityEncoder(nn.Module):
                 packed_rnn_state = self.norm(self.pool(average_context))
 
                 # packed_rnn_state is (batch, 2 * rnn_layers * rnn_dim)
-                packed_rnn_state = packed_rnn_state.reshape(batch_size, 2, self.args.rnn_layers, self.args.rnn_dimension)
+                packed_rnn_state = packed_rnn_state.reshape(batch_size, 2, self.args.rnn_layers,
+                                                            self.args.rnn_dimension)
                 # transpose to (2, batch, rnn_layers, rnn_dimension)
                 packed_rnn_state = packed_rnn_state.transpose(0, 1)
                 # transpose to (2, rnn_layers, batch, rnn_dimension)
@@ -110,6 +112,5 @@ class IdentityEncoder(nn.Module):
                 # convert to a tuple of two (rnn_layers, batch, rnn_dimension) tensors
                 packed_rnn_state = packed_rnn_state.chunk(2, dim=0)
                 context_rnn_state = (packed_rnn_state[0].squeeze(0), packed_rnn_state[1].squeeze(0))
-
 
         return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state

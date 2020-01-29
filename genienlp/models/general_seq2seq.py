@@ -44,6 +44,7 @@ DECODERS = {
     'MQANDecoder': MQANDecoder
 }
 
+
 class Seq2Seq(nn.Module):
     def __init__(self, numericalizer, args, encoder_embeddings, decoder_embeddings):
         super().__init__()
@@ -53,7 +54,8 @@ class Seq2Seq(nn.Module):
         self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings)
 
     def forward(self, batch, iteration):
-        self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
+        self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
+            self.encoder(batch)
 
         loss, predictions = self.decoder(batch, self_attended_context, final_context, context_rnn_state,
                                          final_question, question_rnn_state)

@@ -39,6 +39,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class Saver(object):
     '''
     Wrap pytorch's save functionality into an interface similar to tensorflow.train.Saver
@@ -51,7 +52,7 @@ class Saver(object):
         self._savedir = savedir
         self._max_to_keep = max_to_keep
         assert max_to_keep >= 1
-        
+
         self._loaded_last_checkpoints = False
         self._latest_checkpoint = None
         self._all_checkpoints = None
@@ -59,7 +60,7 @@ class Saver(object):
     def _maybe_load_last_checkpoints(self):
         if self._loaded_last_checkpoints:
             return
-        
+
         try:
             with open(os.path.join(self._savedir, 'checkpoint.json')) as fp:
                 data = json.load(fp)
@@ -70,13 +71,12 @@ class Saver(object):
             self._loaded_last_checkpoints = True
             self._all_checkpoints = []
             self._latest_checkpoint = None
-        
+
     def save(self, save_model_state_dict, save_opt_state_dict, global_step):
         self._maybe_load_last_checkpoints()
 
         model_name = 'iteration_' + str(global_step) + '.pth'
         opt_name = 'iteration_' + str(global_step) + '_optim.pth'
-
 
         self._latest_checkpoint = model_name
         self._all_checkpoints.append(model_name)

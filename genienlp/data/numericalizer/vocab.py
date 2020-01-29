@@ -1,7 +1,5 @@
-from collections import defaultdict, Counter
 import logging
-
-import torch
+from collections import defaultdict, Counter
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +18,7 @@ class Vocab(object):
             numerical identifiers.
         itos: A list of token strings indexed by their numerical identifiers.
     """
+
     def __init__(self, counter, max_size=None, min_freq=1, specials=('<pad>',)):
         """Create a Vocab object from a collections.Counter.
 
