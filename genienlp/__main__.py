@@ -29,14 +29,15 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys
+import argparse
 
-from . import train, predict, server, cache_embeddings
+from . import arguments, train, predict, server, cache_embeddings
 
 subcommands = {
-    'train': ('Train a model', train.main),
-    'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.main),
-    'server': ('Export RPC interface to predict', server.main),
-    'cache-embeddings': ('Download and cache embeddings', cache_embeddings.main)
+    'train': ('Train a model', arguments.parse_argv, train.main),
+    'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.parse_argv, predict.main),
+    'server': ('Export RPC interface to predict', server.parse_argv, server.main),
+    'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
 }
 
 def usage():
@@ -48,13 +49,14 @@ def usage():
     sys.exit(1)
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in subcommands:
-        usage()
-        return
-    
-    main_fn = subcommands[sys.argv[1]][1]
-    canned_argv = ['decanlp-' + sys.argv[1]] + sys.argv[2:]
-    main_fn(canned_argv)
+    parser = argparse.ArgumentParser(prog='genienlp')
+    subparsers = parser.add_subparsers(dest='subcommand')
+    for subcommand in subcommands:
+        helpstr, get_parser, command_fn = subcommands[subcommand]
+        get_parser(subparsers.add_parser(subcommand, help=helpstr))
+
+    argv = parser.parse_args()
+    subcommands[argv.subcommand][2](argv)
 
 if __name__ == '__main__':
     main()

@@ -144,25 +144,21 @@ class Server():
                 self._run_tcp()
 
 
-def get_args(argv):
-    parser = ArgumentParser(prog=argv[0])
+def parse_argv(parser):
     parser.add_argument('--path', required=True)
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
     parser.add_argument('--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
 
-    args = parser.parse_args(argv[1:])
+
+def main(args):
     load_config_json(args)
     set_seed(args)
-    return args
 
-
-def main(argv=sys.argv):
-    args = get_args(argv)
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
 

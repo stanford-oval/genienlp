@@ -61,15 +61,13 @@ class IMDb(CQA):
     name = 'imdb'
     dirname = 'aclImdb'
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         examples = []
         labels = {'neg': 'negative', 'pos': 'positive'}
         question = 'Is this review negative or positive?'
 
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
@@ -115,13 +113,11 @@ class SST(CQA):
     name = 'sst'
     dirname = ''
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         examples = []
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
@@ -169,7 +165,7 @@ class SST(CQA):
 
 
 class TranslationDataset(CQA):
-    def __init__(self, path, exts, subsample=None, tokenize=None, lower=False, **kwargs):
+    def __init__(self, path, exts, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         """Create a TranslationDataset given paths and fields.
 
         Arguments:
@@ -178,11 +174,9 @@ class TranslationDataset(CQA):
             fields$: fields for handling all columns
             Remaining keyword arguments: Passed to the constructor of Dataset.
         """
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
@@ -336,13 +330,11 @@ class SQuAD(CQA):
     name = 'squad'
     dirname = ''
 
-    def __init__(self, path, subsample=None, lower=False, tokenize=None, **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
+    def __init__(self, path, subsample=None, lower=False, tokenize=None, cached_path=None, skip_cache=False, **kwargs):
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         examples, all_answers, q_ids = [], [], []
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples, all_answers, q_ids = torch.load(cache_name)
         else:
@@ -483,13 +475,12 @@ def fix_missing_period(line):
 
 
 class Summarization(CQA):
-    def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False, **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
+    def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False,
+                 cached_path=None, skip_cache=False, **kwargs):
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         examples = []
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
@@ -630,11 +621,11 @@ class WikiSQL(CQA):
     name = 'wikisql'
     dirname = 'data'
 
-    def __init__(self, path, query_as_question=False, subsample=None, tokenize=None, lower=False, **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', 'query_as_question' if query_as_question else 'query_as_context', os.path.basename(path), str(subsample))
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+    def __init__(self, path, query_as_question=False, subsample=None, tokenize=None, lower=False,
+                 cached_path=None, skip_cache=False,**kwargs):
+        cache_name = os.path.join(cached_path, 'query_as_question' if query_as_question else 'query_as_context',
+                                  os.path.basename(path), str(subsample))
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples, all_answers = torch.load(cache_name)
         else:
@@ -748,8 +739,8 @@ class SRL(CQA):
         cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
 
         examples, all_answers = [], []
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+        skip_cache = kwargs.pop('skip_cache')
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples, all_answers = torch.load(cache_name)
         else:
@@ -890,11 +881,10 @@ class WinogradSchema(CQA):
     name = 'schema'
     dirname = ''
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+    def __init__(self, path, subsample=None, tokenize=None, lower=False,
+                 cached_path=None, skip_cache=False, **kwargs):
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
@@ -1002,13 +992,12 @@ class WOZ(CQA):
     name = 'woz'
     dirname = ''
 
-    def __init__(self, path, subsample=None,  tokenize=None, lower=False, description='woz.en', **kwargs):
+    def __init__(self, path, subsample=None,  tokenize=None, lower=False, description='woz.en',
+                 cached_path=None, skip_cache=False, **kwargs):
         examples, all_answers = [], []
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path),
+        cache_name = os.path.join(cached_path, os.path.basename(path),
                                   str(subsample), description)
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples, all_answers = torch.load(cache_name)
         else:
@@ -1120,12 +1109,10 @@ class MultiNLI(CQA):
     name = 'multinli'
     dirname = 'multinli_1.0'
 
-    def __init__(self, path, subsample=None,  tokenize=None, lower=False, description='multinli.in.out', **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path),
-                                  str(subsample), description)
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+    def __init__(self, path, subsample=None,  tokenize=None, lower=False, description='multinli.in.out',
+                 cached_path=None, skip_cache=False, **kwargs):
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample), description)
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
@@ -1200,12 +1187,9 @@ class ZeroShotRE(CQA):
     name = 'zre'
 
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path),
-                                  str(subsample))
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
@@ -1330,11 +1314,9 @@ class OntoNotesNER(CQA):
 
     def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False,
                  path_to_files='.data/ontonotes-release-5.0/data/files',
-                 subtask='all', nones=True, **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample), subtask, str(nones))
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+                 subtask='all', nones=True, cached_path=None, skip_cache=False, **kwargs):
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample), subtask, str(nones))
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
@@ -1514,12 +1496,9 @@ class SNLI(CQA):
     name = 'snli'
 
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path),
-                                  str(subsample))
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
@@ -1583,14 +1562,12 @@ class SNLI(CQA):
 class JSON(CQA):
     name = 'json'
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path),
-                                  str(subsample))
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         examples = []
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+        skip_cache = kwargs.pop('skip_cache')
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:

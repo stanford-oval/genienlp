@@ -35,7 +35,7 @@ import numpy as np
 import collections
 from multiprocessing import Pool, cpu_count
 from contextlib import closing
-from decanlp.tasks.almond.lang_utils import *
+from .tasks.almond.lang_utils import *
 from .tasks.generic_dataset import Query
 
 from pyrouge import Rouge155

@@ -57,8 +57,8 @@ def get_all_splits(args):
         if not 'test' in args.evaluate:
             kwargs['test'] = None
 
-        kwargs['skip_cache_bool'] = args.skip_cache_bool
-        kwargs['cached_path'] = args.cached
+        kwargs['skip_cache'] = args.skip_cache
+        kwargs['cached_path'] = os.path.join(args.cache, task.name)
         kwargs['subsample'] = args.subsample
         s = task.get_splits(root=args.data, lower=args.lower, **kwargs)[0]
         preprocess_examples(args, [task], [s], train=False)
@@ -144,39 +144,35 @@ def run(args, numericalizer, val_sets, model, device):
     logger.info(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
 
 
-def get_args(argv):
-    parser = ArgumentParser(prog=argv[0])
+def parse_argv(parser):
     parser.add_argument('--path', required=True)
     parser.add_argument('--evaluate', type=str, required=True, help='Which dataset to evaluate (test or dev)')
     parser.add_argument('--tasks', default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst','srl', 'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    parser.add_argument('--data', default='./decaNLP/.data/', type=str, help='where to load data from.')
-    parser.add_argument('--embeddings', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
+    parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to save embeddings.')
     parser.add_argument('--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--bleu', action='store_true', help='whether to use the bleu metric (always on for iwslt)')
     parser.add_argument('--rouge', action='store_true', help='whether to use the bleu metric (always on for cnn, dailymail, and cnn_dailymail)')
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
 
-    parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether use exisiting cached splits or generate new ones')
+    parser.add_argument('--skip_cache', action='store_true',
+                        help='whether use exisiting cached splits or generate new ones')
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
-    parser.add_argument('--cached', default='', type=str, help='where to save cached files')
+    parser.add_argument('--cache', default='.cache', type=str, help='where to save cached files')
     parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
 
     parser.add_argument('--saved_models', default='./saved_models', type=str, help='directory where cached models should be loaded from')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets (experimental)')
 
-    args = parser.parse_args(argv[1:])
 
+def main(args):
     load_config_json(args)
     set_seed(args)
     args.tasks = get_tasks(args.task_names, args)
-    return args
 
-
-def main(argv=sys.argv):
-    args = get_args(argv)
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
 

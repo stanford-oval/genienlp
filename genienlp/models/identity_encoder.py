@@ -108,7 +108,8 @@ class IdentityEncoder(nn.Module):
                 # transpose to (2, rnn_layers, batch, rnn_dimension)
                 packed_rnn_state = packed_rnn_state.transpose(1, 2)
                 # convert to a tuple of two (rnn_layers, batch, rnn_dimension) tensors
-                context_rnn_state = tuple(x.squeeze(0) for x in packed_rnn_state.chunk(2, dim=0))
+                packed_rnn_state = packed_rnn_state.chunk(2, dim=0)
+                context_rnn_state = (packed_rnn_state[0].squeeze(0), packed_rnn_state[1].squeeze(0))
 
 
         return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state

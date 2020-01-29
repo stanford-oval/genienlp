@@ -81,8 +81,8 @@ def prepare_data(args, logger):
         kwargs['validation'] = None
         if args.use_curriculum:
             kwargs['curriculum'] = True
-        kwargs['skip_cache_bool'] = args.skip_cache_bool
-        kwargs['cached_path'] = args.cached
+        kwargs['skip_cache'] = args.skip_cache
+        kwargs['cached_path'] = os.path.join(args.cache, task.name)
 
         logger.info(f'Adding {task.name} to training datasets')
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
@@ -102,8 +102,8 @@ def prepare_data(args, logger):
         kwargs = {'test': None}
         kwargs['subsample'] = args.subsample
         kwargs['train'] = None
-        kwargs['skip_cache_bool'] = args.skip_cache_bool
-        kwargs['cached_path'] = args.cached
+        kwargs['skip_cache'] = args.skip_cache
+        kwargs['cached_path'] = os.path.join(args.cache, task.name)
 
         logger.info(f'Adding {task.name} to validation datasets')
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
@@ -418,8 +418,8 @@ def init_opt(args, model, logger):
     return opt, scheduler
 
 
-def main(argv=sys.argv):
-    args = arguments.parse(argv)
+def main(args):
+    args = arguments.post_parse(args)
     if args is None:
         return
 

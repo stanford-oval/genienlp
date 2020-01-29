@@ -52,19 +52,13 @@ def save_args(args):
         json.dump(vars(args), f, indent=2)
 
 
-def parse(argv):
-    """
-    Returns the arguments from the command line.
-    """
-    parser = ArgumentParser(prog=argv[0])
-    parser.add_argument('--root', default='./decaNLP', type=str,
+def parse_argv(parser):
+    parser.add_argument('--root', default='.', type=str,
                         help='root directory for data, results, embeddings, code, etc.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument('--save', default='results', type=str, help='where to save results.')
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
-    parser.add_argument('--cached', default='', type=str, help='where to save cached files')
-    parser.add_argument('--saved_models', default='./saved_models', type=str,
-                        help='directory where cached models should be loaded from')
+    parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
 
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training',
                         required=True)
@@ -158,7 +152,7 @@ def parse(argv):
     parser.add_argument('--exist_ok', action='store_true',
                         help='Ok if the save directory already exists, i.e. overwrite is ok')
 
-    parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool',
+    parser.add_argument('--skip_cache', action='store_true',
                         help='whether to use exisiting cached splits or generate new ones')
     parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')
     parser.add_argument('--aux_dataset', default='', type=str,
@@ -172,8 +166,8 @@ def parse(argv):
     parser.add_argument('--use_google_translate', action='store_true',
                         help='use google translate instead of pre-trained machine translator')
 
-    args = parser.parse_args(argv[1:])
 
+def post_parse(args):
     if args.val_task_names is None:
         args.val_task_names = []
         for t in args.train_task_names:
