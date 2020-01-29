@@ -41,10 +41,10 @@ setuptools.setup(
         'console_scripts': ['genienlp=genienlp.__main__:main'],
     },    
     license='BSD-3-Clause',
-    author="Salesforce Inc.",
+    author="Salesforce Inc., Stanford University Open Virtual Assistant Lab",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/salesforce/decaNLP",
+    url="https://github.com/stanford-oval/genienlp",
 
     install_requires=[
         'numpy',
