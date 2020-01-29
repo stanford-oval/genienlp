@@ -30,7 +30,7 @@
 
 import torch
 from torch import nn
-from torch import functional as F
+from torch.nn import functional as F
 
 from .common import CombinedEmbedding, TransformerDecoder, LSTMDecoderAttention, Feedforward, \
     mask, positional_encodings_like, EPSILON, MultiLSTMCell
