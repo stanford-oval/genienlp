@@ -28,6 +28,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import math
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -193,7 +194,7 @@ class MQANDecoder(nn.Module):
 
             if self.args.transformer_layers > 0:
                 hiddens[0][:, t] = hiddens[0][:, t] + \
-                                   (torch.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)
+                                   (math.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)
                 for l in range(len(self.self_attentive_decoder.layers)):
                     hiddens[l + 1][:, t] = self.self_attentive_decoder.layers[l](hiddens[l][:, t],
                                                                                  self_attended_context[l],
