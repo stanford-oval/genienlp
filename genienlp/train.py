@@ -39,7 +39,6 @@ from functools import partial
 from pprint import pformat
 
 import numpy as np
-import radam
 import torch
 from tensorboardX import SummaryWriter
 
@@ -410,6 +409,7 @@ def init_opt(args, model, logger):
                                    weight_decay=args.weight_decay)
             scheduler = None
     elif args.optimizer == 'radam':
+        import radam
         if args.transformer_lr:
             logger.warning('--transformer_lr has no effect with RAdam optimizer, warmup is never applied')
         opt = radam.RAdam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)

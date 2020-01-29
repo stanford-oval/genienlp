@@ -55,7 +55,6 @@ setuptools.setup(
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
         'requests~=2.22',
-        'transformers~=2.3',
-        'radam @ git+https://github.com/gcampax/RAdam#egg=radam'
+        'transformers~=2.3'
     ]
 )
