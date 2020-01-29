@@ -28,20 +28,16 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import math
+from typing import NamedTuple, List
+
 import torch
-from torch import nn
-from torch.nn import functional as F
+import torch.nn as nn
 from torch.autograd import Variable
 from torch.jit import Final
-import math
-import os
-import sys
-import numpy as np
-import torch.nn as nn
-from typing import NamedTuple, List, Tuple, Union
-
-from torch.nn.utils.rnn import pad_packed_sequence as unpack
+from torch.nn import functional as F
 from torch.nn.utils.rnn import pack_padded_sequence as pack
+from torch.nn.utils.rnn import pad_packed_sequence as unpack
 
 
 class EmbeddingOutput(NamedTuple):
@@ -534,7 +530,7 @@ class CoattentiveLayer(nn.Module):
     def attn(weights, candidates):
         w1, w2, w3 = weights.size()
         c1, c2, c3 = candidates.size()
-        return weights.unsqueeze(3).expand(w1, w2, w3, c3).mul(candidates.unsqueeze(2).expand(c1, c2, w3, c3))\
+        return weights.unsqueeze(3).expand(w1, w2, w3, c3).mul(candidates.unsqueeze(2).expand(c1, c2, w3, c3)) \
             .sum(1).squeeze(1)
 
     @staticmethod

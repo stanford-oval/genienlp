@@ -28,12 +28,12 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import collections
 import os
-import torch
-from transformers import BertConfig
 
-from .sequential_field import SequentialField
+import torch
+
 from .decoder_vocab import DecoderVocabulary
 from .masked_bert_tokenizer import MaskedBertTokenizer
+from .sequential_field import SequentialField
 
 
 class BertNumericalizer(object):

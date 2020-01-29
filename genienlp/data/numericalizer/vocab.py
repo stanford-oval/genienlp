@@ -1,7 +1,5 @@
-from collections import defaultdict, Counter
 import logging
-
-import torch
+from collections import defaultdict, Counter
 
 logger = logging.getLogger(__name__)
 
