@@ -39,18 +39,13 @@ from .data.embeddings import load_embeddings
 logger = logging.getLogger(__name__)
 
 
-def get_args(argv):
-    parser = ArgumentParser(prog=argv[0])
+def parse_argv(parser):
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('-d', '--destdir', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--embeddings', default='glove+char', help='which embeddings to download')
 
-    args = parser.parse_args(argv[1:])
-    return args
 
-
-def main(argv=sys.argv):
-    args = get_args(argv)
+def main(args):
     logger.info(f'Arguments:\n{pformat(vars(args))}')
 
     set_seed(args)

@@ -52,11 +52,7 @@ def save_args(args):
         json.dump(vars(args), f, indent=2)
 
 
-def parse(argv):
-    """
-    Returns the arguments from the command line.
-    """
-    parser = ArgumentParser(prog=argv[0])
+def parse_argv(parser):
     parser.add_argument('--root', default='./decaNLP', type=str,
                         help='root directory for data, results, embeddings, code, etc.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
@@ -172,8 +168,8 @@ def parse(argv):
     parser.add_argument('--use_google_translate', action='store_true',
                         help='use google translate instead of pre-trained machine translator')
 
-    args = parser.parse_args(argv[1:])
 
+def post_parse(args):
     if args.val_task_names is None:
         args.val_task_names = []
         for t in args.train_task_names:

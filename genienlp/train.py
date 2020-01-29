@@ -418,8 +418,8 @@ def init_opt(args, model, logger):
     return opt, scheduler
 
 
-def main(argv=sys.argv):
-    args = arguments.parse(argv)
+def main(args):
+    args = arguments.post_parse(args)
     if args is None:
         return
 
