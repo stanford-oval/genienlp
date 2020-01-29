@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 def parse_argv(parser):
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    parser.add_argument('-d', '--destdir', default='./decaNLP/.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('-d', '--destdir', default='.embeddings/', type=str, help='where to save embeddings.')
     parser.add_argument('--embeddings', default='glove+char', help='which embeddings to download')
 
 
