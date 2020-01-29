@@ -169,7 +169,6 @@ def parse_argv(parser):
                         help='whether use exisiting cached splits or generate new ones')
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
     parser.add_argument('--cache', default='.cache', type=str, help='where to save cached files')
-    parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
 
     parser.add_argument('--saved_models', default='./saved_models', type=str,
                         help='directory where cached models should be loaded from')
