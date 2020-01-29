@@ -240,8 +240,7 @@ class TranslationDataset(CQA):
 class Multi30k(TranslationDataset, CQA):
     urls = ['http://www.quest.dcs.shef.ac.uk/wmt16_files_mmt/training.tar.gz',
             'http://www.quest.dcs.shef.ac.uk/wmt16_files_mmt/validation.tar.gz',
-            'http://www.quest.dcs.shef.ac.uk/'
-            'wmt17_files_mmt/mmt_task1_test2016.tar.gz']
+            'http://www.quest.dcs.shef.ac.uk/wmt17_files_mmt/mmt_task1_test2016.tar.gz']
     name = 'multi30k'
     dirname = ''
 
@@ -341,7 +340,6 @@ class SQuAD(CQA):
             with open(os.path.expanduser(path)) as f:
                 squad = json.load(f)['data']
                 for document in squad:
-                    title = document['title']
                     paragraphs = document['paragraphs']
                     for paragraph in paragraphs:
                         context = paragraph['context']
@@ -747,7 +745,6 @@ class SRL(CQA):
             with open(os.path.expanduser(path)) as f:
                 for line in f:
                     ex = json.loads(line)
-                    t = ex['type']
                     aa = ex['all_answers']
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(all_answers)),
@@ -780,7 +777,7 @@ class SRL(CQA):
                         try:
                             int(x)
                             return True
-                        except:
+                        except ValueError:
                             return False
 
                     lines = []
@@ -1026,9 +1023,7 @@ class WOZ(CQA):
         if os.path.exists(train_jsonl):
             return
 
-        splits = [train, validation, test]
         file_name_base = 'woz_{}_{}.json'
-        question_base = "What is the change in state"
         for split in [train, validation, test]:
             with open (os.path.expanduser(os.path.join(path, f'{split}.jsonl')), 'a') as split_file:
                 for lang in ['en', 'de']:
@@ -1196,7 +1191,7 @@ class ZeroShotRE(CQA):
             examples = []
             with open(os.path.expanduser(path)) as f:
                 for line in f:
-                    ex = example_dict = json.loads(line)
+                    ex = json.loads(line)
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
@@ -1379,7 +1374,6 @@ class OntoNotesNER(CQA):
             id_file = os.path.join(path, f'{split}.id')
 
             num_file_ids = 0
-            examples = []
             with open(split_file_name, 'w') as split_file:
                 with open(os.path.expanduser(id_file)) as f:
                     for file_id in f:
@@ -1402,7 +1396,6 @@ class OntoNotesNER(CQA):
                                     end_enamex_close_idx = start_enamex_close_idx + len('</ENAMEX>')
     
                                     enamex_open_tag = line[start_enamex_open_idx:end_enamex_open_idx]
-                                    enamex_close_tag = line[start_enamex_close_idx:end_enamex_close_idx]
                                     before_entity = line[:start_enamex_open_idx]
                                     entity = line[end_enamex_open_idx:start_enamex_close_idx]
                                     after_entity = line[end_enamex_close_idx:]

@@ -27,7 +27,7 @@ def download_from_url(url, path):
     if 'drive.google.com' not in url:
         try:
             return urllib.request.urlretrieve(url, path)
-        except:
+        except Exception:
             res = requests.get(url) 
             with open(path, 'wb') as out:
                 out.write(res.content)

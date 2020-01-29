@@ -28,7 +28,12 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from .common import *
+import torch
+from torch import nn
+from torch import functional as F
+
+from .common import CombinedEmbedding, TransformerDecoder, LSTMDecoderAttention, Feedforward,\
+    mask, positional_encodings_like, EPSILON, MultiLSTMCell
 
 
 class MQANDecoder(nn.Module):
@@ -187,7 +192,7 @@ class MQANDecoder(nn.Module):
 
             if self.args.transformer_layers > 0:
                 hiddens[0][:, t] = hiddens[0][:, t] + \
-                                   (math.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)
+                                   (torch.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)
                 for l in range(len(self.self_attentive_decoder.layers)):
                     hiddens[l + 1][:, t] = self.self_attentive_decoder.layers[l](hiddens[l][:, t], self_attended_context[l],
                                                                                  selfattn_keys=hiddens[l][:, :t + 1],

@@ -482,9 +482,7 @@ class LSTMDecoderAttention(nn.Module):
         else:
             targetT = input
 
-        x = input.shape
         transposed_context = torch.transpose(context, 2, 1)
-        x = transposed_context.shape
         context_scores = torch.matmul(targetT, transposed_context)
         context_scores.masked_fill_(self.context_mask, -float('inf'))
         context_attention = F.softmax(context_scores, dim=-1) + EPSILON

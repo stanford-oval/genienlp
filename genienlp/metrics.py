@@ -35,7 +35,6 @@ import numpy as np
 import collections
 from multiprocessing import Pool, cpu_count
 from contextlib import closing
-from .tasks.almond.lang_utils import *
 from .tasks.generic_dataset import Query
 
 from pyrouge import Rouge155
@@ -174,7 +173,6 @@ def computeCF1(greedy, answer):
     for g, a in zip(greedy, answer):
         scores += score(g, a)
     tp, tn, sys_pos, real_pos = scores.tolist()
-    total = len(answer)
     if tp == 0:
         p = r = f = 0.0
     else:
@@ -208,22 +206,6 @@ def f1_score(prediction, ground_truth):
     recall = 1.0 * num_same / len(ground_truth_tokens)
     f1 = (2 * precision * recall) / (precision + recall)
     return f1
-
-def fm_score(prediction, ground_truth):
-    pred_funcs = get_functions(prediction)
-    ground_truth = get_functions(ground_truth)
-    common = collections.Counter(pred_funcs) & collections.Counter(ground_truth)
-    if not len(ground_truth):
-        return 1.0
-    return len(common) / len(ground_truth)
-
-def dm_score(prediction, ground_truth):
-    pred_funcs = get_devices(prediction)
-    ground_truth = get_devices(ground_truth)
-    common = collections.Counter(pred_funcs) & collections.Counter(ground_truth)
-    if not len(ground_truth):
-        return 1.0
-    return len(common) / len(ground_truth)
 
 def exact_match(prediction, ground_truth):
     return prediction == ground_truth
@@ -464,14 +446,6 @@ def compute_metrics(greedy, answer, requested_metrics, args=None):
     nem = computeEM(norm_greedy, norm_answer)
     metric_keys.extend(['nf1', 'nem'])
     metric_values.extend([nf1, nem])
-    if 'fm' in requested_metrics:
-        function_accuracy = computeFM(greedy, answer)
-        metric_keys.append('fm')
-        metric_values.append(function_accuracy)
-    if 'dm' in requested_metrics:
-        device_accuracy = computeDM(greedy, answer)
-        metric_keys.append('dm')
-        metric_values.append(device_accuracy)
 
     if 'corpus_f1' in requested_metrics:
         corpus_f1, precision, recall = computeCF1(norm_greedy, norm_answer)

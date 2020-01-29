@@ -195,6 +195,3 @@ def main(args):
     splits = prepare_data(args, numericalizer, set(encoder_embeddings + decoder_embeddings))
 
     run(args, numericalizer, splits, model, devices[0])
-
-if __name__ == '__main__':
-    main()

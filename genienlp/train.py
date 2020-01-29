@@ -35,9 +35,9 @@ import time
 import sys
 from copy import deepcopy
 import logging
+import logging.handlers
 from functools import partial
 from pprint import pformat
-from logging import handlers
 import numpy as np
 import torch
 import radam
@@ -58,7 +58,8 @@ def initialize_logger(args):
     # set up file logger
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
-    handler = handlers.RotatingFileHandler(os.path.join(args.log_dir, f'train.log'), maxBytes=1024*1024*10, backupCount=1)
+    handler = logging.handlers.RotatingFileHandler(os.path.join(args.log_dir, f'train.log'),
+                                                   maxBytes=1024*1024*10, backupCount=1)
     handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(name)s - %(message)s')
     handler.setFormatter(formatter)
@@ -465,8 +466,3 @@ def main(args):
           log_every=args.log_every, val_every=args.val_every, rounds=len(train_sets) > 1,
           writer=writer, save_every=args.save_every, start_iteration=start_iteration,
           best_decascore=save_dict.get('best_decascore') if save_dict is not None else None)
-
-
-if __name__ == '__main__':
-    main()
-

@@ -71,6 +71,7 @@ def task_name_to_cls_name(name):
 def register_task(name):
     def decorator(cls):
         _registry[name] = cls
+        return cls
     return decorator
 
 
