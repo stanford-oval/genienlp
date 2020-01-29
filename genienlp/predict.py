@@ -57,8 +57,8 @@ def get_all_splits(args):
         if not 'test' in args.evaluate:
             kwargs['test'] = None
 
-        kwargs['skip_cache_bool'] = args.skip_cache_bool
-        kwargs['cached_path'] = args.cached
+        kwargs['skip_cache'] = args.skip_cache
+        kwargs['cached_path'] = os.path.join(args.cache, task.name)
         kwargs['subsample'] = args.subsample
         s = task.get_splits(root=args.data, lower=args.lower, **kwargs)[0]
         preprocess_examples(args, [task], [s], train=False)
@@ -158,9 +158,10 @@ def parse_argv(parser):
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
 
-    parser.add_argument('--skip_cache', action='store_true', dest='skip_cache_bool', help='whether use exisiting cached splits or generate new ones')
+    parser.add_argument('--skip_cache', action='store_true',
+                        help='whether use exisiting cached splits or generate new ones')
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
-    parser.add_argument('--cached', default='', type=str, help='where to save cached files')
+    parser.add_argument('--cache', default='.cache', type=str, help='where to save cached files')
     parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
 
     parser.add_argument('--saved_models', default='./saved_models', type=str, help='directory where cached models should be loaded from')

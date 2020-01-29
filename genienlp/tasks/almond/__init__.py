@@ -46,12 +46,11 @@ class AlmondDataset(generic_dataset.CQA):
 
     base_url = None
 
-    def __init__(self, path, contextual=False, reverse_task=False, subsample=None, tokenize=None, **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
+    def __init__(self, path, contextual=False, reverse_task=False, subsample=None, tokenize=None,
+                 cached_path=None, skip_cache=False, **kwargs):
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
-        skip_cache_bool = kwargs.pop('skip_cache_bool')
-        if os.path.exists(cache_name) and not skip_cache_bool:
+        if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
