@@ -33,9 +33,10 @@ import random
 
 from .example import Batch
 
+
 class Iterator(torch.utils.data.IterableDataset):
     def __init__(self,
-                 dataset : torch.utils.data.Dataset,
+                 dataset: torch.utils.data.Dataset,
                  batch_size,
                  shuffle=False,
                  repeat=False,
@@ -89,13 +90,13 @@ class Iterator(torch.utils.data.IterableDataset):
                 yield minibatch
                 minibatch, size_so_far = [], 0
             elif size_so_far > batch_size:
-                if len(minibatch) == 1: # if we only have one really big example
+                if len(minibatch) == 1:  # if we only have one really big example
                     yield minibatch
                     minibatch, size_so_far = [], 0
                 else:
                     yield minibatch[:-1]
                     minibatch, size_so_far = minibatch[-1:], self.batch_size_fn(ex, 1, 0)
-                    if size_so_far > batch_size: # if we add a really big example that needs to be on its own to a batch
+                    if size_so_far > batch_size:  # if we add a really big example that needs to be on its own to a batch
                         yield minibatch
                         minibatch, size_so_far = [], 0
         if minibatch:

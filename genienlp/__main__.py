@@ -40,13 +40,15 @@ subcommands = {
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
 }
 
+
 def usage():
     print('Usage: %s SUBCOMMAND [OPTIONS]' % (sys.argv[0]), file=sys.stderr)
     print(file=sys.stderr)
     print('Available subcommands:', file=sys.stderr)
-    for subcommand,(help_text,_) in subcommands.items():
+    for subcommand, (help_text, _) in subcommands.items():
         print('  %s - %s' % (subcommand, help_text), file=sys.stderr)
     sys.exit(1)
+
 
 def main():
     parser = argparse.ArgumentParser(prog='genienlp')
@@ -57,6 +59,7 @@ def main():
 
     argv = parser.parse_args()
     subcommands[argv.subcommand][2](argv)
+
 
 if __name__ == '__main__':
     main()

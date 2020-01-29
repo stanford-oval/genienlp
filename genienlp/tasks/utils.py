@@ -19,6 +19,7 @@ def reporthook(t):
             t.total = tsize
         t.update((b - last_b[0]) * bsize)
         last_b[0] = b
+
     return inner
 
 
@@ -28,7 +29,7 @@ def download_from_url(url, path):
         try:
             return urllib.request.urlretrieve(url, path)
         except Exception:
-            res = requests.get(url) 
+            res = requests.get(url)
             with open(path, 'wb') as out:
                 out.write(res.content)
     print('downloading from Google Drive; may take a few minutes')

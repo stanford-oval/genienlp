@@ -31,6 +31,7 @@ from torch import nn
 
 from .common import CombinedEmbedding, PackedLSTM
 
+
 class BiLSTMEncoder(nn.Module):
     def __init__(self, numericalizer, args, encoder_embeddings):
         super().__init__()
@@ -68,7 +69,7 @@ class BiLSTMEncoder(nn.Module):
 
         # pick the top-most N transformer layers to pass to the decoder for cross-attention
         # (add 1 to account for the embedding layer - the decoder will drop it later)
-        self_attended_context = context_embedded.all_layers[-(self.args.transformer_layers+1):]
+        self_attended_context = context_embedded.all_layers[-(self.args.transformer_layers + 1):]
         final_context = context_embedded.last_layer
         final_question = question_embedded.last_layer
 

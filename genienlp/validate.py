@@ -30,8 +30,9 @@
 
 
 import torch
-from .util import pad
+
 from .metrics import compute_metrics
+from .util import pad
 
 
 def compute_validation_outputs(model, val_iter, numericalizer, iteration):
@@ -56,7 +57,8 @@ def compute_validation_outputs(model, val_iter, numericalizer, iteration):
 
 
 def gather_results(model, val_iter, numericalizer, task, iteration):
-    loss, predictions, answers, contexts, questions = compute_validation_outputs(model, val_iter, numericalizer, iteration)
+    loss, predictions, answers, contexts, questions = compute_validation_outputs(model, val_iter, numericalizer,
+                                                                                 iteration)
     answers = numericalizer.reverse(answers, detokenize=task.detokenize, field_name='answer')
     predictions = numericalizer.reverse(predictions, detokenize=task.detokenize, field_name='answer')
     contexts = numericalizer.reverse(contexts, detokenize=task.detokenize, field_name='context')
@@ -82,7 +84,8 @@ def validate(task, val_iter, model, logger, numericalizer, iteration, num_print=
     with torch.no_grad():
         model.eval()
         names = ['greedy', 'answer', 'context', 'question']
-        loss, predictions, answers, contexts, questions = gather_results(model, val_iter, numericalizer, task, iteration)
+        loss, predictions, answers, contexts, questions = gather_results(model, val_iter, numericalizer, task,
+                                                                         iteration)
         predictions = [p.replace('UNK', 'OOV') for p in predictions]
 
         metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)

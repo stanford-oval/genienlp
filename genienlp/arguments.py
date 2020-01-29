@@ -33,7 +33,6 @@ import json
 import logging
 import os
 import subprocess
-from argparse import ArgumentParser
 
 from .tasks.registry import get_tasks
 

@@ -73,7 +73,7 @@ class Dataset(torch.utils.data.Dataset):
         try:
             return len(self.examples)
         except TypeError:
-            return 2**32
+            return 2 ** 32
 
     def __iter__(self):
         for x in self.examples:
@@ -130,6 +130,8 @@ def interleave_keys(a, b):
     values for the key defined by this function. Useful for tasks with two
     text fields like machine translation or natural language inference.
     """
+
     def interleave(args):
         return ''.join([x for t in zip(*args) for x in t])
+
     return int(''.join(interleave(format(x, '016b') for x in (a, b))), base=2)

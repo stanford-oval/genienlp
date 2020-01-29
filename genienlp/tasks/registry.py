@@ -31,7 +31,6 @@
 import logging
 from .base import BaseTask
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +63,7 @@ class TaskRegistry:
 _registry = TaskRegistry()
 _registry['generic'] = BaseTask
 
+
 def task_name_to_cls_name(name):
     return name.split('.')[0]
 
@@ -72,6 +72,7 @@ def register_task(name):
     def decorator(cls):
         _registry[name] = cls
         return cls
+
     return decorator
 
 

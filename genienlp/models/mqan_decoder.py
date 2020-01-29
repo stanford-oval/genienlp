@@ -32,7 +32,7 @@ import torch
 from torch import nn
 from torch import functional as F
 
-from .common import CombinedEmbedding, TransformerDecoder, LSTMDecoderAttention, Feedforward,\
+from .common import CombinedEmbedding, TransformerDecoder, LSTMDecoderAttention, Feedforward, \
     mask, positional_encodings_like, EPSILON, MultiLSTMCell
 
 
@@ -59,7 +59,7 @@ class MQANDecoder(nn.Module):
 
         if args.rnn_layers > 0:
             self.rnn_decoder = LSTMDecoder(args.dimension, args.rnn_dimension,
-                dropout=args.dropout_ratio, num_layers=args.rnn_layers)
+                                           dropout=args.dropout_ratio, num_layers=args.rnn_layers)
             switch_input_len = 2 * args.rnn_dimension + args.dimension
         else:
             self.context_attn = LSTMDecoderAttention(args.dimension, dot=True)
@@ -76,7 +76,8 @@ class MQANDecoder(nn.Module):
         if self.decoder_embeddings is not None:
             self.decoder_embeddings.set_embeddings(embeddings)
 
-    def forward(self, batch, self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state):
+    def forward(self, batch, self_attended_context, final_context, context_rnn_state, final_question,
+                question_rnn_state):
         context, context_lengths, context_limited = batch.context.value, batch.context.length, batch.context.limited
         question, question_lengths, question_limited = batch.question.value, batch.question.length, batch.question.limited
         answer, answer_lengths, answer_limited = batch.answer.value, batch.answer.length, batch.answer.limited
@@ -111,7 +112,7 @@ class MQANDecoder(nn.Module):
                 rnn_decoder_outputs = self.rnn_decoder(self_attended_decoded, final_context, final_question,
                                                        hidden=context_rnn_state)
                 decoder_output, vocab_pointer_switch_input, context_question_switch_input, context_attention, \
-                    question_attention, rnn_state = rnn_decoder_outputs
+                question_attention, rnn_state = rnn_decoder_outputs
             else:
                 context_decoder_output, context_attention = self.context_attn(self_attended_decoded, final_context)
                 question_decoder_output, question_attention = self.question_attn(self_attended_decoded, final_question)
@@ -194,7 +195,8 @@ class MQANDecoder(nn.Module):
                 hiddens[0][:, t] = hiddens[0][:, t] + \
                                    (torch.sqrt(self.self_attentive_decoder.d_model) * embedding).squeeze(1)
                 for l in range(len(self.self_attentive_decoder.layers)):
-                    hiddens[l + 1][:, t] = self.self_attentive_decoder.layers[l](hiddens[l][:, t], self_attended_context[l],
+                    hiddens[l + 1][:, t] = self.self_attentive_decoder.layers[l](hiddens[l][:, t],
+                                                                                 self_attended_context[l],
                                                                                  selfattn_keys=hiddens[l][:, :t + 1],
                                                                                  context_padding=context_padding)
 
@@ -206,7 +208,7 @@ class MQANDecoder(nn.Module):
                 rnn_decoder_outputs = self.rnn_decoder(self_attended_decoded, context, question,
                                                        hidden=rnn_state, output=decoder_output)
                 decoder_output, vocab_pointer_switch_input, context_question_switch_input, context_attention, \
-                    question_attention, rnn_state = rnn_decoder_outputs
+                question_attention, rnn_state = rnn_decoder_outputs
             else:
                 context_decoder_output, context_attention = self.context_attn(self_attended_decoded, context)
                 question_decoder_output, question_attention = self.question_attn(self_attended_decoded, question)
@@ -251,7 +253,7 @@ class LSTMDecoder(nn.Module):
         self.context_attn.applyMasks(context_mask)
         self.question_attn.applyMasks(question_mask)
 
-    def forward(self, input : torch.Tensor, context, question, output=None, hidden=None):
+    def forward(self, input: torch.Tensor, context, question, output=None, hidden=None):
         context_output = output if output is not None else self.make_init_output(context)
 
         context_outputs, vocab_pointer_switch_inputs, context_question_switch_inputs, context_attentions, question_attentions = [], [], [], [], []

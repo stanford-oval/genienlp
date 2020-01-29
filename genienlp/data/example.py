@@ -34,22 +34,22 @@ from .numericalizer import SequentialField
 
 
 class Example(NamedTuple):
-    example_id : str
+    example_id: str
 
     # for each field in the example, we store the tokenized sentence, and a boolean mask
     # indicating whether the token is a real word (subject to word-piece tokenization)
     # or it should be treated as an opaque symbol
-    context : List[str]
-    context_word_mask : List[bool]
-    question : List[str]
-    question_word_mask : List[bool]
-    answer : List[str]
-    answer_word_mask : List[bool]
+    context: List[str]
+    context_word_mask: List[bool]
+    question: List[str]
+    question_word_mask: List[bool]
+    answer: List[str]
+    answer_word_mask: List[bool]
 
     vocab_fields = ['context', 'question', 'answer']
 
     @staticmethod
-    def from_raw(example_id : str, context : str, question : str, answer : str, tokenize, lower=False):
+    def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, lower=False):
         args = [example_id]
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
             words, mask = tokenize(arg.rstrip('\n'), field_name=argname)
@@ -63,11 +63,11 @@ class Example(NamedTuple):
 
 
 class Batch(NamedTuple):
-    example_id : List[str]
-    context : SequentialField
-    question : SequentialField
-    answer : SequentialField
-    decoder_vocab : object
+    example_id: List[str]
+    context: SequentialField
+    question: SequentialField
+    answer: SequentialField
+    decoder_vocab: object
 
     @staticmethod
     def from_examples(examples, numericalizer, device=None):
@@ -83,5 +83,3 @@ class Batch(NamedTuple):
                      numericalizer.encode(question_input, decoder_vocab, device=device),
                      numericalizer.encode(answer_input, decoder_vocab, device=device),
                      decoder_vocab)
-
-

@@ -28,13 +28,11 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-from argparse import ArgumentParser
 import logging
-import sys
 from pprint import pformat
 
-from .util import set_seed
 from .data.embeddings import load_embeddings
+from .util import set_seed
 
 logger = logging.getLogger(__name__)
 

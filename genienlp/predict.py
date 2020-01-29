@@ -28,19 +28,18 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
-from argparse import ArgumentParser
 import json
-import torch
-import sys
 import logging
+import os
 from pprint import pformat
 
-from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices
-from .metrics import compute_metrics
-from .data.embeddings import load_embeddings
-from .tasks.registry import get_tasks
+import torch
+
 from . import models
+from .data.embeddings import load_embeddings
+from .metrics import compute_metrics
+from .tasks.registry import get_tasks
+from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,8 @@ def run(args, numericalizer, val_sets, model, device):
     logger.info(f'Preparing iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
-    iters = [(name, make_data_loader(x, numericalizer, bs, device)) for name, x, bs in zip(args.tasks, val_sets, args.val_batch_size)]
+    iters = [(name, make_data_loader(x, numericalizer, bs, device)) for name, x, bs in
+             zip(args.tasks, val_sets, args.val_batch_size)]
 
     log_model_size(logger, model, args.model)
     model.to(device)
@@ -117,9 +117,11 @@ def run(args, numericalizer, val_sets, model, device):
                 for batch_idx, batch in enumerate(it):
                     _, batch_prediction = model(batch, iteration=1)
 
-                    batch_prediction = numericalizer.reverse(batch_prediction, detokenize=task.detokenize, field_name='answer')
+                    batch_prediction = numericalizer.reverse(batch_prediction, detokenize=task.detokenize,
+                                                             field_name='answer')
                     predictions += batch_prediction
-                    batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
+                    batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize,
+                                                         field_name='answer')
                     answers += batch_answer
 
                     for i, example_prediction in enumerate(batch_prediction):
@@ -132,7 +134,7 @@ def run(args, numericalizer, val_sets, model, device):
 
                 if not args.silent:
                     for i, (p, a) in enumerate(zip(predictions, answers)):
-                        logger.info(f'Prediction {i+1}: {p}\nAnswer {i+1}: {a}\n')
+                        logger.info(f'Prediction {i + 1}: {p}\nAnswer {i + 1}: {a}\n')
                     logger.info(metrics)
                 decaScore.append(metrics[task.metrics[0]])
 
@@ -147,14 +149,19 @@ def run(args, numericalizer, val_sets, model, device):
 def parse_argv(parser):
     parser.add_argument('--path', required=True)
     parser.add_argument('--evaluate', type=str, required=True, help='Which dataset to evaluate (test or dev)')
-    parser.add_argument('--tasks', default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst','srl', 'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
-    parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)')
+    parser.add_argument('--tasks',
+                        default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl',
+                                 'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
+    parser.add_argument('--devices', default=[0], nargs='+', type=int,
+                        help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to save embeddings.')
-    parser.add_argument('--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)')
+    parser.add_argument('--checkpoint_name', default='best.pth',
+                        help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--bleu', action='store_true', help='whether to use the bleu metric (always on for iwslt)')
-    parser.add_argument('--rouge', action='store_true', help='whether to use the bleu metric (always on for cnn, dailymail, and cnn_dailymail)')
+    parser.add_argument('--rouge', action='store_true',
+                        help='whether to use the bleu metric (always on for cnn, dailymail, and cnn_dailymail)')
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
 
@@ -164,8 +171,10 @@ def parse_argv(parser):
     parser.add_argument('--cache', default='.cache', type=str, help='where to save cached files')
     parser.add_argument('--thingpedia', type=str, help='where to load thingpedia.json from (for almond task only)')
 
-    parser.add_argument('--saved_models', default='./saved_models', type=str, help='directory where cached models should be loaded from')
-    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets (experimental)')
+    parser.add_argument('--saved_models', default='./saved_models', type=str,
+                        help='directory where cached models should be loaded from')
+    parser.add_argument('--subsample', default=20000000, type=int,
+                        help='subsample the eval/test datasets (experimental)')
 
 
 def main(args):

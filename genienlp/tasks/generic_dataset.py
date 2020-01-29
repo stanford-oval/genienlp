@@ -54,7 +54,7 @@ class CQA(Dataset):
     @staticmethod
     def sort_key(ex):
         return interleave_keys(len(ex.context), len(ex.answer))
- 
+
 
 class IMDb(CQA):
     urls = ['http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz']
@@ -86,7 +86,6 @@ class IMDb(CQA):
             torch.save(examples, cache_name)
         super().__init__(examples, **kwargs)
 
-
     @classmethod
     def splits(cls, root='.data', train='train', validation=None, test='test', **kwargs):
         assert validation is None
@@ -106,8 +105,8 @@ class IMDb(CQA):
 
 
 class SST(CQA):
-
-    urls = ['https://raw.githubusercontent.com/openai/generating-reviews-discovering-sentiment/master/data/train_binary_sent.csv',
+    urls = [
+        'https://raw.githubusercontent.com/openai/generating-reviews-discovering-sentiment/master/data/train_binary_sent.csv',
         'https://raw.githubusercontent.com/openai/generating-reviews-discovering-sentiment/master/data/dev_binary_sent.csv',
         'https://raw.githubusercontent.com/openai/generating-reviews-discovering-sentiment/master/data/test_binary_sent.csv']
     name = 'sst'
@@ -136,7 +135,7 @@ class SST(CQA):
 
                     if subsample is not None and len(examples) > subsample:
                         break
-       
+
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
@@ -165,7 +164,8 @@ class SST(CQA):
 
 
 class TranslationDataset(CQA):
-    def __init__(self, path, exts, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, exts, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False,
+                 **kwargs):
         """Create a TranslationDataset given paths and fields.
 
         Arguments:
@@ -180,7 +180,8 @@ class TranslationDataset(CQA):
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
-            langs = {'.de': 'German', '.en': 'English', '.fr': 'French', '.ar': 'Arabic', '.cs': 'Czech', '.tt': 'ThingTalk', '.fa': 'Farsi'}
+            langs = {'.de': 'German', '.en': 'English', '.fr': 'French', '.ar': 'Arabic', '.cs': 'Czech',
+                     '.tt': 'ThingTalk', '.fa': 'Farsi'}
             source, target = langs[exts[0]], langs[exts[1]]
             src_path, trg_path = tuple(os.path.expanduser(path + x) for x in exts)
             question = f'Translate from {source} to {target}'
@@ -197,7 +198,6 @@ class TranslationDataset(CQA):
                                                          tokenize=tokenize, lower=lower))
                         if subsample is not None and len(examples) >= subsample:
                             break
-
 
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
@@ -325,7 +325,7 @@ class SQuAD(CQA):
     urls = ['https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v1.1.json',
             'https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json',
             'https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v2.0.json',
-            'https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v2.0.json',]
+            'https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v2.0.json', ]
     name = 'squad'
     dirname = ''
 
@@ -358,10 +358,10 @@ class SQuAD(CQA):
                                 answer = qa['answers'][0]['text']
                                 all_answers.append([a['text'] for a in qa['answers']])
                                 answer_start = qa['answers'][0]['answer_start']
-                                answer_end = answer_start + len(answer) 
+                                answer_end = answer_start + len(answer)
                                 context_before_answer = context[:answer_start]
                                 context_after_answer = context[answer_end:]
-                                BEGIN = 'beginanswer ' 
+                                BEGIN = 'beginanswer '
                                 END = ' endanswer'
 
                                 tagged_context = context_before_answer + BEGIN + answer + END + context_after_answer
@@ -369,10 +369,10 @@ class SQuAD(CQA):
 
                                 tokenized_answer = answer.split()
                                 for xi, x in enumerate(tagged_context):
-                                    if BEGIN in x: 
+                                    if BEGIN in x:
                                         answer_start = xi + 1
                                         tagged_context[xi] = x.replace(BEGIN, '')
-                                    if END in x: 
+                                    if END in x:
                                         answer_end = xi
                                         tagged_context[xi] = x.replace(END, '')
                                 new_context = []
@@ -380,7 +380,8 @@ class SQuAD(CQA):
                                 original_answer_end = answer_end
                                 indexed_with_spaces = tagged_context[answer_start:answer_end]
                                 if len(indexed_with_spaces) != len(tokenized_answer):
-                                    import pdb; pdb.set_trace()
+                                    import pdb;
+                                    pdb.set_trace()
 
                                 # remove spaces
                                 for xi, x in enumerate(tagged_context):
@@ -394,17 +395,20 @@ class SQuAD(CQA):
                                 tagged_context = new_context
                                 tokenized_answer = [x for x in tokenized_answer if len(x.strip()) > 0]
                                 if len(tagged_context[answer_start:answer_end]) != len(tokenized_answer):
-                                    import pdb; pdb.set_trace()
+                                    import pdb;
+                                    pdb.set_trace()
                                 context_spans = list(range(answer_start, answer_end))
-                                indexed_answer = tagged_context[context_spans[0]:context_spans[-1]+1]
+                                indexed_answer = tagged_context[context_spans[0]:context_spans[-1] + 1]
                                 if len(indexed_answer) != len(tokenized_answer):
-                                    import pdb; pdb.set_trace()
+                                    import pdb;
+                                    pdb.set_trace()
                                 context_spans += [len(tagged_context)]
                                 for context_idx, answer_word in zip(context_spans, ex.answer):
                                     if context_idx == len(tagged_context):
                                         continue
                                     if tagged_context[context_idx] != answer_word:
-                                        import pdb; pdb.set_trace()
+                                        import pdb;
+                                        pdb.set_trace()
 
                                 ex = Example.from_raw(make_example_id(self, qa['id']),
                                                       ' '.join(tagged_context), question, ' '.join(tokenized_answer),
@@ -425,7 +429,6 @@ class SQuAD(CQA):
         super(SQuAD, self).__init__(examples, **kwargs)
         self.all_answers = all_answers
         self.q_ids = q_ids
-
 
     @classmethod
     def splits(cls, root='.data', description='squad1.1', train='train', validation='dev', test=None, **kwargs):
@@ -462,14 +465,16 @@ class SQuAD(CQA):
 # https://github.com/abisee/cnn-dailymail/blob/8eace60f306dcbab30d1f1d715e379f07a3782db/make_datafiles.py
 dm_single_close_quote = u'\u2019'
 dm_double_close_quote = u'\u201d'
-END_TOKENS = ['.', '!', '?', '...', "'", "`", '"', dm_single_close_quote, dm_double_close_quote, ")"] # acceptable ways to end a sentence
+# acceptable ways to end a sentence
+END_TOKENS = ['.', '!', '?', '...', "'", "`", '"', dm_single_close_quote, dm_double_close_quote, ")"]
+
 
 def fix_missing_period(line):
-  """Adds a period to a line that is missing a period"""
-  if "@highlight" in line: return line
-  if line=="": return line
-  if line[-1] in END_TOKENS: return line
-  return line + "."
+    """Adds a period to a line that is missing a period"""
+    if "@highlight" in line: return line
+    if line == "": return line
+    if line[-1] in END_TOKENS: return line
+    return line + "."
 
 
 class Summarization(CQA):
@@ -511,8 +516,8 @@ class Summarization(CQA):
                 url_file_name = os.path.join(path, f'{cls.name}_wayback_{split}_urls.txt')
                 with open(url_file_name) as url_file:
                     for url in url_file:
-                        story_file_name = os.path.join(path, 'stories', 
-                            f"{hashlib.sha1(url.strip().encode('utf-8')).hexdigest()}.story")
+                        story_file_name = os.path.join(path, 'stories',
+                                                       f"{hashlib.sha1(url.strip().encode('utf-8')).hexdigest()}.story")
                         try:
                             story_file = open(story_file_name)
                         except EnvironmentError as e:
@@ -524,7 +529,7 @@ class Summarization(CQA):
                             with story_file:
                                 article, highlight = [], []
                                 is_highlight = False
-                                for line in story_file: 
+                                for line in story_file:
                                     line = line.strip()
                                     if line == "":
                                         continue
@@ -537,16 +542,15 @@ class Summarization(CQA):
                                         highlight.append(line)
                                     else:
                                         article.append(line)
-                                example = {'context': unicodedata.normalize('NFKC', ' '.join(article)), 
-                                           'answer': unicodedata.normalize('NFKC', ' '.join(highlight)), 
+                                example = {'context': unicodedata.normalize('NFKC', ' '.join(article)),
+                                           'answer': unicodedata.normalize('NFKC', ' '.join(highlight)),
                                            'question': 'What is the summary?'}
-                                split_file.write(json.dumps(example)+'\n')
+                                split_file.write(json.dumps(example) + '\n')
                                 collected_stories += 1
                                 if collected_stories % 1000 == 0:
-                                    logger.debug(example) 
+                                    logger.debug(example)
             logger.warning(f'Missing {missing_stories} stories')
             logger.info(f'Collected {collected_stories} stories')
-
 
     @classmethod
     def splits(cls, root='.data', train='training', validation='validation', test='test', **kwargs):
@@ -572,27 +576,35 @@ class DailyMail(Summarization):
     name = 'dailymail'
     dirname = 'dailymail'
     urls = [('https://drive.google.com/uc?export=download&id=0BwmD_VLjROrfM1BxdkxVaTY2bWs', 'dailymail_stories.tgz'),
-            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/dailymail_wayback_training_urls.txt', 'dailymail/dailymail_wayback_training_urls.txt'),
-            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/dailymail_wayback_validation_urls.txt', 'dailymail/dailymail_wayback_validation_urls.txt'),
-            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/dailymail_wayback_test_urls.txt', 'dailymail/dailymail_wayback_test_urls.txt')]
+            (
+            'https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/dailymail_wayback_training_urls.txt',
+            'dailymail/dailymail_wayback_training_urls.txt'),
+            (
+            'https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/dailymail_wayback_validation_urls.txt',
+            'dailymail/dailymail_wayback_validation_urls.txt'),
+            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/dailymail_wayback_test_urls.txt',
+             'dailymail/dailymail_wayback_test_urls.txt')]
 
 
 class CNN(Summarization):
     name = 'cnn'
     dirname = 'cnn'
     urls = [('https://drive.google.com/uc?export=download&id=0BwmD_VLjROrfTHk4NFg2SndKcjQ', 'cnn_stories.tgz'),
-            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_training_urls.txt', 'cnn/cnn_wayback_training_urls.txt'),
-            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_validation_urls.txt', 'cnn/cnn_wayback_validation_urls.txt'),
-            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_test_urls.txt', 'cnn/cnn_wayback_test_urls.txt')]
-
+            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_training_urls.txt',
+             'cnn/cnn_wayback_training_urls.txt'),
+            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_validation_urls.txt',
+             'cnn/cnn_wayback_validation_urls.txt'),
+            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_test_urls.txt',
+             'cnn/cnn_wayback_test_urls.txt')]
 
 
 class Query:
-    #https://github.com/salesforce/WikiSQL/blob/c2ed4f9b22db1cc2721805d53e6e76e07e2ccbdc/lib/query.py#L10
+    # https://github.com/salesforce/WikiSQL/blob/c2ed4f9b22db1cc2721805d53e6e76e07e2ccbdc/lib/query.py#L10
 
     agg_ops = ['', 'MAX', 'MIN', 'COUNT', 'SUM', 'AVG']
     cond_ops = ['=', '>', '<', 'OP']
-    syms = ['SELECT', 'WHERE', 'AND', 'COL', 'TABLE', 'CAPTION', 'PAGE', 'SECTION', 'OP', 'COND', 'QUESTION', 'AGG', 'AGGOPS', 'CONDOPS']
+    syms = ['SELECT', 'WHERE', 'AND', 'COL', 'TABLE', 'CAPTION', 'PAGE', 'SECTION', 'OP', 'COND', 'QUESTION', 'AGG',
+            'AGGOPS', 'CONDOPS']
 
     def __init__(self, sel_index, agg_index, columns, conditions=tuple()):
         self.sel_index = sel_index
@@ -603,10 +615,11 @@ class Query:
     def __repr__(self):
         rep = 'SELECT {agg} {sel} FROM table'.format(
             agg=self.agg_ops[self.agg_index],
-            sel= self.columns[self.sel_index] if self.columns is not None else 'col{}'.format(self.sel_index),
+            sel=self.columns[self.sel_index] if self.columns is not None else 'col{}'.format(self.sel_index),
         )
         if self.conditions:
-            rep += ' WHERE ' + ' AND '.join(['{} {} {}'.format(self.columns[i], self.cond_ops[o], v) for i, o, v in self.conditions])
+            rep += ' WHERE ' + ' AND '.join(
+                ['{} {} {}'.format(self.columns[i], self.cond_ops[o], v) for i, o, v in self.conditions])
         return ' '.join(rep.split())
 
     @classmethod
@@ -620,7 +633,7 @@ class WikiSQL(CQA):
     dirname = 'data'
 
     def __init__(self, path, query_as_question=False, subsample=None, tokenize=None, lower=False,
-                 cached_path=None, skip_cache=False,**kwargs):
+                 cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, 'query_as_question' if query_as_question else 'query_as_context',
                                   os.path.basename(path), str(subsample))
         if os.path.exists(cache_name) and not skip_cache:
@@ -631,7 +644,7 @@ class WikiSQL(CQA):
             expanded_path = os.path.expanduser(path)
             table_path = os.path.splitext(expanded_path)
             table_path = table_path[0] + '.tables' + table_path[1]
-           
+
             with open(table_path) as tables_file:
                 tables = [json.loads(line) for line in tables_file]
                 id_to_tables = {x['id']: x for x in tables}
@@ -666,7 +679,6 @@ class WikiSQL(CQA):
 
         super(WikiSQL, self).__init__(examples, **kwargs)
         self.all_answers = all_answers
-
 
     @classmethod
     def splits(cls, root='.data', train='train.jsonl', validation='dev.jsonl', test='test.jsonl', **kwargs):
@@ -732,12 +744,11 @@ class SRL(CQA):
         s = s.replace(" '", '')
         return ' '.join(s.split()).strip()
 
-    def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False, **kwargs):
-        cached_path = kwargs.pop('cached_path')
-        cache_name = os.path.join(cached_path, os.path.dirname(path).strip("/"), '.cache', os.path.basename(path), str(subsample))
+    def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False,
+                 cached_path=None, skip_cache=False, **kwargs):
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         examples, all_answers = [], []
-        skip_cache = kwargs.pop('skip_cache')
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples, all_answers = torch.load(cache_name)
@@ -751,7 +762,7 @@ class SRL(CQA):
                                                      context, question, answer,
                                                      tokenize=tokenize, lower=lower))
                     all_answers.append(aa)
-                    if subsample is not None and len(examples) >= subsample: 
+                    if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
@@ -759,7 +770,6 @@ class SRL(CQA):
 
         super(SRL, self).__init__(examples, **kwargs)
         self.all_answers = all_answers
-
 
     @classmethod
     def cache_splits(cls, path, train='train', validation='dev', test='test'):
@@ -792,7 +802,7 @@ class SRL(CQA):
 
                     new_example = True
                     for line in lines:
-                        line = line.strip() 
+                        line = line.strip()
                         if new_example:
                             context = cls.clean(line)
                             new_example = False
@@ -801,7 +811,7 @@ class SRL(CQA):
                             new_example = True
                             continue
                         question, answers = line.split('?')
-                        question = cls.clean(line.split('?')[0].replace(' _', '') +'?') 
+                        question = cls.clean(line.split('?')[0].replace(' _', '') + '?')
                         answer = cls.clean(answers.split('###')[0])
                         all_answers = [cls.clean(x) for x in answers.split('###')]
                         if answer not in context:
@@ -823,7 +833,8 @@ class SRL(CQA):
                                 elif answer.lower() in context:
                                     answer = answer.lower()
                                 else:
-                                    import pdb; pdb.set_trace()
+                                    import pdb;
+                                    pdb.set_trace()
                         assert answer in context
                         modified_all_answers = []
                         for a in all_answers:
@@ -846,11 +857,13 @@ class SRL(CQA):
                                     elif a.lower() in context:
                                         a = a.lower()
                                     else:
-                                        import pdb; pdb.set_trace()
+                                        import pdb;
+                                        pdb.set_trace()
                             assert a in context
                             modified_all_answers.append(a)
-                        split_file.write(json.dumps({'context': context, 'question': question, 'answer': answer, 'type': 'wiki', 'all_answers': modified_all_answers})+'\n')
-
+                        split_file.write(json.dumps(
+                            {'context': context, 'question': question, 'answer': answer, 'type': 'wiki',
+                             'all_answers': modified_all_answers}) + '\n')
 
     @classmethod
     def splits(cls, root='.data', train='train', validation='dev', test='test', **kwargs):
@@ -893,7 +906,7 @@ class WinogradSchema(CQA):
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
                                                      tokenize=tokenize, lower=lower))
-                    if subsample is not None and len(examples) >= subsample: 
+                    if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
@@ -909,19 +922,18 @@ class WinogradSchema(CQA):
             return
 
         def get_both_schema(context):
-             variations = [x[1:-1].split('/') for x in re.findall(pattern, context)]
-             splits = re.split(pattern, context)
-             results = []
-             for which_schema in range(2):
-                 vs = [v[which_schema] for v in variations] 
-                 context = ''
-                 for idx in range(len(splits)):
-                     context += splits[idx]
-                     if idx < len(vs):
-                         context += vs[idx]
-                 results.append(context) 
-             return results
-
+            variations = [x[1:-1].split('/') for x in re.findall(pattern, context)]
+            splits = re.split(pattern, context)
+            results = []
+            for which_schema in range(2):
+                vs = [v[which_schema] for v in variations]
+                context = ''
+                for idx in range(len(splits)):
+                    context += splits[idx]
+                    if idx < len(vs):
+                        context += vs[idx]
+                results.append(context)
+            return results
 
         schemas = []
         with open(os.path.expanduser(os.path.join(path, 'schema.txt'))) as schema_file:
@@ -930,7 +942,7 @@ class WinogradSchema(CQA):
                 if len(line.split()) == 0:
                     schemas.append(schema)
                     schema = []
-                    continue 
+                    continue
                 else:
                     schema.append(line.strip())
 
@@ -954,8 +966,7 @@ class WinogradSchema(CQA):
         for split, examples in zip(splits, [train, dev, test]):
             with open(os.path.expanduser(os.path.join(path, f'{split}.jsonl')), 'a') as split_file:
                 for ex in examples:
-                    split_file.write(json.dumps(ex)+'\n')
-
+                    split_file.write(json.dumps(ex) + '\n')
 
     @classmethod
     def splits(cls, root='.data', train='train', validation='validation', test='test', **kwargs):
@@ -989,7 +1000,7 @@ class WOZ(CQA):
     name = 'woz'
     dirname = ''
 
-    def __init__(self, path, subsample=None,  tokenize=None, lower=False, description='woz.en',
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, description='woz.en',
                  cached_path=None, skip_cache=False, **kwargs):
         examples, all_answers = [], []
         cache_name = os.path.join(cached_path, os.path.basename(path),
@@ -1008,7 +1019,7 @@ class WOZ(CQA):
                                                          context, question, answer,
                                                          tokenize=tokenize, lower=lower))
 
-                    if subsample is not None and len(examples) >= subsample: 
+                    if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
@@ -1025,7 +1036,7 @@ class WOZ(CQA):
 
         file_name_base = 'woz_{}_{}.json'
         for split in [train, validation, test]:
-            with open (os.path.expanduser(os.path.join(path, f'{split}.jsonl')), 'a') as split_file:
+            with open(os.path.expanduser(os.path.join(path, f'{split}.jsonl')), 'a') as split_file:
                 for lang in ['en', 'de']:
                     file_path = file_name_base.format(split, lang)
                     with open(os.path.expanduser(os.path.join(path, file_path))) as src_file:
@@ -1057,10 +1068,11 @@ class WOZ(CQA):
                                                 if not slot in previous_state['inform']:
                                                     delta_state['inform'].append(slot)
                                                 else:
-                                                    prev_slot = previous_state['inform'][previous_state['inform'].index(slot)]
+                                                    prev_slot = previous_state['inform'][
+                                                        previous_state['inform'].index(slot)]
                                                     if prev_slot[1] != slot[1]:
                                                         delta_state['inform'].append(slot)
-                                            else: 
+                                            else:
                                                 delta_state['request'].append(slot[1])
                                                 current_state['request'].append(slot[1])
                                 previous_state = current_state
@@ -1071,12 +1083,11 @@ class WOZ(CQA):
                                 if len(delta_state['request']) > 0:
                                     answer += ' '
                                     answer += ', '.join(delta_state['request'])
-                                ex = {'context': ' '.join(context.split()), 
-                                     'question': ' '.join(question.split()), 'lang': lang,
-                                     'answer': answer if len(answer) > 1 else 'None',
-                                     'lang_dialogue_turn': f'{lang}_{di}_{ti}'}
-                                split_file.write(json.dumps(ex)+'\n')
-
+                                ex = {'context': ' '.join(context.split()),
+                                      'question': ' '.join(question.split()), 'lang': lang,
+                                      'answer': answer if len(answer) > 1 else 'None',
+                                      'lang_dialogue_turn': f'{lang}_{di}_{ti}'}
+                                split_file.write(json.dumps(ex) + '\n')
 
     @classmethod
     def splits(cls, root='.data', train='train', validation='validate', test='test', **kwargs):
@@ -1104,7 +1115,7 @@ class MultiNLI(CQA):
     name = 'multinli'
     dirname = 'multinli_1.0'
 
-    def __init__(self, path, subsample=None,  tokenize=None, lower=False, description='multinli.in.out',
+    def __init__(self, path, subsample=None, tokenize=None, lower=False, description='multinli.in.out',
                  cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample), description)
         if os.path.exists(cache_name) and not skip_cache:
@@ -1120,7 +1131,7 @@ class MultiNLI(CQA):
                         examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                          context, question, answer,
                                                          tokenize=tokenize, lower=lower))
-                    if subsample is not None and len(examples) >= subsample: 
+                    if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
@@ -1137,24 +1148,24 @@ class MultiNLI(CQA):
         with open(os.path.expanduser(os.path.join(path, f'train.jsonl')), 'a') as split_file:
             with open(os.path.expanduser(os.path.join(path, f'multinli_1.0_train.jsonl'))) as src_file:
                 for line in src_file:
-                   ex = json.loads(line)
-                   ex = {'context': f'Premise: "{ex["sentence1"]}"', 
-                         'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?', 
-                         'answer': ex['gold_label'], 
-                         'subtask': 'multinli'}
-                   split_file.write(json.dumps(ex)+'\n')
+                    ex = json.loads(line)
+                    ex = {'context': f'Premise: "{ex["sentence1"]}"',
+                          'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?',
+                          'answer': ex['gold_label'],
+                          'subtask': 'multinli'}
+                    split_file.write(json.dumps(ex) + '\n')
 
         with open(os.path.expanduser(os.path.join(path, f'validation.jsonl')), 'a') as split_file:
             for subtask in ['matched', 'mismatched']:
-                with open(os.path.expanduser(os.path.join(path, 'multinli_1.0_dev_{}.jsonl'.format(subtask)))) as src_file:
+                with open(os.path.expanduser(
+                        os.path.join(path, 'multinli_1.0_dev_{}.jsonl'.format(subtask)))) as src_file:
                     for line in src_file:
-                       ex = json.loads(line)
-                       ex = {'context': f'Premise: "{ex["sentence1"]}"', 
-                             'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?', 
-                             'answer': ex['gold_label'], 
-                             'subtask': 'in' if subtask == 'matched' else 'out'}
-                       split_file.write(json.dumps(ex)+'\n')
-
+                        ex = json.loads(line)
+                        ex = {'context': f'Premise: "{ex["sentence1"]}"',
+                              'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?',
+                              'answer': ex['gold_label'],
+                              'subtask': 'in' if subtask == 'matched' else 'out'}
+                        split_file.write(json.dumps(ex) + '\n')
 
     @classmethod
     def splits(cls, root='.data', train='train', validation='validation', test='test', **kwargs):
@@ -1181,7 +1192,6 @@ class ZeroShotRE(CQA):
     dirname = 'relation_splits'
     name = 'zre'
 
-
     def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         if os.path.exists(cache_name) and not skip_cache:
@@ -1197,7 +1207,7 @@ class ZeroShotRE(CQA):
                                                      context, question, answer,
                                                      tokenize=tokenize, lower=lower))
 
-                    if subsample is not None and len(examples) >= subsample: 
+                    if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
@@ -1217,19 +1227,18 @@ class ZeroShotRE(CQA):
             with open(os.path.expanduser(os.path.join(path, f'{split}.jsonl')), 'a') as split_file:
                 with open(os.path.expanduser(os.path.join(path, src_file_name))) as src_file:
                     for line in src_file:
-                       split_line = line.split('\t')
-                       if len(split_line) == 4:
-                           answer = ''
-                           relation, question, subject, context = split_line
-                       else:
-                           relation, question, subject, context = split_line[:4]
-                           answer = ', '.join(split_line[4:])
-                       question = question.replace('XXX', subject)
-                       ex = {'context': context, 
-                             'question': question, 
-                             'answer': answer if len(answer) > 0 else 'unanswerable'}
-                       split_file.write(json.dumps(ex)+'\n')
-
+                        split_line = line.split('\t')
+                        if len(split_line) == 4:
+                            answer = ''
+                            relation, question, subject, context = split_line
+                        else:
+                            relation, question, subject, context = split_line[:4]
+                            answer = ', '.join(split_line[4:])
+                        question = question.replace('XXX', subject)
+                        ex = {'context': context,
+                              'question': question,
+                              'answer': answer if len(answer) > 0 else 'unanswerable'}
+                        split_file.write(json.dumps(ex) + '\n')
 
     @classmethod
     def splits(cls, root='.data', train='train', validation='dev', test='test', **kwargs):
@@ -1289,18 +1298,18 @@ class OntoNotesNER(CQA):
             start_enamex_open_idx = s.find('<ENAMEX')
             if start_enamex_open_idx > -1:
                 end_enamex_open_idx = s.find('">') + 2
-                if start_enamex_open_idx <= quote_idx  <= end_enamex_open_idx:
+                if start_enamex_open_idx <= quote_idx <= end_enamex_open_idx:
                     raw += s[:end_enamex_open_idx]
                     s = s[end_enamex_open_idx:]
                     quote_idx = s.find('"')
                     continue
             if quote_is_open:
-                raw += s[:quote_idx+1]
-                s = s[quote_idx+1:].strip()
+                raw += s[:quote_idx + 1]
+                s = s[quote_idx + 1:].strip()
                 quote_is_open = False
             else:
                 raw += s[:quote_idx].strip() + '"'
-                s =  s[quote_idx+1:]
+                s = s[quote_idx + 1:]
                 quote_is_open = True
             quote_idx = s.find('"')
         raw += s
@@ -1318,7 +1327,7 @@ class OntoNotesNER(CQA):
             examples = []
             with open(os.path.expanduser(path)) as f:
                 for line in f:
-                    example_dict = json.loads(line)  
+                    example_dict = json.loads(line)
                     t = example_dict['type']
                     a = example_dict['answer']
                     if (subtask == 'both' or t == subtask):
@@ -1329,14 +1338,13 @@ class OntoNotesNER(CQA):
                                                              context, question, answer,
                                                              tokenize=tokenize, lower=lower))
 
-                    if subsample is not None and len(examples) >= subsample: 
+                    if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
             torch.save(examples, cache_name)
 
         super(OntoNotesNER, self).__init__(examples, **kwargs)
-
 
     @classmethod
     def cache_splits(cls, path, path_to_files, train='train', validation='development', test='test'):
@@ -1359,14 +1367,15 @@ class OntoNotesNER(CQA):
                            'QUANTITY': 'quantitative',
                            'ORDINAL': 'ordinal',
                            'CARDINAL': 'cardinal'}
-        
-        pluralize = {'person': 'persons', 'political': 'political', 'facility': 'facilities', 'organization': 'organizations', 
+
+        pluralize = {'person': 'persons', 'political': 'political', 'facility': 'facilities',
+                     'organization': 'organizations',
                      'geopolitical': 'geopolitical', 'location': 'locations', 'product': 'products', 'event': 'events',
-                     'artwork': 'artworks', 'legal': 'legal', 'language': 'languages', 'date': 'dates', 'time': 'times', 
-                     'percentage': 'percentages', 'monetary': 'monetary', 'quantitative': 'quantitative', 'ordinal': 'ordinal',
+                     'artwork': 'artworks', 'legal': 'legal', 'language': 'languages', 'date': 'dates', 'time': 'times',
+                     'percentage': 'percentages', 'monetary': 'monetary', 'quantitative': 'quantitative',
+                     'ordinal': 'ordinal',
                      'cardinal': 'cardinal'}
 
- 
         for split in [train, validation, test]:
             split_file_name = os.path.join(path, f'{split}.jsonl')
             if os.path.exists(split_file_name):
@@ -1386,7 +1395,7 @@ class OntoNotesNER(CQA):
                             for line in lines:
                                 original = line
                                 line = cls.clean(line)
-                                entities = []  
+                                entities = []
                                 while True:
                                     start_enamex_open_idx = line.find('<ENAMEX')
                                     if start_enamex_open_idx == -1:
@@ -1394,29 +1403,29 @@ class OntoNotesNER(CQA):
                                     end_enamex_open_idx = line.find('">') + 2
                                     start_enamex_close_idx = line.find('</ENAMEX>')
                                     end_enamex_close_idx = start_enamex_close_idx + len('</ENAMEX>')
-    
+
                                     enamex_open_tag = line[start_enamex_open_idx:end_enamex_open_idx]
                                     before_entity = line[:start_enamex_open_idx]
                                     entity = line[end_enamex_open_idx:start_enamex_close_idx]
                                     after_entity = line[end_enamex_close_idx:]
-    
+
                                     if 'S_OFF' in enamex_open_tag:
                                         s_off_start = enamex_open_tag.find('S_OFF="')
-                                        s_off_end = enamex_open_tag.find('">') if 'E_OFF' not in enamex_open_tag else enamex_open_tag.find('" E_OFF')
-                                        s_off = int(enamex_open_tag[s_off_start+len('S_OFF="'):s_off_end])
-                                        enamex_open_tag = enamex_open_tag[:s_off_start-2] + '">'
+                                        s_off_end = enamex_open_tag.find(
+                                            '">') if 'E_OFF' not in enamex_open_tag else enamex_open_tag.find('" E_OFF')
+                                        s_off = int(enamex_open_tag[s_off_start + len('S_OFF="'):s_off_end])
+                                        enamex_open_tag = enamex_open_tag[:s_off_start - 2] + '">'
                                         before_entity += entity[:s_off]
                                         entity = entity[s_off:]
-    
+
                                     if 'E_OFF' in enamex_open_tag:
                                         s_off_start = enamex_open_tag.find('E_OFF="')
                                         s_off_end = enamex_open_tag.find('">')
-                                        s_off = int(enamex_open_tag[s_off_start+len('E_OFF="'):s_off_end])
-                                        enamex_open_tag = enamex_open_tag[:s_off_start-2] + '">'
+                                        s_off = int(enamex_open_tag[s_off_start + len('E_OFF="'):s_off_end])
+                                        enamex_open_tag = enamex_open_tag[:s_off_start - 2] + '">'
                                         after_entity = entity[-s_off:] + after_entity
                                         entity = entity[:-s_off]
-    
-    
+
                                     label_start = enamex_open_tag.find('TYPE="') + len('TYPE="')
                                     label_end = enamex_open_tag.find('">')
                                     label = enamex_open_tag[label_start:label_end]
@@ -1425,7 +1434,7 @@ class OntoNotesNER(CQA):
                                     offsets = (len(before_entity), len(before_entity) + len(entity))
                                     entities.append({'entity': entity, 'char_offsets': offsets, 'label': label})
                                     line = before_entity + entity + after_entity
-                                
+
                                 context = line.strip()
                                 is_no_good = False
                                 for entity_tuple in entities:
@@ -1435,32 +1444,34 @@ class OntoNotesNER(CQA):
                                         is_no_good = True
                                         break
                                 if is_no_good:
-                                    logger.warning('Throwing out example that looks poorly labeled: ', original.strip(), ' (', file_id.strip(), ')')
+                                    logger.warning('Throwing out example that looks poorly labeled: ', original.strip(),
+                                                   ' (', file_id.strip(), ')')
                                     continue
                                 question = 'What are the tags for all entities?'
-                                answer = '; '.join([f'{x["entity"]} -- {label_to_answer[x["label"]]}' for x in entities]) 
+                                answer = '; '.join(
+                                    [f'{x["entity"]} -- {label_to_answer[x["label"]]}' for x in entities])
                                 if len(answer) == 0:
                                     answer = 'None'
-                                split_file.write(json.dumps({'context': context, 'question': question, 'answer': answer, 'file_id': file_id.strip(), 
-                                                             'original': original.strip(), 'entity_list': entities, 'type': 'all'})+'\n')
+                                split_file.write(json.dumps({'context': context, 'question': question, 'answer': answer,
+                                                             'file_id': file_id.strip(),
+                                                             'original': original.strip(), 'entity_list': entities,
+                                                             'type': 'all'}) + '\n')
                                 partial_question = 'Which entities are {}?'
- 
+
                                 for lab, ans in label_to_answer.items():
                                     question = partial_question.format(pluralize[ans])
                                     entity_of_type_lab = [x['entity'] for x in entities if x['label'] == lab]
                                     answer = ', '.join(entity_of_type_lab)
                                     if len(answer) == 0:
                                         answer = 'None'
-                                    split_file.write(json.dumps({'context': context, 
-                                                                 'question': question, 
-                                                                 'answer': answer, 
-                                                                 'file_id': file_id.strip(), 
-                                                                 'original': original.strip(), 
-                                                                 'entity_list': entities, 
-                                                                 'type': 'one', 
-                                                                 })+'\n')
-
-
+                                    split_file.write(json.dumps({'context': context,
+                                                                 'question': question,
+                                                                 'answer': answer,
+                                                                 'file_id': file_id.strip(),
+                                                                 'original': original.strip(),
+                                                                 'entity_list': entities,
+                                                                 'type': 'one',
+                                                                 }) + '\n')
 
     @classmethod
     def splits(cls, root='.data', train='train', validation='development', test='test', **kwargs):
@@ -1483,11 +1494,11 @@ class OntoNotesNER(CQA):
         return tuple(d for d in (train_data, validation_data, test_data, aux_data)
                      if d is not None)
 
+
 class SNLI(CQA):
     urls = ['http://nlp.stanford.edu/projects/snli/snli_1.0.zip']
     dirname = 'snli_1.0'
     name = 'snli'
-
 
     def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
@@ -1505,7 +1516,7 @@ class SNLI(CQA):
                                                      context, question, answer,
                                                      tokenize=tokenize, lower=lower))
 
-                    if subsample is not None and len(examples) >= subsample: 
+                    if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')
@@ -1525,12 +1536,11 @@ class SNLI(CQA):
             with open(os.path.expanduser(os.path.join(path, f'{split}.jsonl')), 'a') as split_file:
                 with open(os.path.expanduser(os.path.join(path, src_file_name))) as src_file:
                     for line in src_file:
-                       ex = json.loads(line)
-                       ex = {'context': f'Premise: "{ex["sentence1"]}"', 
-                             'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?', 
-                             'answer': ex['gold_label']}
-                       split_file.write(json.dumps(ex)+'\n')
-
+                        ex = json.loads(line)
+                        ex = {'context': f'Premise: "{ex["sentence1"]}"',
+                              'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?',
+                              'answer': ex['gold_label']}
+                        split_file.write(json.dumps(ex) + '\n')
 
     @classmethod
     def splits(cls, root='.data', train='train', validation='dev', test='test', **kwargs):
@@ -1572,7 +1582,7 @@ class JSON(CQA):
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
                                                      tokenize=tokenize, lower=lower))
-                    if subsample is not None and len(examples) >= subsample: 
+                    if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
             logger.info(f'Caching data to {cache_name}')

@@ -32,6 +32,6 @@ from typing import NamedTuple, List
 
 
 class SequentialField(NamedTuple):
-    value : torch.tensor
-    length : torch.tensor
-    limited : torch.tensor
+    value: torch.tensor
+    length: torch.tensor
+    limited: torch.tensor

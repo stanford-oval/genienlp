@@ -30,6 +30,7 @@
 import numpy as np
 from tqdm import tqdm
 
+
 def string_hash(x):
     """ Simple deterministic string hash
 
@@ -82,6 +83,7 @@ class HashTable(object):
 
     def __iter__(self):
         return iter(self.itos)
+
     def __reversed__(self):
         return reversed(self.itos)
 
@@ -90,6 +92,7 @@ class HashTable(object):
 
     def __eq__(self, other):
         return isinstance(other, HashTable) and self.itos == other.itos
+
     def __hash__(self):
         return hash(self.itos)
 
