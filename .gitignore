@@ -11,9 +11,11 @@ models/__pycache__/
 multiprocess/__pycache__/
 results/
 tests/embeddings/*
+runs/
 
 .DS_Store
 .idea/
+.vscode/
 models/.DS_Store
 multiprocess/.DS_Store
 text/.DS_Store
