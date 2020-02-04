@@ -30,7 +30,7 @@
 
 import sys
 
-from . import train, predict, server, cache_embeddings
+from . import train, predict, server, cache_embeddings, run_lm_finetuning
 
 subcommands = {
     'train': ('Train a model', train.main),
