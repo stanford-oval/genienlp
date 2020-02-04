@@ -390,7 +390,8 @@ def add_special_tokens(model, tokenizer, additional_special_tokens):
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
 
 def main(argv=sys.argv):
-    parser = argparse.ArgumentParser(argv)
+    print('In run_lm_finetuning.py: argv = ', argv)
+    parser = argparse.ArgumentParser(prog=argv[0])
 
     ## Required parameters
     parser.add_argument("--train_data_file", default=None, type=str, required=True,
@@ -485,7 +486,7 @@ def main(argv=sys.argv):
                         help="For distributed training: local_rank")
     parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
-    args = parser.parse_args()
+    args = parser.parse_args(argv[1:])
 
     if args.model_type in ["bert", "roberta", "distilbert", "camembert"] and not args.mlm:
         raise ValueError("BERT and RoBERTa do not have LM heads but masked LM heads. They must be run using the --mlm "
