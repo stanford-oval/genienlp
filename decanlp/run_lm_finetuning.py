@@ -34,6 +34,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
+import sys
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -388,8 +389,8 @@ def add_special_tokens(model, tokenizer, additional_special_tokens):
         logger.info('Added %d special tokens', num_added_tokens)
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
 
-def main():
-    parser = argparse.ArgumentParser()
+def main(argv=sys.argv):
+    parser = argparse.ArgumentParser(argv)
 
     ## Required parameters
     parser.add_argument("--train_data_file", default=None, type=str, required=True,
