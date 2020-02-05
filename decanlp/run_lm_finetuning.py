@@ -79,9 +79,12 @@ class TextDataset(Dataset):
             logger.info("Creating features from dataset file at %s", directory)
 
             prompt_token_id = tokenizer.convert_tokens_to_ids(prompt_token)
-            print('prompt_token_id = ', prompt_token_id)
+            # print('prompt_token_id = ', prompt_token_id)
+            pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
+            # print('pad_token_id = ', pad_token_id)
             self.examples = []
             self.labels = []
+            max_input_length = 0
             with open(file_path, encoding="utf-8") as f:
                 for line in tqdm(f, desc='Tokenizing'):
                     tokens = tokenizer.tokenize(line)
@@ -89,6 +92,7 @@ class TextDataset(Dataset):
                     tokenized_text = tokenized_text[0:block_size] # truncate longer sequences
                     # print(tokenized_text)
                     example = tokenizer.build_inputs_with_special_tokens(tokenized_text)
+                    max_input_length = max(max_input_length, len(example))
                     self.examples.append(example)
                     prompt_token_location = tokenized_text.index(prompt_token_id)
                     if prompt_token_id < 0:
@@ -96,6 +100,12 @@ class TextDataset(Dataset):
                         self.labels.append(example)
                     else:
                         self.labels.append([-1]*(prompt_token_location+1)+example[prompt_token_location+1:])
+
+            logger.info('Maximum input length: %d', max_input_length)
+            for i in range(len(self.examples)):
+                pad_length = max_input_length - len(self.examples[i])
+                self.examples[i].extend([pad_token_id]*pad_length)
+                self.labels[i].extend([-1]*pad_length)
 
             logger.info("Saving features into cached file %s", cached_features_file)
             with open(cached_features_file, 'wb') as handle:
