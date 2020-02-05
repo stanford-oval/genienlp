@@ -66,7 +66,7 @@ MODEL_CLASSES = {
 
 
 class TextDataset(Dataset):
-    def __init__(self, tokenizer, args, file_path='train', block_size=512):
+    def __init__(self, tokenizer, args, file_path='train', block_size=512, prompt_token='<paraphrase>'):
         assert os.path.isfile(file_path)
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(directory, args.model_name_or_path + '_cached_lm_' + str(block_size) + '_' + filename)
@@ -78,17 +78,24 @@ class TextDataset(Dataset):
         else:
             logger.info("Creating features from dataset file at %s", directory)
 
+            prompt_token_id = tokenizer.convert_tokens_to_ids(prompt_token)
+            print('prompt_token_id = ', prompt_token_id)
             self.examples = []
+            self.labels = []
             with open(file_path, encoding="utf-8") as f:
-                text = f.read()
-
-            tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
-
-            for i in range(0, len(tokenized_text)-block_size+1, block_size): # Truncate in block of block_size
-                self.examples.append(tokenizer.build_inputs_with_special_tokens(tokenized_text[i:i+block_size]))
-            # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
-            # If your dataset is small, first you should loook for a bigger one :-) and second you
-            # can change this behavior by adding (model specific) padding.
+                for line in tqdm(f, desc='Tokenizing'):
+                    tokens = tokenizer.tokenize(line)
+                    tokenized_text = tokenizer.convert_tokens_to_ids(tokens)
+                    tokenized_text = tokenized_text[0:block_size] # truncate longer sequences
+                    # print(tokenized_text)
+                    example = tokenizer.build_inputs_with_special_tokens(tokenized_text)
+                    self.examples.append(example)
+                    prompt_token_location = tokenized_text.index(prompt_token_id)
+                    if prompt_token_id < 0:
+                        logger.warning('Prompt token not found after truncating the input.')
+                        self.labels.append(example)
+                    else:
+                        self.labels.append([-1]*(prompt_token_location+1)+example[prompt_token_location+1:])
 
             logger.info("Saving features into cached file %s", cached_features_file)
             with open(cached_features_file, 'wb') as handle:
@@ -98,7 +105,7 @@ class TextDataset(Dataset):
         return len(self.examples)
 
     def __getitem__(self, item):
-        return torch.tensor(self.examples[item])
+        return torch.tensor(self.examples[item]), torch.tensor(self.labels[item])
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False):
@@ -255,7 +262,7 @@ def train(args, train_dataset, model, tokenizer):
                 steps_trained_in_current_epoch -= 1
                 continue
 
-            inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else (batch, batch)
+            inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else batch # batch is a tuple (input, labels)
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
             model.train()
@@ -353,7 +360,7 @@ def evaluate(args, model, tokenizer, prefix=""):
     model.eval()
 
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
-        inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else (batch, batch)
+        inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else batch
         inputs = inputs.to(args.device)
         labels = labels.to(args.device)
 
