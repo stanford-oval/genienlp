@@ -29,12 +29,13 @@ import pickle
 import random
 import re
 import shutil
-
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data.distributed import DistributedSampler
 import sys
+from functools import partial
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -76,12 +77,10 @@ class TextDataset(Dataset):
             with open(cached_features_file, 'rb') as handle:
                 self.examples = pickle.load(handle)
         else:
-            logger.info("Creating features from dataset file at %s", directory)
+            logger.info("Creating features from dataset file at %s", file_path)
 
             prompt_token_id = tokenizer.convert_tokens_to_ids(prompt_token)
             # print('prompt_token_id = ', prompt_token_id)
-            pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
-            # print('pad_token_id = ', pad_token_id)
             self.examples = []
             self.labels = []
             max_input_length = 0
@@ -102,11 +101,6 @@ class TextDataset(Dataset):
                         self.labels.append([-1]*(prompt_token_location+1)+example[prompt_token_location+1:])
 
             logger.info('Maximum input length: %d', max_input_length)
-            for i in range(len(self.examples)):
-                pad_length = max_input_length - len(self.examples[i])
-                self.examples[i].extend([pad_token_id]*pad_length)
-                self.labels[i].extend([-1]*pad_length)
-
             logger.info("Saving features into cached file %s", cached_features_file)
             with open(cached_features_file, 'wb') as handle:
                 pickle.dump(self.examples, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -182,6 +176,14 @@ def mask_tokens(inputs, tokenizer, args):
     # The rest of the time (10% of the time) we keep the masked input tokens unchanged
     return inputs, labels
 
+def pad_collate(batch, pad_token_id):
+    (inputs, labels) = zip(*batch)
+    inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=pad_token_id)
+    labels_pad = pad_sequence(labels, batch_first=True, padding_value=-1)
+    # print('inputs_pad = ', inputs_pad)
+    # print('labels_pad = ', labels_pad)
+
+    return inputs_pad, labels_pad
 
 def train(args, train_dataset, model, tokenizer):
     """ Train the model """
@@ -190,7 +192,8 @@ def train(args, train_dataset, model, tokenizer):
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+    collate = partial(pad_collate, pad_token_id=tokenizer.convert_tokens_to_ids(tokenizer.pad_token))
+    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate)
 
     if args.max_steps > 0:
         t_total = args.max_steps
@@ -274,6 +277,7 @@ def train(args, train_dataset, model, tokenizer):
 
             inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else batch # batch is a tuple (input, labels)
             inputs = inputs.to(args.device)
+
             labels = labels.to(args.device)
             model.train()
             outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
@@ -355,7 +359,8 @@ def evaluate(args, model, tokenizer, prefix=""):
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(eval_dataset)
-    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+    collate = partial(pad_collate, pad_token_id=tokenizer.convert_tokens_to_ids(tokenizer.pad_token))
+    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size, collate_fn=collate)
 
     # multi-gpu evaluate
     if args.n_gpu > 1:
