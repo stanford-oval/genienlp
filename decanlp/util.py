@@ -47,6 +47,12 @@ logger = logging.getLogger(__name__)
 def tokenizer(s):
     return s.split()
 
+def get_number_of_lines(file_path):
+    count = 0
+    with open(file_path) as f:
+        for line in f:
+            count += 1
+    return count
 
 def map_filter(callable, iterable):
     output = []
