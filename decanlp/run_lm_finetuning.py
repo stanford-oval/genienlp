@@ -267,7 +267,11 @@ def train(args, train_dataset, model, tokenizer):
     train_iterator = trange(epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproducibility (even between python 2 and 3)
     for _ in train_iterator:
-        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
+        if args.max_steps > 0:
+            total_steps = args.max_steps*args.gradient_accumulation_steps
+        else:
+            total_steps = len(train_dataloader)
+        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0], total=total_steps)
         for step, batch in enumerate(epoch_iterator):
             
             # Skip past any already trained steps if resuming training
