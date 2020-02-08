@@ -110,7 +110,7 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
 
 def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=0, top_p=0.0, repetition_penalty=1.0,
                     is_xlnet=False, is_xlm_mlm=False, xlm_mask_token=None, xlm_lang=None, device='cpu',
-                    stop_token_id=None, pad_token_id=None):
+                    stop_token_id=None, pad_token_id=None, supports_past=False):
     """
     Generates sequence of tokens for the batch of input contexts.
     Inputs:
@@ -118,6 +118,7 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
         num_samples: the number of sequences to output for each input context
         length: The maximum length of generation
         stop_token_id: generation of each sequence will stop if we generate this token
+        supports_past: set to True if the model accepts the 'past' input for more efficient generation. For example, GPT-2/Transfo-XL/XLNet/CTRL do
     """
     context = torch.tensor(context, dtype=torch.long, device=device)
     # print('context.shape before num_samples = ', context.shape)
@@ -135,6 +136,7 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
     generated = context[:, :next_index]
     # print('generated = ', generated)
     length += max(index_of_first_pad_tokens) - min(index_of_first_pad_tokens)
+    past = None
     with torch.no_grad():
         for _ in trange(length):
 
@@ -158,8 +160,18 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
             if xlm_lang is not None:
                 inputs["langs"] = torch.tensor([xlm_lang] * inputs["input_ids"].shape[1], device=device).view(1, -1)
 
-            outputs = model(**inputs)  # Note: we could also use 'past' with GPT-2/Transfo-XL/XLNet/CTRL (cached hidden-states)
+            if supports_past:
+                inputs['past'] = past
+                if past is not None:
+                    inputs['input_ids'] = next_token
+            # print('input_ids = ', inputs['input_ids'])
+            outputs = model(**inputs)
+            # print('outputs[0] = ', outputs[0].shape)
             next_token_logits = outputs[0][:, -1, :] / (temperature if temperature > 0 else 1.)
+            # print('next_token_logits = ', next_token_logits)
+            past = outputs[1]
+            # print('len(past) = ', len(past))
+            # print('past[0] = ', past[0].shape)
 
             # repetition penalty from CTRL (https://arxiv.org/abs/1909.05858)
             for i in range(context.shape[0]):
@@ -308,7 +320,8 @@ def main():
             xlm_lang=xlm_lang,
             device=args.device,
             stop_token_id=tokenizer.convert_tokens_to_ids(args.stop_token),
-            pad_token_id=pad_token_id
+            pad_token_id=pad_token_id,
+            supports_past=args.model_type in ['gpt2', 'openai-gpt', 'transfo-xl', 'xlnet', 'ctrl']
         )
         out = out[:, :].tolist()
         print('pad = ', pad_token_id)
