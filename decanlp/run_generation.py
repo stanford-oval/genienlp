@@ -21,6 +21,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import argparse
 import logging
 from tqdm import trange
+import math
 
 import torch
 import torch.nn.functional as F
@@ -132,7 +133,8 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
             index_of_first_pad_tokens.append(is_pad_token[0])
     next_index = min(index_of_first_pad_tokens)
     generated = context[:, :next_index]
-    print('generated = ', generated)
+    # print('generated = ', generated)
+    length += max(index_of_first_pad_tokens) - min(index_of_first_pad_tokens)
     with torch.no_grad():
         for _ in trange(length):
 
@@ -160,10 +162,10 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
             next_token_logits = outputs[0][:, -1, :] / (temperature if temperature > 0 else 1.)
 
             # repetition penalty from CTRL (https://arxiv.org/abs/1909.05858)
-            for i in range(num_samples):
+            for i in range(context.shape[0]):
                 for _ in set(generated[i].tolist()):
                     if next_token_logits[i, _] > 0:
-                        next_token_logits[i, _] /= repetition_penalty 
+                        next_token_logits[i, _] /= repetition_penalty
                     else:
                         next_token_logits[i, _] *= repetition_penalty
                 
@@ -174,12 +176,13 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                 next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=1)
             # throw away the tokens that we already have from the context
             for i in range(context.shape[0]):
-                if next_token[i, 0] == stop_token_id:
-                    set_of_finished_generations.add(i)
                 if next_index < index_of_first_pad_tokens[i]:
                     assert context[i, next_index] != pad_token_id, 'Selecting pad token from context'
                     next_token[i, 0] = context[i, next_index]
-            print('next_token = ', next_token)
+                if next_token[i, 0] == stop_token_id:
+                    set_of_finished_generations.add(i)
+                    # print('set of finished gernerations = ', set_of_finished_generations)
+            # print('next_token = ', next_token)
             next_index += 1
             generated = torch.cat((generated, next_token), dim=1)
             if len(set_of_finished_generations) == context.shape[0]:
@@ -194,6 +197,7 @@ def main():
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
                         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS))
     parser.add_argument("--input_file", type=str, help="The file from which we read prompts.")
+    parser.add_argument("--output_file", type=str, help="When specified, generated text will be written in this file.")
     parser.add_argument("--padding_text", type=str, default="")
     parser.add_argument("--xlm_lang", type=str, default="", help="Optional language when used with the XLM model.")
     parser.add_argument("--length", type=int, default=20)
@@ -258,6 +262,7 @@ def main():
         xlm_mask_token = None
 
     all_context_tokens = []
+    all_context_lengths = []
     with open(args.input_file) as input_file:
         for raw_text in input_file:
             if args.model_type in ["transfo-xl", "xlnet"]:
@@ -265,6 +270,7 @@ def main():
                 raw_text = (args.padding_text if args.padding_text else PADDING_TEXT) + raw_text
             context_tokens = tokenizer.encode(raw_text, add_special_tokens=False)
             all_context_tokens.append(context_tokens)
+            all_context_lengths.append(len(context_tokens))
             if args.model_type == "ctrl":
                 if not any(context_tokens[0] == x for x in tokenizer.control_codes.values()):
                     logger.info("WARNING! You are not starting your generation from a control code so you won't get good results")
@@ -272,9 +278,17 @@ def main():
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
     if pad_token_id is None:
         logger.error('Your tokenizer does not have a padding token')
-        
-    for batch in trange(len(all_context_tokens) // args.batch_size + 1):
-        batch_context_tokens = all_context_tokens[batch*args.batch_size : max((batch+1)*args.batch_size, len(all_context_tokens))]
+
+    # TODO sort contexts based on their length so that less generated tokens are thrown away and generation can be done faster
+    if args.output_file is not None:
+        output_file = open(args.output_file, 'w')
+    for batch in trange(math.ceil(len(all_context_tokens) / args.batch_size)):
+        batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_tokens)))
+        batch_context_tokens = all_context_tokens[batch_slice[0]: batch_slice[1]]
+        batch_context_lengths = all_context_lengths[batch_slice[0]: batch_slice[1]]
+        # print('batch_slice = ', batch_slice)
+        # print('all_context_lengths = ', all_context_lengths)
+        # print('batch_context_lengths = ', batch_context_lengths)
         batch_max_sequence_length = max([len(a) for a in batch_context_tokens])
         for a in batch_context_tokens:
             a.extend([pad_token_id] * (batch_max_sequence_length-len(a)))
@@ -298,10 +312,17 @@ def main():
         )
         out = out[:, :].tolist()
         print('pad = ', pad_token_id)
-        for o in out:
+        print('stop token = ', tokenizer.convert_tokens_to_ids(args.stop_token))
+        for i, o in enumerate(out):
+            # print('len(o) = ', len(o))
+            # print('o = ', o)
+            # print(i % (batch_slice[1]-batch_slice[0]))
+            # print('context_length = ', batch_context_lengths[i % (batch_slice[1]-batch_slice[0])])
+            o = o[batch_context_lengths[i % (batch_slice[1]-batch_slice[0])]:]
             text = tokenizer.decode(o, clean_up_tokenization_spaces=True, skip_special_tokens=False)
-            print('len(o) = ', len(o))
-            print('o = ', o)
+
+            # print('len(o) = ', len(o))
+            # print('o = ', o)
             if args.stop_token:
                 index =  text.find(args.stop_token)
                 if index == -1:
@@ -309,6 +330,8 @@ def main():
                 text = text[:index]
 
             print(text)
+            if args.output_file is not None:
+                output_file.write(text + '\n')
 
 
 if __name__ == '__main__':
