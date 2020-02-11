@@ -257,7 +257,7 @@ class AlmondDialogueNLG(BaseAlmondTask):
         # the question is irrelevant for this task
         _id, context, sentence, target_code = parts
         question = 'what should the agent say ?'
-        context = context + ' ; ' + target_code
+        context = context + ' ' + target_code
         answer = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 tokenize=self.tokenize, lower=False)
