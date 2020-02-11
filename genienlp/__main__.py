@@ -28,7 +28,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
 import argparse
 
 from . import arguments, train, predict, server, cache_embeddings
@@ -41,18 +40,9 @@ subcommands = {
 }
 
 
-def usage():
-    print('Usage: %s SUBCOMMAND [OPTIONS]' % (sys.argv[0]), file=sys.stderr)
-    print(file=sys.stderr)
-    print('Available subcommands:', file=sys.stderr)
-    for subcommand, (help_text, _) in subcommands.items():
-        print('  %s - %s' % (subcommand, help_text), file=sys.stderr)
-    sys.exit(1)
-
-
 def main():
     parser = argparse.ArgumentParser(prog='genienlp')
-    subparsers = parser.add_subparsers(dest='subcommand')
+    subparsers = parser.add_subparsers(dest='subcommand', required=True)
     for subcommand in subcommands:
         helpstr, get_parser, command_fn = subcommands[subcommand]
         get_parser(subparsers.add_parser(subcommand, help=helpstr))
