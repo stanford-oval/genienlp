@@ -136,7 +136,7 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
     length = max(length+max_length-min_length, max_length)
     past = None
     with torch.no_grad():
-        for _ in trange(length):
+        for _ in range(length):
 
             inputs = {'input_ids': generated}
             if is_xlnet: 
@@ -204,6 +204,25 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                 break
     return generated
 
+def input_heuristics(s):
+    s = s.strip()
+    if s.startswith('which') or s.startswith('what') or s.startswith('where') or s.startswith('how') or s.startswith('who') or s.startswith('when'):
+        if s.endswith('.'):
+            s[-1] = '?'
+        else:
+            s += '?'
+    s = s.replace('LOCATION_0', 'location')
+    s = s.replace('NUMBER_0', '2')
+    return s
+
+def output_heuristics(s):
+    s = s.replace(' 2 ', ' NUMBER_0 ')
+    s = s.replace(' two ', ' NUMBER_0 ')
+    s = s.replace(' the two ', ' NUMBER_0 ')
+    s = s.replace(' the 2 ', ' NUMBER_0 ')
+    s = s.replace(' location ', ' LOCATION_0 ')
+    s = s.replace(' the location ', ' LOCATION_0 ')
+    return s
 
 def main(argv=sys.argv):
     parser = argparse.ArgumentParser(prog=argv[0])
@@ -286,6 +305,9 @@ def main(argv=sys.argv):
         reader = csv.reader(input_file, delimiter='\t')
         for row in reader:
             raw_text = row[args.input_column]
+            # print('before text = ', raw_text)
+            raw_text = input_heuristics(raw_text)
+            # print('after text = ', raw_text)
             raw_text += args.prompt_token
             if args.model_type in ["transfo-xl", "xlnet"]:
                 # Models with memory likes to have a long prompt for short inputs.
@@ -355,6 +377,7 @@ def main(argv=sys.argv):
                     index = None
                 text = text[:index]
             text = text.strip()
+            text = output_heuristics(text)
             batch_outputs[i % (batch_slice[1]-batch_slice[0])].append(text)
 
         all_outputs.extend(batch_outputs)
