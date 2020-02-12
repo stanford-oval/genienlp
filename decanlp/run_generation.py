@@ -123,22 +123,17 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
         stop_token_id: generation of each sequence will stop if we generate this token
         supports_past: set to True if the model accepts the 'past' input for more efficient generation. For example, GPT-2/Transfo-XL/XLNet/CTRL do
     """
+    max_length = len(context[0]) # context is sorted by length from longest to shortest
+    min_length = len(context[-1])
+    for a in context:
+        a.extend([pad_token_id] * (max_length-len(a)))
     context = torch.tensor(context, dtype=torch.long, device=device)
-    # print('context.shape before num_samples = ', context.shape)
     context = context.repeat(num_samples, 1)
-    # print('context.shape after num_samples = ', context.shape)
-    index_of_first_pad_tokens = []
-    set_of_finished_generations = set()
-    for i in range(context.shape[0]):
-        is_pad_token = (context[i, :] == pad_token_id).nonzero().reshape(-1)
-        if len(is_pad_token) == 0:
-            index_of_first_pad_tokens.append(context.shape[1])
-        else:
-            index_of_first_pad_tokens.append(is_pad_token[0])
-    next_index = min(index_of_first_pad_tokens)
+    next_index = min_length
     generated = context[:, :next_index]
+    should_finish = None
     # print('generated = ', generated)
-    length += max(index_of_first_pad_tokens) - min(index_of_first_pad_tokens)
+    length = max(length+max_length-min_length, max_length)
     past = None
     with torch.no_grad():
         for _ in trange(length):
@@ -177,30 +172,35 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
             # print('past[0] = ', past[0].shape)
 
             # repetition penalty from CTRL (https://arxiv.org/abs/1909.05858)
-            for i in range(context.shape[0]):
-                for _ in set(generated[i].tolist()):
-                    if next_token_logits[i, _] > 0:
-                        next_token_logits[i, _] /= repetition_penalty
-                    else:
-                        next_token_logits[i, _] *= repetition_penalty
+            if repetition_penalty != 1.0:
+                for i in range(context.shape[0]):
+                    for _ in set(generated[i].tolist()):
+                        if next_token_logits[i, _] > 0:
+                            next_token_logits[i, _] /= repetition_penalty
+                        else:
+                            next_token_logits[i, _] *= repetition_penalty
                 
             filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
             if temperature == 0: # greedy sampling:
                 next_token = torch.argmax(filtered_logits, dim=-1).unsqueeze(-1)
             else:
                 next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=1)
+
             # throw away the tokens that we already have from the context
-            for i in range(context.shape[0]):
-                if next_index < index_of_first_pad_tokens[i]:
-                    assert context[i, next_index] != pad_token_id, 'Selecting pad token from context'
-                    next_token[i, 0] = context[i, next_index]
-                if next_token[i, 0] == stop_token_id:
-                    set_of_finished_generations.add(i)
-                    # print('set of finished gernerations = ', set_of_finished_generations)
-            # print('next_token = ', next_token)
+            if next_index < context.shape[1]:
+                # print('context[:, next_index:next_index+1] = ', context[:, next_index:next_index+1])
+                m = (context[:, next_index:next_index+1] != pad_token_id).long()
+                # print('m = ', m)
+                next_token = m*context[:, next_index:next_index+1]+(1-m)*next_token
+                # print('next_token = ', next_token)
+
+            if should_finish is None:
+                should_finish = (next_token == stop_token_id)
+            else:
+                should_finish = should_finish | (next_token == stop_token_id)
             next_index += 1
             generated = torch.cat((generated, next_token), dim=1)
-            if len(set_of_finished_generations) == context.shape[0]:
+            if should_finish.all():
                 break
     return generated
 
@@ -316,9 +316,6 @@ def main(argv=sys.argv):
         # print('batch_slice = ', batch_slice)
         # print('all_context_lengths = ', all_context_lengths)
         # print('batch_context_lengths = ', batch_context_lengths)
-        batch_max_sequence_length = max([len(a) for a in batch_context_tokens])
-        for a in batch_context_tokens:
-            a.extend([pad_token_id] * (batch_max_sequence_length-len(a)))
 
         out = sample_sequence(
             model=model,
@@ -339,8 +336,8 @@ def main(argv=sys.argv):
             supports_past=args.model_type in ['gpt2', 'openai-gpt', 'transfo-xl', 'xlnet', 'ctrl']
         )
         out = out[:, :].tolist()
-        print('pad = ', pad_token_id)
-        print('stop token = ', tokenizer.convert_tokens_to_ids(args.stop_token))
+        # print('pad = ', pad_token_id)
+        # print('stop token = ', tokenizer.convert_tokens_to_ids(args.stop_token))
         batch_outputs = [[] for _ in range(batch_slice[1]-batch_slice[0])]
         for i, o in enumerate(out):
             # print('len(o) = ', len(o))
