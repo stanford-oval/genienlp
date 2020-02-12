@@ -301,9 +301,14 @@ def main(argv=sys.argv):
     if pad_token_id is None:
         logger.error('Your tokenizer does not have a padding token')
 
-    # TODO sort contexts based on their length so that less generated tokens are thrown away and generation can be done faster
+    # sort contexts based on their length so that less generated tokens are thrown away and generation can be done faster
+    t = list(zip(*sorted(list(zip(all_context_lengths, all_context_tokens, range(len(all_context_tokens)))), reverse=True)))
+    all_context_lengths, all_context_tokens, original_order = list(t[0]), list(t[1]), list(t[2])
+    all_outputs = []
+
     if args.output_file is not None:
         output_file = open(args.output_file, 'w')
+
     for batch in trange(math.ceil(len(all_context_tokens) / args.batch_size), desc="Batch"):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_tokens)))
         batch_context_tokens = all_context_tokens[batch_slice[0]: batch_slice[1]]
@@ -355,11 +360,18 @@ def main(argv=sys.argv):
             text = text.strip()
             batch_outputs[i % (batch_slice[1]-batch_slice[0])].append(text)
 
-        print(json.dumps(batch_outputs, indent=2))
-        if args.output_file is not None:
-            for _ in batch_outputs:
-                for text in _:
-                    output_file.write(text + '\n')
+        all_outputs.extend(batch_outputs)
+
+    # sort the results back to their original order
+    t = list(zip(*sorted(list(zip(original_order, all_outputs)))))
+    all_outputs = list(t[1])
+
+    if args.output_file is not None:
+        for _ in all_outputs:
+            for text in _:
+                output_file.write(text + '\n')
+    else:
+        print(json.dumps(all_outputs, indent=2))
 
 
 if __name__ == '__main__':
