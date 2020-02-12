@@ -212,8 +212,8 @@ def main(argv=sys.argv):
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
                         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS))
     parser.add_argument("--input_file", type=str, help="The file from which we read prompts.")
-    # parser.add_argument('--input_format', type=str, choices=['simple', 'genie'], default='simple',
-                        # help='The format of the input file.')
+    parser.add_argument('--input_column', type=int, required=True,
+                        help='The column in the input file which contains the input sentences.')
     parser.add_argument("--output_file", type=str, help="When specified, generated text will be written in this file.")
     parser.add_argument("--padding_text", type=str, default="")
     parser.add_argument("--xlm_lang", type=str, default="", help="Optional language when used with the XLM model.")
@@ -229,6 +229,8 @@ def main(argv=sys.argv):
                         help="Avoid using CUDA when available")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
+    parser.add_argument('--prompt_token', type=str, default='<paraphrase>',
+                        help="Token after which text generation starts. We need to add this to the end of all inputs.")
     parser.add_argument('--stop_token', type=str, default='</paraphrase>',
                         help="Token at which text generation is stopped")
     parser.add_argument('--batch_size', type=int, default=4,
@@ -281,7 +283,10 @@ def main(argv=sys.argv):
     all_context_tokens = []
     all_context_lengths = []
     with open(args.input_file) as input_file:
-        for raw_text in input_file:
+        reader = csv.reader(input_file, delimiter='\t')
+        for row in reader:
+            raw_text = row[args.input_column]
+            raw_text += args.prompt_token
             if args.model_type in ["transfo-xl", "xlnet"]:
                 # Models with memory likes to have a long prompt for short inputs.
                 raw_text = (args.padding_text if args.padding_text else PADDING_TEXT) + raw_text
@@ -299,7 +304,7 @@ def main(argv=sys.argv):
     # TODO sort contexts based on their length so that less generated tokens are thrown away and generation can be done faster
     if args.output_file is not None:
         output_file = open(args.output_file, 'w')
-    for batch in trange(math.ceil(len(all_context_tokens) / args.batch_size)):
+    for batch in trange(math.ceil(len(all_context_tokens) / args.batch_size), desc="Batch"):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_tokens)))
         batch_context_tokens = all_context_tokens[batch_slice[0]: batch_slice[1]]
         batch_context_lengths = all_context_lengths[batch_slice[0]: batch_slice[1]]
