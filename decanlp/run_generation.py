@@ -208,9 +208,8 @@ def input_heuristics(s):
     s = s.strip()
     if s.startswith('which') or s.startswith('what') or s.startswith('where') or s.startswith('how') or s.startswith('who') or s.startswith('when'):
         if s.endswith('.'):
-            s[-1] = '?'
-        else:
-            s += '?'
+            s = s[:-1]
+        s += '?'
     s = s.replace('LOCATION_0', 'location')
     s = s.replace('NUMBER_0', '2')
     return s
