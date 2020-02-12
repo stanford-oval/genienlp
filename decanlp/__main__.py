@@ -30,14 +30,15 @@
 
 import sys
 
-from . import train, predict, server, cache_embeddings, run_lm_finetuning
+from . import train, predict, server, cache_embeddings, run_lm_finetuning, run_generation
 
 subcommands = {
     'train': ('Train a model', train.main),
     'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.main),
     'server': ('Export RPC interface to predict', server.main),
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.main),
-    'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.main)
+    'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.main),
+    'run-paraphrase': ('Run a paraphraser model', run_generation.main)
 }
 
 def usage():

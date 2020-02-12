@@ -22,6 +22,9 @@ import argparse
 import logging
 from tqdm import trange
 import math
+import json
+import csv
+import sys
 
 import torch
 import torch.nn.functional as F
@@ -202,13 +205,15 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
     return generated
 
 
-def main():
-    parser = argparse.ArgumentParser()
+def main(argv=sys.argv):
+    parser = argparse.ArgumentParser(prog=argv[0])
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
                         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS))
     parser.add_argument("--input_file", type=str, help="The file from which we read prompts.")
+    # parser.add_argument('--input_format', type=str, choices=['simple', 'genie'], default='simple',
+                        # help='The format of the input file.')
     parser.add_argument("--output_file", type=str, help="When specified, generated text will be written in this file.")
     parser.add_argument("--padding_text", type=str, default="")
     parser.add_argument("--xlm_lang", type=str, default="", help="Optional language when used with the XLM model.")
@@ -228,7 +233,7 @@ def main():
                         help="Token at which text generation is stopped")
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation.")
-    args = parser.parse_args()
+    args = parser.parse_args(argv[1:])
 
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     args.n_gpu = torch.cuda.device_count()
@@ -326,6 +331,7 @@ def main():
         out = out[:, :].tolist()
         print('pad = ', pad_token_id)
         print('stop token = ', tokenizer.convert_tokens_to_ids(args.stop_token))
+        batch_outputs = [[] for _ in range(batch_slice[1]-batch_slice[0])]
         for i, o in enumerate(out):
             # print('len(o) = ', len(o))
             # print('o = ', o)
@@ -337,14 +343,18 @@ def main():
             # print('len(o) = ', len(o))
             # print('o = ', o)
             if args.stop_token:
-                index =  text.find(args.stop_token)
+                index = text.find(args.stop_token)
                 if index == -1:
                     index = None
                 text = text[:index]
+            text = text.strip()
+            batch_outputs[i % (batch_slice[1]-batch_slice[0])].append(text)
 
-            print(text)
-            if args.output_file is not None:
-                output_file.write(text + '\n')
+        print(json.dumps(batch_outputs, indent=2))
+        if args.output_file is not None:
+            for _ in batch_outputs:
+                for text in _:
+                    output_file.write(text + '\n')
 
 
 if __name__ == '__main__':

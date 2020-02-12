@@ -417,7 +417,7 @@ def add_special_tokens(model, tokenizer, additional_special_tokens):
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
 
 def main(argv=sys.argv):
-    print('In run_lm_finetuning.py: argv = ', argv)
+    # print('In run_lm_finetuning.py: argv = ', argv)
     parser = argparse.ArgumentParser(prog=argv[0])
 
     ## Required parameters
