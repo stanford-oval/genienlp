@@ -136,7 +136,7 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
     length = max(length+max_length-min_length, max_length)
     past = None
     with torch.no_grad():
-        for _ in range(length):
+        for _ in trange(length):
 
             inputs = {'input_ids': generated}
             if is_xlnet: 
@@ -215,6 +215,8 @@ def input_heuristics(s):
     return s
 
 def output_heuristics(s):
+    if '?' in s:
+        s = s[:s.find('?')+1]
     s = s.replace(' 2 ', ' NUMBER_0 ')
     s = s.replace(' two ', ' NUMBER_0 ')
     s = s.replace(' the two ', ' NUMBER_0 ')
