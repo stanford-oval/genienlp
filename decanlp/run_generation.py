@@ -172,14 +172,26 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
             # print('past[0] = ', past[0].shape)
 
             # repetition penalty from CTRL (https://arxiv.org/abs/1909.05858)
-            if repetition_penalty != 1.0:
-                for i in range(context.shape[0]):
-                    for _ in set(generated[i].tolist()):
-                        if next_token_logits[i, _] > 0:
-                            next_token_logits[i, _] /= repetition_penalty
-                        else:
-                            next_token_logits[i, _] *= repetition_penalty
-                
+            print('next_token_logits.shape = ', next_token_logits.shape)
+            print('generated.shape = ', generated.shape)
+            # t = torch.scatter(input=next_token_logits, dim=1, index=generated, src=next_token_logits/repetition_penalty)
+            m = torch.scatter(input=torch.zeros_like(next_token_logits), dim=1, index=generated, value=1)
+            need_change = m*next_token_logits
+            need_divide = need_change > 0
+            need_multiply = need_change < 0
+            next_token_logits = need_divide * next_token_logits / repetition_penalty + \
+                                need_multiply * next_token_logits * repetition_penalty+ \ 
+                                (1-m) * next_token_logits
+            # if repetition_penalty != 1.0:
+                # for i in range(context.shape[0]):
+                    # for _ in set(generated[i].tolist()):
+                        # if next_token_logits[i, _] > 0:
+                            # next_token_logits[i, _] /= repetition_penalty
+                        # else:
+                            # next_token_logits[i, _] *= repetition_penalty
+            # print('test: ', (t==next_token_logits).all())
+            # print('t = ', t)
+            # print('next_token_logits = ', next_token_logits)
             filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
             if temperature == 0: # greedy sampling:
                 next_token = torch.argmax(filtered_logits, dim=-1).unsqueeze(-1)
