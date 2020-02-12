@@ -217,12 +217,12 @@ def input_heuristics(s):
 def output_heuristics(s):
     if '?' in s:
         s = s[:s.find('?')+1]
-    s = s.replace(' 2 ', ' NUMBER_0 ')
-    s = s.replace(' two ', ' NUMBER_0 ')
-    s = s.replace(' the two ', ' NUMBER_0 ')
-    s = s.replace(' the 2 ', ' NUMBER_0 ')
-    s = s.replace(' location ', ' LOCATION_0 ')
-    s = s.replace(' the location ', ' LOCATION_0 ')
+    s = s.replace(' 2', ' NUMBER_0')
+    s = s.replace(' two', ' NUMBER_0')
+    s = s.replace(' the two', ' NUMBER_0')
+    s = s.replace(' the 2', ' NUMBER_0')
+    s = s.replace(' location', ' LOCATION_0')
+    s = s.replace(' the location', ' LOCATION_0')
     return s
 
 def main(argv=sys.argv):
