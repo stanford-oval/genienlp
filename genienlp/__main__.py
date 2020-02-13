@@ -42,7 +42,7 @@ subcommands = {
 
 def main():
     parser = argparse.ArgumentParser(prog='genienlp')
-    subparsers = parser.add_subparsers(dest='subcommand', required=True)
+    subparsers = parser.add_subparsers(dest='subcommand')
     for subcommand in subcommands:
         helpstr, get_parser, command_fn = subcommands[subcommand]
         get_parser(subparsers.add_parser(subcommand, help=helpstr))
