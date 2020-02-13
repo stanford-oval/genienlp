@@ -30,6 +30,7 @@
 
 from torch import nn
 
+from .coatt_encoder import CoattentionEncoder
 from .lstm_encoder import BiLSTMEncoder
 from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
@@ -38,7 +39,8 @@ from .mqan_decoder import MQANDecoder
 ENCODERS = {
     'MQANEncoder': MQANEncoder,
     'BiLSTM': BiLSTMEncoder,
-    'Identity': IdentityEncoder
+    'Identity': IdentityEncoder,
+    'Coattention': CoattentionEncoder,
 }
 DECODERS = {
     'MQANDecoder': MQANDecoder

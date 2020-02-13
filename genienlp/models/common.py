@@ -508,8 +508,7 @@ class CoattentiveLayer(nn.Module):
         question_padding = torch.cat([question.new_zeros((question.size(0), 1), dtype=torch.bool), question_padding], 1)
 
         context_sentinel = self.embed_sentinel(context.new_zeros((context.size(0), 1), dtype=torch.long))
-        context = torch.cat([context_sentinel, self.dropout(context)],
-                            1)  # batch_size x (context_length + 1) x features
+        context = torch.cat([context_sentinel, self.dropout(context)], 1) # batch_size x (context_length + 1) x features
 
         question_sentinel = self.embed_sentinel(question.new_ones((question.size(0), 1), dtype=torch.long))
         question = torch.cat([question_sentinel, question], 1)  # batch_size x (question_length + 1) x features
@@ -523,8 +522,8 @@ class CoattentiveLayer(nn.Module):
         sum_of_question = self.attn(attn_over_question, question)  # batch_size x (context_length + 1) x features
         coattn_context = self.attn(attn_over_question, sum_of_context)  # batch_size x (context_length + 1) x features
         coattn_question = self.attn(attn_over_context, sum_of_question)  # batch_size x (question_length + 1) x features
-        return torch.cat([coattn_context, sum_of_question], 2)[:, 1:], torch.cat([coattn_question, sum_of_context], 2)[
-                                                                       :, 1:]
+        return torch.cat([coattn_context, sum_of_question], 2)[:, 1:], \
+               torch.cat([coattn_question, sum_of_context], 2)[:, 1:]
 
     @staticmethod
     def attn(weights, candidates):
