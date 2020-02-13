@@ -113,14 +113,14 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
 
 def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=0, top_p=0.0, repetition_penalty=1.0,
                     is_xlnet=False, is_xlm_mlm=False, xlm_mask_token=None, xlm_lang=None, device='cpu',
-                    stop_token_id=None, pad_token_id=None, supports_past=False):
+                    stop_token_ids=None, pad_token_id=None, supports_past=False):
     """
     Generates sequence of tokens for the batch of input contexts.
     Inputs:
         context: a list of token_ids
         num_samples: the number of sequences to output for each input context
         length: The maximum length of generation
-        stop_token_id: generation of each sequence will stop if we generate this token
+        stop_token_ids: generation of each sequence will stop if we generate any of these tokens
         supports_past: set to True if the model accepts the 'past' input for more efficient generation. For example, GPT-2/Transfo-XL/XLNet/CTRL do
     """
     max_length = len(context[0]) # context is sorted by length from longest to shortest
@@ -201,10 +201,11 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                 next_token = m*context[:, next_index:next_index+1]+(1-m)*next_token
                 # print('next_token = ', next_token)
 
-            if should_finish is None:
-                should_finish = (next_token == stop_token_id)
-            else:
-                should_finish = should_finish | (next_token == stop_token_id)
+            for stop_token_id in stop_token_ids:
+                if should_finish is None:
+                    should_finish = (next_token == stop_token_id)
+                else:
+                    should_finish = should_finish | (next_token == stop_token_id)
             next_index += 1
             generated = torch.cat((generated, next_token), dim=1)
             if should_finish.all():
@@ -258,7 +259,7 @@ def main(argv=sys.argv):
                         help="random seed for initialization")
     parser.add_argument('--prompt_token', type=str, default='<paraphrase>',
                         help="Token after which text generation starts. We need to add this to the end of all inputs.")
-    parser.add_argument('--stop_token', type=str, default='</paraphrase>',
+    parser.add_argument('--stop_tokens', type=str, nargs='+', default=['</paraphrase>', '?'],
                         help="Token at which text generation is stopped")
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation.")
@@ -275,6 +276,7 @@ def main(argv=sys.argv):
     model = model_class.from_pretrained(args.model_name_or_path)
     model.to(args.device)
     model.eval()
+    print(args.stop_tokens)
 
     if args.length < 0 and model.config.max_position_embeddings > 0:
         args.length = model.config.max_position_embeddings
@@ -361,7 +363,7 @@ def main(argv=sys.argv):
             xlm_mask_token=xlm_mask_token,
             xlm_lang=xlm_lang,
             device=args.device,
-            stop_token_id=tokenizer.convert_tokens_to_ids(args.stop_token),
+            stop_token_ids=[tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens],
             pad_token_id=pad_token_id,
             supports_past=args.model_type in ['gpt2', 'openai-gpt', 'transfo-xl', 'xlnet', 'ctrl']
         )
@@ -379,11 +381,18 @@ def main(argv=sys.argv):
 
             # print('len(o) = ', len(o))
             # print('o = ', o)
-            if args.stop_token:
-                index = text.find(args.stop_token)
-                if index == -1:
-                    index = None
-                text = text[:index]
+            if args.stop_tokens is not None:
+                min_index = len(text)
+                for stop_token in args.stop_tokens:
+                    # print('text = ', text)
+                    # print('stop_token = ', stop_token)
+                    index = text.find(stop_token)
+                    # print('index = ', index)
+                    if index >= 0:
+                        min_index = min(index, min_index)
+                if min_index < len(text) and text[min_index] == '?':
+                    min_index += 1
+                text = text[:min_index]
             text = text.strip()
             text = output_heuristics(text)
             batch_outputs[i % (batch_slice[1]-batch_slice[0])].append(text)
