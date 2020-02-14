@@ -20,7 +20,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import argparse
 import logging
-from tqdm import trange
+from tqdm import trange, tqdm
 import math
 import json
 import csv
@@ -119,7 +119,7 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
     Inputs:
         context: a list of token_ids
         num_samples: the number of sequences to output for each input context
-        length: The maximum length of generation
+        length: The maximum length of generation in addition to the original sentence's length
         stop_token_ids: generation of each sequence will stop if we generate any of these tokens
         supports_past: set to True if the model accepts the 'past' input for more efficient generation. For example, GPT-2/Transfo-XL/XLNet/CTRL do
     """
@@ -133,10 +133,14 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
     generated = context[:, :next_index]
     should_finish = None
     # print('generated = ', generated)
-    length = max(length+max_length-min_length, max_length)
+    length = max_length + length
     past = None
     with torch.no_grad():
-        for _ in trange(length):
+        for _ in range(length):
+            # if _ == 0:
+                # repetition_penalty *= 2
+            # if _ == 3:
+                # repetition_penalty /= 2
 
             inputs = {'input_ids': generated}
             if is_xlnet: 
@@ -220,6 +224,8 @@ def input_heuristics(s):
         s += '?'
     s = s.replace('LOCATION_0', 'location')
     s = s.replace('NUMBER_0', '2')
+    s = s.replace('DATE_0', '5/6/2015')
+    s = s.replace('DURATION_0', '5 days')
     return s
 
 def output_heuristics(s):
@@ -231,6 +237,9 @@ def output_heuristics(s):
     s = s.replace(' the 2', ' NUMBER_0')
     s = s.replace(' location', ' LOCATION_0')
     s = s.replace(' the location', ' LOCATION_0')
+    s = s.replace('5/6/2015', 'DATE_0')
+    s = s.replace('5 days', 'DURATION_0')
+    s = s.replace('five days', 'DURATION_0')
     return s
 
 def main(argv=sys.argv):
@@ -245,7 +254,7 @@ def main(argv=sys.argv):
     parser.add_argument("--output_file", type=str, help="When specified, generated text will be written in this file.")
     parser.add_argument("--padding_text", type=str, default="")
     parser.add_argument("--xlm_lang", type=str, default="", help="Optional language when used with the XLM model.")
-    parser.add_argument("--length", type=int, default=20)
+    parser.add_argument("--length", type=int, default=10, help='The generated sentences will have a maximum length of len(input) + arg.length')
     parser.add_argument("--num_samples", type=int, default=1)
     parser.add_argument("--temperature", type=float, default=1.0,
                         help="temperature of 0 implies greedy sampling")
@@ -313,7 +322,7 @@ def main(argv=sys.argv):
     all_context_lengths = []
     with open(args.input_file) as input_file:
         reader = csv.reader(input_file, delimiter='\t')
-        for row in reader:
+        for row in tqdm(reader, desc='Reading Input File'):
             raw_text = row[args.input_column]
             # print('before text = ', raw_text)
             raw_text = input_heuristics(raw_text)
@@ -337,6 +346,7 @@ def main(argv=sys.argv):
     t = list(zip(*sorted(list(zip(all_context_lengths, all_context_tokens, range(len(all_context_tokens)))), reverse=True)))
     all_context_lengths, all_context_tokens, original_order = list(t[0]), list(t[1]), list(t[2])
     all_outputs = []
+    # print('all_context_lengths[0:100] = ', all_context_lengths[0:100])
 
     if args.output_file is not None:
         output_file = open(args.output_file, 'w')
@@ -378,16 +388,15 @@ def main(argv=sys.argv):
             # print('context_length = ', batch_context_lengths[i % (batch_slice[1]-batch_slice[0])])
             o = o[batch_context_lengths[i % (batch_slice[1]-batch_slice[0])]:]
             text = tokenizer.decode(o, clean_up_tokenization_spaces=True, skip_special_tokens=False)
+            # print('original text: ', tokenizer.decode(batch_context_tokens[i % (batch_slice[1]-batch_slice[0])], clean_up_tokenization_spaces=True, skip_special_tokens=False))
 
             # print('len(o) = ', len(o))
             # print('o = ', o)
+            # print('text = ', text)
             if args.stop_tokens is not None:
                 min_index = len(text)
                 for stop_token in args.stop_tokens:
-                    # print('text = ', text)
-                    # print('stop_token = ', stop_token)
                     index = text.find(stop_token)
-                    # print('index = ', index)
                     if index >= 0:
                         min_index = min(index, min_index)
                 if min_index < len(text) and text[min_index] == '?':
