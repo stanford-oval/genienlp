@@ -136,7 +136,7 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
     length = max_length + length
     past = None
     with torch.no_grad():
-        for _ in range(length):
+        for _ in trange(length):
             # if _ == 0:
                 # repetition_penalty *= 2
             # if _ == 3:
