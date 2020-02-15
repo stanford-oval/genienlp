@@ -286,8 +286,6 @@ def train(args, train_dataset, model, tokenizer):
             model.train()
             outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
-            if args.local_rank in [-1, 0]:
-                tb_writer.add_scalar('training/loss', loss, step)
 
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
