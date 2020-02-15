@@ -153,9 +153,9 @@ def step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, logger
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss')
     non_accumulated_loss = loss.item()
-    print('len(batch) = ', len(batch))
-    loss = loss*len(batch)
-    accumulated_batch_lengths += len(batch)
+    print('batch size = ', len(batch[0]))
+    loss = loss*len(batch[0])
+    accumulated_batch_lengths += len(batch[0])
     loss.backward()
     grad_norm = None
     if (iteration+1) % gradient_accumulation_steps == 0:
