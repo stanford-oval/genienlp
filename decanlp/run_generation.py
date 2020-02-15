@@ -25,6 +25,7 @@ import math
 import json
 import csv
 import sys
+import re
 
 import torch
 import torch.nn.functional as F
@@ -89,6 +90,10 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
                 Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
         From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
+    # sign = 1
+    # if top_k < 0:
+        # top_k = logits.size(-1) + top_k
+        # sign = -1
     top_k = min(top_k, logits.size(-1))  # Safety check
     if top_k > 0:
         # Remove all tokens with a probability less than the last token of the top-k
@@ -136,12 +141,11 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
     length = max_length + length
     past = None
     with torch.no_grad():
+        # rep_penalty = np.random.random(length) < 0.1
+        # original_rep_penalty = repetition_penalty
+        # print('rep_penalty = ', rep_penalty)
         for _ in trange(length):
-            # if _ == 0:
-                # repetition_penalty *= 2
-            # if _ == 3:
-                # repetition_penalty /= 2
-
+            # repetition_penalty = original_rep_penalty + rep_penalty[_] * 9
             inputs = {'input_ids': generated}
             if is_xlnet: 
                 # XLNet is a direct (predict same token, not next token) and bi-directional model by default
@@ -392,7 +396,6 @@ def main(argv=sys.argv):
 
             # print('len(o) = ', len(o))
             # print('o = ', o)
-            # print('text = ', text)
             if args.stop_tokens is not None:
                 min_index = len(text)
                 for stop_token in args.stop_tokens:
@@ -402,6 +405,10 @@ def main(argv=sys.argv):
                 if min_index < len(text) and text[min_index] == '?':
                     min_index += 1
                 text = text[:min_index]
+
+            # print('text = ', text)
+            text = text.replace('<pad>', '')
+            text = re.sub('\s\s+', ' ', text) # remove multiple white spaces
             text = text.strip()
             text = output_heuristics(text)
             batch_outputs[i % (batch_slice[1]-batch_slice[0])].append(text)

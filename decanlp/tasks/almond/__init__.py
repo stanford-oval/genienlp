@@ -166,7 +166,6 @@ class BaseAlmondTask(BaseTask):
         raise NotImplementedError()
 
     def tokenize(self, sentence, field_name=None):
-        print(sentence)
         if not sentence:
             return [], []
 
