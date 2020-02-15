@@ -142,22 +142,36 @@ def prepare_data(args, logger):
 
     return numericalizer, encoder_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
+accumulated_batch_lengths = 0
 
-def step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, logger=None):
+def step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, logger=None, gradient_accumulation_steps=1):
+    global accumulated_batch_lengths
     model.train()
-    opt.zero_grad()
+    if (iteration) % gradient_accumulation_steps == 0:
+        opt.zero_grad()
     loss, predictions = model(batch, iteration)
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss')
+    non_accumulated_loss = loss.item()
+    print('len(batch) = ', len(batch))
+    loss = loss*len(batch)
+    accumulated_batch_lengths += len(batch)
     loss.backward()
     grad_norm = None
-    if grad_clip > 0.0:
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
-    opt.step()
-    if lr_scheduler is not None:
-        lr_scheduler.step()
+    if (iteration+1) % gradient_accumulation_steps == 0:
+        for p in model.parameters():
+            if p.grad is None:
+                continue
+            # print('p.grad = ', p.grad)
+            p.grad /= accumulated_batch_lengths
+        accumulated_batch_lengths = 0
+        if grad_clip > 0.0:
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
+        opt.step()
+        if lr_scheduler is not None:
+            lr_scheduler.step()
 
-    return loss.item(), grad_norm
+    return non_accumulated_loss, grad_norm
 
 
 def update_fraction(args, task_iteration):
@@ -221,7 +235,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
         else:
             train_iterations = train_iter_deep
 
-        for task_idx, (task, train_iter)in enumerate(train_iters):
+        for task_idx, (task, train_iter) in enumerate(train_iters):
 
             task_iterations = train_iterations[task_idx] if train_iterations is not None else None
             if task_iterations == 0:
@@ -306,7 +320,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
                     # param update
                     loss, grad_norm = step(model, batch, iteration, opt, lr_scheduler=lr_scheduler,
-                                           grad_clip=args.grad_clip, logger=logger)
+                                           grad_clip=args.grad_clip, logger=logger, gradient_accumulation_steps=args.gradient_accumulation_steps)
                     if loss is None:
                         logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
                         continue

@@ -145,6 +145,8 @@ def parse(argv):
                         help='multiplier for transformer learning rate (if using Adam)')
     parser.add_argument('--lr_rate', default=0.001, type=float, help='fixed learning rate (if not using warmup)')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
+    parser.add_argument('--gradient_accumulation_steps', default=1, type=int, help='Number of accumulation steps. Useful to effectively get larger batch sizes.')
+    
 
     parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside args.save')
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')
