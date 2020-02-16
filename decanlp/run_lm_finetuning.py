@@ -92,13 +92,14 @@ class TextDataset(Dataset):
                     # print(tokenized_text)
                     example = tokenizer.build_inputs_with_special_tokens(tokenized_text)
                     max_input_length = max(max_input_length, len(example))
-                    self.examples.append(example)
-                    prompt_token_location = tokenized_text.index(prompt_token_id)
-                    if prompt_token_id < 0:
+                    try:
+                        prompt_token_location = tokenized_text.index(prompt_token_id)
+                    except ValueError:
                         logger.warning('Prompt token not found after truncating the input.')
-                        self.labels.append(example)
-                    else:
-                        self.labels.append([-1]*(prompt_token_location+1)+example[prompt_token_location+1:])
+                        continue
+
+                    self.examples.append(example)
+                    self.labels.append([-1]*(prompt_token_location+1)+example[prompt_token_location+1:])
 
             logger.info('Maximum input length: %d', max_input_length)
             logger.info("Saving features into cached file %s", cached_features_file)
