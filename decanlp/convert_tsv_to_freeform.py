@@ -10,6 +10,19 @@ def detokenize(text):
     text = text.replace("( ", "(")
     return text
 
+def is_english(s):
+    try:
+        s.encode(encoding='utf-8').decode('ascii')
+    except UnicodeDecodeError:
+        return False
+    else:
+        return True
+
+def is_valid(s):
+    return 'http' not in s and s.count('-') <= 4 and s.count('.') <= 4 and is_english(s) \
+        and '_' not in s and '/' not in s and '*' not in s and '\\' not in s \
+            and 'www' not in s and sum(c.isdigit() for c in s) <= 10
+
 def main():
     parser = ArgumentParser()
     parser.add_argument('input', type=str,
@@ -28,7 +41,7 @@ def main():
     with open(args.input, 'r') as input_file, open(args.output, 'w') as output_file:
         reader = csv.reader(input_file, delimiter='\t')
         for row in tqdm(reader, desc='Lines'):
-            if 'http' in row[0]:
+            if not is_valid(row[0]) or not is_valid(row[1]):
                 drop_count += 1
                 continue
             output_file.write(detokenize(row[1]) + args.start_special_token +

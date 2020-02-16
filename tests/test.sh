@@ -19,12 +19,14 @@ for v in glove.6B.50d charNgram ; do
 done
 
 TMPDIR=`pwd`
-workdir=`mktemp -d $TMPDIR/genieNLP-tests-XXXXXX`
+workdir=$TMPDIR/workdir #`mktemp -d $TMPDIR/genieNLP-tests-XXXXXX`
+mkdir -p $workdir/cache
 trap on_error ERR INT TERM
 
 i=0
 for hparams in \
-            "--encoder_embeddings=bert-base-multilingual-cased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
+            "--dimension 768 --transformer_hidden 768 --trainable_decoder_embeddings 50 --encoder_embeddings=bert-base-uncased --decoder_embeddings= --seq2seq_encoder=Identity --rnn_layers 2 --transformer_heads 12 --transformer_layers 0 --rnn_zero_state=average --train_encoder_embeddings --transformer_lr_multiply 0.1"
+            # "--encoder_embeddings=bert-base-multilingual-cased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
             # "--encoder_embeddings=small_glove+char --decoder_embeddings=small_glove+char" \
             #    "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50" \
             #    "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
@@ -32,16 +34,16 @@ for hparams in \
 do
 
     # train
-    python -m decanlp train --train_tasks almond  --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --no_commit
+    decanlp train --train_tasks almond  --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --cache $workdir/cache  --root "" --embeddings $SRCDIR/embeddings --no_commit
 
     # greedy decode
-    python -m decanlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
+    # decanlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
 
     # check if result files exist
-    if test ! -f $workdir/model_$i/eval_results/test/almond.tsv ; then
-        echo "File not found!"
-        exit
-    fi
+    # if test ! -f $workdir/model_$i/eval_results/test/almond.tsv ; then
+        # echo "File not found!"
+        # exit
+    # fi
 
     i=$((i+1))
 done
