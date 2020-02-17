@@ -197,14 +197,14 @@ def load_config_json(args):
                     'transformer_hidden', 'dimension', 'rnn_dimension', 'load', 'max_val_context_length',
                     'val_batch_size', 'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower',
                     'encoder_embeddings', 'decoder_embeddings', 'trainable_decoder_embeddings',
-                    'train_encoder_embeddings', 'locale', 'use_pretrained_bert']
+                    'trainable_encoder_embeddings', 'train_encoder_embeddings', 'locale', 'use_pretrained_bert']
 
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
             elif r == 'locale':
                 setattr(args, r, 'en')
-            elif r == 'trainable_decoder_embedding':
+            elif r in ('trainable_decoder_embedding', 'trainable_encoder_embeddings'):
                 setattr(args, r, 0)
             elif r == 'train_encoder_embedding':
                 setattr(args, r, False)

@@ -39,7 +39,7 @@ class CoattentionEncoder(nn.Module):
         self.pad_idx = numericalizer.pad_id
 
         self.context_embeddings = CombinedEmbedding(numericalizer, [], args.dimension,
-                                                    trained_dimension=args.trainable_decoder_embeddings,
+                                                    trained_dimension=args.trainable_encoder_embeddings,
                                                     project=True,
                                                     finetune_pretrained=False)
 

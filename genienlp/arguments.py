@@ -123,6 +123,8 @@ def parse_argv(parser):
                         help='back propagate into pretrained encoder embedding (recommended for BERT)')
     parser.add_argument('--decoder_embeddings', default='glove+char',
                         help='which pretrained word embedding to use on the decoder side')
+    parser.add_argument('--trainable_encoder_embeddings', default=0, type=int,
+                        help='size of trainable portion of encoder embedding (only for Coattention encoder)')
     parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
                         help='size of trainable portion of decoder embedding (0 or omit to disable)')
 
