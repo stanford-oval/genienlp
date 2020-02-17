@@ -90,11 +90,11 @@ class AlmondDataset(generic_dataset.CQA):
                     # the question is irrelevant, so the question says English and ThingTalk even if we're doing
                     # a different language (like Chinese)
                     if reverse_task:
-                        question = 'c'
+                        question = 'translate from thingtalk to english'
                         context = target_code
                         answer = sentence
                     else:
-                        question = 'c'
+                        question = 'translate from english to thingtalk'
                         context = sentence
                         answer = target_code
 
