@@ -67,6 +67,10 @@ def main():
                     output_rows.append(row.copy())
                     new_query_count += 1
             else:
+                import re
+                row[1] = row[1].replace('<pad>', '')
+                row[1] = re.sub('\s\s+', ' ', row[1])
+                row[1] = row[1].strip()
                 output_rows = [row]
             for o in output_rows:
                 output_row = ""
