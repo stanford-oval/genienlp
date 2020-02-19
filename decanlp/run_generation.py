@@ -289,10 +289,6 @@ def main(argv=sys.argv):
     model = model_class.from_pretrained(args.model_name_or_path)
     model.to(args.device)
 
-    # Multi-GPU evaluation
-    if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
-
     model.eval()
     print(args.stop_tokens)
 
@@ -359,6 +355,10 @@ def main(argv=sys.argv):
 
     if args.output_file is not None:
         output_file = open(args.output_file, 'w')
+
+    # Multi-GPU evaluation
+    if args.n_gpu > 1:
+        model = torch.nn.DataParallel(model)
 
     for batch in trange(math.ceil(len(all_context_tokens) / args.batch_size), desc="Batch"):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_tokens)))
