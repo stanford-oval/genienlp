@@ -109,9 +109,5 @@ class IdentityEncoder(nn.Module):
                 packed_rnn_state = packed_rnn_state.transpose(1, 2)
                 # convert to a tuple of two (rnn_layers, batch, rnn_dimension) tensors
                 context_rnn_state = tuple(x.squeeze(0) for x in packed_rnn_state.chunk(2, dim=0))
-        if final_question is not None:
-            final_question = torch.zeros_like(final_question)
-        if question_rnn_state is not None:
-            question_rnn_state = torch.zeros_like(question_rnn_state)
 
         return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state
