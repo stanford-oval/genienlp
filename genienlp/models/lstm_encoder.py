@@ -38,22 +38,19 @@ class BiLSTMEncoder(nn.Module):
         self.args = args
         self.pad_idx = numericalizer.pad_id
 
-        if sum(emb.dim for emb in encoder_embeddings) != args.dimension:
-            raise ValueError('Hidden dimension must be equal to the sum of the embedding sizes to use IdentityEncoder')
-
         def dp(args):
             return args.dropout_ratio if args.rnn_layers > 1 else 0.
 
-        self.encoder_embeddings = CombinedEmbedding(numericalizer, encoder_embeddings, args.dimension,
+        self.encoder_embeddings = CombinedEmbedding(numericalizer, encoder_embeddings, args.rnn_dimension,
                                                     trained_dimension=0,
-                                                    project=False,
+                                                    project=True,
                                                     finetune_pretrained=args.train_encoder_embeddings)
 
-        self.bilstm_context = PackedLSTM(args.dimension, args.dimension,
+        self.bilstm_context = PackedLSTM(args.rnn_dimension, args.rnn_dimension,
                                          batch_first=True, bidirectional=True, num_layers=args.rnn_layers,
                                          dropout=dp(args))
 
-        self.bilstm_question = PackedLSTM(args.dimension, args.dimension,
+        self.bilstm_question = PackedLSTM(args.rnn_dimension, args.rnn_dimension,
                                           batch_first=True, bidirectional=True, num_layers=args.rnn_layers,
                                           dropout=dp(args))
 
