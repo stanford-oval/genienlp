@@ -42,10 +42,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import BertTokenizer
+from transformers import BertTokenizer, XLMRobertaTokenizer
+from collections import OrderedDict
 
 
-class MaskedWordPieceTokenizer:
+class MaskedXLMRobertaWordPieceTokenizer(object):
+    def __init__(self, vocab, spm, added_tokens_encoder, added_tokens_decoder, unk_token, max_input_chars_per_word=100):
+        self.vocab = vocab
+        self.spm = spm
+        self.unk_token = unk_token
+        self.max_input_chars_per_word = max_input_chars_per_word
+        self.added_tokens_encoder = added_tokens_encoder
+        self.added_tokens_decoder = added_tokens_decoder
+
+    def tokenize(self, tokens, mask):
+        output_tokens = []
+        for token, should_word_split in zip(tokens, mask):
+            if not should_word_split:
+                if token not in self.vocab and token not in self.added_tokens_encoder:
+                    token_id = len(self.vocab) + len(self.added_tokens_encoder)
+                    self.added_tokens_encoder[token] = token_id
+                    self.added_tokens_decoder[token_id] = token
+                output_tokens.append(token)
+                continue
+
+            chars = list(token)
+            if len(chars) > self.max_input_chars_per_word:
+                output_tokens.append(self.unk_token)
+                continue
+
+            sub_tokens = self.spm.EncodeAsPieces(token)
+            output_tokens.extend(sub_tokens)
+
+        return output_tokens
+
+
+class MaskedBertWordPieceTokenizer(object):
     def __init__(self, vocab, added_tokens_encoder, added_tokens_decoder, unk_token, max_input_chars_per_word=100):
         self.vocab = vocab
         self.unk_token = unk_token
@@ -96,6 +128,78 @@ class MaskedWordPieceTokenizer:
         return output_tokens
 
 
+
+class MaskedXLMRobertaTokenizer(XLMRobertaTokenizer):
+    def __init__(self, *args, do_lower_case=False, do_basic_tokenize=False, **kwargs):
+        # override do_lower_case and do_basic_tokenize unconditionally
+        super().__init__(*args, do_lower_case=False, do_basic_tokenize=False, **kwargs)
+
+        vocabs = [self.sp_model.id_to_piece(i) for i in range(self.sp_model.get_piece_size())]
+        self.vocab = OrderedDict([(vocab, i) for i, vocab in enumerate(vocabs)])
+        self.ids_to_tokens = OrderedDict([(i, vocab) for i, vocab in enumerate(vocabs)])
+
+        # replace the word piece tokenizer with ours
+        self.wordpiece_tokenizer = MaskedXLMRobertaWordPieceTokenizer(vocab=self.vocab,
+                                                                      spm=self.sp_model,
+                                                                      added_tokens_encoder=self.added_tokens_encoder,
+                                                                      added_tokens_decoder=self.added_tokens_decoder,
+                                                                      unk_token=self.unk_token)
+
+        self._itos = IToSWrapper(self.ids_to_tokens, self.added_tokens_decoder)
+        self._stoi = SToIWrapper(self.vocab, self.added_tokens_encoder)
+
+    def tokenize(self, tokens, mask=None):
+        return self.wordpiece_tokenizer.tokenize(tokens, mask)
+
+    # provide an interface similar to Vocab
+
+    def __len__(self):
+        return len(self.vocab) + len(self.added_tokens_encoder)
+
+    @property
+    def stoi(self):
+        return self._stoi
+
+    @property
+    def itos(self):
+        return self._itos
+
+
+class MaskedBertTokenizer(BertTokenizer):
+    """
+    A modified BertTokenizer that respects a mask deciding whether a token should be split or not.
+    """
+
+    def __init__(self, *args, do_lower_case=False, do_basic_tokenize=False, **kwargs):
+        # override do_lower_case and do_basic_tokenize unconditionally
+        super().__init__(*args, do_lower_case=False, do_basic_tokenize=False, **kwargs)
+
+        # replace the word piece tokenizer with ours
+        self.wordpiece_tokenizer = MaskedBertWordPieceTokenizer(vocab=self.vocab,
+                                                            added_tokens_encoder=self.added_tokens_encoder,
+                                                            added_tokens_decoder=self.added_tokens_decoder,
+                                                            unk_token=self.unk_token)
+
+        self._itos = IToSWrapper(self.ids_to_tokens, self.added_tokens_decoder)
+        self._stoi = SToIWrapper(self.vocab, self.added_tokens_encoder)
+
+    def tokenize(self, tokens, mask=None):
+        return self.wordpiece_tokenizer.tokenize(tokens, mask)
+
+    # provide an interface similar to Vocab
+
+    def __len__(self):
+        return len(self.vocab) + len(self.added_tokens_encoder)
+
+    @property
+    def stoi(self):
+        return self._stoi
+
+    @property
+    def itos(self):
+        return self._itos
+
+
 class IToSWrapper:
     """Wrap the ordered dict vocabs to look like a list int -> str"""
 
@@ -143,38 +247,3 @@ class SToIWrapper:
             yield key
         for key in self.added_tokens:
             yield key
-
-
-class MaskedBertTokenizer(BertTokenizer):
-    """
-    A modified BertTokenizer that respects a mask deciding whether a token should be split or not.
-    """
-
-    def __init__(self, *args, do_lower_case=False, do_basic_tokenize=False, **kwargs):
-        # override do_lower_case and do_basic_tokenize unconditionally
-        super().__init__(*args, do_lower_case=False, do_basic_tokenize=False, **kwargs)
-
-        # replace the word piece tokenizer with ours
-        self.wordpiece_tokenizer = MaskedWordPieceTokenizer(vocab=self.vocab,
-                                                            added_tokens_encoder=self.added_tokens_encoder,
-                                                            added_tokens_decoder=self.added_tokens_decoder,
-                                                            unk_token=self.unk_token)
-
-        self._itos = IToSWrapper(self.ids_to_tokens, self.added_tokens_decoder)
-        self._stoi = SToIWrapper(self.vocab, self.added_tokens_encoder)
-
-    def tokenize(self, tokens, mask=None):
-        return self.wordpiece_tokenizer.tokenize(tokens, mask)
-
-    # provide an interface similar to Vocab
-
-    def __len__(self):
-        return len(self.vocab) + len(self.added_tokens_encoder)
-
-    @property
-    def stoi(self):
-        return self._stoi
-
-    @property
-    def itos(self):
-        return self._itos

@@ -30,4 +30,4 @@
 from .sequential_field import SequentialField
 
 from .simple import SimpleNumericalizer
-from .bert import BertNumericalizer
+from .transformer import BertNumericalizer, XLMRobertaNumericalizer

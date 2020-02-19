@@ -36,7 +36,7 @@ from pprint import pformat
 import torch
 
 from . import models
-from .data.embeddings import load_embeddings
+from .data_utils.embeddings import load_embeddings
 from .metrics import compute_metrics
 from .tasks.registry import get_tasks
 from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices

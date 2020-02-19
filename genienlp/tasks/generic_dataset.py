@@ -40,8 +40,8 @@ import unicodedata
 import logging
 import xml.etree.ElementTree as ET
 
-from .dataset import Dataset, interleave_keys
-from ..data.example import Example
+from .base_dataset import Dataset, interleave_keys
+from ..data_utils.example import Example
 
 logger = logging.getLogger(__name__)
 

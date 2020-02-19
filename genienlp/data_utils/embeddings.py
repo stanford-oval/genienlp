@@ -32,10 +32,10 @@ import torch
 import os
 from collections import defaultdict
 import logging
-from transformers import AutoTokenizer, AutoModel, BertConfig
+from transformers import AutoTokenizer, AutoModel, AutoConfig
 from typing import NamedTuple, List
 
-from .numericalizer import SimpleNumericalizer, BertNumericalizer
+from .numericalizer import SimpleNumericalizer, BertNumericalizer, XLMRobertaNumericalizer
 from . import word_vectors
 from .almond_embeddings import AlmondEmbeddings
 from .pretrained_lstm_lm import PretrainedLTSMLM
@@ -96,7 +96,7 @@ class WordVectorEmbedding(torch.nn.Module):
         pass
 
 
-class BertEmbedding(torch.nn.Module):
+class TransformerEmbedding(torch.nn.Module):
     def __init__(self, model):
         super().__init__()
         model.config.output_hidden_states = True
@@ -160,6 +160,9 @@ class PretrainedLMEmbedding(torch.nn.Module):
 def _is_bert(embedding_name):
     return embedding_name.startswith('bert-')
 
+def _is_xlmr(embedding_name):
+    return embedding_name.startswith('xlm-roberta-')
+
 
 def _name_to_vector(emb_name, cachedir):
     if emb_name == 'glove':
@@ -193,20 +196,23 @@ def load_embeddings(cachedir, encoder_emb_names, decoder_emb_names, max_generati
     for emb_name in encoder_emb_names:
         if not emb_name:
             continue
-        if _is_bert(emb_name):
+        if _is_bert(emb_name) or _is_xlmr(emb_name):
             if numericalizer is not None:
-                raise ValueError('Cannot specify multiple BERT embeddings')
+                raise ValueError('Cannot specify multiple Transformer embeddings')
 
-            config = BertConfig.from_pretrained(emb_name, cache_dir=cachedir)
+            config = AutoConfig.from_pretrained(emb_name, cache_dir=cachedir)
             config.output_hidden_states = True
-            numericalizer = BertNumericalizer(config, emb_name, max_generative_vocab=max_generative_vocab,
-                                              cache=cachedir)
+            if _is_bert(emb_name):
+                numericalizer = BertNumericalizer(emb_name, config=config, max_generative_vocab=max_generative_vocab, cache=cachedir)
+            elif _is_xlmr(emb_name):
+                numericalizer = XLMRobertaNumericalizer(emb_name, config=config, max_generative_vocab=max_generative_vocab, cache=cachedir)
 
             # load the tokenizer once to ensure all files are downloaded
             AutoTokenizer.from_pretrained(emb_name, cache_dir=cachedir)
 
             encoder_vectors.append(
-                BertEmbedding(AutoModel.from_pretrained(emb_name, config=config, cache_dir=cachedir)))
+                TransformerEmbedding(AutoModel.from_pretrained(emb_name, config=config, cache_dir=cachedir)))
+
         else:
             if numericalizer is not None:
                 logger.warning('Combining BERT embeddings with other pretrained embeddings is unlikely to work')
@@ -221,8 +227,8 @@ def load_embeddings(cachedir, encoder_emb_names, decoder_emb_names, max_generati
     for emb_name in decoder_emb_names:
         if not emb_name:
             continue
-        if _is_bert(emb_name):
-            raise ValueError('BERT embeddings cannot be specified in the decoder')
+        if _is_bert(emb_name) or _is_xlmr(emb_name):
+            raise ValueError('Transformer embeddings cannot be specified in the decoder')
 
         if emb_name in all_vectors:
             decoder_vectors.append(all_vectors[emb_name])
