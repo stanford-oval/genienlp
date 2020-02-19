@@ -288,6 +288,11 @@ def main(argv=sys.argv):
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
     model = model_class.from_pretrained(args.model_name_or_path)
     model.to(args.device)
+
+    # Multi-GPU evaluation
+    if args.n_gpu > 1:
+        model = torch.nn.DataParallel(model)
+
     model.eval()
     print(args.stop_tokens)
 
