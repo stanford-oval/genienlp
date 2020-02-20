@@ -160,6 +160,7 @@ class PretrainedLMEmbedding(torch.nn.Module):
 def _is_bert(embedding_name):
     return embedding_name.startswith('bert-')
 
+
 def _is_xlmr(embedding_name):
     return embedding_name.startswith('xlm-roberta-')
 

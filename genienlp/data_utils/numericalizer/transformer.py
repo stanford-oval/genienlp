@@ -31,7 +31,7 @@ import os
 import torch
 
 from .decoder_vocab import DecoderVocabulary
-from .masked_bert_tokenizer import MaskedBertTokenizer, MaskedXLMRobertaTokenizer
+from .masked_tokenizer import MaskedBertTokenizer, MaskedXLMRobertaTokenizer
 from .sequential_field import SequentialField
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 

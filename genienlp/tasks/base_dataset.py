@@ -1,7 +1,7 @@
 import os
 import zipfile
 import tarfile
-from six.moves import urllib
+import urllib
 import requests
 
 import torch.utils.data
