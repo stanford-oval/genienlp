@@ -60,7 +60,7 @@ class TransformerNumericalizer(object):
         return len(self._tokenizer)
 
     def load(self, save_dir):
-        NotImplementedError()
+        raise NotImplementedError()
 
     def save(self, save_dir):
         self._tokenizer.save_pretrained(save_dir)
@@ -69,7 +69,7 @@ class TransformerNumericalizer(object):
                 fp.write(word + '\n')
 
     def build_vocab(self, vocab_fields, vocab_sets):
-        NotImplementedError()
+        raise NotImplementedError()
 
     def grow_vocab(self, examples):
         # do a pass over all the data in the dataset and tokenize everything
@@ -147,7 +147,7 @@ class TransformerNumericalizer(object):
         return self._tokenizer.convert_ids_to_tokens(tensor)
 
     def reverse(self, batch, detokenize, field_name=None):
-        NotImplementedError()
+        raise NotImplementedError()
 
 
 class XLMRobertaNumericalizer(TransformerNumericalizer):
@@ -277,8 +277,6 @@ class BertNumericalizer(TransformerNumericalizer):
 
         self._init()
 
-    def decode(self, tensor):
-        return self._tokenizer.convert_ids_to_tokens(tensor)
 
     def reverse(self, batch, detokenize, field_name=None):
         with torch.cuda.device_of(batch):

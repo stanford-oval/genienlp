@@ -35,7 +35,8 @@ import logging
 from transformers import AutoTokenizer, AutoModel, AutoConfig
 from typing import NamedTuple, List
 
-from .numericalizer import SimpleNumericalizer, BertNumericalizer, XLMRobertaNumericalizer
+from .numericalizer.simple import SimpleNumericalizer
+from .numericalizer.transformer import BertNumericalizer, XLMRobertaNumericalizer
 from . import word_vectors
 from .almond_embeddings import AlmondEmbeddings
 from .pretrained_lstm_lm import PretrainedLTSMLM

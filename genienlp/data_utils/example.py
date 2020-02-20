@@ -29,7 +29,7 @@
 
 from typing import NamedTuple, List
 
-from .numericalizer import SequentialField
+from .numericalizer.sequential_field import SequentialField
 
 
 class Example(NamedTuple):
