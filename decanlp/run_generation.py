@@ -26,6 +26,8 @@ import json
 import csv
 import sys
 import re
+import copy
+from multiprocessing import Process
 
 import torch
 import torch.nn.functional as F
@@ -246,6 +248,9 @@ def output_heuristics(s):
     s = s.replace('five days', 'DURATION_0')
     return s
 
+def get_file_part_path(file_path, part_idx):
+    return file_path + '_part' + str(part_idx+1)
+
 def main(argv=sys.argv):
     parser = argparse.ArgumentParser(prog=argv[0])
     parser.add_argument("--model_type", default=None, type=str, required=True,
@@ -275,15 +280,79 @@ def main(argv=sys.argv):
     parser.add_argument('--stop_tokens', type=str, nargs='+', default=['</paraphrase>', '?'],
                         help="Token at which text generation is stopped")
     parser.add_argument('--batch_size', type=int, default=4,
-                        help="Batch size for text generation.")
+                        help="Batch size for text generation for each GPU.")
     args = parser.parse_args(argv[1:])
 
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     args.n_gpu = torch.cuda.device_count()
 
     set_seed(args)
-
     args.model_type = args.model_type.lower()
+
+    if args.n_gpu > 1:
+        # Independent multi-GPU evaluation
+        all_processes = []
+        all_input_files = split_input_file(args.input_file, args.n_gpu)
+        for gpu_idx in range(args.n_gpu):
+            copy_args = copy.copy(args)
+            if torch.cuda.is_available() and not args.no_cuda:
+                copy_args.device = torch.device("cuda:" + str(gpu_idx))
+            copy_args.n_gpu = 1
+            copy_args.input_file = all_input_files[gpu_idx]
+            copy_args.output_file = get_file_part_path(args.output_file, gpu_idx)
+            
+            p = Process(target=run_generation, args=(copy_args,))
+            all_processes.append(p)
+            p.start()
+
+        for p in all_processes:
+            p.join()
+
+        combine_output_files(args.output_file, args.n_gpu)
+
+    else:
+        run_generation(args)
+
+def combine_output_files(output_path_prefix, num_files):
+    with open(output_path_prefix, 'w') as combined_file:
+        for i in range(num_files):
+            output_path = get_file_part_path(output_path_prefix, i)
+            with open(output_path, 'r') as output_file:
+                for line in output_file:
+                    combined_file.write(line)
+
+
+
+def split_input_file(input_path, num_splits):
+    """
+    """
+    all_output_paths = []
+    all_output_files = []
+    number_of_lines = 0
+    with open(input_path, 'r') as input_file:
+        for line in input_file:
+            number_of_lines += 1
+    
+    for i in range(num_splits):
+        output_path = get_file_part_path(input_path, i)
+        all_output_paths.append(output_path)
+        all_output_files.append(open(output_path, 'w'))
+
+    written_lines = 0
+    with open(input_path, 'r') as input_file:
+        output_file_idx = 0
+        for line in input_file:
+            all_output_files[output_file_idx].write(line)
+            written_lines += 1
+            if written_lines % (number_of_lines//num_splits) == 0:
+                output_file_idx += 1
+
+    for f in all_output_files:
+        f.close()
+
+    return all_output_paths
+
+def run_generation(args):
     model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
     model = model_class.from_pretrained(args.model_name_or_path)
@@ -356,9 +425,6 @@ def main(argv=sys.argv):
     if args.output_file is not None:
         output_file = open(args.output_file, 'w')
 
-    # Multi-GPU evaluation
-    if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
 
     for batch in trange(math.ceil(len(all_context_tokens) / args.batch_size), desc="Batch"):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_tokens)))
