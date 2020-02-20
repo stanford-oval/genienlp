@@ -345,7 +345,7 @@ def split_input_file(input_path, num_splits):
             all_output_files[output_file_idx].write(line)
             written_lines += 1
             if written_lines % (number_of_lines//num_splits) == 0:
-                output_file_idx += 1
+                output_file_idx = min(output_file_idx + 1, len(all_output_files)-1)
 
     for f in all_output_files:
         f.close()
