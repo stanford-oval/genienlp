@@ -290,7 +290,6 @@ def main(argv=sys.argv):
     set_seed(args)
     args.model_type = args.model_type.lower()
 
-    args.n_gpu = 2
     if args.n_gpu > 1:
         # Independent multi-GPU evaluation
         all_processes = []
