@@ -27,8 +27,13 @@ import csv
 import sys
 import re
 import copy
-# from multiprocessing import Process
+
+# multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
+try:
+     set_start_method('spawn')
+except RuntimeError:
+    pass
 
 import torch
 import torch.nn.functional as F
