@@ -28,20 +28,20 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import collections
 import os
-
 import torch
 
 from .decoder_vocab import DecoderVocabulary
-from .masked_bert_tokenizer import MaskedBertTokenizer
+from .masked_tokenizer import MaskedBertTokenizer, MaskedXLMRobertaTokenizer
 from .sequential_field import SequentialField
+from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
 
-class BertNumericalizer(object):
+class TransformerNumericalizer(object):
     """
-    Numericalizer that uses BertTokenizer from huggingface's transformers library.
+    Numericalizer that uses Tokenizers from huggingface's transformers library.
     """
 
-    def __init__(self, config, pretrained_tokenizer, max_generative_vocab, cache=None, fix_length=None):
+    def __init__(self, pretrained_tokenizer, config, max_generative_vocab, cache=None, fix_length=None):
         self.config = config
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
@@ -60,14 +60,7 @@ class BertNumericalizer(object):
         return len(self._tokenizer)
 
     def load(self, save_dir):
-        self._tokenizer = MaskedBertTokenizer.from_pretrained(save_dir, config=self.config, cache_dir=self._cache)
-        # HACK we cannot save the tokenizer without this
-        del self._tokenizer.init_kwargs['config']
-
-        with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'r') as fp:
-            self._decoder_words = [line.rstrip('\n') for line in fp]
-
-        self._init()
+        raise NotImplementedError()
 
     def save(self, save_dir):
         self._tokenizer.save_pretrained(save_dir)
@@ -76,35 +69,7 @@ class BertNumericalizer(object):
                 fp.write(word + '\n')
 
     def build_vocab(self, vocab_fields, vocab_sets):
-        self._tokenizer = MaskedBertTokenizer.from_pretrained(self._pretrained_name, config=self.config,
-                                                              cache_dir=self._cache)
-        # HACK we cannot save the tokenizer without this
-        del self._tokenizer.init_kwargs['config']
-
-        # ensure that init, eos, unk and pad are set
-        # this method has no effect if the tokens are already set according to the tokenizer class
-        self._tokenizer.add_special_tokens({
-            'bos_token': '[CLS]',
-            'eos_token': '[SEP]',
-            'unk_token': '[UNK]',
-            'pad_token': '[PAD]'
-        })
-
-        # do a pass over all the data in the dataset
-        # in this pass, we
-        # 1) tokenize everything, to ensure we account for all added tokens
-        # 2) we construct a counter of wordpieces in the answers, for the decoder vocabulary
-        decoder_words = collections.Counter()
-        for dataset in vocab_sets:
-            for example in dataset:
-                decoder_words.update(self._tokenizer.tokenize(example.context, example.context_word_mask))
-                decoder_words.update(self._tokenizer.tokenize(example.question, example.question_word_mask))
-                decoder_words.update(self._tokenizer.tokenize(example.answer, example.answer_word_mask))
-
-        self._decoder_words = ['[PAD]', '[CLS]', '[SEP]', '[UNK]'] + \
-                              [word for word, _freq in decoder_words.most_common(self.max_generative_vocab)]
-
-        self._init()
+        raise NotImplementedError()
 
     def grow_vocab(self, examples):
         # do a pass over all the data in the dataset and tokenize everything
@@ -180,6 +145,138 @@ class BertNumericalizer(object):
 
     def decode(self, tensor):
         return self._tokenizer.convert_ids_to_tokens(tensor)
+
+    def reverse(self, batch, detokenize, field_name=None):
+        raise NotImplementedError()
+
+
+class XLMRobertaNumericalizer(TransformerNumericalizer):
+
+    def __init__(self, pretrained_tokenizer, config, max_generative_vocab, cache=None, fix_length=None):
+        super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
+
+
+    def load(self, save_dir):
+        self._tokenizer = MaskedXLMRobertaTokenizer.from_pretrained(save_dir, config=self.config, cache_dir=self._cache)
+        # HACK we cannot save the tokenizer without this
+        del self._tokenizer.init_kwargs['config']
+
+        with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'r') as fp:
+            self._decoder_words = [line.rstrip('\n') for line in fp]
+
+        self._init()
+
+
+    def build_vocab(self, vocab_fields, vocab_sets):
+        self._tokenizer = MaskedXLMRobertaTokenizer.from_pretrained(self._pretrained_name, config=self.config,
+                                                              cache_dir=self._cache)
+        # HACK we cannot save the tokenizer without this
+        del self._tokenizer.init_kwargs['config']
+
+        # ensure that init, eos, unk and pad are set
+        # this method has no effect if the tokens are already set according to the tokenizer class
+        self._tokenizer.add_special_tokens({
+            'bos_token': "<s>",
+            'eos_token': "</s>",
+            'unk_token': "<unk>",
+            'pad_token': "<pad>",
+            'mask_token': "<mask>",
+            'cls_token': "<s>",
+        })
+
+        # do a pass over all the data in the dataset
+        # in this pass, we
+        # 1) tokenize everything, to ensure we account for all added tokens
+        # 2) we construct a counter of wordpieces in the answers, for the decoder vocabulary
+        decoder_words = collections.Counter()
+        for dataset in vocab_sets:
+            for example in dataset:
+                decoder_words.update(self._tokenizer.tokenize(example.context, example.context_word_mask))
+                decoder_words.update(self._tokenizer.tokenize(example.question, example.question_word_mask))
+                decoder_words.update(self._tokenizer.tokenize(example.answer, example.answer_word_mask))
+
+        self._decoder_words = ["<s>", "</s>", "<pad>", "<unk>", "<mask>"] + \
+                              [word for word, _freq in decoder_words.most_common(self.max_generative_vocab)]
+
+        self._init()
+
+
+    def reverse(self, batch, detokenize, field_name=None):
+        with torch.cuda.device_of(batch):
+            batch = batch.tolist()
+
+        def reverse_one(tensor):
+            tokens = []
+
+            # trim up to EOS, remove other special stuff, and undo wordpiece tokenization
+            for token in self.decode(tensor):
+                if token == self.eos_token:
+                    break
+                if token in (self.init_token, self.pad_token):
+                    continue
+                if token.startswith(SPIECE_UNDERLINE):
+                        tokens.append(token[1:])
+                elif len(tokens) == 0:
+                    tokens.append(token)
+                else:
+                    tokens[-1] += token
+
+            return detokenize(tokens, field_name=field_name)
+
+        return [reverse_one(tensor) for tensor in batch]
+
+
+class BertNumericalizer(TransformerNumericalizer):
+    """
+    Numericalizer that uses BertTokenizer from huggingface's transformers library.
+    """
+
+    def __init__(self, pretrained_tokenizer, config, max_generative_vocab, cache=None, fix_length=None):
+        super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
+
+
+    def load(self, save_dir):
+        self._tokenizer = MaskedBertTokenizer.from_pretrained(save_dir, config=self.config, cache_dir=self._cache)
+        # HACK we cannot save the tokenizer without this
+        del self._tokenizer.init_kwargs['config']
+
+        with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'r') as fp:
+            self._decoder_words = [line.rstrip('\n') for line in fp]
+
+        self._init()
+
+
+    def build_vocab(self, vocab_fields, vocab_sets):
+        self._tokenizer = MaskedBertTokenizer.from_pretrained(self._pretrained_name, config=self.config,
+                                                              cache_dir=self._cache)
+        # HACK we cannot save the tokenizer without this
+        del self._tokenizer.init_kwargs['config']
+
+        # ensure that init, eos, unk and pad are set
+        # this method has no effect if the tokens are already set according to the tokenizer class
+        self._tokenizer.add_special_tokens({
+            'bos_token': '[CLS]',
+            'eos_token': '[SEP]',
+            'unk_token': '[UNK]',
+            'pad_token': '[PAD]'
+        })
+
+        # do a pass over all the data in the dataset
+        # in this pass, we
+        # 1) tokenize everything, to ensure we account for all added tokens
+        # 2) we construct a counter of wordpieces in the answers, for the decoder vocabulary
+        decoder_words = collections.Counter()
+        for dataset in vocab_sets:
+            for example in dataset:
+                decoder_words.update(self._tokenizer.tokenize(example.context, example.context_word_mask))
+                decoder_words.update(self._tokenizer.tokenize(example.question, example.question_word_mask))
+                decoder_words.update(self._tokenizer.tokenize(example.answer, example.answer_word_mask))
+
+        self._decoder_words = ['[PAD]', '[CLS]', '[SEP]', '[UNK]'] + \
+                              [word for word, _freq in decoder_words.most_common(self.max_generative_vocab)]
+
+        self._init()
+
 
     def reverse(self, batch, detokenize, field_name=None):
         with torch.cuda.device_of(batch):

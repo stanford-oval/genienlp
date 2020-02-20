@@ -19,6 +19,8 @@ multiprocess/.DS_Store
 text/.DS_Store
 src/
 workdir/
+*save*/
+tests/dataset-*
 
 
 # C extensions

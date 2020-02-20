@@ -1,10 +1,10 @@
 import os
 import zipfile
 import tarfile
+import urllib
+import requests
 
 import torch.utils.data
-
-from .utils import download_from_url
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -135,3 +135,32 @@ def interleave_keys(a, b):
         return ''.join([x for t in zip(*args) for x in t])
 
     return int(''.join(interleave(format(x, '016b') for x in (a, b))), base=2)
+
+
+def download_from_url(url, path):
+    """Download file, with logic (from tensor2tensor) for Google Drive"""
+    if 'drive.google.com' not in url:
+        try:
+            return urllib.request.urlretrieve(url, path)
+        except Exception:
+            res = requests.get(url)
+            with open(path, 'wb') as out:
+                out.write(res.content)
+    print('downloading from Google Drive; may take a few minutes')
+    confirm_token = None
+    session = requests.Session()
+    response = session.get(url, stream=True)
+    for k, v in response.cookies.items():
+        if k.startswith("download_warning"):
+            confirm_token = v
+
+    if confirm_token:
+        url = url + "&confirm=" + confirm_token
+        response = session.get(url, stream=True)
+
+    chunk_size = 16 * 1024
+    with open(path, "wb") as f:
+        for chunk in response.iter_content(chunk_size):
+            if chunk:
+                f.write(chunk)
+

@@ -44,12 +44,12 @@ from tensorboardX import SummaryWriter
 
 from . import arguments
 from . import models
-from .data.embeddings import load_embeddings
-from .data.example import Example
+from .data_utils.embeddings import load_embeddings
+from .data_utils.example import Example
 from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader, log_model_size, \
     init_devices
-from .utils.parallel_utils import NamedTupleCompatibleDataParallel
-from .utils.saver import Saver
+from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
+from .model_utils.saver import Saver
 from .validate import validate
 
 
@@ -125,6 +125,7 @@ def prepare_data(args, logger):
         numericalizer.build_vocab(Example.vocab_fields, vocab_sets)
         numericalizer.save(args.save)
 
+        logger.info(f'Initializing encoder and decoder embeddings')
         for vec in set(encoder_embeddings + decoder_embeddings):
             vec.init_for_vocab(numericalizer.vocab)
 

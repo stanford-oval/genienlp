@@ -19,6 +19,23 @@ logger = logging.getLogger(__name__)
 MAX_WORD_LENGTH = 100
 
 
+pretrained_aliases = {
+    "charngram.100d": lambda: CharNGram(),
+    "fasttext.en.300d": lambda: FastText(language="en"),
+    "fasttext.simple.300d": lambda: FastText(language="simple"),
+    "glove.42B.300d": lambda: GloVe(name="42B", dim="300"),
+    "glove.840B.300d": lambda: GloVe(name="840B", dim="300"),
+    "glove.twitter.27B.25d": lambda: GloVe(name="twitter.27B", dim="25"),
+    "glove.twitter.27B.50d": lambda: GloVe(name="twitter.27B", dim="50"),
+    "glove.twitter.27B.100d": lambda: GloVe(name="twitter.27B", dim="100"),
+    "glove.twitter.27B.200d": lambda: GloVe(name="twitter.27B", dim="200"),
+    "glove.6B.50d": lambda: GloVe(name="6B", dim="50"),
+    "glove.6B.100d": lambda: GloVe(name="6B", dim="100"),
+    "glove.6B.200d": lambda: GloVe(name="6B", dim="200"),
+    "glove.6B.300d": lambda: GloVe(name="6B", dim="300")
+}
+
+
 def reporthook(t):
     """https://github.com/tqdm/tqdm"""
     last_b = [0]
@@ -235,20 +252,3 @@ class CharNGram(Vectors):
         else:
             vector = self.unk_init(vector)
         return vector
-
-
-pretrained_aliases = {
-    "charngram.100d": lambda: CharNGram(),
-    "fasttext.en.300d": lambda: FastText(language="en"),
-    "fasttext.simple.300d": lambda: FastText(language="simple"),
-    "glove.42B.300d": lambda: GloVe(name="42B", dim="300"),
-    "glove.840B.300d": lambda: GloVe(name="840B", dim="300"),
-    "glove.twitter.27B.25d": lambda: GloVe(name="twitter.27B", dim="25"),
-    "glove.twitter.27B.50d": lambda: GloVe(name="twitter.27B", dim="50"),
-    "glove.twitter.27B.100d": lambda: GloVe(name="twitter.27B", dim="100"),
-    "glove.twitter.27B.200d": lambda: GloVe(name="twitter.27B", dim="200"),
-    "glove.6B.50d": lambda: GloVe(name="6B", dim="50"),
-    "glove.6B.100d": lambda: GloVe(name="6B", dim="100"),
-    "glove.6B.200d": lambda: GloVe(name="6B", dim="200"),
-    "glove.6B.300d": lambda: GloVe(name="6B", dim="300")
-}

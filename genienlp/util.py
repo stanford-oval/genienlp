@@ -38,8 +38,8 @@ import time
 import numpy as np
 import torch
 
-from .data.example import Batch
-from .data.iterator import Iterator
+from .data_utils.example import Batch
+from .data_utils.iterator import Iterator
 
 logger = logging.getLogger(__name__)
 
