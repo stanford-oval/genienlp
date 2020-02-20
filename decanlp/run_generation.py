@@ -27,7 +27,8 @@ import csv
 import sys
 import re
 import copy
-from multiprocessing import Process
+# from multiprocessing import Process
+from torch.multiprocessing import Process, set_start_method
 
 import torch
 import torch.nn.functional as F
@@ -289,6 +290,7 @@ def main(argv=sys.argv):
     set_seed(args)
     args.model_type = args.model_type.lower()
 
+    args.n_gpu = 2
     if args.n_gpu > 1:
         # Independent multi-GPU evaluation
         all_processes = []
