@@ -236,8 +236,8 @@ def input_heuristics(s):
     return s
 
 def output_heuristics(s):
-    if '?' in s:
-        s = s[:s.find('?')+1]
+    # if '?' in s:
+        # s = s[:s.find('?')+1]
     s = s.replace(' 2', ' NUMBER_0')
     s = s.replace(' two', ' NUMBER_0')
     s = s.replace(' the two', ' NUMBER_0')
@@ -429,6 +429,7 @@ def run_generation(args):
 
             # print('len(o) = ', len(o))
             # print('o = ', o)
+            # print('text = ', text)
             if args.stop_tokens is not None:
                 min_index = len(text)
                 for stop_token in args.stop_tokens:
@@ -439,7 +440,6 @@ def run_generation(args):
                     min_index += 1
                 text = text[:min_index]
 
-            # print('text = ', text)
             text = text.replace('<pad>', '')
             text = re.sub('\s\s+', ' ', text) # remove multiple white spaces
             text = text.strip()

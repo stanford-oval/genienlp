@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 import csv
 from tqdm import tqdm
 import random
+import re
 
 def remove_thingtalk_quotes(thingtalk):
     while True:
@@ -30,8 +31,12 @@ def main():
                         help='Number of new queries per old query. Valid if "--transformation replace_queries" is used.')
     parser.add_argument('--transformation', type=str, choices=['remove_thingtalk_quotes', 'replace_queries', 'remove_wrong_thingtalk', 'none'], default='none',
                         help='The type of transformation to apply.')
+    parser.add_argument('--remove_duplicates', action='store_true',
+                        help='Remove duplicate natural utterances. Note that this also removes cases where a natural utterance has multiple ThingTalk codes.')
     parser.add_argument('--output_columns', type=int, nargs='+', default=[0, 1, 2],
-                        help='The type of transformation to apply.')
+                        help='The columns to write to output.')
+    parser.add_argument('--utterance_column', type=int, default=1,
+                        help='The column index in the input file that contains the natural utterance')
 
     args = parser.parse_args()
 
@@ -50,6 +55,10 @@ def main():
                 gold_thingtalks.append(q[1].strip())
             gold_thingtalk_count = 0
             
+        removed_count = 0
+        written_count = 0
+        if args.remove_duplicates:
+            seen_natural_utterances = set()
         for row in tqdm(reader, desc='Lines'):
             output_rows = []
             if args.transformation == 'remove_thingtalk_quotes':
@@ -67,18 +76,29 @@ def main():
                     output_rows.append(row.copy())
                     new_query_count += 1
             else:
-                import re
+                assert args.transformation == 'none'
+                # do basic clean-up because old generation code missed these
                 row[1] = row[1].replace('<pad>', '')
                 row[1] = re.sub('\s\s+', ' ', row[1])
                 row[1] = row[1].strip()
                 output_rows = [row]
+            
             for o in output_rows:
                 output_row = ""
+                if args.remove_duplicates:
+                    if o[args.utterance_column] in seen_natural_utterances:
+                        removed_count += 1
+                        continue
+                    else:
+                        seen_natural_utterances.add(o[args.utterance_column])
+                written_count += 1
                 for i, column in enumerate(args.output_columns):
                     output_row += o[column]
                     if i < len(args.output_columns)-1:
                         output_row += '\t'
                 output_file.write(output_row + '\n')
+        print('Removed %d duplicate rows' % removed_count)
+        print('Output size is %d rows' % written_count)
 
 if __name__ == '__main__':
     main()
