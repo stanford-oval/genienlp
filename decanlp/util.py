@@ -54,6 +54,43 @@ def get_number_of_lines(file_path):
             count += 1
     return count
 
+def get_file_part_path(file_path, part_idx):
+    return file_path + '_part' + str(part_idx+1)
+
+def split_file_on_disk(file_path, num_splits):
+    """
+    """
+    number_of_lines = get_number_of_lines(file_path)
+
+    all_output_paths = []
+    all_output_files = []
+    for i in range(num_splits):
+        output_path = get_file_part_path(file_path, i)
+        all_output_paths.append(output_path)
+        all_output_files.append(open(output_path, 'w'))
+
+    written_lines = 0
+    with open(file_path, 'r') as input_file:
+        output_file_idx = 0
+        for line in input_file:
+            all_output_files[output_file_idx].write(line)
+            written_lines += 1
+            if written_lines % (number_of_lines//num_splits) == 0:
+                output_file_idx = min(output_file_idx + 1, len(all_output_files)-1)
+
+    for f in all_output_files:
+        f.close()
+
+    return all_output_paths
+
+def combine_files_on_disk(file_path_prefix, num_files):
+    with open(file_path_prefix, 'w') as combined_file:
+        for i in range(num_files):
+            file_path = get_file_part_path(file_path_prefix, i)
+            with open(file_path, 'r') as file:
+                for line in file:
+                    combined_file.write(line)
+
 def map_filter(callable, iterable):
     output = []
     for element in iterable:

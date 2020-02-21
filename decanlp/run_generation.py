@@ -48,6 +48,8 @@ from transformers import TransfoXLLMHeadModel, TransfoXLTokenizer
 from transformers import CTRLLMHeadModel, CTRLTokenizer
 from transformers import XLMWithLMHeadModel, XLMTokenizer
 
+from .util import set_seed, get_number_of_lines, combine_files_on_disk, split_file_on_disk, get_file_part_path
+
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -80,13 +82,6 @@ father initially slaps him for making such an accusation, Rasputin watches as th
 man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
 the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
 with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
-
-
-def set_seed(args):
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
 
 
 def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
@@ -254,8 +249,6 @@ def output_heuristics(s):
     s = s.replace('five days', 'DURATION_0')
     return s
 
-def get_file_part_path(file_path, part_idx):
-    return file_path + '_part' + str(part_idx+1)
 
 def main(argv=sys.argv):
     parser = argparse.ArgumentParser(prog=argv[0])
@@ -298,7 +291,7 @@ def main(argv=sys.argv):
     if args.n_gpu > 1:
         # Independent multi-GPU evaluation
         all_processes = []
-        all_input_files = split_input_file(args.input_file, args.n_gpu)
+        all_input_files = split_file_on_disk(args.input_file, args.n_gpu)
         for gpu_idx in range(args.n_gpu):
             copy_args = copy.copy(args)
             if torch.cuda.is_available() and not args.no_cuda:
@@ -314,49 +307,12 @@ def main(argv=sys.argv):
         for p in all_processes:
             p.join()
 
-        combine_output_files(args.output_file, args.n_gpu)
+        combine_files_on_disk(args.output_file, args.n_gpu)
 
     else:
         run_generation(args)
 
-def combine_output_files(output_path_prefix, num_files):
-    with open(output_path_prefix, 'w') as combined_file:
-        for i in range(num_files):
-            output_path = get_file_part_path(output_path_prefix, i)
-            with open(output_path, 'r') as output_file:
-                for line in output_file:
-                    combined_file.write(line)
 
-
-
-def split_input_file(input_path, num_splits):
-    """
-    """
-    all_output_paths = []
-    all_output_files = []
-    number_of_lines = 0
-    with open(input_path, 'r') as input_file:
-        for line in input_file:
-            number_of_lines += 1
-    
-    for i in range(num_splits):
-        output_path = get_file_part_path(input_path, i)
-        all_output_paths.append(output_path)
-        all_output_files.append(open(output_path, 'w'))
-
-    written_lines = 0
-    with open(input_path, 'r') as input_file:
-        output_file_idx = 0
-        for line in input_file:
-            all_output_files[output_file_idx].write(line)
-            written_lines += 1
-            if written_lines % (number_of_lines//num_splits) == 0:
-                output_file_idx = min(output_file_idx + 1, len(all_output_files)-1)
-
-    for f in all_output_files:
-        f.close()
-
-    return all_output_paths
 
 def run_generation(args):
     model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
