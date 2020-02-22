@@ -175,27 +175,24 @@ class MQANDecoder(nn.Module):
 
         input_ids = self_attended_context[-1].new_full((batch_size, 1), self.init_idx, dtype=torch.long)
 
-        outputs = _generate_beam_search(input_ids=input_ids,
-                    cur_len=1,
-                    max_length=self.args.max_output_length,
-                    do_sample=False,
-                    temperature=1.0,
-                    top_k=0,
-                    top_p=1.0,
-                    repetition_penalty=1.0,
-                    pad_token_id=decoder_vocab.pad_idx,
-                    eos_token_ids=[decoder_vocab.eos_idx],
-                    batch_size=batch_size,
-                    length_penalty=0,
-                    num_beams=self.args.num_beams,
-                    vocab_size=len(decoder_vocab),
-                    decoder_wrapper=decoder_wrapper
-                )
+        eos_yet = context.new_zeros((batch_size,)).byte()
 
-        print('outputs = ', outputs)
-        outputs = outputs.cpu().apply_(self.map_to_full)
-        print('outputs = ', outputs)
-        return outputs
+        for t in range(max_decoder_time):
+            if t == 0:
+                current_token_id = self_attended_context[-1].new_full((batch_size, 1), self.init_idx, dtype=torch.long)
+                
+            else:
+                current_token_id = outs[:, t - 1].unsqueeze(1)
+
+            probs = decoder_wrapper.next_token_probs(current_token_id)
+            # print('probs = ', probs)
+            pred_probs, preds = probs.max(-1)
+            preds = preds.squeeze(1)
+            eos_yet = eos_yet | (preds == decoder_vocab.eos_idx).byte()
+            outs[:, t] = preds.cpu().apply_(self.map_to_full)
+            if eos_yet.all():
+                break
+        return outs
 
 
 class LSTMDecoder(nn.Module):
@@ -316,8 +313,6 @@ class DecoderWrapper(object):
         self.max_decoder_time = max_decoder_time
         self.mqan_decoder = mqan_decoder
 
-        print('batch_size = ', batch_size)
-
         self.time = 0
         self.decoder_output = None
 
@@ -328,7 +323,6 @@ class DecoderWrapper(object):
 
     
     def next_token_probs(self, current_token_id):
-        # print('current_token_id = ', current_token_id, current_token_id.shape)
         embedding = self.mqan_decoder.decoder_embeddings(current_token_id).last_layer
         if self.mqan_decoder.args.transformer_layers > 0:
             self.hiddens[0][:, self.time] = self.hiddens[0][:, self.time] + \
@@ -364,10 +358,11 @@ class DecoderWrapper(object):
                             self.context_indices, self.question_indices, self.decoder_vocab)
 
         self.time += 1
-        return probs.squeeze(1)
+        return probs
 
 
 def _generate_beam_search(
+        self,
         input_ids,
         cur_len,
         max_length,
@@ -382,7 +377,6 @@ def _generate_beam_search(
         length_penalty,
         num_beams,
         vocab_size,
-        decoder_wrapper: DecoderWrapper
     ):
         """ Generate sequences for each example with beam search.
         """
@@ -400,12 +394,20 @@ def _generate_beam_search(
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
 
+        # cache compute states
+        past = None
+
         # done sentences
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
-            print('input_ids = ', input_ids[:, -1].unsqueeze(-1))
-            scores = decoder_wrapper.next_token_probs(input_ids[:, -1].unsqueeze(-1))  # (batch_size * num_beams, vocab_size)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past)
+            outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
+            scores = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
+
+            # if model has past, then set the past variable to speed up decoding
+            if self._do_output_past(outputs):
+                past = outputs[1]
 
             # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
@@ -498,6 +500,19 @@ def _generate_beam_search(
             input_ids = input_ids[beam_idx, :]
             input_ids = torch.cat([input_ids, beam_words.unsqueeze(1)], dim=-1)
 
+            # re-order internal states
+            if past:
+                reordered_past = []
+                for layer_past in past:
+                    # get the correct batch idx from layer past batch dim
+                    # batch dim of `past` and `mems` is at 2nd position
+                    reordered_layer_past = [layer_past[:, i].unsqueeze(1).clone().detach() for i in beam_idx]
+                    reordered_layer_past = torch.cat(reordered_layer_past, dim=1)
+                    # check that shape matches
+                    assert reordered_layer_past.shape == layer_past.shape
+                    reordered_past.append(reordered_layer_past)
+                past = tuple(reordered_past)
+
             # update current length
             cur_len = cur_len + 1
 
@@ -506,13 +521,13 @@ def _generate_beam_search(
                 break
 
         # visualize hypotheses
-        print([len(x) for x in generated_hyps], cur_len)
+        # print([len(x) for x in generated_hyps], cur_len)
         # globals().update( locals() );
         # !import code; code.interact(local=vars())
         # for ii in range(batch_size):
-            # for ss, ww in sorted(generated_hyps[ii].hyp, key=lambda x: x[0], reverse=True):
-                # print("%.3f " % ss + " ".join(self.dico[x] for x in ww.tolist()))
-            # print("")
+        #     for ss, ww in sorted(generated_hyps[ii].hyp, key=lambda x: x[0], reverse=True):
+        #         print("%.3f " % ss + " ".join(self.dico[x] for x in ww.tolist()))
+        #     print("")
 
         # select the best hypotheses
         tgt_len = input_ids.new(batch_size)
