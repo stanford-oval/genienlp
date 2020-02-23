@@ -180,9 +180,9 @@ class MQANDecoder(nn.Module):
                     cur_len=1,
                     max_length=self.args.max_output_length,
                     do_sample=False,
-                    temperature=0.1,
-                    top_k=20,
-                    top_p=0.2,
+                    temperature=1.0,
+                    top_k=0,
+                    top_p=1.0,
                     repetition_penalty=1.0,
                     pad_token_id=decoder_vocab.pad_idx,
                     eos_token_ids=[decoder_vocab.eos_idx],
@@ -290,7 +290,7 @@ class BeamHypotheses(object):
             if len(self) > self.n_hyp:
                 sorted_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.hyp)])
                 del self.hyp[sorted_scores[0][1]]
-                self.worst_score = sorted_scores[1][0]
+                self.worst_score = sorted_scores[0][0]
             else:
                 self.worst_score = min(score, self.worst_score)
 
@@ -497,15 +497,15 @@ def _generate_beam_search(
                     scores = scores / temperature
                 # Top-p/top-k filtering
                 scores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2)  # (batch_size * num_beams, vocab_size)
-                # Sample 2 next words for each beam (so we have some spare tokens and match output of greedy beam search)
-                next_words = torch.multinomial(F.softmax(scores, dim=-1), num_samples=2)  # (batch_size * num_beams, 2)
+                # Sample 3 next words for each beam (so we have some spare tokens and match output of greedy beam search)
+                next_words = torch.multinomial(F.softmax(scores, dim=-1), num_samples=3)  # (batch_size * num_beams, 2)
                 # Compute next scores
                 _scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
                 _scores = torch.gather(_scores, -1, next_words)  # (batch_size * num_beams, 2)
                 next_scores = _scores + beam_scores[:, None].expand_as(_scores)  # (batch_size * num_beams, 2)
                 # Match shape of greedy beam search
-                next_words = next_words.view(batch_size, 2 * num_beams)  # (batch_size, 2 * num_beams)
-                next_scores = next_scores.view(batch_size, 2 * num_beams)  # (batch_size, 2 * num_beams)
+                next_words = next_words.view(batch_size, 3 * num_beams)  # (batch_size, 2 * num_beams)
+                next_scores = next_scores.view(batch_size, 3 * num_beams)  # (batch_size, 2 * num_beams)
             else:
                 # do greedy beam search
                 scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
@@ -514,9 +514,9 @@ def _generate_beam_search(
                 _scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * num_beams, vocab_size)
                 # re-organize to group the beam together (we are keeping top hypothesis accross beams)
                 _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
-                next_scores, next_words = torch.topk(_scores, 2 * num_beams, dim=1, largest=True, sorted=True)
+                next_scores, next_words = torch.topk(_scores, 3 * num_beams, dim=1, largest=True, sorted=True)
 
-            assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
+            assert next_scores.size() == next_words.size() == (batch_size, 3 * num_beams)
 
             # next batch beam content
             # list of (batch_size * num_beams) tuple(next hypothesis score, next word, current position in the batch)
@@ -536,12 +536,13 @@ def _generate_beam_search(
 
                 # next words for this sentence
                 for idx, score in zip(next_words[batch_ex], next_scores[batch_ex]):
-
                     # get beam and word IDs
                     beam_id = idx // vocab_size
                     word_id = idx % vocab_size
 
                     # end of sentence, or next word
+                    # print('eos_token_ids = ', eos_token_ids)
+                    # print('word_id.item() = ', word_id.item())
                     if word_id.item() in eos_token_ids or cur_len + 1 == max_length:
                         generated_hyps[batch_ex].add(input_ids[batch_ex * num_beams + beam_id, :cur_len].clone(), score.item())
                     else:
@@ -552,7 +553,7 @@ def _generate_beam_search(
                         break
 
                 # update next beam content
-                assert len(next_sent_beam) == 0 if cur_len + 1 == max_length else num_beams
+                assert len(next_sent_beam) == (0 if cur_len + 1 == max_length else num_beams)
                 if len(next_sent_beam) == 0:
                     next_sent_beam = [(0, pad_token_id, 0)] * num_beams  # pad the batch
                 next_batch_beam.extend(next_sent_beam)
@@ -565,12 +566,8 @@ def _generate_beam_search(
             beam_idx = input_ids.new([x[2] for x in next_batch_beam])
 
             # re-order batch
-            # print('beam_words = ',  beam_words.unsqueeze(1))
             beam_words = beam_words.apply_(map_to_full)
-            # print('beam_idx = ', beam_idx)
-            # print('input_ids = ', input_ids)
             input_ids = input_ids[beam_idx, :]
-            # print('reordered input_ids = ', input_ids)
             decoder_wrapper.reorder(beam_idx)
             input_ids = torch.cat([input_ids, beam_words.unsqueeze(1)], dim=-1)
 
@@ -580,15 +577,6 @@ def _generate_beam_search(
             # stop when we are done with each sentence
             if all(done):
                 break
-
-        # visualize hypotheses
-        # print([len(x) for x in generated_hyps], cur_len)
-        # globals().update( locals() );
-        # !import code; code.interact(local=vars())
-        # for ii in range(batch_size):
-            # for ss, ww in sorted(generated_hyps[ii].hyp, key=lambda x: x[0], reverse=True):
-                # print("%.3f " % ss + " ".join(self.dico[x] for x in ww.tolist()))
-            # print("")
 
         # select the best hypotheses
         tgt_len = input_ids.new(batch_size)
