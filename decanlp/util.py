@@ -47,6 +47,13 @@ logger = logging.getLogger(__name__)
 def tokenizer(s):
     return s.split()
 
+def detokenize(text):
+    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "'s", ")"]
+    for t in tokens:
+        text = text.replace(' ' + t, t)
+    text = text.replace("( ", "(")
+    return text
+
 def get_number_of_lines(file_path):
     count = 0
     with open(file_path) as f:

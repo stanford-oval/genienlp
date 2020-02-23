@@ -48,7 +48,7 @@ from transformers import TransfoXLLMHeadModel, TransfoXLTokenizer
 from transformers import CTRLLMHeadModel, CTRLTokenizer
 from transformers import XLMWithLMHeadModel, XLMTokenizer
 
-from .util import set_seed, get_number_of_lines, combine_files_on_disk, split_file_on_disk, get_file_part_path
+from .util import set_seed, get_number_of_lines, combine_files_on_disk, split_file_on_disk, get_file_part_path, detokenize
 
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -93,14 +93,14 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
                 Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
         From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
-    # sign = 1
-    # if top_k < 0:
-        # top_k = logits.size(-1) + top_k
-        # sign = -1
+    sign = 1
+    if top_k < 0:
+        top_k = logits.size(-1) + top_k
+        sign = -1
     top_k = min(top_k, logits.size(-1))  # Safety check
     if top_k > 0:
         # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
+        indices_to_remove = sign*logits < torch.topk(sign*logits, top_k)[0][..., -1, None]
         logits[indices_to_remove] = filter_value
 
     if top_p > 0.0:
@@ -182,9 +182,9 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
             # print('len(past) = ', len(past))
             # print('past[0] = ', past[0].shape)
 
-            # repetition penalty from CTRL (https://arxiv.org/abs/1909.05858)
+            # repetition penalty from CTRL (https://arxiv.org/abs/1909.05858), but much faster on GPU
             m = torch.scatter(input=torch.zeros_like(next_token_logits), dim=1, index=generated, value=1)
-            need_change = m*next_token_logits
+            need_change = m * next_token_logits
             need_divide = need_change > 0
             need_multiply = need_change < 0
             next_token_logits = need_divide * next_token_logits / repetition_penalty + need_multiply * next_token_logits * repetition_penalty + (1-m) * next_token_logits
@@ -211,12 +211,14 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                 # print('m = ', m)
                 next_token = m*context[:, next_index:next_index+1]+(1-m)*next_token
                 # print('next_token = ', next_token)
+            else:
+                m = torch.zeros(1, device=device)
 
             for stop_token_id in stop_token_ids:
                 if should_finish is None:
-                    should_finish = (next_token == stop_token_id)
+                    should_finish = ((next_token == stop_token_id) & (1-m).bool())
                 else:
-                    should_finish = should_finish | (next_token == stop_token_id)
+                    should_finish = should_finish | ((next_token == stop_token_id) & (1-m).bool())
             next_index += 1
             generated = torch.cat((generated, next_token), dim=1)
             if should_finish.all():
@@ -225,6 +227,7 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
 
 def input_heuristics(s):
     s = s.strip()
+    s = detokenize(s)
     if s.startswith('which') or s.startswith('what') or s.startswith('where') or s.startswith('how') or s.startswith('who') or s.startswith('when'):
         if s.endswith('.'):
             s = s[:-1]
@@ -416,7 +419,7 @@ def run_generation(args):
         )
         out = out[:, :].tolist()
         # print('pad = ', pad_token_id)
-        # print('stop token = ', tokenizer.convert_tokens_to_ids(args.stop_token))
+        # print('stop tokens = ', [tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens])
         batch_outputs = [[] for _ in range(batch_slice[1]-batch_slice[0])]
         for i, o in enumerate(out):
             # print('len(o) = ', len(o))

@@ -1,14 +1,7 @@
 from argparse import ArgumentParser
 import csv
 from tqdm import tqdm
-# from .util import get_number_of_lines
-
-def detokenize(text):
-    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "'s", ")"]
-    for t in tokens:
-        text = text.replace(' ' + t, t)
-    text = text.replace("( ", "(")
-    return text
+from .util import detokenize
 
 def is_english(s):
     try:

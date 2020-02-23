@@ -37,10 +37,7 @@ from torch.utils.data.distributed import DistributedSampler
 import sys
 from functools import partial
 
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except:
-    from tensorboardX import SummaryWriter
+from tensorboardX import SummaryWriter
 
 from tqdm import tqdm, trange
 
