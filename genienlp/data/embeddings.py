@@ -186,23 +186,26 @@ def get_embedding_type(emb_name):
         return emb_name
 
 
-def load_embeddings(cachedir, encoder_emb_names, decoder_emb_names, max_generative_vocab=50000, logger=_logger):
+def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb_names,
+                    max_generative_vocab=50000, logger=_logger):
     logger.info(f'Getting pretrained word vectors and pretrained models')
 
-    encoder_emb_names = encoder_emb_names.split('+')
+    context_emb_names = context_emb_names.split('+')
+    question_emb_names = question_emb_names.split('+')
     decoder_emb_names = decoder_emb_names.split('+')
 
     all_vectors = {}
-    encoder_vectors = []
+    context_vectors = []
+    question_vectors = []
     decoder_vectors = []
 
     numericalizer = None
     numericalizer_type = None
-    for emb_name in encoder_emb_names:
+    for emb_name in context_emb_names:
         if not emb_name:
             continue
         if emb_name in all_vectors:
-            encoder_vectors.append(all_vectors[emb_name])
+            context_vectors.append(all_vectors[emb_name])
             continue
 
         emb_type = get_embedding_type(emb_name)
@@ -220,14 +223,45 @@ def load_embeddings(cachedir, encoder_emb_names, decoder_emb_names, max_generati
             # load the tokenizer once to ensure all files are downloaded
             AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
 
-            encoder_vectors.append(
+            context_vectors.append(
                 BertEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
         else:
             if numericalizer is not None:
                 logger.warning('Combining BERT embeddings with other pretrained embeddings is unlikely to work')
             vec = _name_to_vector(emb_type, cachedir)
             all_vectors[emb_name] = vec
-            encoder_vectors.append(vec)
+            context_vectors.append(vec)
+
+    for emb_name in question_emb_names:
+        if not emb_name:
+            continue
+        if emb_name in all_vectors:
+            question_vectors.append(all_vectors[emb_name])
+            continue
+
+        emb_type = get_embedding_type(emb_name)
+        if _is_bert(emb_type):
+            if numericalizer is not None and numericalizer_type != emb_type:
+                raise ValueError('Cannot specify multiple BERT embeddings')
+
+            config = BertConfig.from_pretrained(emb_type, cache_dir=cachedir)
+            config.output_hidden_states = True
+            if numericalizer is None:
+                numericalizer = BertNumericalizer(config, emb_type, max_generative_vocab=max_generative_vocab,
+                                                  cache=cachedir)
+                numericalizer_type = emb_type
+
+            # load the tokenizer once to ensure all files are downloaded
+            AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
+
+            question_vectors.append(
+                BertEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
+        else:
+            if numericalizer is not None:
+                logger.warning('Combining BERT embeddings with other pretrained embeddings is unlikely to work')
+            vec = _name_to_vector(emb_type, cachedir)
+            all_vectors[emb_name] = vec
+            question_vectors.append(vec)
 
     for emb_name in decoder_emb_names:
         if not emb_name:
@@ -246,4 +280,4 @@ def load_embeddings(cachedir, encoder_emb_names, decoder_emb_names, max_generati
     if numericalizer is None:
         numericalizer = SimpleNumericalizer(max_generative_vocab=max_generative_vocab, pad_first=False)
 
-    return numericalizer, encoder_vectors, decoder_vectors
+    return numericalizer, context_vectors, question_vectors, decoder_vectors

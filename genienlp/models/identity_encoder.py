@@ -34,12 +34,12 @@ from .common import CombinedEmbedding, LayerNorm, LinearFeedforward
 
 
 class IdentityEncoder(nn.Module):
-    def __init__(self, numericalizer, args, encoder_embeddings):
+    def __init__(self, numericalizer, args, context_embeddings, question_embeddings):
         super().__init__()
         self.args = args
         self.pad_idx = numericalizer.pad_id
 
-        self.encoder_embeddings = CombinedEmbedding(numericalizer, encoder_embeddings, args.dimension,
+        self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
                                                     trained_dimension=0,
                                                     project=False,
                                                     finetune_pretrained=args.train_encoder_embeddings)

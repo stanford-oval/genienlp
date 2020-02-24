@@ -113,10 +113,13 @@ def prepare_data(args, logger):
         if args.vocab_tasks is not None and task.name in args.vocab_tasks:
             vocab_sets.extend(split)
 
-    numericalizer, encoder_embeddings, decoder_embeddings = load_embeddings(args.embeddings, args.encoder_embeddings,
-                                                                            args.decoder_embeddings,
-                                                                            args.max_generative_vocab,
-                                                                            logger)
+    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
+        load_embeddings(args.embeddings,
+                        args.context_embeddings,
+                        args.question_embeddings,
+                        args.decoder_embeddings,
+                        args.max_generative_vocab,
+                        logger)
     if args.load is not None:
         numericalizer.load(args.save)
     else:
@@ -125,7 +128,7 @@ def prepare_data(args, logger):
         numericalizer.build_vocab(Example.vocab_fields, vocab_sets)
         numericalizer.save(args.save)
 
-        for vec in set(encoder_embeddings + decoder_embeddings):
+        for vec in set(context_embeddings + question_embeddings + decoder_embeddings):
             vec.init_for_vocab(numericalizer.vocab)
 
     logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens')
@@ -140,7 +143,7 @@ def prepare_data(args, logger):
     logger.info('Preprocessing validation data')
     preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
 
-    return numericalizer, encoder_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
+    return numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
 
 def step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, logger=None):
@@ -372,11 +375,11 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             break
 
 
-def init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devices, logger):
+def init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings, devices, logger):
     model_name = args.model
     logger.info(f'Initializing {model_name}')
     Model = getattr(models, model_name)
-    model = Model(numericalizer, args, encoder_embeddings, decoder_embeddings)
+    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
 
@@ -441,7 +444,8 @@ def main(args):
     if args.load is not None:
         logger.info(f'Loading vocab from {os.path.join(args.save, args.load)}')
         save_dict = torch.load(os.path.join(args.save, args.load))
-    numericalizer, encoder_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets = prepare_data(args, logger)
+    numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets = \
+        prepare_data(args, logger)
     if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):
         logging.error('sth unpleasant is happening with curriculum')
 
@@ -454,7 +458,7 @@ def main(args):
     else:
         writer = None
 
-    model = init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devices, logger)
+    model = init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings, devices, logger)
     opt, lr_scheduler = init_opt(args, model, logger)
     start_iteration = 1
 

@@ -48,11 +48,11 @@ DECODERS = {
 
 
 class Seq2Seq(nn.Module):
-    def __init__(self, numericalizer, args, encoder_embeddings, decoder_embeddings):
+    def __init__(self, numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings):
         super().__init__()
         self.args = args
 
-        self.encoder = ENCODERS[args.seq2seq_encoder](numericalizer, args, encoder_embeddings)
+        self.encoder = ENCODERS[args.seq2seq_encoder](numericalizer, args, context_embeddings, question_embeddings)
         self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings)
 
     def forward(self, batch, iteration):

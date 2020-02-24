@@ -33,7 +33,7 @@ from .common import CombinedEmbedding, PackedLSTM
 
 
 class BiLSTMEncoder(nn.Module):
-    def __init__(self, numericalizer, args, encoder_embeddings):
+    def __init__(self, numericalizer, args, context_embeddings, question_embeddings):
         super().__init__()
         self.args = args
         self.pad_idx = numericalizer.pad_id
@@ -41,7 +41,7 @@ class BiLSTMEncoder(nn.Module):
         def dp(args):
             return args.dropout_ratio if args.rnn_layers > 1 else 0.
 
-        self.encoder_embeddings = CombinedEmbedding(numericalizer, encoder_embeddings, args.rnn_dimension,
+        self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.rnn_dimension,
                                                     trained_dimension=0,
                                                     project=True,
                                                     finetune_pretrained=args.train_encoder_embeddings)

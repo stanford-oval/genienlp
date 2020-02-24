@@ -33,20 +33,20 @@ from .common import CombinedEmbedding, TransformerEncoder, CoattentiveLayer, Pac
 
 
 class CoattentionEncoder(nn.Module):
-    def __init__(self, numericalizer, args, encoder_embeddings):
+    def __init__(self, numericalizer, args, context_embeddings, question_embeddings):
         super().__init__()
         self.args = args
         self.pad_idx = numericalizer.pad_id
 
-        self.context_embeddings = CombinedEmbedding(numericalizer, [], args.dimension,
+        self.context_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
                                                     trained_dimension=args.trainable_encoder_embeddings,
                                                     project=True,
-                                                    finetune_pretrained=False)
+                                                    finetune_pretrained=args.train_context_embeddings)
 
-        self.question_embeddings = CombinedEmbedding(numericalizer, encoder_embeddings, args.dimension,
+        self.question_embeddings = CombinedEmbedding(numericalizer, question_embeddings, args.dimension,
                                                      trained_dimension=0,
                                                      project=True,
-                                                     finetune_pretrained=args.train_encoder_embeddings)
+                                                     finetune_pretrained=args.train_question_embeddings)
 
         self.dropout = nn.Dropout(args.dropout_ratio)
 
