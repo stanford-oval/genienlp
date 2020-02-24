@@ -183,6 +183,26 @@ def pad_collate(batch, pad_token_id):
 
     return inputs_pad, labels_pad
 
+def remove_thingtalk_quotes(thingtalk):
+    while True:
+        l1 = thingtalk.find('"')
+        if l1 < 0:
+            break
+        l2 = thingtalk.find('"', l1+1)
+        assert l2 >= 0
+        thingtalk = thingtalk[:l1] + '<temp>' + thingtalk[l2+1:]
+    return thingtalk
+
+def get_inbetween_tokens(train_data_file, start_token, end_token):
+    new_tokens = set()
+    with open(train_data_file, encoding="utf-8") as f:
+        for line in tqdm(f, desc='Tokenizing'):
+            line = remove_thingtalk_quotes(line)
+            line = line[line.find(start_token)+len(start_token):line.find(end_token)]
+            new_tokens.update(line.split())
+    return new_tokens
+    
+
 def train(args, train_dataset, model, tokenizer):
     """ Train the model """
     if args.local_rank in [-1, 0]:
@@ -313,6 +333,8 @@ def train(args, train_dataset, model, tokenizer):
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
                             tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
+                    # TODO add generated text to tensorboard
+                    # tb_writer.add_text('eval/generated_text', gen_text, global_step)
                     tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
                     tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
                     logging_loss = tr_loss
@@ -430,6 +452,8 @@ def main(argv=sys.argv):
                         help='The special token for the start of paraphrases.')
     parser.add_argument('--end_special_token', type=str, default='</paraphrase>',
                         help='The special token for the end of paraphrases.')
+    parser.add_argument('--add_inbetween_as_special_tokens', action='store_true',
+                        help='The space-separated tokens between --start_special_token and --end_special_token will be added as special tokens. Useful for ThingTalk code.')
     ## Other parameters
     parser.add_argument("--eval_data_file", default=None, type=str,
                         help="An optional input evaluation data file to evaluate the perplexity on (a text file).")
@@ -569,6 +593,10 @@ def main(argv=sys.argv):
                                         config=config,
                                         cache_dir=args.cache_dir if args.cache_dir else None)
     add_special_tokens(model, tokenizer, additional_special_tokens=[args.start_special_token, args.end_special_token])
+    if args.add_inbetween_as_special_tokens:
+        new_tokens = get_inbetween_tokens(args.train_data_file, start_token=args.start_special_token, end_token=args.end_special_token)
+        logger.info('Detected %d new tokens', len(new_tokens))
+        add_special_tokens(model, tokenizer, additional_special_tokens=list(new_tokens))
     model.to(args.device)
 
     if args.local_rank == 0:
