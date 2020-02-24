@@ -496,16 +496,16 @@ def _generate_beam_search(
                 if temperature != 1.0:
                     scores = scores / temperature
                 # Top-p/top-k filtering
-                scores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2)  # (batch_size * num_beams, vocab_size)
+                scores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=3)  # (batch_size * num_beams, vocab_size)
                 # Sample 3 next words for each beam (so we have some spare tokens and match output of greedy beam search)
                 next_words = torch.multinomial(F.softmax(scores, dim=-1), num_samples=3)  # (batch_size * num_beams, 2)
                 # Compute next scores
                 _scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
-                _scores = torch.gather(_scores, -1, next_words)  # (batch_size * num_beams, 2)
-                next_scores = _scores + beam_scores[:, None].expand_as(_scores)  # (batch_size * num_beams, 2)
+                _scores = torch.gather(_scores, -1, next_words)  # (batch_size * num_beams, 3)
+                next_scores = _scores + beam_scores[:, None].expand_as(_scores)  # (batch_size * num_beams, 3)
                 # Match shape of greedy beam search
-                next_words = next_words.view(batch_size, 3 * num_beams)  # (batch_size, 2 * num_beams)
-                next_scores = next_scores.view(batch_size, 3 * num_beams)  # (batch_size, 2 * num_beams)
+                next_words = next_words.view(batch_size, 3 * num_beams)  # (batch_size, 3 * num_beams)
+                next_scores = next_scores.view(batch_size, 3 * num_beams)  # (batch_size, 3 * num_beams)
             else:
                 # do greedy beam search
                 scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
