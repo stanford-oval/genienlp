@@ -144,12 +144,14 @@ def prepare_data(args, logger):
     return numericalizer, encoder_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
 
-def step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, logger=None):
+def step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None):
     model.train()
     opt.zero_grad()
     loss, predictions = model(batch, iteration)
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss')
+    if len(devices) > 1:
+        loss = loss.mean()
     loss.backward()
     grad_norm = None
     if grad_clip > 0.0:
@@ -308,8 +310,8 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                             torch.save(save_opt_state_dict, os.path.join(args.log_dir, 'best_optim.pth'))
 
                     # param update
-                    loss, grad_norm = step(model, batch, iteration, opt, lr_scheduler=lr_scheduler,
-                                           grad_clip=args.grad_clip, logger=logger)
+                    loss, grad_norm = step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
+                                           grad_clip=args.grad_clip)
                     if loss is None:
                         logger.info(
                             'Encountered NAN loss during training... Continue training ignoring the current batch')
