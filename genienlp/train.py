@@ -355,7 +355,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                             if lr_scheduler is not None:
                                 writer.add_scalar(f'training/lr', lr_scheduler.get_last_lr(), iteration)
                             else:
-                                writer.add_scalar(f'training/lr', args.lr_rate)
+                                writer.add_scalar(f'training/lr', args.lr_rate, iteration)
                             if grad_norm is not None:
                                 writer.add_scalar(f'training/norm', grad_norm, iteration)
 
@@ -452,12 +452,6 @@ def main(args):
     logger.info(f'Processing')
     logger.start = time.time()
 
-    if hasattr(args, 'tensorboard') and args.tensorboard:
-        logger.info(f'Initializing Writer')
-        writer = SummaryWriter(log_dir=args.tensorboard_dir)
-    else:
-        writer = None
-
     model = init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings, devices, logger)
     opt, lr_scheduler = init_opt(args, model, logger)
     start_iteration = 1
@@ -472,6 +466,12 @@ def main(args):
             start_iteration = opt_state_dict.pop('start_iteration')
             logger.info(f'Starting iteration is {start_iteration}')
             opt.load_state_dict(opt_state_dict)
+
+    if hasattr(args, 'tensorboard') and args.tensorboard:
+        logger.info(f'Initializing Writer')
+        writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration)
+    else:
+        writer = None
 
     train(args, devices, model, opt, lr_scheduler, train_sets, args.train_iterations, numericalizer, val_sets=val_sets,
           aux_sets=aux_sets,
