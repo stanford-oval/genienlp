@@ -240,6 +240,27 @@ class AlmondDialogueNLU(BaseAlmondTask):
         return AlmondDataset.splits(root=root, task_name='almond/user', make_example=self._make_example, **kwargs)
 
 
+@register_task('almond_dialogue_nlu_agent')
+class AlmondDialogueNLUAgent(BaseAlmondTask):
+    """Multi-turn NLU task for Almond dialogues, for the agent utterance
+    (translate the agent utterance to a formal representation, given the current
+    state of the conversation).
+    This is used to facilitate annotation of human-human dialogues.
+    """
+    def _is_program_field(self, field_name):
+        return field_name in ('answer', 'context')
+
+    def _make_example(self, parts):
+        _id, context, sentence, target_code = parts
+        answer = target_code
+        question = sentence
+        return Example.from_raw(self.name + '/' + _id, context, question, answer,
+                                tokenize=self.tokenize, lower=False)
+
+    def get_splits(self, root, **kwargs):
+        return AlmondDataset.splits(root=root, task_name='almond/agent', make_example=self._make_example, **kwargs)
+
+
 @register_task('almond_dialogue_nlg')
 class AlmondDialogueNLG(BaseAlmondTask):
     """Multi-turn NLG task for Almond dialogues
