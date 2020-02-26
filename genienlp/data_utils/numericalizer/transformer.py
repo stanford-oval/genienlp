@@ -46,9 +46,7 @@ class TransformerNumericalizer(object):
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
         self._cache = cache
-        self.config = None
         self._tokenizer = None
-
         self.fix_length = fix_length
 
     @property

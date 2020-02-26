@@ -134,9 +134,9 @@ class MaskedXLMRobertaTokenizer(XLMRobertaTokenizer):
         # override do_lower_case and do_basic_tokenize unconditionally
         super().__init__(*args, do_lower_case=False, do_basic_tokenize=False, **kwargs)
 
-        vocabs = [self.sp_model.id_to_piece(i) for i in range(self.sp_model.get_piece_size())]
-        self.vocab = OrderedDict([(vocab, i) for i, vocab in enumerate(vocabs)])
-        self.ids_to_tokens = OrderedDict([(i, vocab) for i, vocab in enumerate(vocabs)])
+        vocabs = ['<pad>'] + [self.sp_model.id_to_piece(i) for i in range(self.sp_model.get_piece_size())]
+        self.vocab = OrderedDict((vocab, self._convert_token_to_id(vocab)) for vocab in vocabs)
+        self.ids_to_tokens = OrderedDict((i, vocab) for vocab, i in self.vocab.items())
 
         # replace the word piece tokenizer with ours
         self.wordpiece_tokenizer = MaskedXLMRobertaWordPieceTokenizer(vocab=self.vocab,
