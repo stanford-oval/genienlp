@@ -279,7 +279,7 @@ def main(argv=sys.argv):
                         help="random seed for initialization")
     parser.add_argument('--prompt_token', type=str, default='<paraphrase>',
                         help="Token after which text generation starts. We need to add this to the end of all inputs.")
-    parser.add_argument('--stop_tokens', type=str, nargs='+', default=['</paraphrase>', '?'],
+    parser.add_argument('--stop_tokens', type=str, nargs='+', default=['</paraphrase>', '?', '.'],
                         help="Token at which text generation is stopped")
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")

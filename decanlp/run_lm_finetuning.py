@@ -429,7 +429,7 @@ def add_special_tokens(model, tokenizer, additional_special_tokens):
     """ Add special tokens to the tokenizer and the model if they have not already been added. """
     ATTR_TO_SPECIAL_TOKEN = {'pad_token': '<pad>',
                          'additional_special_tokens': additional_special_tokens}
-    orig_num_tokens = len(tokenizer.encoder)
+    orig_num_tokens = len(tokenizer)
     num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN) # doesn't add if they are already there
     if num_added_tokens > 0:
         logger.info('Added %d special tokens', num_added_tokens)
