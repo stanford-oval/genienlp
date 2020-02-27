@@ -225,31 +225,70 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                 break
     return generated
 
-def input_heuristics(s):
+
+special_token_mapping = {
+    'PATH_NAME_0': {'forward': 'my1folder'},
+    'PATH_NAME_1': {'forward': 'my2folder'},
+    'TIME_0': {'forward': '1p.m.', 'back': ['1 pm', '1pm', '1:00 pm', '1:00pm', '1p.m.', '1 p.m.', '1:00 p.m.', '1:00']},
+    'TIME_1': {'forward': '2p.m.', 'back': ['2 pm', '2pm', '2:00 pm', '2:00pm', '2p.m.', '2 p.m.', '2:00 p.m.', '2:00']},
+    'EMAIL_ADDRESS_0': {'forward': 'e1@example.com'},
+    'EMAIL_ADDRESS_1': {'forward': 'e2@example.com'},
+    'URL_0': {'forward': 'my1site.com'},
+    'URL_1': {'forward': 'my2site.com'},
+    'DATE_0': {'forward': '5-6-2015', 'back': ['5-6-2015']},
+    'DATE_1': {'forward': '8-3-2016', 'back': ['8-3-2016']},
+    'CURRENCY_0': {'forward': '$12', 'back': ['$12', 'twelve dollars', '12 dollars', '$ 12', '$ 12.00', '12.00', '12']},
+    'CURRENCY_1': {'forward': '$13', 'back': ['$13', 'thirteen dollars', '13 dollars', '$ 13', '$ 13.00', '13.00', '13']},
+    'NUMBER_0': {'forward': '2', 'back': ['2', 'two']},
+    'NUMBER_1': {'forward': '3', 'back': ['3', 'three']},
+    'DURATION_0': {'forward': '5 weeks', 'back': ['5 weeks', 'five weeks']},
+    'DURATION_1': {'forward': '6 weeks', 'back': ['6 weeks', 'six weeks']},
+    'LOCATION_0': {'forward': 'locatio1n', 'back': ['locatio1n', 'locat1n']},
+    'LOCATION_1': {'forward': 'locatio2n', 'back': ['locatio2n', 'locat2n']},
+    'PHONE_NUMBER_0': {'forward': '888-8888'},
+    'PHONE_NUMBER_1': {'forward': '777-8888'}
+}
+
+def input_heuristics(s: str):
+    """
+    Changes the input string so that it is closer to what the pre-traied language models have seen during their training.
+    Outputs:
+        s: the new string
+        reverse_map: a list of special tokens. Can be used to recover the original special_tokens in the string
+    """
+    reverse_map = []
     s = s.strip()
     s = detokenize(s)
+
+    # Put question mark at the end whenever necessary.
     if s.startswith('which') or s.startswith('what') or s.startswith('where') or s.startswith('how') or s.startswith('who') or s.startswith('when'):
         if s.endswith('.'):
             s = s[:-1]
         s += '?'
-    s = s.replace('LOCATION_0', 'location')
-    s = s.replace('NUMBER_0', '2')
-    s = s.replace('DATE_0', '5/6/2015')
-    s = s.replace('DURATION_0', '5 days')
-    return s
 
-def output_heuristics(s):
-    # if '?' in s:
-        # s = s[:s.find('?')+1]
-    s = s.replace(' 2', ' NUMBER_0')
-    s = s.replace(' two', ' NUMBER_0')
-    s = s.replace(' the two', ' NUMBER_0')
-    s = s.replace(' the 2', ' NUMBER_0')
-    s = s.replace(' location', ' LOCATION_0')
-    s = s.replace(' the location', ' LOCATION_0')
-    s = s.replace('5/6/2015', 'DATE_0')
-    s = s.replace('5 days', 'DURATION_0')
-    s = s.replace('five days', 'DURATION_0')
+    # replace special tokens with natural-looking exmaples
+    for special_token, natural_form in special_token_mapping.items():
+        new_s = s.replace(special_token, natural_form['forward'])
+        if new_s != s:
+            print(new_s)
+            reverse_map.append(special_token)
+        s = new_s
+    return s, reverse_map
+
+def output_heuristics(s: str, reverse_map: list):
+    s = s.replace('<pad>', '')
+    s = re.sub('\s\s+', ' ', s) # remove multiple white spaces
+    s = s.strip()
+
+    for special_token in reverse_map:
+        if 'back' in special_token_mapping[special_token]:
+            back = special_token_mapping[special_token]['back']
+        else:
+            back = [special_token_mapping[special_token]['forward']]
+        for b in back:
+            if b in s:
+                s = s.replace(b, special_token)
+                break
     return s
 
 
@@ -279,7 +318,7 @@ def main(argv=sys.argv):
                         help="random seed for initialization")
     parser.add_argument('--prompt_token', type=str, default='<paraphrase>',
                         help="Token after which text generation starts. We need to add this to the end of all inputs.")
-    parser.add_argument('--stop_tokens', type=str, nargs='+', default=['</paraphrase>', '?', '.'],
+    parser.add_argument('--stop_tokens', type=str, nargs='+', default=['</paraphrase>', '?'],
                         help="Token at which text generation is stopped")
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")
@@ -359,12 +398,14 @@ def run_generation(args):
 
     all_context_tokens = []
     all_context_lengths = []
+    reverse_maps = []
     with open(args.input_file) as input_file:
         reader = csv.reader(input_file, delimiter='\t')
         for row in tqdm(reader, desc='Reading Input File'):
             raw_text = row[args.input_column]
             # print('before text = ', raw_text)
-            raw_text = input_heuristics(raw_text)
+            raw_text, reverse_map = input_heuristics(raw_text)
+            reverse_maps.append(reverse_map)
             # print('after text = ', raw_text)
             raw_text += args.prompt_token
             if args.model_type in ["transfo-xl", "xlnet"]:
@@ -382,8 +423,8 @@ def run_generation(args):
         logger.error('Your tokenizer does not have a padding token')
 
     # sort contexts based on their length so that less generated tokens are thrown away and generation can be done faster
-    t = list(zip(*sorted(list(zip(all_context_lengths, all_context_tokens, range(len(all_context_tokens)))), reverse=True)))
-    all_context_lengths, all_context_tokens, original_order = list(t[0]), list(t[1]), list(t[2])
+    t = list(zip(*sorted(list(zip(all_context_lengths, all_context_tokens, range(len(all_context_tokens)), reverse_maps)), reverse=True)))
+    all_context_lengths, all_context_tokens, original_order, reverse_maps = list(t[0]), list(t[1]), list(t[2]), list(t[3])
     all_outputs = []
     # print('all_context_lengths[0:100] = ', all_context_lengths[0:100])
 
@@ -395,9 +436,7 @@ def run_generation(args):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_tokens)))
         batch_context_tokens = all_context_tokens[batch_slice[0]: batch_slice[1]]
         batch_context_lengths = all_context_lengths[batch_slice[0]: batch_slice[1]]
-        # print('batch_slice = ', batch_slice)
-        # print('all_context_lengths = ', all_context_lengths)
-        # print('batch_context_lengths = ', batch_context_lengths)
+        batch_reverse_maps = reverse_maps[batch_slice[0]: batch_slice[1]]
 
         out = sample_sequence(
             model=model,
@@ -419,19 +458,11 @@ def run_generation(args):
         )
         out = out[:, :].tolist()
         # print('pad = ', pad_token_id)
-        # print('stop tokens = ', [tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens])
         batch_outputs = [[] for _ in range(batch_slice[1]-batch_slice[0])]
         for i, o in enumerate(out):
-            # print('len(o) = ', len(o))
-            # print('o = ', o)
-            # print(i % (batch_slice[1]-batch_slice[0]))
-            # print('context_length = ', batch_context_lengths[i % (batch_slice[1]-batch_slice[0])])
             o = o[batch_context_lengths[i % (batch_slice[1]-batch_slice[0])]:]
             text = tokenizer.decode(o, clean_up_tokenization_spaces=True, skip_special_tokens=False)
             # print('original text: ', tokenizer.decode(batch_context_tokens[i % (batch_slice[1]-batch_slice[0])], clean_up_tokenization_spaces=True, skip_special_tokens=False))
-
-            # print('len(o) = ', len(o))
-            # print('o = ', o)
             # print('text = ', text)
             if args.stop_tokens is not None:
                 min_index = len(text)
@@ -443,10 +474,7 @@ def run_generation(args):
                     min_index += 1
                 text = text[:min_index]
 
-            text = text.replace('<pad>', '')
-            text = re.sub('\s\s+', ' ', text) # remove multiple white spaces
-            text = text.strip()
-            text = output_heuristics(text)
+            text = output_heuristics(text, batch_reverse_maps[i % (batch_slice[1]-batch_slice[0])])
             batch_outputs[i % (batch_slice[1]-batch_slice[0])].append(text)
 
         all_outputs.extend(batch_outputs)

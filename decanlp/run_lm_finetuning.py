@@ -596,6 +596,7 @@ def main(argv=sys.argv):
     if args.add_inbetween_as_special_tokens:
         new_tokens = get_inbetween_tokens(args.train_data_file, start_token=args.start_special_token, end_token=args.end_special_token)
         logger.info('Detected %d new tokens', len(new_tokens))
+        # logger.info('New tokens: %s', str([s for s in new_tokens if ('_' in s and '@' not in s and '^' not in s and '(' not in s and ':' not in s)]))
         add_special_tokens(model, tokenizer, additional_special_tokens=list(new_tokens))
     model.to(args.device)
 
