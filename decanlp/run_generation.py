@@ -121,11 +121,11 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
 
 def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=0, top_p=0.0, repetition_penalty=1.0,
                     is_xlnet=False, is_xlm_mlm=False, xlm_mask_token=None, xlm_lang=None, device='cpu',
-                    stop_token_ids=None, pad_token_id=None, supports_past=False):
+                    stop_token_ids=None, pad_token_id=None, supports_past=False, prompt_token_id=None):
     """
     Generates sequence of tokens for the batch of input contexts.
     Inputs:
-        context: a list of token_ids
+        context: a list of token_ids, sorted by length from longest to shortest
         num_samples: the number of sequences to output for each input context
         length: The maximum length of generation in addition to the original sentence's length
         stop_token_ids: generation of each sequence will stop if we generate any of these tokens
@@ -140,7 +140,6 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
     next_index = min_length
     generated = context[:, :next_index]
     should_finish = None
-    # print('generated = ', generated)
     length = max_length + length
     past = None
     with torch.no_grad():
@@ -148,7 +147,6 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
         # original_rep_penalty = repetition_penalty
         # print('rep_penalty = ', rep_penalty)
         for _ in trange(length):
-            # repetition_penalty = original_rep_penalty + rep_penalty[_] * 9
             inputs = {'input_ids': generated}
             if is_xlnet: 
                 # XLNet is a direct (predict same token, not next token) and bi-directional model by default
@@ -173,21 +171,22 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                 inputs['past'] = past
                 if past is not None:
                     inputs['input_ids'] = next_token
-            # print('input_ids = ', inputs['input_ids'])
             outputs = model(**inputs)
-            # print('outputs[0] = ', outputs[0].shape)
             next_token_logits = outputs[0][:, -1, :] / (temperature if temperature > 0 else 1.)
-            # print('next_token_logits = ', next_token_logits)
             past = outputs[1]
-            # print('len(past) = ', len(past))
-            # print('past[0] = ', past[0].shape)
 
             # repetition penalty from CTRL (https://arxiv.org/abs/1909.05858), but much faster on GPU
-            m = torch.scatter(input=torch.zeros_like(next_token_logits), dim=1, index=generated, value=1)
+            # for repetition_penalty, we penalize the tokens that appear in the context
+            m = torch.scatter(input=torch.zeros_like(next_token_logits), dim=1, index=context, value=1)
+            m[:prompt_token_id] = 0
+            m[:pad_token_id] = 0
+            # print('m = ', m.shape)
             need_change = m * next_token_logits
             need_divide = need_change > 0
             need_multiply = need_change < 0
             next_token_logits = need_divide * next_token_logits / repetition_penalty + need_multiply * next_token_logits * repetition_penalty + (1-m) * next_token_logits
+            
+            # Old, slow implementation
             # if repetition_penalty != 1.0:
                 # for i in range(context.shape[0]):
                     # for _ in set(generated[i].tolist()):
@@ -195,9 +194,7 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                             # next_token_logits[i, _] /= repetition_penalty
                         # else:
                             # next_token_logits[i, _] *= repetition_penalty
-            # print('test: ', (t==next_token_logits).all())
-            # print('t = ', t)
-            # print('next_token_logits = ', next_token_logits)
+
             filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
             if temperature == 0: # greedy sampling:
                 next_token = torch.argmax(filtered_logits, dim=-1).unsqueeze(-1)
@@ -206,11 +203,8 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
 
             # throw away the tokens that we already have from the context
             if next_index < context.shape[1]:
-                # print('context[:, next_index:next_index+1] = ', context[:, next_index:next_index+1])
                 m = (context[:, next_index:next_index+1] != pad_token_id).long()
-                # print('m = ', m)
                 next_token = m*context[:, next_index:next_index+1]+(1-m)*next_token
-                # print('next_token = ', next_token)
             else:
                 m = torch.zeros(1, device=device)
 
@@ -419,6 +413,7 @@ def run_generation(args):
                     logger.info("WARNING! You are not starting your generation from a control code so you won't get good results")
     
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
+    prompt_token_id = tokenizer.convert_tokens_to_ids(args.prompt_token)
     if pad_token_id is None:
         logger.error('Your tokenizer does not have a padding token')
 
@@ -454,14 +449,16 @@ def run_generation(args):
             device=args.device,
             stop_token_ids=[tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens],
             pad_token_id=pad_token_id,
-            supports_past=args.model_type in ['gpt2', 'openai-gpt', 'transfo-xl', 'xlnet', 'ctrl']
+            supports_past=args.model_type in ['gpt2', 'openai-gpt', 'transfo-xl', 'xlnet', 'ctrl'],
+            prompt_token_id=prompt_token_id
         )
         out = out[:, :].tolist()
-        # print('pad = ', pad_token_id)
         batch_outputs = [[] for _ in range(batch_slice[1]-batch_slice[0])]
         for i, o in enumerate(out):
             o = o[batch_context_lengths[i % (batch_slice[1]-batch_slice[0])]:]
             text = tokenizer.decode(o, clean_up_tokenization_spaces=True, skip_special_tokens=False)
+            # print('original tokens: ', batch_context_tokens[i % (batch_slice[1]-batch_slice[0])])
+            # print('generated tokens: ', o)
             # print('original text: ', tokenizer.decode(batch_context_tokens[i % (batch_slice[1]-batch_slice[0])], clean_up_tokenization_spaces=True, skip_special_tokens=False))
             # print('text = ', text)
             if args.stop_tokens is not None:
