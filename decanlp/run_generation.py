@@ -196,6 +196,8 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                             # next_token_logits[i, _] *= repetition_penalty
 
             filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
+
+
             if temperature == 0: # greedy sampling:
                 next_token = torch.argmax(filtered_logits, dim=-1).unsqueeze(-1)
             else:
