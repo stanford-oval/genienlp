@@ -24,12 +24,12 @@ trap on_error ERR INT TERM
 
 i=0
 for hparams in \
-            "--dimension 768 --transformer_hidden 768 --trainable_decoder_embeddings 50 --encoder_embeddings=bert-base-uncased --decoder_embeddings= --seq2seq_encoder=Identity --rnn_layers 1 --transformer_heads 12 --transformer_layers 0 --rnn_zero_state=average --train_encoder_embeddings --transformer_lr_multiply 0.1"
-            # "--encoder_embeddings=bert-base-multilingual-cased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-            # "--encoder_embeddings=small_glove+char --decoder_embeddings=small_glove+char" \
-            #    "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50" \
-            #    "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-            #    "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=BiLSTM --dimension=768" \
+            "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings 50 --dimension 768 --transformer_hidden 768 --seq2seq_encoder=Identity --rnn_layers 1 --transformer_heads 12 --transformer_layers 0 --rnn_zero_state=average --train_encoder_embeddings --transformer_lr_multiply 0.1" \
+            "--encoder_embeddings=bert-base-multilingual-cased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
+            "--encoder_embeddings=small_glove+char --decoder_embeddings=small_glove+char" \
+            "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50" \
+            "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
+            "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=BiLSTM --dimension=768"
 do
 
     # train
@@ -38,13 +38,18 @@ do
     # greedy decode
     pipenv run python3 -m genienlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
 
-    # check if result files exist
-    # if test ! -f $workdir/model_$i/eval_results/test/almond.tsv ; then
-        # echo "File not found!"
-        # exit
-    # fi
+    check if result files exist
+    if test ! -f $workdir/model_$i/eval_results/test/almond.tsv ; then
+        echo "File not found!"
+        exit
+    fi
 
     i=$((i+1))
 done
 
-# rm -fr $workdir
+# Train a paraphrasing model for a few iterations
+pipenv run python3 -m genienlp train-paraphrase --train_data_file $SRCDIR/dataset/paraphrasing/train.txt --eval_data_file $SRCDIR/dataset/paraphrasing/dev.txt --output_dir $workdir/gpt2-small-1 --tensorboard_dir $workdir/tensorboard/ --model_type gpt2 --do_train --do_eval --evaluate_during_training --overwrite_output_dir --logging_steps 1000 --save_steps 1000 --max_steps 4 --save_total_limit 1 -- --gradient_accumulation_steps 1 --per_gpu_eval_batch_size 1 --per_gpu_train_batch_size 1 --num_train_epochs 1 --model_name_or_path gpt2-small
+# Use it to paraphrase almond's train set
+pipenv run python3 -m genienlp run-paraphrase --model_type gpt2 --model_name_or_path $workdir/gpt2-small-1 --length 15 --temperature 0.4 --repetition_penalty 1.0 --num_samples 4 --input_file $SRCDIR/dataset/almond/train.tsv --input_column 1
+
+rm -fr $workdir
