@@ -140,6 +140,9 @@ class BaseAlmondTask(BaseTask):
         if not sentence:
             return [], []
 
+        if self.force_subword_tokenize:
+            return sentence.split(' '), None
+
         if self._is_program_field(field_name):
             mask = []
             in_string = False

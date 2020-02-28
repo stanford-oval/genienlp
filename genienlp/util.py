@@ -199,7 +199,7 @@ def load_config_json(args):
                     'encoder_embeddings', 'context_embeddings', 'question_embeddings', 'decoder_embeddings',
                     'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'train_encoder_embeddings',
                     'train_context_embeddings', 'train_question_embeddings', 'locale', 'use_pretrained_bert',
-                    'pretrain_context', 'pretrain_mlm_probability']
+                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize']
 
         for r in retrieve:
             if r in config:

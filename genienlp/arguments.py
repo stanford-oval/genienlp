@@ -141,6 +141,8 @@ def parse_argv(parser):
                         help='number of pretraining steps for the context encoder')
     parser.add_argument('--pretrain_mlm_probability', default=0.15, type=int,
                         help='probability of replacing a token with mask for MLM pretraining')
+    parser.add_argument('--force_subword_tokenize', action='store_true', default=False,
+                        help='force subword tokenization of code tokens too')
 
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
