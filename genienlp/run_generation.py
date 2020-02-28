@@ -104,6 +104,7 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
     should_finish = None
     length = max_length + length
     past = None
+    next_token = None
     with torch.no_grad():
         # rep_penalty = np.random.random(length) < 0.1
         # original_rep_penalty = repetition_penalty
