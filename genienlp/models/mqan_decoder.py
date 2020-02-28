@@ -538,7 +538,7 @@ def _generate_beam_search(
             beam_idx = input_ids.new([x[2] for x in next_batch_beam])
 
             # re-order batch
-            beam_words = beam_words.apply_(map_to_full)
+            beam_words = beam_words.cpu().apply_(map_to_full)
             input_ids = input_ids[beam_idx, :]
             decoder_wrapper.reorder(beam_idx)
             input_ids = torch.cat([input_ids, beam_words.unsqueeze(1)], dim=-1)
