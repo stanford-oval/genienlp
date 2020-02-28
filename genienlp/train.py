@@ -146,8 +146,13 @@ def prepare_data(args, logger):
     return numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
 
-def train_step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, pretraining=False):
+def train_step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, pretraining=False,
+               train_context_embeddings_after=None, train_question_embeddings_after=None):
     model.train()
+    model.module.set_train_context_embeddings(train_context_embeddings_after is not None and
+                                              iteration > train_context_embeddings_after)
+    model.module.set_train_question_embeddings(train_question_embeddings_after is not None and
+                                               iteration > train_question_embeddings_after)
     opt.zero_grad()
     loss, predictions = model(batch, iteration, pretraining=pretraining)
     if torch.isnan(loss).any():
@@ -377,7 +382,11 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
             # param update
             loss, grad_norm = train_step(model, batch, iteration, opt, lr_scheduler=lr_scheduler,
-                                         grad_clip=args.grad_clip, pretraining=pretraining)
+                                         grad_clip=args.grad_clip, pretraining=pretraining,
+                                         train_context_embeddings_after=args.train_context_embeddings_after if
+                                                                        args.train_context_embeddings else None,
+                                         train_question_embeddings_after=args.train_question_embeddings_after if
+                                                                         args.train_question_embeddings else None)
             if loss is None:
                 logger.info(
                     'Encountered NAN loss during training... Continue training ignoring the current batch')

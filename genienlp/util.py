@@ -199,6 +199,7 @@ def load_config_json(args):
                     'encoder_embeddings', 'context_embeddings', 'question_embeddings', 'decoder_embeddings',
                     'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'train_encoder_embeddings',
                     'train_context_embeddings', 'train_question_embeddings', 'locale', 'use_pretrained_bert',
+                    'train_context_embeddings_after', 'train_question_embeddings_after',
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize']
 
         for r in retrieve:
@@ -206,7 +207,8 @@ def load_config_json(args):
                 setattr(args, r, config[r])
             elif r == 'locale':
                 setattr(args, r, 'en')
-            elif r in ('trainable_decoder_embedding', 'trainable_encoder_embeddings', 'pretrain_context'):
+            elif r in ('trainable_decoder_embedding', 'trainable_encoder_embeddings', 'pretrain_context',
+                       'train_context_embeddings_after', 'train_question_embeddings_after'):
                 setattr(args, r, 0)
             elif r == 'pretrain_mlm_probability':
                 setattr(args, r, 0.15)

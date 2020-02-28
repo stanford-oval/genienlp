@@ -54,6 +54,12 @@ class BiLSTMEncoder(nn.Module):
                                           batch_first=True, bidirectional=True, num_layers=args.rnn_layers,
                                           dropout=dp(args))
 
+    def set_train_context_embeddings(self, trainable):
+        self.encoder_embeddings.set_trainable(trainable)
+
+    def set_train_question_embeddings(self, trainable):
+        pass
+
     def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length
         question, question_lengths = batch.question.value, batch.question.length

@@ -128,9 +128,15 @@ def parse_argv(parser):
     parser.add_argument('--train_encoder_embeddings', action='store_true', default=False,
                         help='back propagate into pretrained encoder embedding (recommended for BERT)')
     parser.add_argument('--train_context_embeddings', action='store_true', default=None,
-                        help='back propagate into pretrained encoder embedding (recommended for BERT)')
+                        help='back propagate into pretrained context embedding (recommended for BERT)')
+    parser.add_argument('--train_context_embeddings_after', type=int, default=0,
+                        help='back propagate into pretrained context embedding after the given iteration (default: '
+                             'immediately)')
     parser.add_argument('--train_question_embeddings', action='store_true', default=None,
-                        help='back propagate into pretrained encoder embedding (recommended for BERT)')
+                        help='back propagate into pretrained question embedding (recommended for BERT)')
+    parser.add_argument('--train_question_embeddings_after', type=int, default=0,
+                        help='back propagate into pretrained context embedding after the given iteration (default: '
+                             'immediately)')
     parser.add_argument('--decoder_embeddings', default='glove+char',
                         help='which pretrained word embedding to use on the decoder side')
     parser.add_argument('--trainable_encoder_embeddings', default=0, type=int,

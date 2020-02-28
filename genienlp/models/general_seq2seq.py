@@ -60,6 +60,12 @@ class Seq2Seq(torch.nn.Module):
         if self.args.pretrain_context > 0:
             self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, numericalizer.num_tokens)
 
+    def set_train_context_embeddings(self, trainable):
+        self.encoder.set_train_context_embeddings(trainable)
+
+    def set_train_question_embeddings(self, trainable):
+        self.encoder.set_train_question_embeddings(trainable)
+
     def _pretrain_forward(self, batch):
         masked_input, masked_labels = mask_tokens(batch.context.value, self.numericalizer,
                                                   self.args.pretrain_mlm_probability)
