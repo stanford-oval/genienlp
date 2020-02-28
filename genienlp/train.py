@@ -146,10 +146,10 @@ def prepare_data(args, logger):
     return numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
 
-def step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, logger=None):
+def train_step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, pretraining=False):
     model.train()
     opt.zero_grad()
-    loss, predictions = model(batch, iteration)
+    loss, predictions = model(batch, iteration, pretraining=pretraining)
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss')
     loss.backward()
@@ -256,21 +256,21 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
 def do_log_training_loss(iteration, loss, *,
                          lr_scheduler, grad_norm, lr_rate,
                          num_examples, len_contexts, len_answers,
-                         logger, train_task, round_progress, task_progress, timestamp, writer):
+                         logger, train_task, round_progress, task_progress,
+                         timestamp, writer, log_prefix):
     avg_batch_size = f'avbatch_{num_examples:.0f}_{len_contexts:.0f}_{len_answers:.0f}:'
     logger.info(
-        f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}{avg_batch_size}loss_{loss:.4f}')
+        f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}{avg_batch_size}{log_prefix}/loss_{loss:.4f}')
 
     if writer is not None:
-        writer.add_scalar(f'loss/{train_task.name}/train', loss, iteration)
-        writer.add_scalar(f'training/loss/{train_task.name}', loss, iteration)
+        writer.add_scalar(f'{log_prefix}/loss/{train_task.name}', loss, iteration)
 
         if lr_scheduler is not None:
-            writer.add_scalar(f'training/lr', lr_scheduler.get_last_lr(), iteration)
+            writer.add_scalar(f'{log_prefix}/lr', lr_scheduler.get_last_lr(), iteration)
         else:
-            writer.add_scalar(f'training/lr', lr_rate, iteration)
+            writer.add_scalar(f'{log_prefix}/lr', lr_rate, iteration)
         if grad_norm is not None:
-            writer.add_scalar(f'training/norm', grad_norm, iteration)
+            writer.add_scalar(f'{log_prefix}/norm', grad_norm, iteration)
 
 
 def np_coin(prob):
@@ -293,9 +293,9 @@ def get_next_batch(train_iter, aux_iters, *, task, task_idx, task_fraction, use_
     return batch
 
 
-def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations, numericalizer, logger,
-          log_every=10, val_every=100, save_every=1000, rounds=False, val_sets=(), aux_sets=(), writer=None,
-          start_iteration=1, rnd=1, best_decascore=None):
+def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations, numericalizer, *,
+          log_every, val_every, save_every, rounds, val_sets, aux_sets, writer, logger, log_prefix,
+          start_iteration=1, rnd=1, best_decascore, use_curriculum, pretraining):
     """main training function"""
     local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, start_iteration
 
@@ -322,13 +322,14 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
-    if args.use_curriculum:
+    aux_iters = []
+    if use_curriculum:
         aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
 
     zero_loss = 0
-    logger.info(f'Begin Training')
+    logger.info(f'Begin {log_prefix}')
 
     while not all(task_done.values()):
         # For some number of rounds, we 'jump start' some subset of the tasks
@@ -349,8 +350,8 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 task_done[task] = True
                 continue
 
-            batch = get_next_batch(train_iter, iteration, task=task, task_idx=task_idx,
-                                   task_fraction=task_fraction, use_curriculum=args.use_curriculum)
+            batch = get_next_batch(train_iter, aux_iters, task=task, task_idx=task_idx,
+                                   task_fraction=task_fraction, use_curriculum=use_curriculum)
 
             if iteration < start_iteration:
                 # skip this iteration (this is done to ensure iterators are at the same position when resuming)
@@ -375,8 +376,8 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                                                 timestamp=args.timestamp, log_dir=args.log_dir)
 
             # param update
-            loss, grad_norm = step(model, batch, iteration, opt, lr_scheduler=lr_scheduler,
-                                   grad_clip=args.grad_clip)
+            loss, grad_norm = train_step(model, batch, iteration, opt, lr_scheduler=lr_scheduler,
+                                         grad_clip=args.grad_clip, pretraining=pretraining)
             if loss is None:
                 logger.info(
                     'Encountered NAN loss during training... Continue training ignoring the current batch')
@@ -410,7 +411,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                                      lr_scheduler=lr_scheduler, grad_norm=grad_norm, lr_rate=args.lr_rate,
                                      num_examples=num_examples, len_contexts=len_contexts, len_answers=len_answers,
                                      logger=logger, writer=writer, train_task=task, round_progress=round_progress,
-                                     task_progress=task_progress, timestamp=args.timestamp)
+                                     task_progress=task_progress, timestamp=args.timestamp, log_prefix=log_prefix)
                 num_examples = 0
                 len_contexts = 0
                 len_answers = 0
@@ -424,7 +425,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
         epoch += 1
         rnd += 1
 
-    logger.info(f'training is done after {epoch} epochs')
+    logger.info(f'{log_prefix} is done after {epoch} epochs')
 
 
 def init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings, devices, logger):
@@ -525,9 +526,18 @@ def main(args):
     else:
         writer = None
 
-    train(args, devices, model, opt, lr_scheduler, train_sets, args.train_iterations, numericalizer, val_sets=val_sets,
-          aux_sets=aux_sets,
-          logger=logger,
-          log_every=args.log_every, val_every=args.val_every, rounds=len(train_sets) > 1,
-          writer=writer, save_every=args.save_every, start_iteration=start_iteration,
-          best_decascore=save_dict.get('best_decascore') if save_dict is not None else None)
+    if not args.resume and args.pretrain_context > 0:
+        pretrain_opt, pretrain_lr_scheduler = init_opt(args, model, logger)
+        train_iterations = [args.pretrain_context for _ in args.train_tasks]
+        train(args, devices, model, pretrain_opt, pretrain_lr_scheduler, train_sets,
+              train_iterations, numericalizer, val_sets=[], aux_sets=[], logger=logger, writer=writer,
+              log_every=args.log_every, val_every=None, save_every=None, use_curriculum=False,
+              rounds=len(train_sets) > 1, start_iteration=start_iteration, best_decascore=0,
+              pretraining=True, log_prefix='pretrain')
+
+    train(args, devices, model, opt, lr_scheduler, train_sets,
+          args.train_iterations, numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
+          log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
+          rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
+          best_decascore=save_dict.get('best_decascore') if save_dict is not None else None,
+          pretraining=False, log_prefix='training')

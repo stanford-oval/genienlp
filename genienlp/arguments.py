@@ -137,6 +137,10 @@ def parse_argv(parser):
                         help='size of trainable portion of encoder embedding (only for Coattention encoder)')
     parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
                         help='size of trainable portion of decoder embedding (0 or omit to disable)')
+    parser.add_argument('--pretrain_context', default=0, type=int,
+                        help='number of pretraining steps for the context encoder')
+    parser.add_argument('--pretrain_mlm_probability', default=0.15, type=int,
+                        help='probability of replacing a token with mask for MLM pretraining')
 
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')

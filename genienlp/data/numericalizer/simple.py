@@ -43,6 +43,7 @@ class SimpleNumericalizer(object):
         self.eos_token = '<eos>'
         self.unk_token = '<unk>'
         self.pad_token = '<pad>'
+        self.mask_token = '<mask>'
 
         self.fix_length = fix_length
         self.pad_first = pad_first
@@ -90,15 +91,21 @@ class SimpleNumericalizer(object):
         self.eos_id = self.vocab.stoi[self.eos_token]
         self.unk_id = self.vocab.stoi[self.unk_token]
         self.pad_id = self.vocab.stoi[self.pad_token]
+        self.mask_id = self.vocab.stoi[self.mask_token]
         self.generative_vocab_size = min(self.max_generative_vocab, len(self.vocab))
 
         assert self.init_id < self.max_generative_vocab
         assert self.eos_id < self.max_generative_vocab
         assert self.unk_id < self.max_generative_vocab
         assert self.pad_id < self.max_generative_vocab
+        assert self.mask_id < self.max_generative_vocab
 
         self.decoder_vocab = DecoderVocabulary(self.vocab.itos[:self.max_generative_vocab], self.vocab,
                                                pad_token=self.pad_token, eos_token=self.eos_token)
+
+    def get_special_token_mask(self, tensor):
+        special_tokens_tuple = (self.init_id, self.eos_id, self.pad_id, self.mask_id)
+        return list(map(lambda x: 1 if x in special_tokens_tuple else 0, tensor))
 
     def encode(self, minibatch, decoder_vocab, device=None):
         assert isinstance(minibatch, list)

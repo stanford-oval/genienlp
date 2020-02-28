@@ -198,15 +198,18 @@ def load_config_json(args):
                     'val_batch_size', 'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower',
                     'encoder_embeddings', 'context_embeddings', 'question_embeddings', 'decoder_embeddings',
                     'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'train_encoder_embeddings',
-                    'train_context_embeddings', 'train_question_embeddings', 'locale', 'use_pretrained_bert']
+                    'train_context_embeddings', 'train_question_embeddings', 'locale', 'use_pretrained_bert',
+                    'pretrain_context', 'pretrain_mlm_probability']
 
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
             elif r == 'locale':
                 setattr(args, r, 'en')
-            elif r in ('trainable_decoder_embedding', 'trainable_encoder_embeddings'):
+            elif r in ('trainable_decoder_embedding', 'trainable_encoder_embeddings', 'pretrain_context'):
                 setattr(args, r, 0)
+            elif r == 'pretrain_mlm_probability':
+                setattr(args, r, 0.15)
             elif r == 'context_embeddings':
                 if args.seq2seq_encoder == 'Coattention':
                     setattr(args, r, '')

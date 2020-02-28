@@ -28,13 +28,14 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from torch import nn
+import torch
 
 from .coatt_encoder import CoattentionEncoder
 from .lstm_encoder import BiLSTMEncoder
 from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
+from .common import mask_tokens
 
 ENCODERS = {
     'MQANEncoder': MQANEncoder,
@@ -47,19 +48,41 @@ DECODERS = {
 }
 
 
-class Seq2Seq(nn.Module):
+class Seq2Seq(torch.nn.Module):
     def __init__(self, numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings):
         super().__init__()
         self.args = args
 
+        self.numericalizer = numericalizer
         self.encoder = ENCODERS[args.seq2seq_encoder](numericalizer, args, context_embeddings, question_embeddings)
         self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings)
 
-    def forward(self, batch, iteration):
+        if self.args.pretrain_context > 0:
+            self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, numericalizer.num_tokens)
+
+    def _pretrain_forward(self, batch):
+        masked_input, masked_labels = mask_tokens(batch.context.value, self.numericalizer,
+                                                  self.args.pretrain_mlm_probability)
+        masked_batch = batch._replace(context=batch.context._replace(value=masked_input))
+
+        self_attended_context, _final_context, _context_rnn_state, _final_question, _question_rnn_state = \
+            self.encoder(masked_batch)
+        context_logits = self.context_pretrain_lm_head(self_attended_context[-1])
+        predictions = None
+
+        context_logits = context_logits.view(-1, self.numericalizer.num_tokens)
+        masked_labels = masked_labels.view(-1)
+        loss = torch.nn.functional.cross_entropy(context_logits, masked_labels, ignore_index=self.numericalizer.pad_id)
+        return loss, predictions
+
+    def _normal_forward(self, batch):
         self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
             self.encoder(batch)
+        return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
+                            final_question, question_rnn_state)
 
-        loss, predictions = self.decoder(batch, self_attended_context, final_context, context_rnn_state,
-                                         final_question, question_rnn_state)
-
-        return loss, predictions
+    def forward(self, batch, iteration, pretraining=False):
+        if pretraining:
+            return self._pretrain_forward(batch)
+        else:
+            return self._normal_forward(batch)
