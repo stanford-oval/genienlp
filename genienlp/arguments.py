@@ -117,10 +117,10 @@ def parse_argv(parser):
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
 
     parser.add_argument('--encoder_embeddings', default='glove+char',
-                        help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT or a *roberta* model for RoBERTa; '
+                        help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT or a xlm-roberta* model for Multi-lingual RoBERTa; '
                              'multiple embeddings can be concatenated with +')
     parser.add_argument('--train_encoder_embeddings', action='store_true', default=False,
-                        help='back propagate into pretrained encoder embedding (recommended for BERT and RoBERTa)')
+                        help='back propagate into pretrained encoder embedding (recommended for BERT and XLM-RoBERTa)')
     parser.add_argument('--decoder_embeddings', default='glove+char',
                         help='which pretrained word embedding to use on the decoder side')
     parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
