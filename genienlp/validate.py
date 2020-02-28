@@ -83,7 +83,7 @@ def print_results(keys, values, num_print=1):
 def validate(task, val_iter, model, logger, numericalizer, iteration, num_print=10, args=None):
     with torch.no_grad():
         model.eval()
-        names = ['greedy', 'answer', 'context', 'question']
+        names = ['beam search', 'answer', 'context', 'question']
         loss, predictions, answers, contexts, questions = \
             gather_results(model, val_iter, numericalizer, task, iteration)
         predictions = [p.replace('UNK', 'OOV') for p in predictions]

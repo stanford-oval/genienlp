@@ -271,6 +271,11 @@ def expand_for_beam_search(t, batch_size, num_beams, dim=0):
         for e in t:
             elements.append(expand_for_beam_search(e, batch_size, num_beams, dim))
         return tuple(elements)
+    elif isinstance(t, list):
+        elements = []
+        for e in t:
+            elements.append(expand_for_beam_search(e, batch_size, num_beams, dim))
+        return elements
 
     # print('before expansion: ', t.shape)
     original_size = list(t.shape)
@@ -289,6 +294,11 @@ def reorder_for_beam_search(t, new_order, dim=0):
         for e in t:
             elements.append(reorder_for_beam_search(e, new_order, dim))
         return tuple(elements)
+    elif isinstance(t, list):
+        elements = []
+        for e in t:
+            elements.append(reorder_for_beam_search(e, new_order, dim))
+        return elements
 
     # print('before reordering t = ', t)
     p = [i for i in range(len(t.shape))]
@@ -305,6 +315,7 @@ class DecoderWrapper(object):
 
     def __init__(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                decoder_vocab, rnn_state, batch_size, max_decoder_time, mqan_decoder: MQANDecoder, num_beams:int):
+        # print('self_attended_context = ', self_attended_context)
         self.self_attended_context = expand_for_beam_search(self_attended_context, batch_size, num_beams)
         self.context = expand_for_beam_search(context, batch_size, num_beams)
         self.context_padding = expand_for_beam_search(context_padding, batch_size, num_beams)

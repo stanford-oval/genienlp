@@ -165,7 +165,6 @@ def parse_argv(parser):
                         help='whether to use the bleu metric (always on for cnn, dailymail, and cnn_dailymail)')
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
-    parser.add_argument('--num_beams', type=int, default=1, help='number of beams to use for beam search')
 
     parser.add_argument('--skip_cache', action='store_true',
                         help='whether use exisiting cached splits or generate new ones')

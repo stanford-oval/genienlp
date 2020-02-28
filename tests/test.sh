@@ -38,7 +38,7 @@ do
     # greedy decode
     pipenv run python3 -m genienlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
 
-    check if result files exist
+    # check if result file exists
     if test ! -f $workdir/model_$i/eval_results/test/almond.tsv ; then
         echo "File not found!"
         exit
@@ -48,8 +48,14 @@ do
 done
 
 # Train a paraphrasing model for a few iterations
-pipenv run python3 -m genienlp train-paraphrase --train_data_file $SRCDIR/dataset/paraphrasing/train.txt --eval_data_file $SRCDIR/dataset/paraphrasing/dev.txt --output_dir $workdir/gpt2-small-1 --tensorboard_dir $workdir/tensorboard/ --model_type gpt2 --do_train --do_eval --evaluate_during_training --overwrite_output_dir --logging_steps 1000 --save_steps 1000 --max_steps 4 --save_total_limit 1 -- --gradient_accumulation_steps 1 --per_gpu_eval_batch_size 1 --per_gpu_train_batch_size 1 --num_train_epochs 1 --model_name_or_path gpt2-small
+pipenv run python3 -m genienlp train-paraphrase --train_data_file $SRCDIR/dataset/paraphrasing/train.txt --eval_data_file $SRCDIR/dataset/paraphrasing/dev.txt --output_dir $workdir/gpt2-small-1 --tensorboard_dir $workdir/tensorboard/ --cache_dir $workdir/cache_dir/ --model_type gpt2 --do_train --do_eval --evaluate_during_training --overwrite_output_dir --logging_steps 1000 --save_steps 1000 --max_steps 4 --save_total_limit 1 --gradient_accumulation_steps 1 --per_gpu_eval_batch_size 1 --per_gpu_train_batch_size 1 --num_train_epochs 1 --model_name_or_path gpt2
 # Use it to paraphrase almond's train set
-pipenv run python3 -m genienlp run-paraphrase --model_type gpt2 --model_name_or_path $workdir/gpt2-small-1 --length 15 --temperature 0.4 --repetition_penalty 1.0 --num_samples 4 --input_file $SRCDIR/dataset/almond/train.tsv --input_column 1
+pipenv run python3 -m genienlp run-paraphrase --model_type gpt2 --model_name_or_path $workdir/gpt2-small-1 --length 15 --temperature 0.4 --repetition_penalty 1.0 --num_samples 4 --input_file $SRCDIR/dataset/almond/train.tsv --input_column 1 --output_file $workdir/generated.tsv
+
+# check if result file exists
+if test ! -f $workdir/generated.tsv ; then
+    echo "File not found!"
+    exit
+fi
 
 rm -fr $workdir

@@ -37,6 +37,7 @@ import time
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from .data_utils.example import Batch
 from .data_utils.iterator import Iterator
@@ -286,11 +287,12 @@ def load_config_json(args):
                     'transformer_hidden', 'dimension', 'rnn_dimension', 'load', 'max_val_context_length',
                     'val_batch_size', 'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower',
                     'encoder_embeddings', 'decoder_embeddings', 'trainable_decoder_embeddings',
-                    'train_encoder_embeddings', 'locale', 'use_pretrained_bert']
+                    'train_encoder_embeddings', 'locale', 'use_pretrained_bert', 'num_beams']
 
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
+            # These are for backward compatibility with models that were trained before we added these arguments
             elif r == 'locale':
                 setattr(args, r, 'en')
             elif r == 'trainable_decoder_embedding':
@@ -303,6 +305,8 @@ def load_config_json(args):
                 setattr(args, r, 'zero')
             elif r == 'use_pretrained_bert':
                 setattr(args, r, True)
+            elif r == 'num_beams':
+                setattr(args, r, 1)
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0

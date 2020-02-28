@@ -146,6 +146,7 @@ def prepare_data(args, logger):
 accumulated_batch_lengths = 0
 
 def step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, logger=None, gradient_accumulation_steps=1):
+    # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of the total batch size
     global accumulated_batch_lengths
     model.train()
     if (iteration) % gradient_accumulation_steps == 0:
@@ -154,7 +155,6 @@ def step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, logger
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss')
     non_accumulated_loss = loss.item()
-    print('batch size = ', len(batch[0]))
     loss = loss*len(batch[0])
     accumulated_batch_lengths += len(batch[0])
     loss.backward()
