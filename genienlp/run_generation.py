@@ -18,13 +18,11 @@
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import argparse
 import logging
 from tqdm import trange, tqdm
 import math
 import json
 import csv
-import sys
 import re
 import copy
 
@@ -37,7 +35,6 @@ except RuntimeError:
 
 import torch
 import torch.nn.functional as F
-import numpy as np
 
 from transformers import GPT2Config, OpenAIGPTConfig, XLNetConfig, TransfoXLConfig, XLMConfig, CTRLConfig
 
@@ -358,6 +355,7 @@ def run_generation(args):
     all_context_tokens = []
     all_context_lengths = []
     reverse_maps = []
+    number_of_lines = get_number_of_lines(args.input_file)
     with open(args.input_file) as input_file:
         reader = csv.reader(input_file, delimiter='\t')
         for row in tqdm(reader, desc='Reading Input File'):

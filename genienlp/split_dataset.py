@@ -1,5 +1,4 @@
 from argparse import ArgumentParser
-import csv
 from tqdm import tqdm
 import random
 

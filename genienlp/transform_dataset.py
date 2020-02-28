@@ -1,7 +1,6 @@
 from argparse import ArgumentParser
 import csv
 from tqdm import tqdm
-import random
 import re
 
 def remove_thingtalk_quotes(thingtalk):
