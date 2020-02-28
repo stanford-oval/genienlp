@@ -20,8 +20,9 @@ models/.DS_Store
 multiprocess/.DS_Store
 text/.DS_Store
 src/
-decaNLP_models/
 workdir/
+*save*/
+tests/dataset-*
 
 
 # C extensions

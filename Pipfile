@@ -15,7 +15,8 @@ sacrebleu = "~=1.0"
 tensorboardX = "==2.0.*"
 requests = "~=2.22"
 transformers = "~=2.3"
-radam = {git = "https://github.com/gcampax/RAdam"}
+radam = {git = "https://github.com/LiyuanLucasLiu/RAdam"}
+sentencepiece = ">=0.1.83,<0.2.0"
 
 [requires]
 python_version = "3.7"

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright 2019 The Board of Trustees of the Leland Stanford Junior University
 #
 # Author: Giovanni Campagna <gcampagn@cs.stanford.edu>
@@ -27,35 +28,41 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import setuptools
+import sys
+import argparse
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+from . import arguments, train, predict, server, cache_embeddings, run_lm_finetuning, run_generation
 
-setuptools.setup(
-    name='genienlp',
-    version='0.1.1',
-    
-    packages=setuptools.find_packages(exclude=['tests']),
-    entry_points= {
-        'console_scripts': ['genienlp=genienlp.__main__:main'],
-    },    
-    license='BSD-3-Clause',
-    author="Salesforce Inc., Stanford University Open Virtual Assistant Lab",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/stanford-oval/genienlp",
+subcommands = {
+    'train': ('Train a model', arguments.parse_argv, train.main),
+    'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.parse_argv, predict.main),
+    'server': ('Export RPC interface to predict', server.parse_argv, server.main),
+    'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
+    'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.parse_argv, run_lm_finetuning.main),
+    'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main)
+}
 
-    install_requires=[
-        'numpy',
-        'torch~=1.4',
-        'revtok==0.0.3',
-        'tqdm~=4.0',
-        'tensorboardX==2.0.*',
-        'pyrouge>=0.1.3',
-        'sacrebleu~=1.0',
-        'requests~=2.22',
-        'transformers~=2.3',
-        'sentencepiece>=0.1.83,<0.2.0'
-    ]
-)
+
+
+def usage():
+    print('Usage: %s SUBCOMMAND [OPTIONS]' % (sys.argv[0]), file=sys.stderr)
+    print(file=sys.stderr)
+    print('Available subcommands:', file=sys.stderr)
+    for subcommand, (help_text, _) in subcommands.items():
+        print('  %s - %s' % (subcommand, help_text), file=sys.stderr)
+    sys.exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser(prog='genienlp')
+    subparsers = parser.add_subparsers(dest='subcommand')
+    for subcommand in subcommands:
+        helpstr, get_parser, command_fn = subcommands[subcommand]
+        get_parser(subparsers.add_parser(subcommand, help=helpstr))
+
+    argv = parser.parse_args()
+    subcommands[argv.subcommand][2](argv)
+
+
+if __name__ == '__main__':
+    main()

@@ -19,8 +19,7 @@ for v in glove.6B.50d charNgram ; do
 done
 
 TMPDIR=`pwd`
-workdir=$TMPDIR/workdir #`mktemp -d $TMPDIR/genieNLP-tests-XXXXXX`
-mkdir -p $workdir/cache
+workdir=`mktemp -d $TMPDIR/genieNLP-tests-XXXXXX`
 trap on_error ERR INT TERM
 
 i=0
@@ -34,10 +33,10 @@ for hparams in \
 do
 
     # train
-    decanlp train --train_tasks almond  --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --cache $workdir/cache  --root "" --embeddings $SRCDIR/embeddings --no_commit
+    pipenv run python3 -m genienlp train --train_tasks almond  --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --root "" --embeddings $SRCDIR/embeddings --no_commit
 
     # greedy decode
-    # decanlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
+    pipenv run python3 -m genienlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $SRCDIR/embeddings
 
     # check if result files exist
     # if test ! -f $workdir/model_$i/eval_results/test/almond.tsv ; then

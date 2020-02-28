@@ -7,7 +7,7 @@ MAINTAINER Thingpedia Admins <thingpedia-admins@lists.stanford.edu>
 USER root
 
 # copy source
-COPY . /opt/decanlp
+COPY . /opt/genienlp
 
 # install basic tools and python3, install dependencies, and then cleanup
 RUN dnf -y install git gcc gcc-c++ \
@@ -16,13 +16,13 @@ RUN dnf -y install git gcc gcc-c++ \
 	python3-scipy \
 	python3-pip \
 	python3-devel \
-	&& pip3 install -e /opt/decanlp \
+	&& pip3 install -e /opt/genienlp \
 	&& rm -fr /root/.cache \
 	&& dnf -y remove gcc gcc-c++ \
 	&& rm -fr /var/cache/dnf
 
-# add user decanlp
-RUN useradd -ms /bin/bash -r decanlp
-USER decanlp
-WORKDIR /home/decanlp
-ENTRYPOINT ["decanlp"]
+# add user genienlp
+RUN useradd -ms /bin/bash -r genienlp
+USER genienlp
+WORKDIR /home/genienlp
+ENTRYPOINT ["genienlp"]
