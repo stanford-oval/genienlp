@@ -562,9 +562,10 @@ def mask_tokens(inputs: torch.Tensor, numericalizer, probability):
 
     labels = inputs.clone()
     # We sample a few tokens in each sequence for masked-LM training
-    probability_matrix = torch.full(labels.shape, probability)
+    probability_matrix = torch.full(labels.shape, probability, device=inputs.device)
     special_tokens_mask = [numericalizer.get_special_token_mask(token_ids) for token_ids in inputs.tolist()]
-    probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
+    probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool, device=inputs.device),
+                                    value=0.0)
     padding_mask = labels.eq(numericalizer.pad_id)
     probability_matrix.masked_fill_(padding_mask, value=0.0)
     masked_indices = torch.bernoulli(probability_matrix).bool()
@@ -573,12 +574,12 @@ def mask_tokens(inputs: torch.Tensor, numericalizer, probability):
     labels[~masked_indices] = numericalizer.pad_id
 
     # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-    indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+    indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8, device=inputs.device)).bool() & masked_indices
     inputs[indices_replaced] = numericalizer.mask_id
 
     # 10% of the time, we replace masked input tokens with random word
-    indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-    random_words = torch.randint(numericalizer.num_tokens, labels.shape, dtype=torch.long)
+    indices_random = torch.bernoulli(torch.full(labels.shape, 0.5, device=inputs.device)).bool() & masked_indices & ~indices_replaced
+    random_words = torch.randint(numericalizer.num_tokens, labels.shape, dtype=torch.long, device=inputs.device)
     inputs[indices_random] = random_words[indices_random]
 
     # The rest of the time (10% of the time) we keep the masked input tokens unchanged
