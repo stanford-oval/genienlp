@@ -1,4 +1,6 @@
-# coding=utf-8
+# Parts of this file were adopted from https://github.com/huggingface/transformers.
+# See the original copyright notice below.
+
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #

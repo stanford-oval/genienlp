@@ -1,5 +1,6 @@
-#!/usr/bin/env python3
-# coding=utf-8
+# Parts of this file were adopted from https://github.com/huggingface/transformers.
+# See the original copyright notice below.
+
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
