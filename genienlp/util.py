@@ -53,6 +53,8 @@ def detokenize(text):
     for t in tokens:
         text = text.replace(' ' + t, t)
     text = text.replace("( ", "(")
+    text = text.replace('gon na', 'gonna')
+    text = text.replace('wan na', 'wanna')
     return text
 
 def get_number_of_lines(file_path):
