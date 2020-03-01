@@ -82,13 +82,14 @@ the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famo
 with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
 
-def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=0, top_p=0.0, repetition_penalty=1.0,
+def sample_sequence(model, length, context, position_ids, num_samples=1, temperature=1, top_k=0, top_p=0.0, repetition_penalty=1.0,
                     is_xlnet=False, is_xlm_mlm=False, xlm_mask_token=None, xlm_lang=None, device='cpu',
                     stop_token_ids=None, pad_token_id=None, supports_past=False, prompt_token_id=None):
     """
     Generates sequence of tokens for the batch of input contexts.
     Inputs:
         context: a list of token_ids, sorted by length from longest to shortest
+        position_ids: a list of position_ids that indicates the positional embedding we should use for each token in context
         num_samples: the number of sequences to output for each input context
         length: The maximum length of generation in addition to the original sentence's length
         stop_token_ids: generation of each sequence will stop if we generate any of these tokens
@@ -98,12 +99,18 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
     min_length = len(context[-1])
     for a in context:
         a.extend([pad_token_id] * (max_length-len(a)))
+    
     context = torch.tensor(context, dtype=torch.long, device=device)
     context = context.repeat(num_samples, 1)
     next_index = min_length
     generated = context[:, :next_index]
     should_finish = None
     length = max_length + length
+    for p in position_ids:
+        p.extend(range(length))
+    position_ids = torch.tensor(position_ids, dtype=torch.long, device=device)
+    position_ids = position_ids.repeat(num_samples, 1)
+    # print('position_ids = ', position_ids)
     past = None
     next_token = None
     with torch.no_grad():
@@ -111,7 +118,7 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
         # original_rep_penalty = repetition_penalty
         # print('rep_penalty = ', rep_penalty)
         for _ in trange(length):
-            inputs = {'input_ids': generated}
+            inputs = {'input_ids': generated, 'position_ids': position_ids[:, :next_index]}
             if is_xlnet: 
                 # XLNet is a direct (predict same token, not next token) and bi-directional model by default
                 # => need one additional dummy token in the input (will be masked), attention mask and target mapping (see model docstring)
@@ -135,6 +142,9 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                 inputs['past'] = past
                 if past is not None:
                     inputs['input_ids'] = next_token
+                    inputs['position_ids'] = position_ids[:, next_index-1]
+            # print('input_ids = ', inputs['input_ids'].shape)
+            # print('position_ids = ', inputs['position_ids'])
             outputs = model(**inputs)
             next_token_logits = outputs[0][:, -1, :] / (temperature if temperature > 0 else 1.)
             past = outputs[1]
@@ -354,8 +364,14 @@ def run_generation(args):
     else:
         xlm_mask_token = None
 
+    pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
+    prompt_token_id = tokenizer.convert_tokens_to_ids(args.prompt_token)
+    if pad_token_id is None:
+        logger.error('Your tokenizer does not have a padding token')
+
     all_context_tokens = []
     all_context_lengths = []
+    all_position_ids = []
     reverse_maps = []
     number_of_lines = get_number_of_lines(args.input_file)
     with open(args.input_file) as input_file:
@@ -371,22 +387,18 @@ def run_generation(args):
                 # Models with memory likes to have a long prompt for short inputs.
                 raw_text = (args.padding_text if args.padding_text else PADDING_TEXT) + raw_text
             context_tokens = tokenizer.encode(raw_text, add_special_tokens=False)
+            position_ids = [pos for pos in range(len(context_tokens))]
             all_context_tokens.append(context_tokens)
             all_context_lengths.append(len(context_tokens))
+            all_position_ids.append(position_ids)
             if args.model_type == "ctrl":
                 if not any(context_tokens[0] == x for x in tokenizer.control_codes.values()):
                     logger.info("WARNING! You are not starting your generation from a control code so you won't get good results")
     
-    pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
-    prompt_token_id = tokenizer.convert_tokens_to_ids(args.prompt_token)
-    if pad_token_id is None:
-        logger.error('Your tokenizer does not have a padding token')
-
     # sort contexts based on their length so that less generated tokens are thrown away and generation can be done faster
-    t = list(zip(*sorted(list(zip(all_context_lengths, all_context_tokens, range(len(all_context_tokens)), reverse_maps)), reverse=True)))
-    all_context_lengths, all_context_tokens, original_order, reverse_maps = list(t[0]), list(t[1]), list(t[2]), list(t[3])
+    t = list(zip(*sorted(list(zip(all_context_lengths, all_context_tokens, all_position_ids, range(len(all_context_tokens)), reverse_maps)), reverse=True)))
+    all_context_lengths, all_context_tokens, all_position_ids, original_order, reverse_maps = list(t[0]), list(t[1]), list(t[2]), list(t[3]), list(t[4])
     all_outputs = []
-    # print('all_context_lengths[0:100] = ', all_context_lengths[0:100])
 
     if args.output_file is not None:
         output_file = open(args.output_file, 'w')
@@ -396,11 +408,13 @@ def run_generation(args):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_tokens)))
         batch_context_tokens = all_context_tokens[batch_slice[0]: batch_slice[1]]
         batch_context_lengths = all_context_lengths[batch_slice[0]: batch_slice[1]]
+        batch_position_ids = all_position_ids[batch_slice[0]: batch_slice[1]]
         batch_reverse_maps = reverse_maps[batch_slice[0]: batch_slice[1]]
 
         out = sample_sequence(
             model=model,
             context=batch_context_tokens,
+            position_ids=batch_position_ids,
             num_samples=args.num_samples,
             length=args.length,
             temperature=args.temperature,

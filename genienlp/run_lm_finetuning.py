@@ -74,7 +74,7 @@ class TextDataset(Dataset):
         if os.path.exists(cached_features_file) and not args.overwrite_cache:
             logger.info("Loading features from cached file %s", cached_features_file)
             with open(cached_features_file, 'rb') as handle:
-                self.examples, self.labels = pickle.load(handle)
+                self.examples, self.labels, self.position_ids = pickle.load(handle)
         else:
             logger.info("Creating features from dataset file at %s", file_path)
 
@@ -82,6 +82,7 @@ class TextDataset(Dataset):
             # print('prompt_token_id = ', prompt_token_id)
             self.examples = []
             self.labels = []
+            self.position_ids = []
             max_input_length = 0
             with open(file_path, encoding="utf-8") as f:
                 for line in tqdm(f, desc='Tokenizing'):
@@ -94,22 +95,23 @@ class TextDataset(Dataset):
                     try:
                         prompt_token_location = tokenized_text.index(prompt_token_id)
                     except ValueError:
-                        logger.warning('Prompt token not found after truncating the input.')
+                        logger.warning('Prompt token not found after truncating the input. Dropping the example.')
                         continue
 
                     self.examples.append(example)
                     self.labels.append([-1]*(prompt_token_location+1)+example[prompt_token_location+1:])
+                    self.position_ids.append([pos for pos in range(prompt_token_location+1)]+[pos for pos in range(len(example)-prompt_token_location-1)])
 
             logger.info('Maximum input length: %d', max_input_length)
             logger.info("Saving features into cached file %s", cached_features_file)
             with open(cached_features_file, 'wb') as handle:
-                pickle.dump((self.examples, self.labels), handle, protocol=pickle.HIGHEST_PROTOCOL)
+                pickle.dump((self.examples, self.labels, self.position_ids), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def __len__(self):
         return len(self.examples)
 
     def __getitem__(self, item):
-        return torch.tensor(self.examples[item]), torch.tensor(self.labels[item])
+        return torch.tensor(self.examples[item]), torch.tensor(self.labels[item]), torch.tensor(self.position_ids[item])
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False):
@@ -177,13 +179,14 @@ def mask_tokens(inputs, tokenizer, args):
     return inputs, labels
 
 def pad_collate(batch, pad_token_id):
-    (inputs, labels) = zip(*batch)
+    (inputs, labels, position_ids) = zip(*batch)
     inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=pad_token_id)
     labels_pad = pad_sequence(labels, batch_first=True, padding_value=-1)
+    position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
     # print('inputs_pad = ', inputs_pad)
     # print('labels_pad = ', labels_pad)
 
-    return inputs_pad, labels_pad
+    return inputs_pad, labels_pad, position_ids
 
 def remove_thingtalk_quotes(thingtalk):
     while True:
@@ -300,12 +303,12 @@ def train(args, train_dataset, model, tokenizer):
                 steps_trained_in_current_epoch -= 1
                 continue
 
-            inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else batch # batch is a tuple (input, labels)
+            inputs, labels, position_ids = mask_tokens(batch, tokenizer, args) if args.mlm else batch # batch is a tuple (input, labels, position_ids)
             inputs = inputs.to(args.device)
-
             labels = labels.to(args.device)
+            position_ids = position_ids.to(args.device)
             model.train()
-            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
+            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels, position_ids=position_ids)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.n_gpu > 1:
@@ -416,12 +419,13 @@ def evaluate(args, model, tokenizer, prefix=""):
     model.eval()
 
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
-        inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else batch
+        inputs, labels, position_ids = mask_tokens(batch, tokenizer, args) if args.mlm else batch
         inputs = inputs.to(args.device)
         labels = labels.to(args.device)
+        position_ids = position_ids.to(args.device)
 
         with torch.no_grad():
-            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
+            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels, position_ids=position_ids)
             lm_loss = outputs[0]
             eval_loss += lm_loss.mean().item()
         nb_eval_steps += 1
