@@ -386,11 +386,6 @@ def init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devi
     if save_dict is not None:
         logger.info(f'Loading model from {os.path.join(args.save, args.load)}')
         save_dict = torch.load(os.path.join(args.save, args.load))
-
-        param = 'encoder.encoder_embeddings.pretrained_embeddings.0.model.embeddings.word_embeddings.weight'
-        print(save_dict['model_state_dict'][param].shape)
-        print(dict(model.named_parameters())[param].shape)
-
         model.load_state_dict(save_dict['model_state_dict'])
 
     model.to(devices[0])
