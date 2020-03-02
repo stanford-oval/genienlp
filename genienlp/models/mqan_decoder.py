@@ -180,240 +180,115 @@ class MQANDecoder(nn.Module):
         input_ids = self_attended_context[-1].new_full((batch_size, 1), self.init_idx, dtype=torch.long)
 
 
-        decoder_wrapper = DecoderWrapper(self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
+        decoder_wrapper = MQANDecoderWrapper(self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                decoder_vocab, rnn_state, batch_size, max_decoder_time, self, num_beams=self.args.num_beams)
 
 
-        outputs = _generate_beam_search(input_ids=input_ids,
-                    cur_len=1,
-                    max_length=self.args.max_output_length,
-                    do_sample=False,
-                    temperature=1.0,
-                    top_k=0,
-                    top_p=1.0,
-                    repetition_penalty=1.0,
-                    pad_token_id=decoder_vocab.pad_idx,
-                    eos_token_ids=[decoder_vocab.eos_idx],
-                    batch_size=batch_size,
-                    length_penalty=1.0,
-                    num_beams=self.args.num_beams,
-                    vocab_size=len(decoder_vocab),
-                    decoder_wrapper=decoder_wrapper,
-                    map_to_full=self.map_to_full
-                )
+        if self.args.num_beams > 1:
+            outputs = self._generate_beam_search(input_ids=input_ids,
+                        cur_len=1,
+                        max_length=self.args.max_output_length,
+                        do_sample=False,
+                        temperature=1.0,
+                        top_k=0,
+                        top_p=1.0,
+                        repetition_penalty=1.0,
+                        pad_token_id=decoder_vocab.pad_idx,
+                        eos_token_ids=[decoder_vocab.eos_idx],
+                        batch_size=batch_size,
+                        length_penalty=1.0,
+                        num_beams=self.args.num_beams,
+                        vocab_size=len(decoder_vocab),
+                        decoder_wrapper=decoder_wrapper,
+                        map_to_full=self.map_to_full
+                    )
+        else:
+            outputs = self._generate_no_beam_search(input_ids=input_ids,
+                        cur_len=1,
+                        max_length=self.args.max_output_length,
+                        do_sample=False,
+                        temperature=1.0,
+                        top_k=0,
+                        top_p=1.0,
+                        repetition_penalty=1.0,
+                        pad_token_id=decoder_vocab.pad_idx,
+                        eos_token_ids=[decoder_vocab.eos_idx],
+                        batch_size=batch_size,
+                        decoder_wrapper=decoder_wrapper,
+                        map_to_full=self.map_to_full
+                    )
 
-        # print('outputs = ', outputs)
+
+        print('outputs = ', outputs)
         return outputs
 
+    def _generate_no_beam_search(
+        self,
+        input_ids,
+        cur_len,
+        max_length,
+        do_sample,
+        temperature,
+        top_k,
+        top_p,
+        repetition_penalty,
+        pad_token_id,
+        eos_token_ids,
+        batch_size,
+        decoder_wrapper,
+        map_to_full
+    ):
+        """ Generate sequences for each example without beam search (num_beams == 1).
+            All returned sequence are generated independantly.
+        """
+        # current position / max lengths / length of generated sentences / unfinished sentences
+        unfinished_sents = input_ids.new(batch_size).fill_(1)
 
-class LSTMDecoder(nn.Module):
-    def __init__(self, d_in, d_hid, dropout=0.0, num_layers=1):
-        super().__init__()
-        self.d_hid = d_hid
-        self.d_in = d_in
-        self.num_layers = num_layers
-        self.dropout = nn.Dropout(dropout)
+        while cur_len < max_length:
+            scores = decoder_wrapper.next_token_probs(input_ids[:, -1].unsqueeze(-1))
 
-        self.input_feed = True
-        if self.input_feed:
-            d_in += 1 * d_hid
+            # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
+            if repetition_penalty != 1.0:
+                for i in range(batch_size):
+                    for previous_token in set(input_ids[i].tolist()):
+                        # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
+                        if scores[i, previous_token] < 0:
+                            scores[i, previous_token] *= repetition_penalty
+                        else:
+                            scores[i, previous_token] /= repetition_penalty
 
-        self.rnn = MultiLSTMCell(self.num_layers, d_in, d_hid, dropout)
-        self.context_attn = LSTMDecoderAttention(d_hid, dot=True)
-        self.question_attn = LSTMDecoderAttention(d_hid, dot=True)
-
-    def applyMasks(self, context_mask, question_mask):
-        self.context_attn.applyMasks(context_mask)
-        self.question_attn.applyMasks(question_mask)
-
-    def forward(self, input: torch.Tensor, context, question, output=None, hidden=None):
-        context_output = output if output is not None else self.make_init_output(context)
-
-        context_outputs, vocab_pointer_switch_inputs, context_question_switch_inputs, context_attentions, question_attentions = [], [], [], [], []
-        for decoder_input in input.split(1, dim=1):
-            context_output = self.dropout(context_output)
-            if self.input_feed:
-                rnn_input = torch.cat([decoder_input, context_output], 2)
+            if do_sample:
+                # Temperature (higher temperature => more likely to sample low probability tokens)
+                if temperature != 1.0:
+                    scores = scores / temperature
+                # Top-p/top-k filtering
+                scores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p)
+                # Sample
+                next_token = torch.multinomial(F.softmax(scores, dim=-1), num_samples=1).squeeze(1)
             else:
-                rnn_input = decoder_input
+                # Greedy decoding
+                next_token = torch.argmax(scores, dim=-1)
 
-            rnn_input = rnn_input.squeeze(1)
-            dec_state, hidden = self.rnn(rnn_input, hidden)
-            dec_state = dec_state.unsqueeze(1)
+            # update generations and finished sentences
+            tokens_to_add = next_token * unfinished_sents + pad_token_id * (1 - unfinished_sents)
+            input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
+            for eos_token_id in eos_token_ids:
+                unfinished_sents.mul_(tokens_to_add.ne(eos_token_id).long())
+            cur_len = cur_len + 1
 
-            # print('dec_state = ', dec_state.shape)
-            # print('context = ', context.shape)
-            context_output, context_attention = self.context_attn(dec_state, context)
-            question_output, question_attention = self.question_attn(dec_state, question)
-            vocab_pointer_switch_inputs.append(torch.cat([dec_state, context_output, decoder_input], -1))
-            context_question_switch_inputs.append(torch.cat([dec_state, question_output, decoder_input], -1))
+            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            if unfinished_sents.max() == 0:
+                break
 
-            context_output = self.dropout(context_output)
-            context_outputs.append(context_output)
-            context_attentions.append(context_attention)
-            question_attentions.append(question_attention)
+        # add eos_token_ids to unfinished sentences
+        if cur_len == max_length:
+            input_ids[:, -1].masked_fill_(unfinished_sents.to(dtype=torch.bool), eos_token_ids[0])
 
-        return [torch.cat(x, dim=1) for x in (context_outputs,
-                                              vocab_pointer_switch_inputs,
-                                              context_question_switch_inputs,
-                                              context_attentions,
-                                              question_attentions)] + [hidden]
+        return input_ids
+        
 
-    def make_init_output(self, context):
-        batch_size = context.size(0)
-        h_size = (batch_size, 1, self.d_hid)
-        return context.new_zeros(h_size)
-
-
-def expand_for_beam_search(t, batch_size, num_beams, dim=0):
-    if isinstance(t, tuple):
-        elements = []
-        for e in t:
-            elements.append(expand_for_beam_search(e, batch_size, num_beams, dim))
-        return tuple(elements)
-    elif isinstance(t, list):
-        elements = []
-        for e in t:
-            elements.append(expand_for_beam_search(e, batch_size, num_beams, dim))
-        return elements
-
-    # print('before expansion: ', t.shape)
-    original_size = list(t.shape)
-    original_size[dim] *= num_beams
-    t = t.unsqueeze(dim+1)
-    expanded_size = list(t.shape)
-    expanded_size[dim+1] = num_beams
-    t = t.expand(*expanded_size)
-    t = t.contiguous().view(*original_size)  # (batch_size * num_beams, -1)
-    # print('after expansion: ', t.shape)
-    return t
-
-def reorder_for_beam_search(t, new_order, dim=0):
-    if isinstance(t, tuple):
-        elements = []
-        for e in t:
-            elements.append(reorder_for_beam_search(e, new_order, dim))
-        return tuple(elements)
-    elif isinstance(t, list):
-        elements = []
-        for e in t:
-            elements.append(reorder_for_beam_search(e, new_order, dim))
-        return elements
-
-    # print('before reordering t = ', t)
-    p = [i for i in range(len(t.shape))]
-    p[dim] = 0
-    p[0] = dim
-    t = t.permute(*p)
-    t = t[new_order]
-    t = t.permute(*p)
-    # print('after reordering t = ', t)
-
-    return t
-
-class DecoderWrapper(object):
-
-    def __init__(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
-               decoder_vocab, rnn_state, batch_size, max_decoder_time, mqan_decoder: MQANDecoder, num_beams:int):
-        # print('self_attended_context = ', self_attended_context)
-        self.self_attended_context = expand_for_beam_search(self_attended_context, batch_size, num_beams)
-        self.context = expand_for_beam_search(context, batch_size, num_beams)
-        self.context_padding = expand_for_beam_search(context_padding, batch_size, num_beams)
-        self.question = expand_for_beam_search(question, batch_size, num_beams)
-        self.question_padding = expand_for_beam_search(question_padding, batch_size, num_beams)
-        self.context_indices = expand_for_beam_search(context_indices, batch_size, num_beams)
-        self.question_indices = expand_for_beam_search(question_indices, batch_size, num_beams)
-        self.decoder_vocab = decoder_vocab
-        # print('rnn')
-        self.rnn_state = expand_for_beam_search(rnn_state, batch_size, num_beams, dim=1)
-        self.batch_size = batch_size
-        self.max_decoder_time = max_decoder_time
-        self.mqan_decoder = mqan_decoder
-        self.num_beams = num_beams
-
-        if self.mqan_decoder.args.rnn_layers > 0:
-                self.mqan_decoder.rnn_decoder.applyMasks(self.context_padding, self.question_padding)
-        else:
-            self.mqan_decoder.context_attn.applyMasks(self.context_padding)
-            self.mqan_decoder.question_attn.applyMasks(self.question_padding)
-
-        # print('batch_size = ', batch_size)
-
-        self.time = 0
-        self.decoder_output = None
-
-        if self.mqan_decoder.args.transformer_layers > 0:
-            self.hiddens = [self.self_attended_context[0].new_zeros((self.batch_size*self.num_beams, self.max_decoder_time, self.mqan_decoder.args.dimension))
-                    for l in range(len(self.mqan_decoder.self_attentive_decoder.layers) + 1)]
-            self.hiddens[0] =  self.hiddens[0] + positional_encodings_like(self.hiddens[0])
-
-    
-    def reorder(self, new_order):
-        # TODO only reordering rnn_state should be enough since reordering happens among beams of the same input
-        self.self_attended_context = reorder_for_beam_search(self.self_attended_context, new_order)
-        self.context = reorder_for_beam_search(self.context, new_order)
-        self.context_padding = reorder_for_beam_search(self.context_padding, new_order)
-        self.question = reorder_for_beam_search(self.question, new_order)
-        self.question_padding = reorder_for_beam_search(self.question_padding, new_order)
-        self.context_indices = reorder_for_beam_search(self.context_indices, new_order)
-        self.question_indices = reorder_for_beam_search(self.question_indices, new_order)
-        self.rnn_state = reorder_for_beam_search(self.rnn_state, new_order, dim=1)
-
-        if self.mqan_decoder.args.rnn_layers > 0:
-                self.mqan_decoder.rnn_decoder.applyMasks(self.context_padding, self.question_padding)
-        else:
-            self.mqan_decoder.context_attn.applyMasks(self.context_padding)
-            self.mqan_decoder.question_attn.applyMasks(self.question_padding)
-
-
-    def next_token_probs(self, current_token_id):
-        # print('current_`token_id = ', current_token_id, current_token_id.shape)
-        embedding = self.mqan_decoder.decoder_embeddings(current_token_id).last_layer
-
-        if self.mqan_decoder.args.transformer_layers > 0:
-            self.hiddens[0][:, self.time] = self.hiddens[0][:, self.time] + \
-                                (math.sqrt(self.mqan_decoder.self_attentive_decoder.d_model) * embedding).squeeze(1)
-            for l in range(len(self.mqan_decoder.self_attentive_decoder.layers)):
-                self.hiddens[l + 1][:, self.time] = self.mqan_decoder.self_attentive_decoder.layers[l](self.hiddens[l][:, self.time],
-                                                                                self.self_attended_context[l],
-                                                                                selfattn_keys=self.hiddens[l][:, :self.time + 1],
-                                                                                context_padding=self.context_padding)
-
-            self_attended_decoded = self.hiddens[-1][:, self.time].unsqueeze(1)
-        else:
-            self_attended_decoded = embedding
-
-        if self.mqan_decoder.args.rnn_layers > 0:
-            # print(self_attended_decoded.shape)
-            # print(self.context.shape)
-            # print(self.question.shape)
-            # print(self.rnn_state[0].shape, self.rnn_state[1].shape)
-            # print(self.decoder_output.shape)
-            rnn_decoder_outputs = self.mqan_decoder.rnn_decoder(self_attended_decoded, self.context, self.question,
-                                                    hidden=self.rnn_state, output=self.decoder_output)
-            self.decoder_output, vocab_pointer_switch_input, context_question_switch_input, context_attention, \
-                question_attention, self.rnn_state = rnn_decoder_outputs
-        else:
-            context_decoder_output, context_attention = self.mqan_decoder.context_attn(self_attended_decoded, self.context)
-            question_decoder_output, question_attention = self.mqan_decoder.question_attn(self_attended_decoded, self.question)
-
-            vocab_pointer_switch_input = torch.cat((context_decoder_output, self_attended_decoded), dim=-1)
-            context_question_switch_input = torch.cat((question_decoder_output, self_attended_decoded), dim=-1)
-
-            self.decoder_output = self.dropout(context_decoder_output)
-
-        vocab_pointer_switch = self.mqan_decoder.vocab_pointer_switch(vocab_pointer_switch_input)
-        context_question_switch = self.mqan_decoder.context_question_switch(context_question_switch_input)
-
-        probs = self.mqan_decoder.probs(self.decoder_output, vocab_pointer_switch, context_question_switch,
-                            context_attention, question_attention,
-                            self.context_indices, self.question_indices, self.decoder_vocab)
-
-        self.time += 1
-        return probs.squeeze(1)
-
-
-def _generate_beam_search(
+    def _generate_beam_search(
+        self,
         input_ids,
         cur_len,
         max_length,
@@ -428,7 +303,7 @@ def _generate_beam_search(
         length_penalty,
         num_beams,
         vocab_size,
-        decoder_wrapper: DecoderWrapper,
+        decoder_wrapper,
         map_to_full
     ):
         """ Generate sequences for each example with beam search.
@@ -567,3 +442,219 @@ def _generate_beam_search(
             decoded[i, tgt_len[i] - 1] = map_to_full(eos_token_ids[0])
 
         return decoded
+
+
+class LSTMDecoder(nn.Module):
+    def __init__(self, d_in, d_hid, dropout=0.0, num_layers=1):
+        super().__init__()
+        self.d_hid = d_hid
+        self.d_in = d_in
+        self.num_layers = num_layers
+        self.dropout = nn.Dropout(dropout)
+
+        self.input_feed = True
+        if self.input_feed:
+            d_in += 1 * d_hid
+
+        self.rnn = MultiLSTMCell(self.num_layers, d_in, d_hid, dropout)
+        self.context_attn = LSTMDecoderAttention(d_hid, dot=True)
+        self.question_attn = LSTMDecoderAttention(d_hid, dot=True)
+
+    def applyMasks(self, context_mask, question_mask):
+        self.context_attn.applyMasks(context_mask)
+        self.question_attn.applyMasks(question_mask)
+
+    def forward(self, input: torch.Tensor, context, question, output=None, hidden=None):
+        context_output = output if output is not None else self.make_init_output(context)
+
+        context_outputs, vocab_pointer_switch_inputs, context_question_switch_inputs, context_attentions, question_attentions = [], [], [], [], []
+        for decoder_input in input.split(1, dim=1):
+            context_output = self.dropout(context_output)
+            if self.input_feed:
+                rnn_input = torch.cat([decoder_input, context_output], 2)
+            else:
+                rnn_input = decoder_input
+
+            rnn_input = rnn_input.squeeze(1)
+            dec_state, hidden = self.rnn(rnn_input, hidden)
+            dec_state = dec_state.unsqueeze(1)
+
+            # print('dec_state = ', dec_state.shape)
+            # print('context = ', context.shape)
+            context_output, context_attention = self.context_attn(dec_state, context)
+            question_output, question_attention = self.question_attn(dec_state, question)
+            vocab_pointer_switch_inputs.append(torch.cat([dec_state, context_output, decoder_input], -1))
+            context_question_switch_inputs.append(torch.cat([dec_state, question_output, decoder_input], -1))
+
+            context_output = self.dropout(context_output)
+            context_outputs.append(context_output)
+            context_attentions.append(context_attention)
+            question_attentions.append(question_attention)
+
+        return [torch.cat(x, dim=1) for x in (context_outputs,
+                                              vocab_pointer_switch_inputs,
+                                              context_question_switch_inputs,
+                                              context_attentions,
+                                              question_attentions)] + [hidden]
+
+    def make_init_output(self, context):
+        batch_size = context.size(0)
+        h_size = (batch_size, 1, self.d_hid)
+        return context.new_zeros(h_size)
+
+
+class MQANDecoderWrapper(object):
+    """
+    A wrapper for MQANDecoder that wraps around its recurrent neural network, so that we can decode it like a Transformer
+    """
+
+    def __init__(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
+               decoder_vocab, rnn_state, batch_size, max_decoder_time, mqan_decoder: MQANDecoder, num_beams:int):
+        # print('self_attended_context = ', self_attended_context)
+        self.decoder_vocab = decoder_vocab
+        if num_beams > 1:
+            self_attended_context = self.expand_for_beam_search(self_attended_context, batch_size, num_beams)
+            context = self.expand_for_beam_search(context, batch_size, num_beams)
+            context_padding = self.expand_for_beam_search(context_padding, batch_size, num_beams)
+            question = self.expand_for_beam_search(question, batch_size, num_beams)
+            question_padding = self.expand_for_beam_search(question_padding, batch_size, num_beams)
+            context_indices = self.expand_for_beam_search(context_indices, batch_size, num_beams)
+            question_indices = self.expand_for_beam_search(question_indices, batch_size, num_beams)
+            rnn_state = self.expand_for_beam_search(rnn_state, batch_size, num_beams, dim=1)
+        self.self_attended_context = self_attended_context
+        self.context = context
+        self.context_padding = context_padding
+        self.question = question
+        self.question_padding = question_padding
+        self.context_indices = context_indices
+        self.question_indices = question_indices
+        self.rnn_state = rnn_state
+        self.batch_size = batch_size
+        self.max_decoder_time = max_decoder_time
+        self.mqan_decoder = mqan_decoder
+        self.num_beams = num_beams
+
+        if self.mqan_decoder.args.rnn_layers > 0:
+                self.mqan_decoder.rnn_decoder.applyMasks(self.context_padding, self.question_padding)
+        else:
+            self.mqan_decoder.context_attn.applyMasks(self.context_padding)
+            self.mqan_decoder.question_attn.applyMasks(self.question_padding)
+
+        self.time = 0
+        self.decoder_output = None
+
+        if self.mqan_decoder.args.transformer_layers > 0:
+            self.hiddens = [self.self_attended_context[0].new_zeros((self.batch_size*self.num_beams, self.max_decoder_time, self.mqan_decoder.args.dimension))
+                    for l in range(len(self.mqan_decoder.self_attentive_decoder.layers) + 1)]
+            self.hiddens[0] =  self.hiddens[0] + positional_encodings_like(self.hiddens[0])
+
+    
+    def reorder(self, new_order):
+        # TODO only reordering rnn_state should be enough since reordering happens among beams of the same input
+        self.self_attended_context = self.reorder_for_beam_search(self.self_attended_context, new_order)
+        self.context = self.reorder_for_beam_search(self.context, new_order)
+        self.context_padding = self.reorder_for_beam_search(self.context_padding, new_order)
+        self.question = self.reorder_for_beam_search(self.question, new_order)
+        self.question_padding = self.reorder_for_beam_search(self.question_padding, new_order)
+        self.context_indices = self.reorder_for_beam_search(self.context_indices, new_order)
+        self.question_indices = self.reorder_for_beam_search(self.question_indices, new_order)
+        self.rnn_state = self.reorder_for_beam_search(self.rnn_state, new_order, dim=1)
+
+        if self.mqan_decoder.args.rnn_layers > 0:
+                self.mqan_decoder.rnn_decoder.applyMasks(self.context_padding, self.question_padding)
+        else:
+            self.mqan_decoder.context_attn.applyMasks(self.context_padding)
+            self.mqan_decoder.question_attn.applyMasks(self.question_padding)
+
+
+    def next_token_probs(self, current_token_id):
+        # print('current_`token_id = ', current_token_id, current_token_id.shape)
+        embedding = self.mqan_decoder.decoder_embeddings(current_token_id).last_layer
+
+        if self.mqan_decoder.args.transformer_layers > 0:
+            self.hiddens[0][:, self.time] = self.hiddens[0][:, self.time] + \
+                                (math.sqrt(self.mqan_decoder.self_attentive_decoder.d_model) * embedding).squeeze(1)
+            for l in range(len(self.mqan_decoder.self_attentive_decoder.layers)):
+                self.hiddens[l + 1][:, self.time] = self.mqan_decoder.self_attentive_decoder.layers[l](self.hiddens[l][:, self.time],
+                                                                                self.self_attended_context[l],
+                                                                                selfattn_keys=self.hiddens[l][:, :self.time + 1],
+                                                                                context_padding=self.context_padding)
+
+            self_attended_decoded = self.hiddens[-1][:, self.time].unsqueeze(1)
+        else:
+            self_attended_decoded = embedding
+
+        if self.mqan_decoder.args.rnn_layers > 0:
+            # print(self_attended_decoded.shape)
+            # print(self.context.shape)
+            # print(self.question.shape)
+            # print(self.rnn_state[0].shape, self.rnn_state[1].shape)
+            # print(self.decoder_output.shape)
+            rnn_decoder_outputs = self.mqan_decoder.rnn_decoder(self_attended_decoded, self.context, self.question,
+                                                    hidden=self.rnn_state, output=self.decoder_output)
+            self.decoder_output, vocab_pointer_switch_input, context_question_switch_input, context_attention, \
+                question_attention, self.rnn_state = rnn_decoder_outputs
+        else:
+            context_decoder_output, context_attention = self.mqan_decoder.context_attn(self_attended_decoded, self.context)
+            question_decoder_output, question_attention = self.mqan_decoder.question_attn(self_attended_decoded, self.question)
+
+            vocab_pointer_switch_input = torch.cat((context_decoder_output, self_attended_decoded), dim=-1)
+            context_question_switch_input = torch.cat((question_decoder_output, self_attended_decoded), dim=-1)
+
+            self.decoder_output = self.dropout(context_decoder_output)
+
+        vocab_pointer_switch = self.mqan_decoder.vocab_pointer_switch(vocab_pointer_switch_input)
+        context_question_switch = self.mqan_decoder.context_question_switch(context_question_switch_input)
+
+        probs = self.mqan_decoder.probs(self.decoder_output, vocab_pointer_switch, context_question_switch,
+                            context_attention, question_attention,
+                            self.context_indices, self.question_indices, self.decoder_vocab)
+
+        self.time += 1
+        return probs.squeeze(1)
+
+    def expand_for_beam_search(self, t, batch_size, num_beams, dim=0):
+        if isinstance(t, tuple):
+            elements = []
+            for e in t:
+                elements.append(self.expand_for_beam_search(e, batch_size, num_beams, dim))
+            return tuple(elements)
+        elif isinstance(t, list):
+            elements = []
+            for e in t:
+                elements.append(self.expand_for_beam_search(e, batch_size, num_beams, dim))
+            return elements
+
+        # print('before expansion: ', t.shape)
+        original_size = list(t.shape)
+        original_size[dim] *= num_beams
+        t = t.unsqueeze(dim+1)
+        expanded_size = list(t.shape)
+        expanded_size[dim+1] = num_beams
+        t = t.expand(*expanded_size)
+        t = t.contiguous().view(*original_size)  # (batch_size * num_beams, -1)
+        # print('after expansion: ', t.shape)
+        return t
+
+    def reorder_for_beam_search(self, t, new_order, dim=0):
+        if isinstance(t, tuple):
+            elements = []
+            for e in t:
+                elements.append(self.reorder_for_beam_search(e, new_order, dim))
+            return tuple(elements)
+        elif isinstance(t, list):
+            elements = []
+            for e in t:
+                elements.append(self.reorder_for_beam_search(e, new_order, dim))
+            return elements
+
+        # print('before reordering t = ', t)
+        p = [i for i in range(len(t.shape))]
+        p[dim] = 0
+        p[0] = dim
+        t = t.permute(*p)
+        t = t[new_order]
+        t = t.permute(*p)
+        # print('after reordering t = ', t)
+
+        return t
