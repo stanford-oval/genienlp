@@ -84,16 +84,17 @@ with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
 def sample_sequence(model, length, context, position_ids, num_samples=1, temperature=1, top_k=0, top_p=0.0, repetition_penalty=1.0,
                     is_xlnet=False, is_xlm_mlm=False, xlm_mask_token=None, xlm_lang=None, device='cpu',
-                    stop_token_ids=None, pad_token_id=None, supports_past=False, prompt_token_id=None):
+                    stop_token_ids=None, pad_token_id=None, supports_past=False, prompt_token_id=None, segment_token_ids=None):
     """
     Generates sequence of tokens for the batch of input contexts.
     Inputs:
         context: a list of token_ids, sorted by length from longest to shortest
-        position_ids: a list of position_ids that indicates the positional embedding we should use for each token in context
+        position_ids: a list of indicate that indicates the positional embedding we should use for each token in context
         num_samples: the number of sequences to output for each input context
         length: The maximum length of generation in addition to the original sentence's length
         stop_token_ids: generation of each sequence will stop if we generate any of these tokens
         supports_past: set to True if the model accepts the 'past' input for more efficient generation. For example, GPT-2/Transfo-XL/XLNet/CTRL do
+        segment_token_ids: a list of two integers that indicate the tokens we should use for each of the two segments
     """
     max_length = len(context[0]) # context is sorted by length from longest to shortest
     min_length = len(context[-1])
@@ -106,11 +107,20 @@ def sample_sequence(model, length, context, position_ids, num_samples=1, tempera
     generated = context[:, :next_index]
     should_finish = None
     length = max_length + length
+    segment_ids = []
     for p in position_ids:
-        p.extend(range(length))
+        segment_ids.append([segment_token_ids[0]]*len(p)+[segment_token_ids[1]]*(length+max_length-len(p)))
+        p.extend(range(length+max_length-len(p)))
+
     position_ids = torch.tensor(position_ids, dtype=torch.long, device=device)
     position_ids = position_ids.repeat(num_samples, 1)
+    segment_ids = torch.tensor(segment_ids, dtype=torch.long, device=device)
+    segment_ids = segment_ids.repeat(num_samples, 1)
+
+    # print('context = ', context)
     # print('position_ids = ', position_ids)
+    # print('segment_ids = ', segment_ids)
+
     past = None
     next_token = None
     with torch.no_grad():
@@ -118,7 +128,7 @@ def sample_sequence(model, length, context, position_ids, num_samples=1, tempera
         # original_rep_penalty = repetition_penalty
         # print('rep_penalty = ', rep_penalty)
         for _ in trange(length):
-            inputs = {'input_ids': generated, 'position_ids': position_ids[:, :next_index]}
+            inputs = {'input_ids': generated, 'position_ids': position_ids[:, :next_index], 'token_type_ids': segment_ids[:, :next_index]}
             if is_xlnet: 
                 # XLNet is a direct (predict same token, not next token) and bi-directional model by default
                 # => need one additional dummy token in the input (will be masked), attention mask and target mapping (see model docstring)
@@ -143,8 +153,8 @@ def sample_sequence(model, length, context, position_ids, num_samples=1, tempera
                 if past is not None:
                     inputs['input_ids'] = next_token
                     inputs['position_ids'] = position_ids[:, next_index-1]
-            # print('input_ids = ', inputs['input_ids'].shape)
-            # print('position_ids = ', inputs['position_ids'])
+                    inputs['token_type_ids'] = segment_ids[:, next_index-1]
+            
             outputs = model(**inputs)
             next_token_logits = outputs[0][:, -1, :] / (temperature if temperature > 0 else 1.)
             past = outputs[1]
@@ -285,9 +295,9 @@ def parse_argv(parser):
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
     parser.add_argument('--prompt_token', type=str, default='<paraphrase>',
-                        help="Token after which text generation starts. We need to add this to the end of all inputs.")
+                        help="Token after which text generation starts. We add this to the end of all inputs.")
     parser.add_argument('--stop_tokens', type=str, nargs='+', default=['</paraphrase>', '?'],
-                        help="Token at which text generation is stopped")
+                        help="Token at which text generation is stopped. The first element of the list is used as segment id as well.")
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")
 
@@ -429,7 +439,8 @@ def run_generation(args):
             stop_token_ids=[tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens],
             pad_token_id=pad_token_id,
             supports_past=args.model_type in ['gpt2', 'openai-gpt', 'transfo-xl', 'xlnet', 'ctrl'],
-            prompt_token_id=prompt_token_id
+            prompt_token_id=prompt_token_id,
+            segment_token_ids=[tokenizer.convert_tokens_to_ids(args.prompt_token), tokenizer.convert_tokens_to_ids(args.stop_tokens[0])]
         )
         out = out[:, :].tolist()
         batch_outputs = [[] for _ in range(batch_slice[1]-batch_slice[0])]
