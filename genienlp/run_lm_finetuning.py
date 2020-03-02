@@ -51,6 +51,8 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer,
                                   CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
 
+from genienlp.util import set_seed
+
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +68,7 @@ MODEL_CLASSES = {
 
 
 class TextDataset(Dataset):
-    def __init__(self, tokenizer, args, file_path='train', block_size=512, prompt_token='<paraphrase>'):
+    def __init__(self, tokenizer, args, file_path=None, block_size=512, prompt_token='<paraphrase>', evaluate=None):
         assert os.path.isfile(file_path)
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(directory, os.path.basename(os.path.normpath(args.model_name_or_path)) + '_cached_lm_' + str(block_size) + '_' + filename)
@@ -102,7 +104,10 @@ class TextDataset(Dataset):
                         continue
 
                     self.examples.append(example)
-                    self.labels.append([-1]*(prompt_token_location+1)+example[prompt_token_location+1:])
+                    if args.train_all_tokens and not evaluate:
+                        self.labels.append(example)
+                    else: # During evaluation, we only care about the output sequence so we mask the input
+                        self.labels.append([-1]*(prompt_token_location+1)+example[prompt_token_location+1:])
                     self.position_ids.append([pos for pos in range(prompt_token_location+1)]+[pos for pos in range(len(example)-prompt_token_location-1)])
                     self.segment_ids.append([segment1_id]*(prompt_token_location+1)+[segment2_id]*(len(example)-prompt_token_location-1))
 
@@ -119,16 +124,8 @@ class TextDataset(Dataset):
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False):
-    dataset = TextDataset(tokenizer, args, file_path=args.eval_data_file if evaluate else args.train_data_file, block_size=args.block_size)
+    dataset = TextDataset(tokenizer, args, file_path=args.eval_data_file if evaluate else args.train_data_file, block_size=args.block_size, evaluate=evaluate)
     return dataset
-
-
-def set_seed(args):
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
 
 
 def _rotate_checkpoints(args, checkpoint_prefix, use_mtime=False):
@@ -477,6 +474,8 @@ def parse_argv(parser):
                         help='The special token for the end of paraphrases.')
     parser.add_argument('--add_inbetween_as_special_tokens', action='store_true',
                         help='The space-separated tokens between --start_special_token and --end_special_token will be added as special tokens. Useful for ThingTalk code.')
+    parser.add_argument('--train_all_tokens', action='store_true',
+                        help='If True, the model will be trained on input and output sequences, as opposed to only tokens of the output sequence')
     ## Other parameters
     parser.add_argument("--eval_data_file", default=None, type=str,
                         help="An optional input evaluation data file to evaluate the perplexity on (a text file).")
