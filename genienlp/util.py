@@ -44,10 +44,6 @@ from .data_utils.iterator import Iterator
 logger = logging.getLogger(__name__)
 
 
-def tokenizer(s):
-    return s.split()
-
-
 def map_filter(callable, iterable):
     output = []
     for element in iterable:
@@ -122,19 +118,6 @@ def set_seed(args):
     torch.cuda.manual_seed_all(args.seed)
 
 
-def count_params(params):
-    def mult(ps):
-        r = 0
-        for p in ps:
-            this_r = 1
-            for s in p.size():
-                this_r *= s
-            r += this_r
-        return r
-
-    return mult(params)
-
-
 def get_trainable_params(model, name=False):
     if name:
         return list(filter(lambda p: p[1].requires_grad, model.named_parameters()))
@@ -143,8 +126,7 @@ def get_trainable_params(model, name=False):
 
 
 def log_model_size(logger, model, model_name):
-    params = list(filter(lambda p: p.requires_grad, model.parameters()))
-    num_param = count_params(params)
+    num_param = sum([p.nelement() for p in model.parameters() if p.requires_grad])
     logger.info(f'{model_name} has {num_param:,} parameters')
 
 
