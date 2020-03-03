@@ -100,6 +100,7 @@ def parse_argv(parser):
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument('--preserve_case', action='store_false', dest='lower',
                         help='whether to preserve casing for all text')
+    parser.add_argument('--num_beams', type=int, default=1, help='number of beams to use for beam search')
 
     parser.add_argument('--model', type=str, choices=['Seq2Seq'], default='Seq2Seq', help='which model to import')
     parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity'],
@@ -117,10 +118,10 @@ def parse_argv(parser):
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
 
     parser.add_argument('--encoder_embeddings', default='glove+char',
-                        help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT; '
+                        help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT or a xlm-roberta* model for Multi-lingual RoBERTa; '
                              'multiple embeddings can be concatenated with +')
     parser.add_argument('--train_encoder_embeddings', action='store_true', default=False,
-                        help='back propagate into pretrained encoder embedding (recommended for BERT)')
+                        help='back propagate into pretrained encoder embedding (recommended for BERT and XLM-RoBERTa)')
     parser.add_argument('--decoder_embeddings', default='glove+char',
                         help='which pretrained word embedding to use on the decoder side')
     parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
@@ -138,6 +139,8 @@ def parse_argv(parser):
                         help='multiplier for transformer learning rate (if using Adam)')
     parser.add_argument('--lr_rate', default=0.001, type=float, help='fixed learning rate (if not using warmup)')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
+    parser.add_argument('--gradient_accumulation_steps', default=1, type=int, help='Number of accumulation steps. Useful to effectively get larger batch sizes.')
+    
 
     parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside args.save')
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')

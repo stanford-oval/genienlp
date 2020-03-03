@@ -14,6 +14,7 @@ tests/embeddings/*
 
 .DS_Store
 .idea/
+.vscode/
 models/.DS_Store
 multiprocess/.DS_Store
 text/.DS_Store

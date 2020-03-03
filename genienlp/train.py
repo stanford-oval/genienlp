@@ -143,24 +143,39 @@ def prepare_data(args, logger):
 
     return numericalizer, encoder_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
+accumulated_batch_lengths = 0
 
-def step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None):
+def step(model, batch, iteration, opt,  devices, lr_scheduler=None, grad_clip=None, gradient_accumulation_steps=1):
+    # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of the total batch size
+    global accumulated_batch_lengths
     model.train()
-    opt.zero_grad()
+    if (iteration) % gradient_accumulation_steps == 0:
+        opt.zero_grad()
     loss, predictions = model(batch, iteration)
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss')
     if len(devices) > 1:
         loss = loss.mean()
+    non_accumulated_loss = loss.item()
+    loss = loss*len(batch[0])
+    accumulated_batch_lengths += len(batch[0])
+
     loss.backward()
     grad_norm = None
-    if grad_clip > 0.0:
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
-    opt.step()
-    if lr_scheduler is not None:
-        lr_scheduler.step()
+    if (iteration+1) % gradient_accumulation_steps == 0:
+        for p in model.parameters():
+            if p.grad is None:
+                continue
+            # print('p.grad = ', p.grad)
+            p.grad /= accumulated_batch_lengths
+        accumulated_batch_lengths = 0
+        if grad_clip > 0.0:
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
+        opt.step()
+        if lr_scheduler is not None:
+            lr_scheduler.step()
 
-    return loss.item(), grad_norm
+    return non_accumulated_loss, grad_norm
 
 
 def update_fraction(args, task_iteration):
@@ -311,7 +326,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
                     # param update
                     loss, grad_norm = step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
-                                           grad_clip=args.grad_clip)
+                                           grad_clip=args.grad_clip, gradient_accumulation_steps=args.gradient_accumulation_steps)
                     if loss is None:
                         logger.info(
                             'Encountered NAN loss during training... Continue training ignoring the current batch')

@@ -37,12 +37,108 @@ import time
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from .data_utils.example import Batch
 from .data_utils.iterator import Iterator
 
 logger = logging.getLogger(__name__)
 
+
+def tokenizer(s):
+    return s.split()
+
+def detokenize(text):
+    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "'s", ")"]
+    for t in tokens:
+        text = text.replace(' ' + t, t)
+    text = text.replace("( ", "(")
+    text = text.replace('gon na', 'gonna')
+    text = text.replace('wan na', 'wanna')
+    return text
+
+def get_number_of_lines(file_path):
+    count = 0
+    with open(file_path) as f:
+        for line in f:
+            count += 1
+    return count
+
+def get_file_part_path(file_path, part_idx):
+    return file_path + '_part' + str(part_idx+1)
+
+def split_file_on_disk(file_path, num_splits):
+    """
+    """
+    number_of_lines = get_number_of_lines(file_path)
+
+    all_output_paths = []
+    all_output_files = []
+    for i in range(num_splits):
+        output_path = get_file_part_path(file_path, i)
+        all_output_paths.append(output_path)
+        all_output_files.append(open(output_path, 'w'))
+
+    written_lines = 0
+    with open(file_path, 'r') as input_file:
+        output_file_idx = 0
+        for line in input_file:
+            all_output_files[output_file_idx].write(line)
+            written_lines += 1
+            if written_lines % (number_of_lines//num_splits) == 0:
+                output_file_idx = min(output_file_idx + 1, len(all_output_files)-1)
+
+    for f in all_output_files:
+        f.close()
+
+    return all_output_paths
+
+def combine_files_on_disk(file_path_prefix, num_files):
+    with open(file_path_prefix, 'w') as combined_file:
+        for i in range(num_files):
+            file_path = get_file_part_path(file_path_prefix, i)
+            with open(file_path, 'r') as file:
+                for line in file:
+                    combined_file.write(line)
+
+def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float('Inf'), min_tokens_to_keep=1):
+    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+        Args:
+            logits: logits distribution shape (batch size, vocabulary size)
+            if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
+            if top_k < 0: keeps all tokens but the ones with top |k| probability
+            if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+            Make sure we keep at least min_tokens_to_keep per batch example in the output
+        From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
+    """
+    sign = 1
+    if top_k < 0:
+        top_k = logits.size(-1) + top_k
+        sign = -1
+    top_k = min(top_k, logits.size(-1))  # Safety check
+    if top_k > 0:
+        # Remove all tokens with a probability less than the last token of the top-k
+        indices_to_remove = sign*logits < torch.topk(sign*logits, top_k)[0][..., -1, None]
+        logits[indices_to_remove] = filter_value
+
+    if top_p < 1.0:
+        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+
+        # Remove tokens with cumulative probability above the threshold
+        sorted_indices_to_remove = cumulative_probs > top_p
+        if min_tokens_to_keep > 1:
+            # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
+            sorted_indices_to_remove[..., :min_tokens_to_keep] = 0
+        # Shift the indices to the right to keep also the first token above the threshold
+        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+        sorted_indices_to_remove[..., 0] = 0
+
+        # scatter sorted tensors to original indexing
+        indices_to_remove = sorted_indices_to_remove.scatter(dim=1, index=sorted_indices, src=sorted_indices_to_remove)
+        logits[indices_to_remove] = filter_value
+    return logits
 
 def map_filter(callable, iterable):
     output = []
@@ -179,11 +275,12 @@ def load_config_json(args):
                     'transformer_hidden', 'dimension', 'rnn_dimension', 'load', 'max_val_context_length',
                     'val_batch_size', 'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower',
                     'encoder_embeddings', 'decoder_embeddings', 'trainable_decoder_embeddings',
-                    'train_encoder_embeddings', 'locale', 'use_pretrained_bert']
+                    'train_encoder_embeddings', 'locale', 'use_pretrained_bert', 'num_beams']
 
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
+            # These are for backward compatibility with models that were trained before we added these arguments
             elif r == 'locale':
                 setattr(args, r, 'en')
             elif r == 'trainable_decoder_embedding':
@@ -196,6 +293,8 @@ def load_config_json(args):
                 setattr(args, r, 'zero')
             elif r == 'use_pretrained_bert':
                 setattr(args, r, True)
+            elif r == 'num_beams':
+                setattr(args, r, 1)
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0
