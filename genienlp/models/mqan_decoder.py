@@ -137,7 +137,7 @@ class MQANDecoder(nn.Module):
             return loss, None
 
         else:
-            return None, self.greedy(self_attended_context, final_context, context_padding, final_question, question_padding,
+            return None, self.decode(self_attended_context, final_context, context_padding, final_question, question_padding,
                                      context_limited, question_limited,
                                      decoder_vocab, rnn_state=context_rnn_state).data
 
@@ -172,7 +172,7 @@ class MQANDecoder(nn.Module):
 
         return scaled_p_vocab
 
-    def greedy(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
+    def decode(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                decoder_vocab, rnn_state=None):
         batch_size = context.size()[0]
         max_decoder_time = self.args.max_output_length
@@ -183,114 +183,62 @@ class MQANDecoder(nn.Module):
         decoder_wrapper = MQANDecoderWrapper(self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                decoder_vocab, rnn_state, batch_size, max_decoder_time, self, num_beams=self.args.num_beams)
 
+        if self.args.num_beams > 1:
+            outputs = self._decode_beam_search(
+                input_ids=input_ids,
+                max_length=self.args.max_output_length,
+                do_sample=False,
+                temperature=1.0,
+                top_k=0,
+                top_p=1.0,
+                repetition_penalty=1.0,
+                pad_token_id=decoder_vocab.pad_idx,
+                eos_token_ids=[decoder_vocab.eos_idx],
+                batch_size=batch_size,
+                length_penalty=1.0,
+                num_beams=self.args.num_beams,
+                vocab_size=len(decoder_vocab),
+                decoder_wrapper=decoder_wrapper,
+            )
+        else:
+            outputs = self._decode_greedy(
+                input_ids=input_ids,
+                max_length=self.args.max_output_length,
+                eos_token_id=decoder_vocab.eos_idx,
+                batch_size=batch_size,
+                decoder_wrapper=decoder_wrapper,
+            )
 
-        # if self.args.num_beams > 1:
-        #     outputs = self._generate_beam_search(input_ids=input_ids,
-        #                 cur_len=1,
-        #                 max_length=self.args.max_output_length,
-        #                 do_sample=False,
-        #                 temperature=1.0,
-        #                 top_k=0,
-        #                 top_p=1.0,
-        #                 repetition_penalty=1.0,
-        #                 pad_token_id=decoder_vocab.pad_idx,
-        #                 eos_token_ids=[decoder_vocab.eos_idx],
-        #                 batch_size=batch_size,
-        #                 length_penalty=1.0,
-        #                 num_beams=self.args.num_beams,
-        #                 vocab_size=len(decoder_vocab),
-        #                 decoder_wrapper=decoder_wrapper,
-        #                 map_to_full=self.map_to_full
-        #             )
-        # else:
-        outputs = self._generate_no_beam_search(input_ids=input_ids,
-                    cur_len=1,
-                    max_length=self.args.max_output_length,
-                    do_sample=False,
-                    temperature=1.0,
-                    top_k=0,
-                    top_p=1.0,
-                    repetition_penalty=1.0,
-                    pad_token_id=decoder_vocab.pad_idx,
-                    eos_token_ids=[decoder_vocab.eos_idx],
-                    batch_size=batch_size,
-                    decoder_wrapper=decoder_wrapper,
-                    map_to_full=self.map_to_full
-                )
-
-
-        # print('outputs = ', outputs)
+       # print('outputs = ', outputs)
         return outputs
 
-    def _generate_no_beam_search(
+    def _decode_greedy(
         self,
         input_ids,
-        cur_len,
         max_length,
-        do_sample,
-        temperature,
-        top_k,
-        top_p,
-        repetition_penalty,
-        pad_token_id,
-        eos_token_ids,
+        eos_token_id,
         batch_size,
-        decoder_wrapper,
-        map_to_full
+        decoder_wrapper
     ):
-        """ Generate sequences for each example without beam search (num_beams == 1).
-            All returned sequence are generated independantly.
-        """
-        # current position / max lengths / length of generated sentences / unfinished sentences
-        unfinished_sents = input_ids.new(batch_size).fill_(1)
+        outs = input_ids.new_full((batch_size, max_length), self.pad_idx, dtype=torch.long)
+        eos_yet = input_ids.new_zeros((batch_size,)).byte()
 
-        while cur_len < max_length:
-            scores = decoder_wrapper.next_token_probs(input_ids[:, -1].unsqueeze(-1))
-
-            # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
-            if repetition_penalty != 1.0:
-                for i in range(batch_size):
-                    for previous_token in set(input_ids[i].tolist()):
-                        # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
-                        if scores[i, previous_token] < 0:
-                            scores[i, previous_token] *= repetition_penalty
-                        else:
-                            scores[i, previous_token] /= repetition_penalty
-
-            if do_sample:
-                # Temperature (higher temperature => more likely to sample low probability tokens)
-                if temperature != 1.0:
-                    scores = scores / temperature
-                # Top-p/top-k filtering
-                scores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p)
-                # Sample
-                next_token = torch.multinomial(F.softmax(scores, dim=-1), num_samples=1).squeeze(1)
-            else:
-                # Greedy decoding
-                next_token = torch.argmax(scores, dim=-1)
-
-            # update generations and finished sentences
-            tokens_to_add = next_token * unfinished_sents + pad_token_id * (1 - unfinished_sents)
-            input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
-            for eos_token_id in eos_token_ids:
-                unfinished_sents.mul_(tokens_to_add.ne(eos_token_id).long())
-            cur_len = cur_len + 1
-
-            # stop when there is a </s> in each sentence, or if we exceed the maximul length
-            if unfinished_sents.max() == 0:
+        for t in range(max_length):
+            probs = decoder_wrapper.next_token_probs(input_ids[:, -1].unsqueeze(-1))
+            pred_probs, preds = probs.max(-1)
+            eos_yet = eos_yet | (preds == eos_token_id).byte()
+            outs[:, t] = preds.cpu().apply_(self.map_to_full)
+            if eos_yet.all():
                 break
+            preds = preds.unsqueeze(1)
+            print('preds: ', preds.shape)
+            print('input_ids: ', input_ids.shape)
+            input_ids = torch.cat((input_ids, preds), dim=1)
+        return outs
 
-        # add eos_token_ids to unfinished sentences
-        if cur_len == max_length:
-            input_ids[:, -1].masked_fill_(unfinished_sents.to(dtype=torch.bool), eos_token_ids[0])
-
-        return input_ids
-        
-
-    def _generate_beam_search(
+    def _decode_beam_search(
         self,
         input_ids,
-        cur_len,
         max_length,
         do_sample,
         temperature,
@@ -304,11 +252,12 @@ class MQANDecoder(nn.Module):
         num_beams,
         vocab_size,
         decoder_wrapper,
-        map_to_full
     ):
-        """ Generate sequences for each example with beam search.
+        """
+        Generate sequences for each example with beam search. Temperature, repetition penalty, top-k and top-p sampling are also supported.
         """
 
+        cur_len = 1
         # Expand input to num beams
         input_ids = input_ids.unsqueeze(1).expand(batch_size, num_beams, 1)
         input_ids = input_ids.contiguous().view(batch_size * num_beams, 1)  # (batch_size * num_beams, cur_len)
@@ -326,7 +275,9 @@ class MQANDecoder(nn.Module):
 
         while cur_len < max_length:
             # print('input_ids = ', input_ids[:, -1].unsqueeze(-1))
-            scores = decoder_wrapper.next_token_probs(input_ids[:, -1].unsqueeze(-1))  # (batch_size * num_beams, vocab_size)
+
+            # next_token_probs outputs a normalized probability distribution instead of logits
+            scores = torch.log(torch.log(decoder_wrapper.next_token_probs(input_ids[:, -1].unsqueeze(-1))))  # (batch_size * num_beams, vocab_size)
 
             # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
@@ -343,16 +294,16 @@ class MQANDecoder(nn.Module):
                 if temperature != 1.0:
                     scores = scores / temperature
                 # Top-p/top-k filtering
-                scores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=3)  # (batch_size * num_beams, vocab_size)
-                # Sample 3 next words for each beam (so we have some spare tokens and match output of greedy beam search)
-                next_words = torch.multinomial(F.softmax(scores, dim=-1), num_samples=3)  # (batch_size * num_beams, 2)
+                scores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2)  # (batch_size * num_beams, vocab_size)
+                # Sample 2 next words for each beam (so we have some spare tokens and match output of greedy beam search)
+                next_words = torch.multinomial(F.softmax(scores, dim=-1), num_samples=2)  # (batch_size * num_beams, 2)
                 # Compute next scores
                 _scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
-                _scores = torch.gather(_scores, -1, next_words)  # (batch_size * num_beams, 3)
-                next_scores = _scores + beam_scores[:, None].expand_as(_scores)  # (batch_size * num_beams, 3)
+                _scores = torch.gather(_scores, -1, next_words)  # (batch_size * num_beams, 2)
+                next_scores = _scores + beam_scores[:, None].expand_as(_scores)  # (batch_size * num_beams, 2)
                 # Match shape of greedy beam search
-                next_words = next_words.view(batch_size, 3 * num_beams)  # (batch_size, 3 * num_beams)
-                next_scores = next_scores.view(batch_size, 3 * num_beams)  # (batch_size, 3 * num_beams)
+                next_words = next_words.view(batch_size, 2 * num_beams)  # (batch_size, 2 * num_beams)
+                next_scores = next_scores.view(batch_size, 2 * num_beams)  # (batch_size, 2 * num_beams)
             else:
                 # do greedy beam search
                 scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
@@ -361,9 +312,9 @@ class MQANDecoder(nn.Module):
                 _scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * num_beams, vocab_size)
                 # re-organize to group the beam together (we are keeping top hypothesis accross beams)
                 _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
-                next_scores, next_words = torch.topk(_scores, 3 * num_beams, dim=1, largest=True, sorted=True)
+                next_scores, next_words = torch.topk(_scores, 2 * num_beams, dim=1, largest=True, sorted=True)
 
-            assert next_scores.size() == next_words.size() == (batch_size, 3 * num_beams)
+            assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
 
             # next batch beam content
             # list of (batch_size * num_beams) tuple(next hypothesis score, next word, current position in the batch)
@@ -414,7 +365,7 @@ class MQANDecoder(nn.Module):
 
             # re-order batch
             device = beam_words.device
-            beam_words = beam_words.cpu().apply_(map_to_full).to(device)
+            beam_words = beam_words.cpu().apply_(self.map_to_full).to(device)
             input_ids = input_ids[beam_idx, :]
             decoder_wrapper.reorder(beam_idx)
             input_ids = torch.cat([input_ids, beam_words.unsqueeze(1)], dim=-1)
@@ -439,7 +390,7 @@ class MQANDecoder(nn.Module):
         decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id)
         for i, hypo in enumerate(best):
             decoded[i, : tgt_len[i] - 1] = hypo
-            decoded[i, tgt_len[i] - 1] = map_to_full(eos_token_ids[0])
+            decoded[i, tgt_len[i] - 1] = self.map_to_full(eos_token_ids[0])
 
         return decoded
 

@@ -23,20 +23,16 @@ using a masked language modeling (MLM) loss.
 
 from __future__ import absolute_import, division, print_function
 
-import argparse
 import glob
 import logging
 import os
 import pickle
-import random
 import re
 import shutil
-import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data.distributed import DistributedSampler
-import sys
 from functools import partial
 
 from tensorboardX import SummaryWriter
@@ -652,6 +648,3 @@ def main(args):
 
     return results
 
-
-if __name__ == "__main__":
-    main()

@@ -386,7 +386,7 @@ def run_generation(args):
     number_of_lines = get_number_of_lines(args.input_file)
     with open(args.input_file) as input_file:
         reader = csv.reader(input_file, delimiter='\t')
-        for row in tqdm(reader, desc='Reading Input File'):
+        for row in tqdm(reader, desc='Reading Input File', total=number_of_lines):
             raw_text = row[args.input_column]
             # print('before text = ', raw_text)
             raw_text, reverse_map = input_heuristics(raw_text)
@@ -477,6 +477,3 @@ def run_generation(args):
     else:
         print(json.dumps(all_outputs, indent=2))
 
-
-if __name__ == '__main__':
-    main()

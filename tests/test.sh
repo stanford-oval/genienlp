@@ -24,9 +24,8 @@ trap on_error ERR INT TERM
 
 i=0
 for hparams in \
-            "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings 50 --dimension 768 --transformer_hidden 768 --seq2seq_encoder=Identity --rnn_layers 1 --transformer_heads 12 --transformer_layers 0 --rnn_zero_state=average --train_encoder_embeddings --transformer_lr_multiply 0.1" \
-            "--encoder_embeddings=bert-base-multilingual-cased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
             "--encoder_embeddings=small_glove+char --decoder_embeddings=small_glove+char" \
+            "--encoder_embeddings=bert-base-multilingual-cased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
             "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50" \
             "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
             "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=BiLSTM --dimension=768"
