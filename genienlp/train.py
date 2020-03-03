@@ -125,9 +125,9 @@ def prepare_data(args, logger):
         numericalizer.build_vocab(Example.vocab_fields, vocab_sets)
         numericalizer.save(args.save)
 
-        logger.info(f'Initializing encoder and decoder embeddings')
-        for vec in set(encoder_embeddings + decoder_embeddings):
-            vec.init_for_vocab(numericalizer.vocab)
+    logger.info(f'Initializing encoder and decoder embeddings')
+    for vec in set(encoder_embeddings + decoder_embeddings):
+        vec.init_for_vocab(numericalizer.vocab)
 
     logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens')
     logger.debug(f'The first 200 tokens:')
@@ -145,7 +145,7 @@ def prepare_data(args, logger):
 
 accumulated_batch_lengths = 0
 
-def step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, logger=None, gradient_accumulation_steps=1):
+def step(model, batch, iteration, opt,  devices, lr_scheduler=None, grad_clip=None, gradient_accumulation_steps=1):
     # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of the total batch size
     global accumulated_batch_lengths
     model.train()
@@ -154,9 +154,12 @@ def step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, logger
     loss, predictions = model(batch, iteration)
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss')
+    if len(devices) > 1:
+        loss = loss.mean()
     non_accumulated_loss = loss.item()
     loss = loss*len(batch[0])
     accumulated_batch_lengths += len(batch[0])
+
     loss.backward()
     grad_norm = None
     if (iteration+1) % gradient_accumulation_steps == 0:
@@ -322,8 +325,8 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                             torch.save(save_opt_state_dict, os.path.join(args.log_dir, 'best_optim.pth'))
 
                     # param update
-                    loss, grad_norm = step(model, batch, iteration, opt, lr_scheduler=lr_scheduler,
-                                           grad_clip=args.grad_clip, logger=logger, gradient_accumulation_steps=args.gradient_accumulation_steps)
+                    loss, grad_norm = step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
+                                           grad_clip=args.grad_clip, gradient_accumulation_steps=args.gradient_accumulation_steps)
                     if loss is None:
                         logger.info(
                             'Encountered NAN loss during training... Continue training ignoring the current batch')
@@ -387,13 +390,18 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             break
 
 
-def init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devices, logger):
+def init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devices, logger, save_dict):
     model_name = args.model
     logger.info(f'Initializing {model_name}')
     Model = getattr(models, model_name)
     model = Model(numericalizer, args, encoder_embeddings, decoder_embeddings)
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
+
+    if save_dict is not None:
+        logger.info(f'Loading model from {os.path.join(args.save, args.load)}')
+        save_dict = torch.load(os.path.join(args.save, args.load))
+        model.load_state_dict(save_dict['model_state_dict'])
 
     model.to(devices[0])
     model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
@@ -469,20 +477,17 @@ def main(args):
     else:
         writer = None
 
-    model = init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devices, logger)
+    model = init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devices, logger, save_dict)
     opt, lr_scheduler = init_opt(args, model, logger)
     start_iteration = 1
 
-    if save_dict is not None:
-        logger.info(f'Loading model from {os.path.join(args.save, args.load)}')
-        save_dict = torch.load(os.path.join(args.save, args.load))
-        model.load_state_dict(save_dict['model_state_dict'])
-        if args.resume:
-            logger.info(f'Resuming Training from {os.path.splitext(args.load)[0]}_optim.pth')
-            opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'))
-            start_iteration = opt_state_dict.pop('start_iteration')
-            logger.info(f'Starting iteration is {start_iteration}')
-            opt.load_state_dict(opt_state_dict)
+
+    if save_dict is not None and args.resume:
+        logger.info(f'Resuming Training from {os.path.splitext(args.load)[0]}_optim.pth')
+        opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'))
+        start_iteration = opt_state_dict.pop('start_iteration')
+        logger.info(f'Starting iteration is {start_iteration}')
+        opt.load_state_dict(opt_state_dict)
 
     train(args, devices, model, opt, lr_scheduler, train_sets, args.train_iterations, numericalizer, val_sets=val_sets,
           aux_sets=aux_sets,

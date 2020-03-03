@@ -231,8 +231,6 @@ class MQANDecoder(nn.Module):
             if eos_yet.all():
                 break
             preds = preds.unsqueeze(1)
-            print('preds: ', preds.shape)
-            print('input_ids: ', input_ids.shape)
             input_ids = torch.cat((input_ids, preds), dim=1)
         return outs
 

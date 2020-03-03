@@ -130,7 +130,7 @@ def run(args, numericalizer, val_sets, model, device):
 
             if len(answers) > 0:
                 metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)
-                with open(results_file_name, 'w' + ('' if args.overwrite else 'x')) as results_file:
+                with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')
 
                 if not args.silent:
@@ -149,7 +149,7 @@ def run(args, numericalizer, val_sets, model, device):
 
 def parse_argv(parser):
     parser.add_argument('--path', required=True)
-    parser.add_argument('--evaluate', type=str, required=True, help='Which dataset to evaluate (test or dev)')
+    parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'], help='Which dataset to evaluate (test or dev)')
     parser.add_argument('--tasks',
                         default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl',
                                  'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')

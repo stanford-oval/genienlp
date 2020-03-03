@@ -46,9 +46,7 @@ class TransformerNumericalizer(object):
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
         self._cache = cache
-        self.config = None
         self._tokenizer = None
-
         self.fix_length = fix_length
 
     @property
@@ -205,9 +203,13 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
         with torch.cuda.device_of(batch):
             batch = batch.tolist()
 
-        def reverse_one(tensor):
+        def is_entity(token):
+            return token[0].isupper()
+
+        def reverse_one(tensor, field_name):
             tokens = []
 
+            in_string = False
             # trim up to EOS, remove other special stuff, and undo wordpiece tokenization
             for token in self.decode(tensor):
                 if token == self.eos_token:
@@ -219,11 +221,25 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
                 elif len(tokens) == 0:
                     tokens.append(token)
                 else:
-                    tokens[-1] += token
+                    if field_name == 'answer':
+                        if token == '"':
+                            in_string = not in_string
+                            tokens.append(token)
+                            continue
+                        if in_string:
+                            tokens[-1] += token
+                        else:
+                            tokens.append(token)
+
+                    else:
+                        if is_entity(token):
+                            tokens.append(token)
+                        else:
+                            tokens[-1] += token
 
             return detokenize(tokens, field_name=field_name)
 
-        return [reverse_one(tensor) for tensor in batch]
+        return [reverse_one(tensor, field_name) for tensor in batch]
 
 
 class BertNumericalizer(TransformerNumericalizer):
