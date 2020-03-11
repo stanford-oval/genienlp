@@ -41,10 +41,15 @@ class BiLSTMEncoder(nn.Module):
         def dp(args):
             return args.dropout_ratio if args.rnn_layers > 1 else 0.
 
-        self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.rnn_dimension,
-                                                    trained_dimension=0,
+        self.context_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.rnn_dimension,
+                                                    trained_dimension=args.trainable_encoder_embeddings,
                                                     project=True,
-                                                    finetune_pretrained=args.train_encoder_embeddings)
+                                                    finetune_pretrained=args.train_context_embeddings)
+
+        self.question_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.rnn_dimension,
+                                                     trained_dimension=0,
+                                                     project=True,
+                                                     finetune_pretrained=args.train_question_embeddings)
 
         self.bilstm_context = PackedLSTM(args.rnn_dimension, args.rnn_dimension,
                                          batch_first=True, bidirectional=True, num_layers=args.rnn_layers,
@@ -55,10 +60,10 @@ class BiLSTMEncoder(nn.Module):
                                           dropout=dp(args))
 
     def set_train_context_embeddings(self, trainable):
-        self.encoder_embeddings.set_trainable(trainable)
+        self.context_embeddings.set_trainable(trainable)
 
     def set_train_question_embeddings(self, trainable):
-        pass
+        self.question_embeddings.set_trainable(trainable)
 
     def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length
@@ -67,8 +72,8 @@ class BiLSTMEncoder(nn.Module):
         context_padding = context.data == self.pad_idx
         question_padding = question.data == self.pad_idx
 
-        context_embedded = self.encoder_embeddings(context, padding=context_padding)
-        question_embedded = self.encoder_embeddings(question, padding=question_padding)
+        context_embedded = self.context_embeddings(context, padding=context_padding)
+        question_embedded = self.question_embeddings(question, padding=question_padding)
 
         # pick the top-most N transformer layers to pass to the decoder for cross-attention
         # (add 1 to account for the embedding layer - the decoder will drop it later)
