@@ -46,7 +46,7 @@ class BiLSTMEncoder(nn.Module):
                                                     project=True,
                                                     finetune_pretrained=args.train_context_embeddings)
 
-        self.question_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.rnn_dimension,
+        self.question_embeddings = CombinedEmbedding(numericalizer, question_embeddings, args.rnn_dimension,
                                                      trained_dimension=0,
                                                      project=True,
                                                      finetune_pretrained=args.train_question_embeddings)
