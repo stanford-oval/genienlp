@@ -223,7 +223,7 @@ def post_parse(args):
     if args.context_embeddings is None:
         args.context_embeddings = args.encoder_embeddings
     if args.question_embeddings is None:
-        args.question_embeddings = args.question_embeddings
+        args.question_embeddings = args.context_embeddings
     if args.train_context_embeddings is None:
         args.train_context_embeddings = args.train_encoder_embeddings
     if args.train_question_embeddings is None:

@@ -392,7 +392,7 @@ class CombinedEmbedding(nn.Module):
         if self.project:
             self.projection = Feedforward(dimension, output_dimension)
         else:
-            assert dimension == output_dimension
+            assert dimension == output_dimension, (dimension, output_dimension)
         self.dimension = output_dimension
 
     def set_trainable(self, trainable):

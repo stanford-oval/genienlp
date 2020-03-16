@@ -229,6 +229,7 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
                     numericalizer = XLMRobertaNumericalizer(emb_name, config=config,
                                                             max_generative_vocab=max_generative_vocab,
                                                             cache=cachedir)
+                numericalizer_type = emb_type
 
             # load the tokenizer once to ensure all files are downloaded
             AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
@@ -265,11 +266,12 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
                     numericalizer = XLMRobertaNumericalizer(emb_name, config=config,
                                                             max_generative_vocab=max_generative_vocab,
                                                             cache=cachedir)
+                numericalizer_type = emb_type
 
             # load the tokenizer once to ensure all files are downloaded
             AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
 
-            context_vectors.append(
+            question_vectors.append(
                 TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
         else:
             if numericalizer is not None:
