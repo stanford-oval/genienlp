@@ -59,11 +59,7 @@ class Vocab(object):
             self.stoi[word] = len(self.itos) - 1
 
     def __eq__(self, other):
-        if self.freqs != other.freqs:
-            return False
-        if self.stoi != other.stoi:
-            return False
-        if self.itos != other.itos:
+        if self.freqs != other.freqs or self.stoi != other.stoi or self.itos != other.itos:
             return False
         return True
 

@@ -38,8 +38,8 @@ from pprint import pformat
 import torch
 
 from . import models
-from .data.embeddings import load_embeddings
-from .data.example import Batch
+from .data_utils.embeddings import load_embeddings
+from .data_utils.example import Batch
 from .tasks.generic_dataset import Example
 from .tasks.registry import get_tasks
 from .util import set_seed, init_devices, load_config_json, log_model_size

@@ -42,7 +42,17 @@ Generate predictions:
 genienlp predict --tasks almond --data <datadir> --path <modeldir>
 ```
 
-See `genienlp --help` for details.
+Train a paraphrasing model:
+```bash
+genienlp train-paraphrase --train_data_file <train_data_file> --eval_data_file <dev_data_file> --output_dir <modeldir> --model_type gpt2 --do_train --do_eval --evaluate_during_training --logging_steps 1000 --save_steps 1000 --max_steps 40000 --save_total_limit 2 --gradient_accumulation_steps 16 --per_gpu_eval_batch_size 4 --per_gpu_train_batch_size 4 --num_train_epochs 1 --model_name_or_path <gpt2/gpt2-medium/gpt2-large/gpt2-xlarge>
+```
+
+Generate paraphrases:
+```bash
+genienlp run-paraphrase --model_type gpt2 --model_name_or_path <modeldir> --temperature 0.3 --repetition_penalty 1.0 --num_samples 4 --length 15 --batch_size 32 --input_file <input tsv file> --input_column 1
+```
+
+See `genienlp --help` and `genienlp <command> --help` for details about each argument.
 
 ## Citation
 

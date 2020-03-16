@@ -32,10 +32,10 @@ import torch
 import logging
 from tqdm import tqdm
 
-from ..base import BaseTask
+from ..base_task import BaseTask
 from ..registry import register_task
 from .. import generic_dataset
-from ...data.example import Example
+from ...data_utils.example import Example
 
 logger = logging.getLogger(__name__)
 

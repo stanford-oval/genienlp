@@ -44,12 +44,12 @@ from tensorboardX import SummaryWriter
 
 from . import arguments
 from . import models
-from .data.embeddings import load_embeddings
-from .data.example import Example
+from .data_utils.embeddings import load_embeddings
+from .data_utils.example import Example
 from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader, log_model_size, \
     init_devices
-from .utils.parallel_utils import NamedTupleCompatibleDataParallel
-from .utils.saver import Saver
+from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
+from .model_utils.saver import Saver
 from .validate import validate
 
 
@@ -128,8 +128,9 @@ def prepare_data(args, logger):
         numericalizer.build_vocab(Example.vocab_fields, vocab_sets)
         numericalizer.save(args.save)
 
-        for vec in set(context_embeddings + question_embeddings + decoder_embeddings):
-            vec.init_for_vocab(numericalizer.vocab)
+    logger.info(f'Initializing encoder and decoder embeddings')
+    for vec in set(context_embeddings + question_embeddings + decoder_embeddings):
+        vec.init_for_vocab(numericalizer.vocab)
 
     logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens')
     logger.debug(f'The first 200 tokens:')
@@ -145,27 +146,46 @@ def prepare_data(args, logger):
 
     return numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
+accumulated_batch_lengths = 0
 
-def train_step(model, batch, iteration, opt, lr_scheduler=None, grad_clip=None, pretraining=False,
-               train_context_embeddings_after=None, train_question_embeddings_after=None):
+def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None, pretraining=False,
+               train_context_embeddings_after=None, train_question_embeddings_after=None,
+               gradient_accumulation_steps=1):
+    # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of
+    # the total batch size
+    global accumulated_batch_lengths
     model.train()
     model.module.set_train_context_embeddings(train_context_embeddings_after is not None and
                                               iteration > train_context_embeddings_after)
     model.module.set_train_question_embeddings(train_question_embeddings_after is not None and
                                                iteration > train_question_embeddings_after)
-    opt.zero_grad()
+    if (iteration) % gradient_accumulation_steps == 0:
+        opt.zero_grad()
     loss, predictions = model(batch, iteration, pretraining=pretraining)
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss')
+    if len(devices) > 1:
+        loss = loss.mean()
+    non_accumulated_loss = loss.item()
+    loss = loss*len(batch[0])
+    accumulated_batch_lengths += len(batch[0])
+
     loss.backward()
     grad_norm = None
-    if grad_clip > 0.0:
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
-    opt.step()
-    if lr_scheduler is not None:
-        lr_scheduler.step()
+    if (iteration+1) % gradient_accumulation_steps == 0:
+        for p in model.parameters():
+            if p.grad is None:
+                continue
+            # print('p.grad = ', p.grad)
+            p.grad /= accumulated_batch_lengths
+        accumulated_batch_lengths = 0
+        if grad_clip > 0.0:
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
+        opt.step()
+        if lr_scheduler is not None:
+            lr_scheduler.step()
 
-    return loss.item(), grad_norm
+    return non_accumulated_loss, grad_norm
 
 
 def update_fraction(args, task_iteration):
@@ -381,8 +401,9 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                                                 timestamp=args.timestamp, log_dir=args.log_dir)
 
             # param update
-            loss, grad_norm = train_step(model, batch, iteration, opt, lr_scheduler=lr_scheduler,
+            loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
                                          grad_clip=args.grad_clip, pretraining=pretraining,
+                                         gradient_accumulation_steps=args.gradient_accumulation_steps,
                                          train_context_embeddings_after=args.train_context_embeddings_after if
                                                                         args.train_context_embeddings else None,
                                          train_question_embeddings_after=args.train_question_embeddings_after if
@@ -437,13 +458,19 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     logger.info(f'{log_prefix} is done after {epoch} epochs')
 
 
-def init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings, devices, logger):
+def init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings, devices, logger,
+               save_dict):
     model_name = args.model
     logger.info(f'Initializing {model_name}')
     Model = getattr(models, model_name)
     model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
+
+    if save_dict is not None:
+        logger.info(f'Loading model from {os.path.join(args.save, args.load)}')
+        save_dict = torch.load(os.path.join(args.save, args.load))
+        model.load_state_dict(save_dict['model_state_dict'])
 
     model.to(devices[0])
     model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
@@ -514,20 +541,18 @@ def main(args):
     logger.info(f'Processing')
     logger.start = time.time()
 
-    model = init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings, devices, logger)
+    model = init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings,
+                       devices, logger, save_dict)
     opt, lr_scheduler = init_opt(args, model, logger)
     start_iteration = 1
 
-    if save_dict is not None:
-        logger.info(f'Loading model from {os.path.join(args.save, args.load)}')
-        save_dict = torch.load(os.path.join(args.save, args.load))
-        model.load_state_dict(save_dict['model_state_dict'])
-        if args.resume:
-            logger.info(f'Resuming Training from {os.path.splitext(args.load)[0]}_optim.pth')
-            opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'))
-            start_iteration = opt_state_dict.pop('start_iteration')
-            logger.info(f'Starting iteration is {start_iteration}')
-            opt.load_state_dict(opt_state_dict)
+
+    if save_dict is not None and args.resume:
+        logger.info(f'Resuming Training from {os.path.splitext(args.load)[0]}_optim.pth')
+        opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'))
+        start_iteration = opt_state_dict.pop('start_iteration')
+        logger.info(f'Starting iteration is {start_iteration}')
+        opt.load_state_dict(opt_state_dict)
 
     if hasattr(args, 'tensorboard') and args.tensorboard:
         logger.info(f'Initializing Writer')

@@ -31,7 +31,7 @@
 import logging
 from pprint import pformat
 
-from .data.embeddings import load_embeddings
+from .data_utils.embeddings import load_embeddings
 from .util import set_seed
 
 logger = logging.getLogger(__name__)

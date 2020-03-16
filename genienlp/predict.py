@@ -32,11 +32,12 @@ import json
 import logging
 import os
 from pprint import pformat
+from tqdm import tqdm
 
 import torch
 
 from . import models
-from .data.embeddings import load_embeddings
+from .data_utils.embeddings import load_embeddings
 from .metrics import compute_metrics
 from .tasks.registry import get_tasks
 from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices
@@ -114,7 +115,7 @@ def run(args, numericalizer, val_sets, model, device):
             predictions = []
             answers = []
             with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
-                for batch_idx, batch in enumerate(it):
+                for batch_idx, batch in tqdm(enumerate(it), desc="Batches"):
                     _, batch_prediction = model(batch, iteration=1)
 
                     batch_prediction = numericalizer.reverse(batch_prediction, detokenize=task.detokenize,
@@ -129,7 +130,7 @@ def run(args, numericalizer, val_sets, model, device):
 
             if len(answers) > 0:
                 metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)
-                with open(results_file_name, 'w' + ('' if args.overwrite else 'x')) as results_file:
+                with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')
 
                 if not args.silent:
@@ -148,7 +149,7 @@ def run(args, numericalizer, val_sets, model, device):
 
 def parse_argv(parser):
     parser.add_argument('--path', required=True)
-    parser.add_argument('--evaluate', type=str, required=True, help='Which dataset to evaluate (test or dev)')
+    parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'], help='Which dataset to evaluate (test or dev)')
     parser.add_argument('--tasks',
                         default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl',
                                  'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
