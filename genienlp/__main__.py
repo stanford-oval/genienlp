@@ -31,10 +31,11 @@
 import sys
 import argparse
 
-from . import arguments, train, predict, server, cache_embeddings, run_lm_finetuning, run_generation
+from . import arguments, train, predict, server, cache_embeddings, run_lm_finetuning, run_generation, export
 
 subcommands = {
     'train': ('Train a model', arguments.parse_argv, train.main),
+    'export': ('Export a trained model for serving', export.parse_argv, export.main),
     'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.parse_argv, predict.main),
     'server': ('Export RPC interface to predict', server.parse_argv, server.main),
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
