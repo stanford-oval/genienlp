@@ -184,62 +184,117 @@ def _name_to_vector(emb_name, cachedir):
         raise ValueError(f'Unrecognized embedding name {emb_name}')
 
 
-def load_embeddings(cachedir, encoder_emb_names, decoder_emb_names, max_generative_vocab=50000, logger=_logger):
+def get_embedding_type(emb_name):
+    if '@' in emb_name:
+        return emb_name.split('@')[0]
+    else:
+        return emb_name
+
+
+def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb_names,
+                    max_generative_vocab=50000, logger=_logger):
     logger.info(f'Getting pretrained word vectors and pretrained models')
 
-    encoder_emb_names = encoder_emb_names.split('+')
+    context_emb_names = context_emb_names.split('+')
+    question_emb_names = question_emb_names.split('+')
     decoder_emb_names = decoder_emb_names.split('+')
 
     all_vectors = {}
-    encoder_vectors = []
+    context_vectors = []
+    question_vectors = []
     decoder_vectors = []
 
     numericalizer = None
-    for emb_name in encoder_emb_names:
+    numericalizer_type = None
+    for emb_name in context_emb_names:
         if not emb_name:
             continue
+        if emb_name in all_vectors:
+            context_vectors.append(all_vectors[emb_name])
+            continue
+
+        emb_type = get_embedding_type(emb_name)
         if _is_bert(emb_name) or _is_xlmr(emb_name):
-            if numericalizer is not None:
+            if numericalizer is not None and numericalizer_type != emb_type:
                 raise ValueError('Cannot specify multiple Transformer embeddings')
 
-            config = AutoConfig.from_pretrained(emb_name, cache_dir=cachedir)
+            config = AutoConfig.from_pretrained(emb_type, cache_dir=cachedir)
             config.output_hidden_states = True
-            if _is_bert(emb_name):
-                numericalizer = BertNumericalizer(emb_name, config=config, max_generative_vocab=max_generative_vocab, cache=cachedir)
-            elif _is_xlmr(emb_name):
-                numericalizer = XLMRobertaNumericalizer(emb_name, config=config, max_generative_vocab=max_generative_vocab, cache=cachedir)
+            if numericalizer is None:
+                if _is_bert(emb_name):
+                    numericalizer = BertNumericalizer(emb_name, config=config,
+                                                      max_generative_vocab=max_generative_vocab,
+                                                      cache=cachedir)
+                elif _is_xlmr(emb_name):
+                    numericalizer = XLMRobertaNumericalizer(emb_name, config=config,
+                                                            max_generative_vocab=max_generative_vocab,
+                                                            cache=cachedir)
+                numericalizer_type = emb_type
 
             # load the tokenizer once to ensure all files are downloaded
-            AutoTokenizer.from_pretrained(emb_name, cache_dir=cachedir)
+            AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
 
-            encoder_vectors.append(
-                TransformerEmbedding(AutoModel.from_pretrained(emb_name, config=config, cache_dir=cachedir)))
-
+            context_vectors.append(
+                TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
         else:
             if numericalizer is not None:
-                logger.warning('Combining BERT embeddings with other pretrained embeddings is unlikely to work')
+                logger.warning('Combining Transformer embeddings with other pretrained embeddings is unlikely to work')
+            vec = _name_to_vector(emb_type, cachedir)
+            all_vectors[emb_name] = vec
+            context_vectors.append(vec)
 
-            if emb_name in all_vectors:
-                encoder_vectors.append(all_vectors[emb_name])
-            else:
-                vec = _name_to_vector(emb_name, cachedir)
-                all_vectors[emb_name] = vec
-                encoder_vectors.append(vec)
+    for emb_name in question_emb_names:
+        if not emb_name:
+            continue
+        if emb_name in all_vectors:
+            question_vectors.append(all_vectors[emb_name])
+            continue
+
+        emb_type = get_embedding_type(emb_name)
+        if _is_bert(emb_type) or _is_xlmr(emb_name):
+            if numericalizer is not None and numericalizer_type != emb_type:
+                raise ValueError('Cannot specify multiple Transformer embeddings')
+
+            config = AutoConfig.from_pretrained(emb_type, cache_dir=cachedir)
+            config.output_hidden_states = True
+            if numericalizer is None:
+                if _is_bert(emb_name):
+                    numericalizer = BertNumericalizer(emb_name, config=config,
+                                                      max_generative_vocab=max_generative_vocab,
+                                                      cache=cachedir)
+                elif _is_xlmr(emb_name):
+                    numericalizer = XLMRobertaNumericalizer(emb_name, config=config,
+                                                            max_generative_vocab=max_generative_vocab,
+                                                            cache=cachedir)
+                numericalizer_type = emb_type
+
+            # load the tokenizer once to ensure all files are downloaded
+            AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
+
+            question_vectors.append(
+                TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
+        else:
+            if numericalizer is not None:
+                logger.warning('Combining Transformer embeddings with other pretrained embeddings is unlikely to work')
+            vec = _name_to_vector(emb_type, cachedir)
+            all_vectors[emb_name] = vec
+            question_vectors.append(vec)
 
     for emb_name in decoder_emb_names:
         if not emb_name:
             continue
+        emb_type = get_embedding_type(emb_name)
         if _is_bert(emb_name) or _is_xlmr(emb_name):
             raise ValueError('Transformer embeddings cannot be specified in the decoder')
 
         if emb_name in all_vectors:
             decoder_vectors.append(all_vectors[emb_name])
         else:
-            vec = _name_to_vector(emb_name, cachedir)
+            vec = _name_to_vector(emb_type, cachedir)
             all_vectors[emb_name] = vec
             decoder_vectors.append(vec)
 
     if numericalizer is None:
         numericalizer = SimpleNumericalizer(max_generative_vocab=max_generative_vocab, pad_first=False)
 
-    return numericalizer, encoder_vectors, decoder_vectors
+    return numericalizer, context_vectors, question_vectors, decoder_vectors

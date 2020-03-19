@@ -29,35 +29,40 @@
 
 from torch import nn
 
-from .common import CombinedEmbedding, PackedLSTM
+from .common import CombinedEmbedding, TransformerEncoder, CoattentiveLayer, PackedLSTM, positional_encodings_like
 
 
-class BiLSTMEncoder(nn.Module):
+class CoattentionEncoder(nn.Module):
     def __init__(self, numericalizer, args, context_embeddings, question_embeddings):
         super().__init__()
         self.args = args
         self.pad_idx = numericalizer.pad_id
 
-        def dp(args):
-            return args.dropout_ratio if args.rnn_layers > 1 else 0.
-
-        self.context_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.rnn_dimension,
+        self.context_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
                                                     trained_dimension=args.trainable_encoder_embeddings,
                                                     project=True,
                                                     finetune_pretrained=args.train_context_embeddings)
 
-        self.question_embeddings = CombinedEmbedding(numericalizer, question_embeddings, args.rnn_dimension,
+        self.question_embeddings = CombinedEmbedding(numericalizer, question_embeddings, args.dimension,
                                                      trained_dimension=0,
                                                      project=True,
                                                      finetune_pretrained=args.train_question_embeddings)
 
-        self.bilstm_context = PackedLSTM(args.rnn_dimension, args.rnn_dimension,
+        self.dropout = nn.Dropout(args.dropout_ratio)
+
+        self.self_attentive_encoder_context = TransformerEncoder(args.dimension, args.transformer_heads,
+                                                                 args.transformer_hidden, args.transformer_layers,
+                                                                 args.dropout_ratio)
+
+        self.coattention = CoattentiveLayer(args.dimension, dropout=args.dropout_ratio)
+
+        def dp(args):
+            return args.dropout_ratio if args.rnn_layers > 1 else 0.
+
+        self.question_projection = nn.Linear(2 * args.dimension, args.rnn_dimension, bias=False)
+        self.bilstm_context = PackedLSTM(2 * args.dimension, args.rnn_dimension,
                                          batch_first=True, bidirectional=True, num_layers=args.rnn_layers,
                                          dropout=dp(args))
-
-        self.bilstm_question = PackedLSTM(args.rnn_dimension, args.rnn_dimension,
-                                          batch_first=True, bidirectional=True, num_layers=args.rnn_layers,
-                                          dropout=dp(args))
 
     def set_train_context_embeddings(self, trainable):
         self.context_embeddings.set_trainable(trainable)
@@ -72,20 +77,23 @@ class BiLSTMEncoder(nn.Module):
         context_padding = context.data == self.pad_idx
         question_padding = question.data == self.pad_idx
 
-        context_embedded = self.context_embeddings(context, padding=context_padding)
-        question_embedded = self.question_embeddings(question, padding=question_padding)
+        context_embedded = self.context_embeddings(context, padding=context_padding).last_layer
+        context_embedded += positional_encodings_like(context_embedded)
+        self_attended_context = self.self_attentive_encoder_context(context_embedded, padding=context_padding)
 
-        # pick the top-most N transformer layers to pass to the decoder for cross-attention
-        # (add 1 to account for the embedding layer - the decoder will drop it later)
-        self_attended_context = context_embedded.all_layers[-(self.args.transformer_layers + 1):]
-        final_context = context_embedded.last_layer
-        final_question = question_embedded.last_layer
+        question_embedded = self.question_embeddings(question, padding=question_padding).last_layer
 
-        final_context, context_rnn_state = self.bilstm_context(final_context, context_lengths)
-        context_rnn_state = tuple(self.reshape_rnn_state(x) for x in context_rnn_state)
+        coattended_context, coattended_question = self.coattention(self_attended_context[-1], question_embedded,
+                                                                   context_padding, question_padding)
 
-        final_question, question_rnn_state = self.bilstm_question(final_question, question_lengths)
-        question_rnn_state = tuple(self.reshape_rnn_state(x) for x in question_rnn_state)
+        coattended_context = self.dropout(coattended_context)
+        coattended_question = self.dropout(coattended_question)
+
+        final_context, (context_rnn_h, context_rnn_c) = self.bilstm_context(coattended_context, lengths=context_lengths)
+        context_rnn_state = [self.reshape_rnn_state(x) for x in (context_rnn_h, context_rnn_c)]
+        final_context = self.dropout(final_context)
+        final_question = self.dropout(self.question_projection(coattended_question))
+        question_rnn_state = None
 
         return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state
 

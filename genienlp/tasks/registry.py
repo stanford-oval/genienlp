@@ -44,12 +44,12 @@ class TaskRegistry:
 
     def __setitem__(self, name, cls):
         if name in self.store:
-            raise ValueError(f'Duplicate task ${name}')
+            raise ValueError(f'Duplicate task {name}')
         self.store[name] = cls
 
     def __getitem__(self, name):
         if name not in self.store:
-            logger.warning(f'Unrecognized task ${name}, using generic code')
+            logger.warning(f'Unrecognized task {name}, using generic code')
             self.store[name] = BaseTask
         return self.store[name]
 

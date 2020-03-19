@@ -42,6 +42,7 @@ class BaseTask:
 
     def __init__(self, name, args):
         self.name = name
+        self.force_subword_tokenize = args.force_subword_tokenize
 
     @property
     def default_question(self):

@@ -55,7 +55,7 @@ def parse_argv(parser):
     parser.add_argument('--root', default='.', type=str,
                         help='root directory for data, results, embeddings, code, etc.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
-    parser.add_argument('--save', default='results', type=str, help='where to save results.')
+    parser.add_argument('--save', required=True, type=str, help='where to save results.')
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
 
@@ -103,7 +103,7 @@ def parse_argv(parser):
     parser.add_argument('--num_beams', type=int, default=1, help='number of beams to use for beam search')
 
     parser.add_argument('--model', type=str, choices=['Seq2Seq'], default='Seq2Seq', help='which model to import')
-    parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity'],
+    parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity', 'Coattention'],
                         default='MQANEncoder', help='which encoder to use for the Seq2Seq model')
     parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'], default='MQANDecoder',
                         help='which decoder to use for the Seq2Seq model')
@@ -118,14 +118,38 @@ def parse_argv(parser):
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
 
     parser.add_argument('--encoder_embeddings', default='glove+char',
-                        help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT or a xlm-roberta* model for Multi-lingual RoBERTa; '
-                             'multiple embeddings can be concatenated with +')
+                        help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
+                             'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
+    parser.add_argument('--context_embeddings', default=None,
+                        help='which word embedding to use for the context; use a bert-* pretrained model for BERT; '
+                             'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
+    parser.add_argument('--question_embeddings', default=None,
+                        help='which word embedding to use for the question; use a bert-* pretrained model for BERT; '
+                             'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
     parser.add_argument('--train_encoder_embeddings', action='store_true', default=False,
                         help='back propagate into pretrained encoder embedding (recommended for BERT and XLM-RoBERTa)')
+    parser.add_argument('--train_context_embeddings', action='store_true', default=None,
+                        help='back propagate into pretrained context embedding (recommended for BERT and XLM-RoBERTa)')
+    parser.add_argument('--train_context_embeddings_after', type=int, default=0,
+                        help='back propagate into pretrained context embedding after the given iteration (default: '
+                             'immediately)')
+    parser.add_argument('--train_question_embeddings', action='store_true', default=None,
+                        help='back propagate into pretrained question embedding (recommended for BERT)')
+    parser.add_argument('--train_question_embeddings_after', type=int, default=0,
+                        help='back propagate into pretrained context embedding after the given iteration (default: '
+                             'immediately)')
     parser.add_argument('--decoder_embeddings', default='glove+char',
                         help='which pretrained word embedding to use on the decoder side')
+    parser.add_argument('--trainable_encoder_embeddings', default=0, type=int,
+                        help='size of trainable portion of encoder embedding (only for Coattention encoder)')
     parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
                         help='size of trainable portion of decoder embedding (0 or omit to disable)')
+    parser.add_argument('--pretrain_context', default=0, type=int,
+                        help='number of pretraining steps for the context encoder')
+    parser.add_argument('--pretrain_mlm_probability', default=0.15, type=int,
+                        help='probability of replacing a token with mask for MLM pretraining')
+    parser.add_argument('--force_subword_tokenize', action='store_true', default=False,
+                        help='force subword tokenization of code tokens too')
 
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
@@ -195,6 +219,15 @@ def post_parse(args):
 
     if args.rnn_dimension is None:
         args.rnn_dimension = args.dimension
+
+    if args.context_embeddings is None:
+        args.context_embeddings = args.encoder_embeddings
+    if args.question_embeddings is None:
+        args.question_embeddings = args.context_embeddings
+    if args.train_context_embeddings is None:
+        args.train_context_embeddings = args.train_encoder_embeddings
+    if args.train_question_embeddings is None:
+        args.train_question_embeddings = args.train_encoder_embeddings
 
     args.log_dir = args.save
     if args.tensorboard_dir is None:

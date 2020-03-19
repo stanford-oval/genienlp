@@ -113,10 +113,13 @@ def prepare_data(args, logger):
         if args.vocab_tasks is not None and task.name in args.vocab_tasks:
             vocab_sets.extend(split)
 
-    numericalizer, encoder_embeddings, decoder_embeddings = load_embeddings(args.embeddings, args.encoder_embeddings,
-                                                                            args.decoder_embeddings,
-                                                                            args.max_generative_vocab,
-                                                                            logger)
+    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
+        load_embeddings(args.embeddings,
+                        args.context_embeddings,
+                        args.question_embeddings,
+                        args.decoder_embeddings,
+                        args.max_generative_vocab,
+                        logger)
     if args.load is not None:
         numericalizer.load(args.save)
     else:
@@ -126,7 +129,7 @@ def prepare_data(args, logger):
         numericalizer.save(args.save)
 
     logger.info(f'Initializing encoder and decoder embeddings')
-    for vec in set(encoder_embeddings + decoder_embeddings):
+    for vec in set(context_embeddings + question_embeddings + decoder_embeddings):
         vec.init_for_vocab(numericalizer.vocab)
 
     logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens')
@@ -141,17 +144,24 @@ def prepare_data(args, logger):
     logger.info('Preprocessing validation data')
     preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
 
-    return numericalizer, encoder_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
+    return numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
 accumulated_batch_lengths = 0
 
-def step(model, batch, iteration, opt,  devices, lr_scheduler=None, grad_clip=None, gradient_accumulation_steps=1):
-    # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of the total batch size
+def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None, pretraining=False,
+               train_context_embeddings_after=None, train_question_embeddings_after=None,
+               gradient_accumulation_steps=1):
+    # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of
+    # the total batch size
     global accumulated_batch_lengths
     model.train()
+    model.module.set_train_context_embeddings(train_context_embeddings_after is not None and
+                                              iteration > train_context_embeddings_after)
+    model.module.set_train_question_embeddings(train_question_embeddings_after is not None and
+                                               iteration > train_question_embeddings_after)
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
-    loss, predictions = model(batch, iteration)
+    loss, predictions = model(batch, iteration, pretraining=pretraining)
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss')
     if len(devices) > 1:
@@ -189,9 +199,128 @@ def update_fraction(args, task_iteration):
     return fraction
 
 
-def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations, numericalizer, logger,
-          log_every=10, val_every=100, save_every=1000, rounds=False, val_sets=[], aux_sets=[], writer=None,
-          start_iteration=1, rnd=1, best_decascore=None):
+def should_validate(iteration, val_every, resume, start_iteration):
+    if val_every is None:
+        return False
+    return (iteration % val_every == 0) or (resume and iteration == start_iteration)
+
+
+def should_save(iteration, save_every):
+    if save_every is None:
+        return False
+    return iteration % save_every == 0
+
+
+def should_log(iteration, log_every):
+    if log_every is None:
+        return False
+    return iteration % log_every == 0
+
+
+def do_validate(iteration, args, model, numericalizer, val_iters, *,
+                train_task, round_progress, task_progress, writer, logger):
+    deca_score = 0
+    for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
+        val_loss, metric_dict = validate(val_task, val_iter, model, logger, numericalizer,
+                                         iteration, num_print=args.num_print, args=args)
+        if val_loss is not None:
+            log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss{val_loss.item():.4f}:'
+            writer.add_scalar(f'loss/{val_task.name}/val', val_loss.item(), iteration)
+        else:
+            log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:'
+
+        metric_entry = ''
+        for metric_key, metric_value in metric_dict.items():
+            metric_entry += f'{metric_key}_{metric_value:.2f}:'
+        metric_entry = metric_entry[:-1]
+
+        deca_score += metric_dict[val_task.metrics[0]]
+
+        # val log
+        logger.info(log_entry + metric_entry)
+        if writer is not None:
+            for metric_key, metric_value in metric_dict.items():
+                writer.add_scalar(f'{val_task.name}/{metric_key}/val', metric_value, iteration)
+    if writer is not None:
+        writer.add_scalar('deca/val', deca_score, iteration)
+    logger.info(
+        f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_deca:deca_{deca_score:.2f}')
+
+    return deca_score
+
+
+def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
+               saver, logger, train_task, round_progress, task_progress, timestamp, log_dir):
+    should_save_best = False
+    if deca_score is not None and (best_decascore is None or best_decascore < deca_score):
+        best_decascore = deca_score
+        should_save_best = True
+
+    # punch through the nn.DataParallel to access the real model, otherwise we won't be able
+    # to load this model later
+    model_state_dict = model.module.state_dict()
+    model_state_dict = {k: v.cpu() for k, v in model_state_dict.items()}
+
+    save_model_state_dict = {
+        'model_state_dict': model_state_dict,
+        'best_decascore': best_decascore
+    }
+    save_opt_state_dict = opt.state_dict()
+    save_opt_state_dict.update({'start_iteration': iteration})
+
+    saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
+    if should_save_best:
+        logger.info(
+            f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}found new best model')
+        torch.save(save_model_state_dict, os.path.join(log_dir, 'best.pth'))
+        torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
+
+    return best_decascore
+
+
+def do_log_training_loss(iteration, loss, *,
+                         lr_scheduler, grad_norm, lr_rate,
+                         num_examples, len_contexts, len_answers,
+                         logger, train_task, round_progress, task_progress,
+                         timestamp, writer, log_prefix):
+    avg_batch_size = f'avbatch_{num_examples:.0f}_{len_contexts:.0f}_{len_answers:.0f}:'
+    logger.info(
+        f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}{avg_batch_size}{log_prefix}/loss_{loss:.4f}')
+
+    if writer is not None:
+        writer.add_scalar(f'{log_prefix}/loss/{train_task.name}', loss, iteration)
+
+        if lr_scheduler is not None:
+            writer.add_scalar(f'{log_prefix}/lr', lr_scheduler.get_last_lr(), iteration)
+        else:
+            writer.add_scalar(f'{log_prefix}/lr', lr_rate, iteration)
+        if grad_norm is not None:
+            writer.add_scalar(f'{log_prefix}/norm', grad_norm, iteration)
+
+
+def np_coin(prob):
+    return np.random.uniform() < prob
+
+
+def get_next_batch(train_iter, aux_iters, *, task, task_idx, task_fraction, use_curriculum):
+    if use_curriculum:
+        aux_iter = aux_iters[task_idx][1]
+        prob = np_coin(task_fraction[task])
+        if prob == 'aux':
+            return next(aux_iter)
+        else:
+            assert prob == 'train'
+            batch = next(train_iter)
+
+    else:
+        batch = next(train_iter)
+
+    return batch
+
+
+def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations, numericalizer, *,
+          log_every, val_every, save_every, rounds, val_sets, aux_sets, writer, logger, log_prefix,
+          start_iteration=1, rnd=1, best_decascore, use_curriculum, pretraining):
     """main training function"""
     local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, start_iteration
 
@@ -218,19 +347,19 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
-    if args.use_curriculum:
+    aux_iters = []
+    if use_curriculum:
         aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
 
     zero_loss = 0
-    logger.info(f'Begin Training')
+    logger.info(f'Begin {log_prefix}')
 
-    while True:
-
+    while not all(task_done.values()):
         # For some number of rounds, we 'jump start' some subset of the tasks
         # by training them and not others
-        # once the specified number of rounds is completed, 
+        # once the specified number of rounds is completed,
         # switch to normal round robin training
         if rnd < args.jump_start:
             train_iterations = [0] * len(train_iterations)
@@ -239,7 +368,6 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             train_iterations = train_iter_deep
 
         for task_idx, (task, train_iter) in enumerate(train_iters):
-
             task_iterations = train_iterations[task_idx] if train_iterations is not None else None
             if task_iterations == 0:
                 continue
@@ -247,154 +375,95 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 task_done[task] = True
                 continue
 
-            if args.use_curriculum:
-                aux_iter = aux_iters[task_idx][1]
-                prob = np.random.choice(['train', 'aux'], p=[1 - task_fraction[task], task_fraction[task]])
-                if prob == 'aux':
-                    batch = next(aux_iter)
-                else:
-                    assert prob == 'train'
-                    batch = next(train_iter)
+            batch = get_next_batch(train_iter, aux_iters, task=task, task_idx=task_idx,
+                                   task_fraction=task_fraction, use_curriculum=use_curriculum)
 
-            else:
-                batch = next(train_iter)
-
-            # run only once
-            for _ in range(1):
-                if not args.resume or iteration > start_iteration:
-                    task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
-                    round_progress = f'round_{rnd}:' if rounds else ''
-
-                    # validate
-                    deca_score = None
-                    if (val_every is not None and
-                            ((iteration % args.val_every == 0 % args.val_every) or
-                             (args.load and iteration == start_iteration + 1))):
-
-                        deca_score = 0
-                        for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-                            val_loss, metric_dict = validate(val_task, val_iter, model, logger, numericalizer,
-                                                             iteration, num_print=args.num_print, args=args)
-                            if val_loss is not None:
-                                log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}val_{val_task.name}:val_loss{val_loss.item():.4f}:'
-                                writer.add_scalar(f'loss/{val_task.name}/val', val_loss.item(), iteration)
-                            else:
-                                log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}val_{val_task.name}:'
-
-                            metric_entry = ''
-                            for metric_key, metric_value in metric_dict.items():
-                                metric_entry += f'{metric_key}_{metric_value:.2f}:'
-                            metric_entry = metric_entry[:-1]
-
-                            deca_score += metric_dict[val_task.metrics[0]]
-
-                            # val log
-                            logger.info(log_entry + metric_entry)
-                            if writer is not None:
-                                for metric_key, metric_value in metric_dict.items():
-                                    writer.add_scalar(f'{val_task.name}/{metric_key}/val', metric_value, iteration)
-                        if writer is not None:
-                            writer.add_scalar('deca/val', deca_score, iteration)
-                        logger.info(
-                            f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}val_deca:deca_{deca_score:.2f}')
-
-                    # saving
-                    if save_every is not None and (iteration % args.save_every == 0):
-                        should_save_best = False
-                        if deca_score is not None and (best_decascore is None or best_decascore < deca_score):
-                            best_decascore = deca_score
-                            should_save_best = True
-
-                        # punch through the nn.DataParallel to access the real model, otherwise we won't be able
-                        # to load this model later
-                        model_state_dict = model.module.state_dict()
-                        model_state_dict = {k: v.cpu() for k, v in model_state_dict.items()}
-
-                        save_model_state_dict = {
-                            'model_state_dict': model_state_dict,
-                            'best_decascore': best_decascore
-                        }
-                        save_opt_state_dict = opt.state_dict()
-                        save_opt_state_dict.update({'start_iteration': iteration})
-
-                        saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
-                        if should_save_best:
-                            logger.info(
-                                f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}found new best model')
-                            torch.save(save_model_state_dict, os.path.join(args.log_dir, 'best.pth'))
-                            torch.save(save_opt_state_dict, os.path.join(args.log_dir, 'best_optim.pth'))
-
-                    # param update
-                    loss, grad_norm = step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
-                                           grad_clip=args.grad_clip, gradient_accumulation_steps=args.gradient_accumulation_steps)
-                    if loss is None:
-                        logger.info(
-                            'Encountered NAN loss during training... Continue training ignoring the current batch')
-                        continue
-                    if loss < 1e-5:
-                        zero_loss += 1
-                        if zero_loss >= 100:
-                            logger.info('Found loss less than 1e-5 for 100 steps, stopping.')
-                            return
-                    else:
-                        zero_loss = 0
-
-                    # update curriculum fraction
-                    if args.use_curriculum:
-                        task_fraction[task] = update_fraction(args, task_iteration[task])
-
-                    # train metrics
-                    local_loss += loss
-
-                    # train logs
-                    num_examples += batch.context.value.size(0)
-                    len_contexts += batch.context.value.size(1)
-                    len_answers += batch.answer.value.size(1)
-
-                    if log_every is not None and (iteration % log_every == 0 % log_every):
-                        local_loss /= args.log_every
-                        num_examples /= args.log_every
-                        len_contexts /= args.log_every
-                        len_answers /= args.log_every
-                        avg_batch_size = f'avbatch_{num_examples:.0f}_{len_contexts:.0f}_{len_answers:.0f}:'
-                        logger.info(
-                            f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{task.name}:{task_progress}{avg_batch_size}loss_{local_loss:.4f}')
-                        num_examples = 0
-                        len_contexts = 0
-                        len_answers = 0
-
-                        if writer is not None:
-                            writer.add_scalar(f'loss/{task.name}/train', local_loss, iteration)
-                            writer.add_scalar(f'training/loss/{task.name}', local_loss, iteration)
-
-                            if lr_scheduler is not None:
-                                writer.add_scalar(f'training/lr', lr_scheduler.get_last_lr(), iteration)
-                            else:
-                                writer.add_scalar(f'training/lr', args.lr_rate)
-                            if grad_norm is not None:
-                                writer.add_scalar(f'training/norm', grad_norm, iteration)
-
-                        local_loss = 0
-                        num_examples = 0
-
-                # book keeping
+            if iteration < start_iteration:
+                # skip this iteration (this is done to ensure iterators are at the same position when resuming)
                 task_iteration[task] += 1
                 iteration += 1
+                return
+
+            task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
+            round_progress = f'round_{rnd}:' if rounds else ''
+
+            # validate
+            if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
+                deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
+                                         train_task=task, round_progress=round_progress,
+                                         task_progress=task_progress, writer=writer, logger=logger)
+
+                # saving
+                if should_save(iteration, save_every):
+                    best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
+                                                saver=saver, logger=logger, train_task=task,
+                                                round_progress=round_progress, task_progress=task_progress,
+                                                timestamp=args.timestamp, log_dir=args.log_dir)
+
+            # param update
+            loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
+                                         grad_clip=args.grad_clip, pretraining=pretraining,
+                                         gradient_accumulation_steps=args.gradient_accumulation_steps,
+                                         train_context_embeddings_after=args.train_context_embeddings_after if
+                                                                        args.train_context_embeddings else None,
+                                         train_question_embeddings_after=args.train_question_embeddings_after if
+                                                                         args.train_question_embeddings else None)
+            if loss is None:
+                logger.info(
+                    'Encountered NAN loss during training... Continue training ignoring the current batch')
+                continue
+            if loss < 1e-5:
+                zero_loss += 1
+                if zero_loss >= 100:
+                    logger.info('Found loss less than 1e-5 for 100 steps, stopping.')
+                    return
+            else:
+                zero_loss = 0
+
+            # update curriculum fraction
+            if args.use_curriculum:
+                task_fraction[task] = update_fraction(args, task_iteration[task])
+
+            # train metrics
+            local_loss += loss
+
+            # train logs
+            num_examples += batch.context.value.size(0)
+            len_contexts += batch.context.value.size(1)
+            len_answers += batch.answer.value.size(1)
+
+            if should_log(iteration, log_every):
+                local_loss /= log_every
+                num_examples /= log_every
+                len_contexts /= log_every
+                len_answers /= log_every
+                do_log_training_loss(iteration, local_loss,
+                                     lr_scheduler=lr_scheduler, grad_norm=grad_norm, lr_rate=args.lr_rate,
+                                     num_examples=num_examples, len_contexts=len_contexts, len_answers=len_answers,
+                                     logger=logger, writer=writer, train_task=task, round_progress=round_progress,
+                                     task_progress=task_progress, timestamp=args.timestamp, log_prefix=log_prefix)
+                num_examples = 0
+                len_contexts = 0
+                len_answers = 0
+                local_loss = 0
+
+            # book keeping
+            task_iteration[task] += 1
+            iteration += 1
 
         # book keeping
         epoch += 1
         rnd += 1
 
-        if all(task_done.values()):
-            logger.info(f'training is done after {epoch} epochs')
-            break
+    logger.info(f'{log_prefix} is done after {epoch} epochs')
 
 
-def init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devices, logger, save_dict):
+def init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings, devices, logger,
+               save_dict):
     model_name = args.model
     logger.info(f'Initializing {model_name}')
     Model = getattr(models, model_name)
-    model = Model(numericalizer, args, encoder_embeddings, decoder_embeddings)
+    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
 
@@ -464,20 +533,16 @@ def main(args):
     if args.load is not None:
         logger.info(f'Loading vocab from {os.path.join(args.save, args.load)}')
         save_dict = torch.load(os.path.join(args.save, args.load))
-    numericalizer, encoder_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets = prepare_data(args, logger)
+    numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets = \
+        prepare_data(args, logger)
     if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):
         logging.error('sth unpleasant is happening with curriculum')
 
     logger.info(f'Processing')
     logger.start = time.time()
 
-    if hasattr(args, 'tensorboard') and args.tensorboard:
-        logger.info(f'Initializing Writer')
-        writer = SummaryWriter(log_dir=args.tensorboard_dir)
-    else:
-        writer = None
-
-    model = init_model(args, numericalizer, encoder_embeddings, decoder_embeddings, devices, logger, save_dict)
+    model = init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings,
+                       devices, logger, save_dict)
     opt, lr_scheduler = init_opt(args, model, logger)
     start_iteration = 1
 
@@ -489,9 +554,24 @@ def main(args):
         logger.info(f'Starting iteration is {start_iteration}')
         opt.load_state_dict(opt_state_dict)
 
-    train(args, devices, model, opt, lr_scheduler, train_sets, args.train_iterations, numericalizer, val_sets=val_sets,
-          aux_sets=aux_sets,
-          logger=logger,
-          log_every=args.log_every, val_every=args.val_every, rounds=len(train_sets) > 1,
-          writer=writer, save_every=args.save_every, start_iteration=start_iteration,
-          best_decascore=save_dict.get('best_decascore') if save_dict is not None else None)
+    if hasattr(args, 'tensorboard') and args.tensorboard:
+        logger.info(f'Initializing Writer')
+        writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration)
+    else:
+        writer = None
+
+    if not args.resume and args.pretrain_context > 0:
+        pretrain_opt, pretrain_lr_scheduler = init_opt(args, model, logger)
+        train_iterations = [args.pretrain_context for _ in args.train_tasks]
+        train(args, devices, model, pretrain_opt, pretrain_lr_scheduler, train_sets,
+              train_iterations, numericalizer, val_sets=[], aux_sets=[], logger=logger, writer=writer,
+              log_every=args.log_every, val_every=None, save_every=None, use_curriculum=False,
+              rounds=len(train_sets) > 1, start_iteration=start_iteration, best_decascore=0,
+              pretraining=True, log_prefix='pretrain')
+
+    train(args, devices, model, opt, lr_scheduler, train_sets,
+          args.train_iterations, numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
+          log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
+          rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
+          best_decascore=save_dict.get('best_decascore') if save_dict is not None else None,
+          pretraining=False, log_prefix='training')

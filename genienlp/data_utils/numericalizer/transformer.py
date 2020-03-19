@@ -79,6 +79,10 @@ class TransformerNumericalizer(object):
         # return no new words - BertEmbedding will resize the embedding regardless
         return []
 
+    def get_special_token_mask(self, token_ids):
+        special_tokens_tuple = (self.init_id, self.eos_id, self.pad_id, self.mask_id)
+        return list(map(lambda x: 1 if x in special_tokens_tuple else 0, token_ids))
+
     def _init(self):
         self.pad_first = self._tokenizer.padding_side == 'left'
 
@@ -86,17 +90,20 @@ class TransformerNumericalizer(object):
         self.eos_token = self._tokenizer.eos_token
         self.unk_token = self._tokenizer.unk_token
         self.pad_token = self._tokenizer.pad_token
+        self.mask_token = self._tokenizer.mask_token
 
         self.init_id = self._tokenizer.bos_token_id
         self.eos_id = self._tokenizer.eos_token_id
         self.unk_id = self._tokenizer.unk_token_id
         self.pad_id = self._tokenizer.pad_token_id
+        self.mask_id = self._tokenizer.mask_token_id
         self.generative_vocab_size = len(self._decoder_words)
 
         assert self.init_id < self.generative_vocab_size
         assert self.eos_id < self.generative_vocab_size
         assert self.unk_id < self.generative_vocab_size
         assert self.pad_id < self.generative_vocab_size
+        assert self.mask_id < self.generative_vocab_size
 
         self.decoder_vocab = DecoderVocabulary(self._decoder_words, self._tokenizer,
                                                pad_token=self.pad_token, eos_token=self.eos_token)
@@ -274,7 +281,8 @@ class BertNumericalizer(TransformerNumericalizer):
             'bos_token': '[CLS]',
             'eos_token': '[SEP]',
             'unk_token': '[UNK]',
-            'pad_token': '[PAD]'
+            'pad_token': '[PAD]',
+            'mask_token': '[MASK]'
         })
 
         # do a pass over all the data in the dataset
@@ -288,7 +296,7 @@ class BertNumericalizer(TransformerNumericalizer):
                 decoder_words.update(self._tokenizer.tokenize(example.question, example.question_word_mask))
                 decoder_words.update(self._tokenizer.tokenize(example.answer, example.answer_word_mask))
 
-        self._decoder_words = ['[PAD]', '[CLS]', '[SEP]', '[UNK]'] + \
+        self._decoder_words = ['[PAD]', '[CLS]', '[SEP]', '[UNK]', '[MASK]'] + \
                               [word for word, _freq in decoder_words.most_common(self.max_generative_vocab)]
 
         self._init()

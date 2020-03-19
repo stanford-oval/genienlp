@@ -28,7 +28,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
 import argparse
 
 from . import arguments, train, predict, server, cache_embeddings, run_lm_finetuning, run_generation, export
@@ -42,16 +41,6 @@ subcommands = {
     'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.parse_argv, run_lm_finetuning.main),
     'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main)
 }
-
-
-
-def usage():
-    print('Usage: %s SUBCOMMAND [OPTIONS]' % (sys.argv[0]), file=sys.stderr)
-    print(file=sys.stderr)
-    print('Available subcommands:', file=sys.stderr)
-    for subcommand, (help_text, _) in subcommands.items():
-        print('  %s - %s' % (subcommand, help_text), file=sys.stderr)
-    sys.exit(1)
 
 
 def main():

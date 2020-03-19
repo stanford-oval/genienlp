@@ -188,19 +188,18 @@ def main(args):
     devices = init_devices(args)
     save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
 
-    numericalizer, encoder_embeddings, decoder_embeddings = load_embeddings(args.embeddings, args.encoder_embeddings,
-                                                                            args.decoder_embeddings,
-                                                                            args.max_generative_vocab,
-                                                                            logger)
+    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
+        load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings, args.decoder_embeddings,
+                        args.max_generative_vocab, logger)
     numericalizer.load(args.path)
-    for emb in set(encoder_embeddings + decoder_embeddings):
+    for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
         emb.init_for_vocab(numericalizer.vocab)
 
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(numericalizer, args, encoder_embeddings, decoder_embeddings)
+    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
     model_dict = save_dict['model_state_dict']
     model.load_state_dict(model_dict)
-    splits = prepare_data(args, numericalizer, set(encoder_embeddings + decoder_embeddings))
+    splits = prepare_data(args, numericalizer, set(context_embeddings + question_embeddings + decoder_embeddings))
 
     run(args, numericalizer, splits, model, devices[0])

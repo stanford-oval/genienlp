@@ -4,8 +4,8 @@ __pycache__/
 *$py.class
 
 # added manually
-.data/
-.embeddings/
+.data
+.embeddings
 __pycache__/
 models/__pycache__/
 multiprocess/__pycache__/

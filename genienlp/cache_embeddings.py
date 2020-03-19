@@ -47,4 +47,4 @@ def main(args):
     logger.info(f'Arguments:\n{pformat(vars(args))}')
 
     set_seed(args)
-    load_embeddings(args.destdir, args.embeddings, '')
+    load_embeddings(args.destdir, args.embeddings, '', '')
