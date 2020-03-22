@@ -1,3 +1,24 @@
+0.2.0a1
+=======
+
+New features:
+* Add new tasks for Almond: almond_dialogue_nlu, almond_dialogue_nlg, almond_dialogue_policy
+* Added a new encoder, "Coattention", which encodes the context and question separately, then
+  coattends and applies a BiLSTM layer.
+* For Coattention and Identity encoder, it is now possible to specify the context and question
+  embeddings separately.
+* Embeddings in context, question and answer can now be untied, by suffixing the name with '@'
+  followed by an unique identifier (e.g. bert-base-uncased@0 and bert-base-uncased@1).
+* Added an option to pretrain the context encoder, using MLM objective.
+* Added beam search.
+* New embedding option: XLM-R (XLM trained with Roberta).
+* New task: paraphrasing with GPT2. This is not fully integrated with the other tasks yet,
+  but it will in the future.
+* New command "genienlp export" can be used to save a trained model for inference.
+
+Incompatible changes:
+* The --save flag is now required when calling train
+
 0.1.1
 =====
 
