@@ -221,12 +221,12 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             config = AutoConfig.from_pretrained(emb_type, cache_dir=cachedir)
             config.output_hidden_states = True
             if numericalizer is None:
-                if _is_bert(emb_name):
-                    numericalizer = BertNumericalizer(emb_name, config=config,
+                if _is_bert(emb_type):
+                    numericalizer = BertNumericalizer(emb_type, config=config,
                                                       max_generative_vocab=max_generative_vocab,
                                                       cache=cachedir)
-                elif _is_xlmr(emb_name):
-                    numericalizer = XLMRobertaNumericalizer(emb_name, config=config,
+                elif _is_xlmr(emb_type):
+                    numericalizer = XLMRobertaNumericalizer(emb_type, config=config,
                                                             max_generative_vocab=max_generative_vocab,
                                                             cache=cachedir)
                 numericalizer_type = emb_type
@@ -258,12 +258,12 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             config = AutoConfig.from_pretrained(emb_type, cache_dir=cachedir)
             config.output_hidden_states = True
             if numericalizer is None:
-                if _is_bert(emb_name):
-                    numericalizer = BertNumericalizer(emb_name, config=config,
+                if _is_bert(emb_type):
+                    numericalizer = BertNumericalizer(emb_type, config=config,
                                                       max_generative_vocab=max_generative_vocab,
                                                       cache=cachedir)
-                elif _is_xlmr(emb_name):
-                    numericalizer = XLMRobertaNumericalizer(emb_name, config=config,
+                elif _is_xlmr(emb_type):
+                    numericalizer = XLMRobertaNumericalizer(emb_type, config=config,
                                                             max_generative_vocab=max_generative_vocab,
                                                             cache=cachedir)
                 numericalizer_type = emb_type
