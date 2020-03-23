@@ -53,10 +53,12 @@ def main(args):
 
     # we need to load the embeddings to get to the correct numericalizer class
     # this is somewhat unfortunate but acceptable
-    numericalizer, _, _ = load_embeddings(args.embeddings, args.encoder_embeddings,
-                                          args.decoder_embeddings,
-                                          args.max_generative_vocab,
-                                          logger)
+    numericalizer, _, _, _ = load_embeddings(args.embeddings,
+                                             args.context_embeddings,
+                                             args.question_embeddings,
+                                             args.decoder_embeddings,
+                                             args.max_generative_vocab,
+                                             logger)
 
     # load the numericalizer from the model training directory, and immediately save it in the export directory
     # this will copy over all the necessary vocabulary and config files that the numericalizer needs
