@@ -76,40 +76,37 @@ def prepare_data(args, logger):
     train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
     for task in args.train_tasks:
         logger.info(f'Loading {task.name}')
-        kwargs = {'test': None}
-        kwargs['subsample'] = args.subsample
-        kwargs['validation'] = None
+        kwargs = {'test': None, 'validation': None}
+        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
+                       'cached_path': os.path.join(args.cache, task.name), 'languages': args.train_languages})
         if args.use_curriculum:
             kwargs['curriculum'] = True
-        kwargs['skip_cache'] = args.skip_cache
-        kwargs['cached_path'] = os.path.join(args.cache, task.name)
 
         logger.info(f'Adding {task.name} to training datasets')
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        assert not split.eval and not split.test
         if args.use_curriculum:
-            assert len(split) == 2
-            aux_sets.append(split[1])
-            logger.info(f'{task.name} has {len(split[1])} auxiliary examples')
+            assert split.aux
+            aux_sets.append(split.aux)
+            logger.info(f'{task.name} has {len(split.aux)} auxiliary examples')
         else:
-            assert len(split) == 1
-        train_sets.append(split[0])
-        logger.info(f'{task.name} has {len(split[0])} training examples')
+            assert split.train
+        train_sets.append(split.train)
+        logger.info(f'{task.name} has {len(split.train)} training examples')
         if args.vocab_tasks is not None and task.name in args.vocab_tasks:
             vocab_sets.extend(split)
 
     for task in args.val_tasks:
         logger.info(f'Loading {task.name}')
-        kwargs = {'test': None}
-        kwargs['subsample'] = args.subsample
-        kwargs['train'] = None
-        kwargs['skip_cache'] = args.skip_cache
-        kwargs['cached_path'] = os.path.join(args.cache, task.name)
+        kwargs = {'train': None, 'test': None}
+        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
+                       'cached_path': os.path.join(args.cache, task.name), 'languages': args.eval_languages})
 
         logger.info(f'Adding {task.name} to validation datasets')
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
-        assert len(split) == 1
-        logger.info(f'{task.name} has {len(split[0])} validation examples')
-        val_sets.append(split[0])
+        assert not split.train and not split.test and not split.aux
+        logger.info(f'{task.name} has {len(split.eval)} validation examples')
+        val_sets.append(split.eval)
         if args.vocab_tasks is not None and task.name in args.vocab_tasks:
             vocab_sets.extend(split)
 

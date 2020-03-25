@@ -59,6 +59,11 @@ def parse_argv(parser):
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
 
+    parser.add_argument('--train_languages', nargs='+', type=str, default=['en'],
+                        help='used for multilingual tasks to specify dataset languages used during training')
+    parser.add_argument('--eval_languages', nargs='+', type=str, default=['en'],
+                        help='used for multilingual tasks to specify dataset languages used during validation')
+
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training',
                         required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
