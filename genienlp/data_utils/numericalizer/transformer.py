@@ -99,12 +99,6 @@ class TransformerNumericalizer(object):
         self.mask_id = self._tokenizer.mask_token_id
         self.generative_vocab_size = len(self._decoder_words)
 
-        assert self.init_id < self.generative_vocab_size
-        assert self.eos_id < self.generative_vocab_size
-        assert self.unk_id < self.generative_vocab_size
-        assert self.pad_id < self.generative_vocab_size
-        assert self.mask_id < self.generative_vocab_size
-
         self.decoder_vocab = DecoderVocabulary(self._decoder_words, self._tokenizer,
                                                pad_token=self.pad_token, eos_token=self.eos_token)
 
