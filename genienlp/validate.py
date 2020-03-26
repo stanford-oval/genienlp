@@ -80,7 +80,7 @@ def print_results(keys, values, num_print=1):
         print()
 
 
-def validate(task, val_iter, model, logger, numericalizer, iteration, num_print=10, args=None):
+def validate(task, val_iter, model, numericalizer, iteration, num_print=10, args=None):
     with torch.no_grad():
         model.eval()
         names = ['beam search', 'answer', 'context', 'question']

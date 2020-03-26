@@ -156,31 +156,33 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
                                               iteration > train_context_embeddings_after)
     model.module.set_train_question_embeddings(train_question_embeddings_after is not None and
                                                iteration > train_question_embeddings_after)
-    if (iteration) % gradient_accumulation_steps == 0:
-        opt.zero_grad()
-    loss, predictions = model(batch, iteration, pretraining=pretraining)
+        
+    loss_dict, predictions = model(batch, iteration, pretraining=pretraining)
+    # element_wise sum for losses coming from each GPU
+    loss = torch.stack(list(loss_dict.values()), 0).sum(0)
+    
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss')
     if len(devices) > 1:
         loss = loss.mean()
     non_accumulated_loss = loss.item()
-    loss = loss*len(batch[0])
+    loss_ = loss * len(batch[0])
     accumulated_batch_lengths += len(batch[0])
 
-    loss.backward()
+    loss_.backward()
     grad_norm = None
     if (iteration+1) % gradient_accumulation_steps == 0:
         for p in model.parameters():
-            if p.grad is None:
-                continue
-            # print('p.grad = ', p.grad)
-            p.grad /= accumulated_batch_lengths
+            if p.grad:
+                p.grad /= accumulated_batch_lengths
+            
         accumulated_batch_lengths = 0
         if grad_clip > 0.0:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
         opt.step()
         if lr_scheduler is not None:
             lr_scheduler.step()
+        opt.zero_grad()
 
     return non_accumulated_loss, grad_norm
 
@@ -195,6 +197,17 @@ def update_fraction(args, task_iteration):
 
     return fraction
 
+def update_lambd(model, budget, confidence_loss):
+    cur_lambd = model.module.lambd
+    
+    with torch.no_grad():
+        if budget <= confidence_loss.data[0]:
+            new_lambd = cur_lambd / 0.99
+        else:
+            new_lambd = cur_lambd / 1.01
+        
+    model.module.lambd.set_(new_lambd)
+    
 
 def should_validate(iteration, val_every, resume, start_iteration):
     if val_every is None:
@@ -218,7 +231,7 @@ def do_validate(iteration, args, model, numericalizer, val_iters, *,
                 train_task, round_progress, task_progress, writer, logger):
     deca_score = 0
     for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-        val_loss, metric_dict = validate(val_task, val_iter, model, logger, numericalizer,
+        val_loss, metric_dict = validate(val_task, val_iter, model, numericalizer,
                                          iteration, num_print=args.num_print, args=args)
         if val_loss is not None:
             log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss{val_loss.item():.4f}:'
@@ -326,11 +339,13 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     task_iteration = dict()
     task_done = dict()
     task_fraction = dict()
+    task_lambd = dict()
 
     for task in args.train_tasks:
         task_iteration[task] = 1
         task_done[task] = False
         task_fraction[task] = 0.0
+        task_lambd[task] = args.lambd
 
     saver = Saver(args.log_dir, args.max_to_keep)
     epoch = 0
@@ -405,10 +420,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                                                                         args.train_context_embeddings else None,
                                          train_question_embeddings_after=args.train_question_embeddings_after if
                                                                          args.train_question_embeddings else None)
-            if loss is None:
-                logger.info(
-                    'Encountered NAN loss during training... Continue training ignoring the current batch')
-                continue
+
             if loss < 1e-5:
                 zero_loss += 1
                 if zero_loss >= 100:
@@ -420,6 +432,10 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             # update curriculum fraction
             if args.use_curriculum:
                 task_fraction[task] = update_fraction(args, task_iteration[task])
+                
+            # update confidence lambd
+            if args.use_confidence:
+                update_lambd(model, args.budget, loss['confidence'])
 
             # train metrics
             local_loss += loss

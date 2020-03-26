@@ -34,7 +34,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .common import CombinedEmbedding, TransformerDecoder, LSTMDecoderAttention, Feedforward, EPSILON, MultiLSTMCell
-from ..model_utils.functional_utils import mask, positional_encodings_like, BeamHypotheses
+from ..model_utils.functional_utils import mask, make_confidence, positional_encodings_like, encode_onehot, BeamHypotheses
 
 from ..util import top_k_top_p_filtering
 
@@ -45,6 +45,8 @@ class MQANDecoder(nn.Module):
         self.numericalizer = numericalizer
         self.pad_idx = numericalizer.pad_id
         self.init_idx = numericalizer.init_id
+        self.generative_vocab_size = numericalizer.generative_vocab_size
+        self.use_confidence = self.args.use_confidence
         self.args = args
 
         self.decoder_embeddings = CombinedEmbedding(numericalizer, decoder_embeddings, args.dimension,
@@ -59,6 +61,18 @@ class MQANDecoder(nn.Module):
                                                              args.dropout_ratio)
         else:
             self.self_attentive_decoder = None
+            
+        self.lambd = torch.nn.Parameter(self.args.lambd, requires_grad=False)
+        self.confidence_l1 = nn.Linear(self.generative_vocab_size, 100)
+        self.confidence_l2 = nn.Linear(100, 1, bias=False)
+        
+        if args.confidence_mode == "linear":
+            self.confidence_projection = nn.Linear(self.args.max_answer_length, 1, bias=False)
+        elif args.confidence_mode =="conv":
+            self.confidence_projection = nn.Conv1d(1, 1, 3, padding=2)
+        else:
+            self.confidence_projection = nn.Linear(50, 1, bias=False)
+            
 
         if args.rnn_layers > 0:
             self.rnn_decoder = LSTMDecoder(args.dimension, args.rnn_dimension,
@@ -72,7 +86,7 @@ class MQANDecoder(nn.Module):
         self.vocab_pointer_switch = nn.Sequential(Feedforward(switch_input_len, 1), nn.Sigmoid())
         self.context_question_switch = nn.Sequential(Feedforward(switch_input_len, 1), nn.Sigmoid())
 
-        self.generative_vocab_size = numericalizer.generative_vocab_size
+        
         self.out = nn.Linear(args.rnn_dimension if args.rnn_layers > 0 else args.dimension, self.generative_vocab_size)
 
     def set_embeddings(self, embeddings):
@@ -128,19 +142,101 @@ class MQANDecoder(nn.Module):
             vocab_pointer_switch = self.vocab_pointer_switch(vocab_pointer_switch_input)
             context_question_switch = self.context_question_switch(context_question_switch_input)
 
-            probs = self.probs(decoder_output, vocab_pointer_switch, context_question_switch,
+            probs, confidence = self.probs(decoder_output, vocab_pointer_switch, context_question_switch,
                                context_attention, question_attention,
                                context_limited, question_limited,
                                decoder_vocab)
-
+            
             probs, targets = mask(answer_limited[:, 1:].contiguous(), probs.contiguous(), pad_idx=decoder_vocab.pad_idx)
-            loss = F.nll_loss(probs.log(), targets)
-            return loss, None
+            # clamp values to prevent numerical instability
+            probs = torch.clamp(probs, 0. + EPSILON, 1. - EPSILON)
+            
+            # losses is a dict with keys for each loss term
+            losses = dict()
+            
+            if self.use_confidence:
+                answer_indices = answer_limited if answer_limited is not None else answer
+                confidence = self.process_confidence_scores(self.args.confidence_method, confidence, answer_indices)
+                confidence = torch.clamp(confidence, 0. + EPSILON, 1. - EPSILON)
+            
+                # Randomly set half of the confidences to 1 (i.e. no hints)
+                bern = torch.bernoulli(torch.Tensor(confidence.size()).uniform_(0, 1)).to(torch.device(self.args.devices[0]))
+                conf = confidence * bern + (1 - bern)
+                labels_onehot = encode_onehot(targets, probs.size(-1))
+
+                maked_confidence = make_confidence(answer_indices[:, 1:].contiguous(), probs.contiguous(), conf.contiguous())
+
+                pred_new = probs * maked_confidence.expand_as(probs) + labels_onehot * (1 - maked_confidence.expand_as(labels_onehot))
+                pred_new = torch.log(pred_new)
+                
+                losses['xentropy'] = F.nll_loss(pred_new, targets)
+                losses['confidence'] = -1 * self.lambd * torch.mean(torch.log(confidence))
+                losses['confidence_reg'] = 10 * self.confidence_l1.weight.norm(2)
+                
+            else:
+                losses['xentropy'] =  F.nll_loss(torch.log(probs), targets)
+            
+            return losses, None
 
         else:
             return None, self.decode(self_attended_context, final_context, context_padding, final_question, question_padding,
                                      context_limited, question_limited,
                                      decoder_vocab, rnn_state=context_rnn_state).data
+        
+    def process_confidence_scores(self, confidence_method, confidence, answer_indices):
+        pad_idx = self.pad_idx
+    
+        if confidence_method == 'rnn':
+            confidence, _ = mask(answer_indices[:, 1:].contiguous(), confidence.contiguous(), squash=False, pad_idx=pad_idx)
+            mask_ans = (answer_indices[:, 1:].contiguous() != pad_idx)
+            lengths = torch.sum(mask_ans, -1)
+            outputs, (h, c) = self.confidence_encoder(confidence, lengths) # h of shape (num_layers * num_directions, batch, hidden_size)
+            batch = h.size(1)
+            h_flattened = torch.transpose(h, 0, 1).contiguous().view(batch, -1)
+    
+            confidence = model.confidence_hidden_projection(h_flattened)
+            confidence = torch.sigmoid(confidence)
+    
+        elif confidence_method == 'conv':
+            confidence, _ = mask(answer_indices[:, 1:].contiguous(), confidence.contiguous(), squash=False, pad_idx=pad_idx)
+            confidence = self.confidence_projection(confidence.permute(0,2,1))
+            confidence = torch.sigmoid(confidence)
+            confidence = torch.min(confidence, -1)[0]
+    
+        elif confidence_method == 'linear':
+            confidence, _ = mask(answer_indices[:, 1:].contiguous(), confidence.contiguous(), squash=False, pad_idx=pad_idx)
+            padding_length = self.args.max_answer_length - confidence.size(1)
+            confidence = confidence.squeeze(-1)
+            confidence = F.pad(confidence, (0, padding_length), mode='constant', value=0)
+    
+            # do sigmoid before projection (kind of a normalization)
+            confidence = torch.sigmoid(confidence)
+            # confidence of sentence is calculated by passing confidence of tokens through a one layer neural network
+            confidence = self.confidence_projection(confidence)
+            confidence = torch.sigmoid(confidence)
+    
+    
+        elif confidence_method == 'mean':
+            confidence, _ = mask(answer_indices[:, 1:].contiguous(), confidence.contiguous(), squash=False, pad_idx=pad_idx)
+            mask_ans = (answer_indices[:, 1:].contiguous() != pad_idx)
+            lengths = torch.sum(mask_ans, -1)
+            confidence = torch.sigmoid(confidence)
+            confidence = confidence * mask_ans.unsqueeze(-1)
+            confidence = confidence.squeeze(-1)
+            # confidence of sentence is the mean of confidence of each token (after removing pad tokens)
+            confidence = torch.sum(confidence, -1) / lengths.float()
+    
+        elif confidence_method == 'min':
+            confidence, _ = mask(answer_indices[:, 1:].contiguous(), confidence.contiguous(), squash=False, pad_idx=pad_idx)
+            mask_ans = (answer_indices[:, 1:].contiguous() != pad_idx)
+            lengths = torch.sum(mask_ans, -1)
+            confidence = torch.sigmoid(confidence)
+            confidence = confidence * mask_ans.unsqueeze(-1)
+            confidence = confidence.squeeze(-1)
+            # confidence of sentence is the mean of confidence of each token (after removing pad tokens)
+            confidence = torch.min(confidence, -1)[0]
+        return confidence
+
 
     def probs(self, outputs, vocab_pointer_switches, context_question_switches,
               context_attention, question_attention,
@@ -151,6 +247,13 @@ class MQANDecoder(nn.Module):
 
         size[-1] = self.generative_vocab_size
         scores = self.out(outputs.view(-1, outputs.size(-1))).view(size)
+        
+        confidence = None
+        if self.use_confidence:
+            confiedence_size = list(scores.size())[:-1] + [1]
+            confidence_vec = F.relu(self.confidence_l1(scores.view(-1, scores.size(-1))))
+            confidence = self.confidence_l2(confidence_vec).view(confiedence_size)
+        
         p_vocab = F.softmax(scores, dim=scores.dim() - 1)
         scaled_p_vocab = vocab_pointer_switches.expand_as(p_vocab) * p_vocab
 
@@ -171,7 +274,7 @@ class MQANDecoder(nn.Module):
                                     ((1 - context_question_switches) * (1 - vocab_pointer_switches)).expand_as(
                                         question_attention) * question_attention)
 
-        return scaled_p_vocab
+        return scaled_p_vocab, confidence
 
     def decode(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                decoder_vocab, rnn_state=None):
@@ -555,7 +658,7 @@ class MQANDecoderWrapper(object):
         vocab_pointer_switch = self.mqan_decoder.vocab_pointer_switch(vocab_pointer_switch_input)
         context_question_switch = self.mqan_decoder.context_question_switch(context_question_switch_input)
 
-        probs = self.mqan_decoder.probs(self.decoder_output, vocab_pointer_switch, context_question_switch,
+        probs, confidence = self.mqan_decoder.probs(self.decoder_output, vocab_pointer_switch, context_question_switch,
                             context_attention, question_attention,
                             self.context_indices, self.question_indices, self.decoder_vocab)
 

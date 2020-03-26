@@ -158,6 +158,12 @@ def parse_argv(parser):
                         help='probability of replacing a token with mask for MLM pretraining')
     parser.add_argument('--force_subword_tokenize', action='store_true', default=False,
                         help='force subword tokenization of code tokens too')
+    
+    parser.add_argument('--lambd', default=0.0, type=float, help='weight for confidence loss')
+    parser.add_argument('--budget', default=0.3, type=float, help='budget for how often the network can get hints')
+    parser.add_argument('--lambd_clipping', type=float, nargs=2, metavar=('min_val', 'max_val'), help='provides lower and upper bound for lambd')
+    parser.add_argument('--use_confidence', action='store_true', help='train and use confidence branch')
+    parser.add_argument('--confidence_method', type=str, default='mean', help="method to calculate confidence score for each sentence from its token's scores")
 
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
