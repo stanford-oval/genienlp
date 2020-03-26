@@ -29,7 +29,8 @@
 
 from torch import nn
 
-from .common import CombinedEmbedding, TransformerEncoder, CoattentiveLayer, PackedLSTM, positional_encodings_like
+from .common import CombinedEmbedding, TransformerEncoder, CoattentiveLayer, PackedLSTM
+from ..model_utils.functional_utils import positional_encodings_like
 
 
 class CoattentionEncoder(nn.Module):

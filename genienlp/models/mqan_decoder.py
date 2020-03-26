@@ -33,8 +33,9 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from .common import CombinedEmbedding, TransformerDecoder, LSTMDecoderAttention, Feedforward, \
-    mask, positional_encodings_like, EPSILON, MultiLSTMCell, BeamHypotheses
+from .common import CombinedEmbedding, TransformerDecoder, LSTMDecoderAttention, Feedforward, EPSILON, MultiLSTMCell
+from ..model_utils.functional_utils import mask, positional_encodings_like, BeamHypotheses
+
 from ..util import top_k_top_p_filtering
 
 

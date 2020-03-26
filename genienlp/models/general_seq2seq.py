@@ -35,7 +35,7 @@ from .lstm_encoder import BiLSTMEncoder
 from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
-from .common import mask_tokens
+from ..model_utils.functional_utils import mask_tokens
 
 ENCODERS = {
     'MQANEncoder': MQANEncoder,
