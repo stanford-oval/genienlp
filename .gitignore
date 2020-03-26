@@ -11,6 +11,7 @@ models/__pycache__/
 multiprocess/__pycache__/
 results/
 tests/embeddings/*
+local_files
 
 .DS_Store
 .idea/
@@ -22,6 +23,7 @@ src/
 workdir/
 *save*/
 tests/dataset-*
+tests/dataset/*
 
 
 # C extensions

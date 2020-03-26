@@ -266,6 +266,8 @@ def pad(x, new_channel, dim, val=None):
     padding = x.new(*size).fill_(val)
     return torch.cat([x, padding], dim)
 
+def have_multilingual(task_names):
+    return any(['multilingual' in name for name in task_names])
 
 def load_config_json(args):
     args.almond_type_embeddings = False
@@ -320,3 +322,18 @@ def load_config_json(args):
         args.dropout_ratio = 0.0
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
+    
+    if (have_multilingual(args.task_names) and args.pred_languages is None) or (args.pred_languages and len(args.task_names) != len(args.pred_languages)):
+        raise ValueError('You have to define prediction languages when you have a multilingual task'
+                         'Use None for single language tasks. Also provide languages in the same order you provided tasks.' )
+    
+    if args.pred_languages is None:
+        args.pred_languages = [None for _ in range(len(args.task_names))]
+        
+    # preserve backward compatibility for single language tasks
+    for i, task_name in enumerate(args.task_names):
+        if 'multilingual' in task_name and args.pred_languages[i] is None:
+            raise ValueError('You have to define prediction languages for this multilingual task: {}'.format(task_name))
+        elif 'multilingual' not in task_name and args.pred_languages[i] is not None:
+            logger.warning('prediction languages should be empty for single language tasks')
+            args.pred_languages[i] = None

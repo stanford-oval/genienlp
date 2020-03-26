@@ -91,12 +91,14 @@ class TransformerNumericalizer(object):
         self.unk_token = self._tokenizer.unk_token
         self.pad_token = self._tokenizer.pad_token
         self.mask_token = self._tokenizer.mask_token
+        self.cls_token = self._tokenizer.cls_token
 
         self.init_id = self._tokenizer.bos_token_id
         self.eos_id = self._tokenizer.eos_token_id
         self.unk_id = self._tokenizer.unk_token_id
         self.pad_id = self._tokenizer.pad_token_id
         self.mask_id = self._tokenizer.mask_token_id
+        self.cls_id = self._tokenizer.cls_token_id
         self.generative_vocab_size = len(self._decoder_words)
 
         self.decoder_vocab = DecoderVocabulary(self._decoder_words, self._tokenizer,

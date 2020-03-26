@@ -33,6 +33,7 @@ import logging
 import os
 from pprint import pformat
 from tqdm import tqdm
+from collections import defaultdict
 
 import torch
 
@@ -47,22 +48,33 @@ logger = logging.getLogger(__name__)
 
 def get_all_splits(args):
     splits = []
-    for task in args.tasks:
+    if len(args.pred_languages) == 1 and len(args.tasks) > 1:
+        args.pred_languages *= len(args.tasks)
+    for i, task in enumerate(args.tasks):
+        task_languages = args.pred_languages[i]
         logger.info(f'Loading {task}')
-        kwargs = {}
-        if not 'train' in args.evaluate:
-            kwargs['train'] = None
-        if not 'valid' in args.evaluate:
+        kwargs = {'train': None}
+        if args.evaluate == 'valid':
             kwargs['validation'] = None
-        if not 'test' in args.evaluate:
+        elif args.evaluate == 'test':
             kwargs['test'] = None
-
-        kwargs['skip_cache'] = args.skip_cache
-        kwargs['cached_path'] = os.path.join(args.cache, task.name)
-        kwargs['subsample'] = args.subsample
-        s = task.get_splits(root=args.data, lower=args.lower, **kwargs)[0]
-        preprocess_examples(args, [task], [s], train=False)
-        splits.append(s)
+        else:
+            raise ValueError('Validation split should be either valid or test')
+        
+        kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
+                       'cached_path': os.path.join(args.cache, task.name), 'languages': task_languages})
+        
+        kwargs['separate_eval'] = args.separate_eval
+        task_splits = task.get_splits(root=args.data, lower=args.lower, **kwargs)
+        if not isinstance(task_splits, list):
+            task_splits = [task_splits]
+        task_split_processed = []
+        for split in task_splits:
+            assert (split.eval or split.test) and not split.train and not split.aux
+            split = split.eval if split.eval else split.test
+            preprocess_examples(args, [task], [split], train=False)
+            task_split_processed.append(split)
+        splits.append(task_split_processed)
     return splits
 
 
@@ -70,9 +82,10 @@ def prepare_data(args, numericalizer, embeddings):
     splits = get_all_splits(args)
     logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens from training')
     new_words = []
-    for split in splits:
-        new_words += numericalizer.grow_vocab(split)
-        logger.info(f'Vocabulary has expanded to {numericalizer.num_tokens} tokens')
+    for task_splits in splits:
+        for split in task_splits:
+            new_words += numericalizer.grow_vocab(split)
+            logger.info(f'Vocabulary has expanded to {numericalizer.num_tokens} tokens')
 
     for emb in embeddings:
         emb.grow_for_vocab(numericalizer.vocab, new_words)
@@ -84,23 +97,44 @@ def run(args, numericalizer, val_sets, model, device):
     logger.info(f'Preparing iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
-    iters = [(name, make_data_loader(x, numericalizer, bs, device)) for name, x, bs in
-             zip(args.tasks, val_sets, args.val_batch_size)]
+    iters = []
+    task_index = 0
+    for task, bs, val_set in zip(args.tasks, args.val_batch_size, val_sets):
+        task_iter = []
+        task_languages = args.pred_languages[task_index]
+        if task_languages is not None and args.separate_eval:
+            task_languages = task_languages.split('+')
+            assert len(task_languages) == len(val_set)
+            for index, set in enumerate(val_set):
+                task_iter.append((task, task_languages[index],  make_data_loader(set, numericalizer, bs, device)))
+        # single language task or no separate eval
+        else:
+           task_iter.append((task, task_languages,  make_data_loader(val_set[0], numericalizer, bs, device)))
+
+        iters.extend(task_iter)
+        task_index += 1
 
     log_model_size(logger, model, args.model)
     model.to(device)
 
     decaScore = []
+    task_scores = defaultdict(list)
     model.eval()
 
     eval_dir = os.path.join(args.eval_dir, args.evaluate)
     os.makedirs(eval_dir, exist_ok=True)
 
     with torch.no_grad():
-        for task, it in iters:
+        for task, language, it in iters:
             logger.info(task.name)
-            prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
-            results_file_name = os.path.join(eval_dir, task.name + '.results.json')
+            # single language task
+            if language is None:
+                prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
+                results_file_name = os.path.join(eval_dir, task.name + '.results.json')
+            # multi language task
+            else:
+                prediction_file_name = os.path.join(eval_dir, task.name + '_{}.tsv'.format(language))
+                results_file_name = os.path.join(eval_dir, task.name + '_{}.results.json'.format(language))
             if os.path.exists(prediction_file_name):
                 if args.overwrite:
                     logger.warning(f'{prediction_file_name} already exists -- overwriting **')
@@ -137,10 +171,14 @@ def run(args, numericalizer, val_sets, model, device):
                     for i, (p, a) in enumerate(zip(predictions, answers)):
                         logger.info(f'Prediction {i + 1}: {p}\nAnswer {i + 1}: {a}\n')
                     logger.info(metrics)
-                decaScore.append(metrics[task.metrics[0]])
+                    
+                task_scores[task].append((len(answers), metrics[task.metrics[0]]))
+    
+    for task in task_scores.keys():
+        decaScore.append(sum([lenght * score for lenght, score in task_scores[task]]) / sum([lenght for lenght, score in task_scores[task]]))
 
     logger.info(f'Evaluated Tasks:\n')
-    for i, (task, _) in enumerate(iters):
+    for i, task in enumerate(args.tasks):
         logger.info(f'{task.name}: {decaScore[i]}')
     logger.info(f'-------------------')
     logger.info(f'DecaScore:  {sum(decaScore)}\n')
@@ -175,6 +213,11 @@ def parse_argv(parser):
                         help='directory where cached models should be loaded from')
     parser.add_argument('--subsample', default=20000000, type=int,
                         help='subsample the eval/test datasets (experimental)')
+    
+    parser.add_argument('--pred_languages', type=str, nargs='+',
+                        help='used to specify dataset languages used during prediction for multilingual tasks'
+                             'multiple languages for each task should be concatenated with +')
+    parser.add_argument('--separate_eval', action='store_true', help='evaluate on each language eval set separately')
 
 
 def main(args):

@@ -192,7 +192,7 @@ def get_embedding_type(emb_name):
 
 
 def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb_names,
-                    max_generative_vocab=50000, logger=_logger):
+                    max_generative_vocab=50000, logger=_logger, cache_only=False):
     logger.info(f'Getting pretrained word vectors and pretrained models')
 
     context_emb_names = context_emb_names.split('+')
@@ -215,7 +215,7 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
 
         emb_type = get_embedding_type(emb_name)
         if _is_bert(emb_name) or _is_xlmr(emb_name):
-            if numericalizer is not None and numericalizer_type != emb_type:
+            if numericalizer is not None and numericalizer_type != emb_type and not cache_only:
                 raise ValueError('Cannot specify multiple Transformer embeddings')
 
             config = AutoConfig.from_pretrained(emb_type, cache_dir=cachedir)

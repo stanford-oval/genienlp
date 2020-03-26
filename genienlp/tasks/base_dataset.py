@@ -3,6 +3,7 @@ import zipfile
 import tarfile
 import urllib
 import requests
+from typing import NamedTuple
 
 import torch.utils.data
 
@@ -35,7 +36,7 @@ class Dataset(torch.utils.data.Dataset):
             if make_list:
                 examples = list(examples)
         self.examples = examples
-
+        
     @classmethod
     def splits(cls, root='.data', train=None, validation=None,
                test=None, **kwargs):
@@ -121,6 +122,13 @@ class Dataset(torch.utils.data.Dataset):
                         tar.extractall(path=path, members=dirs)
 
         return os.path.join(path, cls.dirname)
+    
+    
+class Split(NamedTuple):
+    train: Dataset = None
+    eval: Dataset = None
+    test: Dataset = None
+    aux: Dataset = None
 
 
 def interleave_keys(a, b):
@@ -163,4 +171,6 @@ def download_from_url(url, path):
         for chunk in response.iter_content(chunk_size):
             if chunk:
                 f.write(chunk)
+                
+                
 
