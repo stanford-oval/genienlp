@@ -35,6 +35,7 @@ import os
 import subprocess
 
 from .tasks.registry import get_tasks
+from .util import have_multilingual
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +60,12 @@ def parse_argv(parser):
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
 
-    parser.add_argument('--train_languages', nargs='+', type=str, default=['en'],
-                        help='used for multilingual tasks to specify dataset languages used during training')
-    parser.add_argument('--eval_languages', nargs='+', type=str, default=['en'],
-                        help='used for multilingual tasks to specify dataset languages used during validation')
+    parser.add_argument('--train_languages', type=str,
+                        help='used to specify dataset languages used during training for multilingual tasks'
+                             'multiple languages for each task should be concatenated with +')
+    parser.add_argument('--eval_languages', type=str,
+                        help='used to specify dataset languages used during validation for multilingual tasks'
+                             'multiple languages for each task should be concatenated with +')
 
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training',
                         required=True)
@@ -238,7 +241,10 @@ def post_parse(args):
     if args.tensorboard_dir is None:
         args.tensorboard_dir = args.log_dir
     args.dist_sync_file = os.path.join(args.log_dir, 'distributed_sync_file')
-
+    
+    if (have_multilingual(args.train_task_names) and (args.train_languages is None or args.eval_languages is None)):
+        raise ValueError('You have to define training and evaluation languages when you have a multilingual task')
+    
     for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
     save_args(args)

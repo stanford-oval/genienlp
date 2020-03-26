@@ -68,7 +68,6 @@ def get_all_splits(args):
         task_splits = task.get_splits(root=args.data, lower=args.lower, **kwargs)
         if not isinstance(task_splits, list):
             task_splits = [task_splits]
-        assert len(task_splits) == len(task_languages)
         task_split_processed = []
         for split in task_splits:
             assert (split.eval or split.test) and not split.train and not split.aux
@@ -103,8 +102,15 @@ def run(args, numericalizer, val_sets, model, device):
     for task, bs, val_set in zip(args.tasks, args.val_batch_size, val_sets):
         task_iter = []
         task_languages = args.pred_languages[task_index]
-        for index, set in enumerate(val_set):
-            task_iter.append((task, task_languages[index],  make_data_loader(set, numericalizer, bs, device)))
+        if task_languages is not None and args.separate_eval:
+            task_languages = task_languages.split('+')
+            assert len(task_languages) == len(val_set)
+            for index, set in enumerate(val_set):
+                task_iter.append((task, task_languages[index],  make_data_loader(set, numericalizer, bs, device)))
+        # single language task or no separate eval
+        else:
+           task_iter.append((task, task_languages,  make_data_loader(val_set[0], numericalizer, bs, device)))
+
         iters.extend(task_iter)
         task_index += 1
 
@@ -208,8 +214,9 @@ def parse_argv(parser):
     parser.add_argument('--subsample', default=20000000, type=int,
                         help='subsample the eval/test datasets (experimental)')
     
-    parser.add_argument('--pred_languages', nargs='+', action='append', type=str,
-                        help='used for multilingual tasks to specify dataset languages used during prediction for each task')
+    parser.add_argument('--pred_languages', type=str, nargs='+',
+                        help='used to specify dataset languages used during prediction for multilingual tasks'
+                             'multiple languages for each task should be concatenated with +')
     parser.add_argument('--separate_eval', action='store_true', help='evaluate on each language eval set separately')
 
 
@@ -217,12 +224,6 @@ def main(args):
     load_config_json(args)
     set_seed(args)
     args.tasks = get_tasks(args.task_names, args)
-    
-    if args.pred_languages is None:
-        if 'multilingual' in args.task_names:
-            raise ValueError('You have to define prediction languages for multilingual tasks')
-        else:
-            args.pred_languages = [[None]]
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
