@@ -580,11 +580,6 @@ class Summarization(CQA):
         path = cls.download(root)
         cls.cache_splits(path)
 
-        aux_data = None
-        if kwargs.get('curriculum', False):
-            kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'auxiliary.jsonl'), **kwargs)
-
         train_data = None if train is None else cls(
             os.path.join(path, 'training.jsonl'), **kwargs)
         validation_data = None if validation is None else cls(
@@ -1218,11 +1213,6 @@ class MultiNLI(CQA):
     def splits(cls, root='.data', train='train', validation='validation', test='test', **kwargs):
         path = cls.download(root)
         cls.cache_splits(path)
-
-        aux_data = None
-        if kwargs.get('curriculum', False):
-            kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
 
         train_data = None if train is None else cls(
             os.path.join(path, f'{train}.jsonl'), **kwargs)

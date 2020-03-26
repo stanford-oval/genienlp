@@ -48,9 +48,10 @@ logger = logging.getLogger(__name__)
 
 def get_all_splits(args):
     splits = []
-    if len(args.pred_languages) == 1 and len(args.tasks) > 1 and args.separate_eval:
+    if len(args.pred_languages) == 1 and len(args.tasks) > 1:
         args.pred_languages *= len(args.tasks)
     for i, task in enumerate(args.tasks):
+        task_languages = args.pred_languages[i]
         logger.info(f'Loading {task}')
         kwargs = {'train': None}
         if args.evaluate == 'valid':
@@ -61,14 +62,13 @@ def get_all_splits(args):
             raise ValueError('Validation split should be either valid or test')
         
         kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
-                       'cached_path': os.path.join(args.cache, task.name), 'languages': args.pred_languages[i]})
+                       'cached_path': os.path.join(args.cache, task.name), 'languages': task_languages})
         
         kwargs['separate_eval'] = args.separate_eval
-
         task_splits = task.get_splits(root=args.data, lower=args.lower, **kwargs)
         if not isinstance(task_splits, list):
             task_splits = [task_splits]
-        assert len(task_splits) == len(args.pred_languages[i])
+        assert len(task_splits) == len(task_languages)
         task_split_processed = []
         for split in task_splits:
             assert (split.eval or split.test) and not split.train and not split.aux
@@ -121,8 +121,14 @@ def run(args, numericalizer, val_sets, model, device):
     with torch.no_grad():
         for task, language, it in iters:
             logger.info(task.name)
-            prediction_file_name = os.path.join(eval_dir, task.name + '_{}.tsv'.format(language))
-            results_file_name = os.path.join(eval_dir, task.name + '_{}.results.json'.format(language))
+            # single language task
+            if language is None:
+                prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
+                results_file_name = os.path.join(eval_dir, task.name + '.results.json')
+            # multi language task
+            else:
+                prediction_file_name = os.path.join(eval_dir, task.name + '_{}.tsv'.format(language))
+                results_file_name = os.path.join(eval_dir, task.name + '_{}.results.json'.format(language))
             if os.path.exists(prediction_file_name):
                 if args.overwrite:
                     logger.warning(f'{prediction_file_name} already exists -- overwriting **')
@@ -163,7 +169,7 @@ def run(args, numericalizer, val_sets, model, device):
                 task_scores[task].append((len(answers), metrics[task.metrics[0]]))
     
     for task in task_scores.keys():
-        decaScore.append(sum([lenght * score  for lenght, score in task_scores[task]]) / sum([lenght  for lenght, score in task_scores[task]]))
+        decaScore.append(sum([lenght * score for lenght, score in task_scores[task]]) / sum([lenght for lenght, score in task_scores[task]]))
 
     logger.info(f'Evaluated Tasks:\n')
     for i, task in enumerate(args.tasks):
@@ -211,6 +217,12 @@ def main(args):
     load_config_json(args)
     set_seed(args)
     args.tasks = get_tasks(args.task_names, args)
+    
+    if args.pred_languages is None:
+        if 'multilingual' in args.task_names:
+            raise ValueError('You have to define prediction languages for multilingual tasks')
+        else:
+            args.pred_languages = [[None]]
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')

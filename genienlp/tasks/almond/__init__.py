@@ -49,12 +49,8 @@ class AlmondDataset(CQA):
     base_url = None
 
 
-    def __init__(self, path, *, make_example, subsample=None, cached_path=None, skip_cache=False, examples=None, **kwargs):
-        
-        if examples:
-            super().__init__(examples, **kwargs)
-            return
-            
+    def __init__(self, path, *, make_example, subsample=None, cached_path=None, skip_cache=False, **kwargs):
+
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         if os.path.exists(cache_name) and not skip_cache:
@@ -313,7 +309,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     
     
 @register_task('almond_multilingual')
-class AlmondDialoguePolicy(BaseAlmondTask):
+class AlmondMultiLingual(BaseAlmondTask):
     """Multi-Language task for Almond
     """
     def _is_program_field(self, field_name):
@@ -340,7 +336,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
             all_examples = []
             for dataset in datasets:
                 all_examples.extend(getattr(dataset, field).examples)
-            splits[field] = AlmondDataset('', make_example=None, examples=all_examples)
+            splits[field] = CQA(all_examples)
         
         return Split(train=splits.get('train'),
                      eval=splits.get('eval'),
