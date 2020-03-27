@@ -150,7 +150,7 @@ def run(args, numericalizer, val_sets, model, device):
             answers = []
             with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
                 for batch_idx, batch in tqdm(enumerate(it), desc="Batches"):
-                    _, batch_prediction = model(batch, iteration=1)
+                    _, (batch_prediction, confidence) = model(batch, iteration=1)
 
                     batch_prediction = numericalizer.reverse(batch_prediction, detokenize=task.detokenize,
                                                              field_name='answer')

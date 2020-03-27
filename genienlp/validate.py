@@ -38,17 +38,19 @@ from .util import pad
 def compute_validation_outputs(model, val_iter, numericalizer, iteration):
     loss, predictions, answers, contexts, questions = [], [], [], [], []
     for batch_idx, batch in enumerate(val_iter):
-        l, p = model(batch, iteration)
-        loss.append(l)
-        predictions.append(pad(p, 500, dim=-1, val=numericalizer.pad_id))
+        loss_dict, (pred, confidence) = model(batch, iteration)
+        if loss_dict:
+            l = loss_dict['total_loss']
+            loss.append(l)
+        predictions.append(pad(pred, 500, dim=-1, val=numericalizer.pad_id))
         a = pad(batch.answer.value.data.cpu(), 500, dim=-1, val=numericalizer.pad_id)
         answers.append(a)
         c = pad(batch.context.value.data.cpu(), 500, dim=-1, val=numericalizer.pad_id)
         contexts.append(c)
         q = pad(batch.question.value.data.cpu(), 500, dim=-1, val=numericalizer.pad_id)
         questions.append(q)
-
-    loss = torch.cat(loss, 0) if loss[0] is not None else None
+    
+    loss = torch.cat(loss, 0) if len(loss) else None
     predictions = torch.cat(predictions, 0)
     answers = torch.cat(answers, 0)
     contexts = torch.cat(contexts, 0)
@@ -83,7 +85,9 @@ def print_results(keys, values, num_print=1):
 def validate(task, val_iter, model, numericalizer, iteration, num_print=10, args=None):
     with torch.no_grad():
         model.eval()
-        names = ['beam search', 'answer', 'context', 'question']
+        names = ['greedy', 'answer', 'context', 'question']
+        if args.num_beams > 1:
+            names[0] = 'beam_search'
         loss, predictions, answers, contexts, questions = \
             gather_results(model, val_iter, numericalizer, task, iteration)
         predictions = [p.replace('UNK', 'OOV') for p in predictions]

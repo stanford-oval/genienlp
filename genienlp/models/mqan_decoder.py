@@ -46,7 +46,7 @@ class MQANDecoder(nn.Module):
         self.pad_idx = numericalizer.pad_id
         self.init_idx = numericalizer.init_id
         self.generative_vocab_size = numericalizer.generative_vocab_size
-        self.use_confidence = self.args.use_confidence
+        self.use_confidence = args.use_confidence
         self.args = args
 
         self.decoder_embeddings = CombinedEmbedding(numericalizer, decoder_embeddings, args.dimension,
@@ -61,17 +61,17 @@ class MQANDecoder(nn.Module):
                                                              args.dropout_ratio)
         else:
             self.self_attentive_decoder = None
-            
-        self.lambd = torch.nn.Parameter(self.args.lambd, requires_grad=False)
-        self.confidence_l1 = nn.Linear(self.generative_vocab_size, 100)
-        self.confidence_l2 = nn.Linear(100, 1, bias=False)
         
-        if args.confidence_mode == "linear":
-            self.confidence_projection = nn.Linear(self.args.max_answer_length, 1, bias=False)
-        elif args.confidence_mode =="conv":
-            self.confidence_projection = nn.Conv1d(1, 1, 3, padding=2)
-        else:
-            self.confidence_projection = nn.Linear(50, 1, bias=False)
+        if self.use_confidence:
+            self.lambd = torch.nn.Parameter(torch.tensor(args.lambd, dtype=self.get_dtpye()), requires_grad=False)
+            self.confidence_l1 = nn.Linear(self.generative_vocab_size, 100)
+            self.confidence_l2 = nn.Linear(100, 1, bias=False)
+            
+            if args.confidence_method == "linear":
+                #TODO max_answer_length or max_output_length
+                self.confidence_projection = nn.Linear(self.args.max_output_length, 1, bias=False)
+            elif args.confidence_method =="conv":
+                self.confidence_projection = nn.Conv1d(1, 1, 3, padding=2)
             
 
         if args.rnn_layers > 0:
@@ -92,6 +92,9 @@ class MQANDecoder(nn.Module):
     def set_embeddings(self, embeddings):
         if self.decoder_embeddings is not None:
             self.decoder_embeddings.set_embeddings(embeddings)
+            
+    def get_dtpye(self):
+        return next(self.parameters()).dtype
 
     def forward(self, batch, self_attended_context, final_context, context_rnn_state, final_question,
                 question_rnn_state):
@@ -147,7 +150,14 @@ class MQANDecoder(nn.Module):
                                context_limited, question_limited,
                                decoder_vocab)
             
+            # probs is (batch; len; gen_vocab)
+            # cofidence is (batch; len; 1)
+            # answer_limited is (batch ; len+1)
             probs, targets = mask(answer_limited[:, 1:].contiguous(), probs.contiguous(), pad_idx=decoder_vocab.pad_idx)
+            
+            # probs is (batch*actul_len ; gen_vocab)
+            # targets is flat array (batch*actul_len) which has indices of correct tokens
+            
             # clamp values to prevent numerical instability
             probs = torch.clamp(probs, 0. + EPSILON, 1. - EPSILON)
             
@@ -155,40 +165,57 @@ class MQANDecoder(nn.Module):
             losses = dict()
             
             if self.use_confidence:
-                answer_indices = answer_limited if answer_limited is not None else answer
-                confidence = self.process_confidence_scores(self.args.confidence_method, confidence, answer_indices)
-                confidence = torch.clamp(confidence, 0. + EPSILON, 1. - EPSILON)
-            
-                # Randomly set half of the confidences to 1 (i.e. no hints)
-                bern = torch.bernoulli(torch.Tensor(confidence.size()).uniform_(0, 1)).to(torch.device(self.args.devices[0]))
-                conf = confidence * bern + (1 - bern)
-                labels_onehot = encode_onehot(targets, probs.size(-1))
+                
+                confidence_masked, confidence_pooled = self.process_confidence(confidence, answer_limited, decoder_vocab)
+                labels = encode_onehot(targets, probs.size(-1))
+                # labels is from targets (batch*actual_len ; gen_vocab)
 
-                maked_confidence = make_confidence(answer_indices[:, 1:].contiguous(), probs.contiguous(), conf.contiguous())
-
-                pred_new = probs * maked_confidence.expand_as(probs) + labels_onehot * (1 - maked_confidence.expand_as(labels_onehot))
+                pred_new = probs * confidence_masked.expand_as(probs) + labels * (1 - confidence_masked.expand_as(labels))
                 pred_new = torch.log(pred_new)
                 
                 losses['xentropy'] = F.nll_loss(pred_new, targets)
-                losses['confidence'] = -1 * self.lambd * torch.mean(torch.log(confidence))
+                losses['confidence'] = -1 * self.lambd * torch.mean(torch.log(confidence_pooled))
                 losses['confidence_reg'] = 10 * self.confidence_l1.weight.norm(2)
                 
             else:
                 losses['xentropy'] =  F.nll_loss(torch.log(probs), targets)
+                
+            losses_sum = torch.stack(list(losses.values()), 0).sum(0)
+            losses['total_loss'] = losses_sum
             
             return losses, None
 
         else:
             return None, self.decode(self_attended_context, final_context, context_padding, final_question, question_padding,
                                      context_limited, question_limited,
-                                     decoder_vocab, rnn_state=context_rnn_state).data
+                                     decoder_vocab, rnn_state=context_rnn_state)
         
-    def process_confidence_scores(self, confidence_method, confidence, answer_indices):
+    def process_confidence(self, confidence, answer_limited, decoder_vocab):
+        confidence = torch.clamp(confidence, 0. + EPSILON, 1. - EPSILON)
+        
+        # Randomly set half of the confidences to 1 (i.e. no hints)
+        #TODO maybe we should apply this after pooling
+        bern = torch.bernoulli(torch.zeros(confidence.size(), dtype=self.get_dtpye()).uniform_(0, 1))
+        confidence = confidence * bern + (1 - bern)
+        
+        confidence_masked, _ = mask(answer_limited[:, 1:].contiguous(), confidence.contiguous(), pad_idx=decoder_vocab.pad_idx)
+        # confidence_masked is (batch*actual_len ; 1)
+        
+        confidence_pooled = self.confidence_pool(confidence, answer_limited)
+        # confidence_pooled is (batch; 1)
+        
+        return confidence_masked, confidence_pooled
+        
+    def confidence_pool(self, confidence, answer_limited):
+        '''
+        calculate final sentence confidence score from its tokens' scores
+        '''
         pad_idx = self.pad_idx
+        confidence_method = self.args.confidence_method
     
         if confidence_method == 'rnn':
-            confidence, _ = mask(answer_indices[:, 1:].contiguous(), confidence.contiguous(), squash=False, pad_idx=pad_idx)
-            mask_ans = (answer_indices[:, 1:].contiguous() != pad_idx)
+            confidence, _ = mask(answer_limited[:, 1:].contiguous(), confidence.contiguous(), pad_idx, squash=False)
+            mask_ans = (answer_limited[:, 1:].contiguous() != pad_idx)
             lengths = torch.sum(mask_ans, -1)
             outputs, (h, c) = self.confidence_encoder(confidence, lengths) # h of shape (num_layers * num_directions, batch, hidden_size)
             batch = h.size(1)
@@ -198,14 +225,14 @@ class MQANDecoder(nn.Module):
             confidence = torch.sigmoid(confidence)
     
         elif confidence_method == 'conv':
-            confidence, _ = mask(answer_indices[:, 1:].contiguous(), confidence.contiguous(), squash=False, pad_idx=pad_idx)
+            confidence, _ = mask(answer_limited[:, 1:].contiguous(), confidence.contiguous(), pad_idx, squash=False)
             confidence = self.confidence_projection(confidence.permute(0,2,1))
             confidence = torch.sigmoid(confidence)
             confidence = torch.min(confidence, -1)[0]
     
         elif confidence_method == 'linear':
-            confidence, _ = mask(answer_indices[:, 1:].contiguous(), confidence.contiguous(), squash=False, pad_idx=pad_idx)
-            padding_length = self.args.max_answer_length - confidence.size(1)
+            confidence, _ = mask(answer_limited[:, 1:].contiguous(), confidence.contiguous(), pad_idx, squash=False)
+            padding_length = self.args.max_output_length - confidence.size(1)
             confidence = confidence.squeeze(-1)
             confidence = F.pad(confidence, (0, padding_length), mode='constant', value=0)
     
@@ -217,8 +244,8 @@ class MQANDecoder(nn.Module):
     
     
         elif confidence_method == 'mean':
-            confidence, _ = mask(answer_indices[:, 1:].contiguous(), confidence.contiguous(), squash=False, pad_idx=pad_idx)
-            mask_ans = (answer_indices[:, 1:].contiguous() != pad_idx)
+            confidence, _ = mask(answer_limited[:, 1:].contiguous(), confidence.contiguous(), pad_idx, squash=False)
+            mask_ans = (answer_limited[:, 1:].contiguous() != pad_idx)
             lengths = torch.sum(mask_ans, -1)
             confidence = torch.sigmoid(confidence)
             confidence = confidence * mask_ans.unsqueeze(-1)
@@ -227,8 +254,8 @@ class MQANDecoder(nn.Module):
             confidence = torch.sum(confidence, -1) / lengths.float()
     
         elif confidence_method == 'min':
-            confidence, _ = mask(answer_indices[:, 1:].contiguous(), confidence.contiguous(), squash=False, pad_idx=pad_idx)
-            mask_ans = (answer_indices[:, 1:].contiguous() != pad_idx)
+            confidence, _ = mask(answer_limited[:, 1:].contiguous(), confidence.contiguous(), pad_idx, squash=False)
+            mask_ans = (answer_limited[:, 1:].contiguous() != pad_idx)
             lengths = torch.sum(mask_ans, -1)
             confidence = torch.sigmoid(confidence)
             confidence = confidence * mask_ans.unsqueeze(-1)
@@ -243,24 +270,20 @@ class MQANDecoder(nn.Module):
               context_indices, question_indices,
               decoder_vocab):
 
-        size = list(outputs.size())
-
-        size[-1] = self.generative_vocab_size
-        scores = self.out(outputs.view(-1, outputs.size(-1))).view(size)
+        outputs_size = list(outputs.size())
         
+        scores = self.out(outputs)
         confidence = None
         if self.use_confidence:
-            confiedence_size = list(scores.size())[:-1] + [1]
-            confidence_vec = F.relu(self.confidence_l1(scores.view(-1, scores.size(-1))))
-            confidence = self.confidence_l2(confidence_vec).view(confiedence_size)
+            confidence = self.confidence_l2(F.relu(self.confidence_l1(scores)))
         
         p_vocab = F.softmax(scores, dim=scores.dim() - 1)
         scaled_p_vocab = vocab_pointer_switches.expand_as(p_vocab) * p_vocab
 
         effective_vocab_size = len(decoder_vocab)
         if self.generative_vocab_size < effective_vocab_size:
-            size[-1] = effective_vocab_size - self.generative_vocab_size
-            buff = scaled_p_vocab.new_full(size, EPSILON)
+            vocab_size_diff = effective_vocab_size - self.generative_vocab_size
+            buff = scaled_p_vocab.new_full(outputs_size[:-1] + [vocab_size_diff], EPSILON)
             scaled_p_vocab = torch.cat([scaled_p_vocab, buff], dim=buff.dim() - 1)
 
         # p_context_ptr
@@ -276,16 +299,23 @@ class MQANDecoder(nn.Module):
 
         return scaled_p_vocab, confidence
 
+
     def decode(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                decoder_vocab, rnn_state=None):
         batch_size = context.size()[0]
         max_decoder_time = self.args.max_output_length
 
         input_ids = self_attended_context[-1].new_full((batch_size, 1), self.init_idx, dtype=torch.long)
-
-
+        # input_ids (batch; 1)
+        # self_attended_context, context (batch; c_len; emb_dim)
+        # context_indices (batch; c_len)
+        # rnn_state is a tuple each (1; batch; emb_dim)
+        
         decoder_wrapper = MQANDecoderWrapper(self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                decoder_vocab, rnn_state, batch_size, max_decoder_time, self, num_beams=self.args.num_beams)
+        
+        if self.args.num_beams > 1 and self.use_confidence:
+            raise ValueError('Beam search is not supported for confidence prediction yet. Please switch to greedy decoding.')
         
         if self.args.num_beams > 1:
             outputs = self._decode_beam_search(
@@ -305,7 +335,9 @@ class MQANDecoder(nn.Module):
                 decoder_wrapper=decoder_wrapper,
             )
         else:
-            outputs = self._decode_greedy(
+            # note that during prediction outputs are calculated without considering confidence values
+            # during training however we interpolate output probs before making prediction
+            outputs, confidence = self._decode_greedy(
                 input_ids=input_ids,
                 max_length=self.args.max_output_length,
                 pad_token_id=decoder_vocab.pad_idx,
@@ -313,9 +345,12 @@ class MQANDecoder(nn.Module):
                 batch_size=batch_size,
                 decoder_wrapper=decoder_wrapper,
             )
+        
+        if self.use_confidence:
+            return outputs.data, None
+        else:
+            return outputs.data, confidence.data
 
-        # print('outputs = ', outputs.shape)
-        return outputs
 
     def _decode_greedy(
         self,
@@ -327,17 +362,22 @@ class MQANDecoder(nn.Module):
         decoder_wrapper
     ):
         
-        outs = input_ids.new_full((batch_size, max_length), pad_token_id, dtype=torch.long)
+        pred_outs = input_ids.new_full((batch_size, max_length), pad_token_id, dtype=torch.long)
+        confidence_outs = input_ids.new_full((batch_size, max_length), 0, dtype=torch.long)
+        
         eos_yet = input_ids.new_zeros((batch_size,)).byte()
         for t in range(max_length):
-            probs = decoder_wrapper.next_token_probs(input_ids[:, -1].unsqueeze(-1))
+            probs, confidence = decoder_wrapper.next_token_probs(input_ids[:, -1].unsqueeze(-1))
+            # probs is (batch;  gen_vocab)
+            # confidence is (batch; 1)
+            confidence_outs[:, t] = confidence.cpu().squeeze(1)
             pred_probs, preds = probs.max(-1)
             eos_yet = eos_yet | (preds == eos_token_id).byte()
-            outs[:, t] = preds.cpu().apply_(self.map_to_full)
+            pred_outs[:, t] = preds.cpu().apply_(self.map_to_full)
             if eos_yet.all():
                 break
-            input_ids = torch.cat((input_ids, outs[:, t].unsqueeze(1)), dim=1)
-        return outs
+            input_ids = torch.cat((input_ids, pred_outs[:, t].unsqueeze(1)), dim=1)
+        return pred_outs, confidence_outs
 
     def _decode_beam_search(
         self,
@@ -378,7 +418,8 @@ class MQANDecoder(nn.Module):
 
         while cur_len < max_length:
             # next_token_probs outputs a normalized probability distribution instead of logits
-            scores = torch.log(decoder_wrapper.next_token_probs(input_ids[:, -1].unsqueeze(-1)))  # (batch_size * num_beams, vocab_size)
+            scores, _ = decoder_wrapper.next_token_probs(input_ids[:, -1].unsqueeze(-1))  # (batch_size * num_beams, vocab_size)
+            scores = torch.log(scores)
 
             # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
@@ -440,8 +481,6 @@ class MQANDecoder(nn.Module):
                     word_id = idx % vocab_size
 
                     # end of sentence, or next word
-                    # print('eos_token_ids = ', eos_token_ids)
-                    # print('word_id.item() = ', word_id.item())
                     if word_id.item() in eos_token_ids or cur_len + 1 == max_length:
                         generated_hyps[batch_ex].add(input_ids[batch_ex * num_beams + beam_id, :cur_len].clone(), score.item())
                     else:
@@ -531,8 +570,6 @@ class LSTMDecoder(nn.Module):
             dec_state, hidden = self.rnn(rnn_input, hidden)
             dec_state = dec_state.unsqueeze(1)
 
-            # print('dec_state = ', dec_state.shape)
-            # print('context = ', context.shape)
             context_output, context_attention = self.context_attn(dec_state, context)
             question_output, question_attention = self.question_attn(dec_state, question)
             vocab_pointer_switch_inputs.append(torch.cat([dec_state, context_output, decoder_input], -1))
@@ -562,9 +599,7 @@ class MQANDecoderWrapper(object):
 
     def __init__(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                decoder_vocab, rnn_state, batch_size, max_decoder_time, mqan_decoder: MQANDecoder, num_beams:int):
-        # print('self_attended_context = ', self_attended_context)
         self.decoder_vocab = decoder_vocab
-        # if num_beams > 1:
         self_attended_context = self.expand_for_beam_search(self_attended_context, batch_size, num_beams)
         context = self.expand_for_beam_search(context, batch_size, num_beams)
         context_padding = self.expand_for_beam_search(context_padding, batch_size, num_beams)
@@ -620,8 +655,10 @@ class MQANDecoderWrapper(object):
 
 
     def next_token_probs(self, current_token_id):
-        # print('current_`token_id = ', current_token_id, current_token_id.shape)
+        # current_token_id (batch; 1)
+        
         embedding = self.mqan_decoder.decoder_embeddings(current_token_id).last_layer
+        # current_token_id (batch; 1; emb_dim)
 
         if self.mqan_decoder.args.transformer_layers > 0:
             self.hiddens[0][:, self.time] = self.hiddens[0][:, self.time] + \
@@ -637,11 +674,6 @@ class MQANDecoderWrapper(object):
             self_attended_decoded = embedding
 
         if self.mqan_decoder.args.rnn_layers > 0:
-            # print(self_attended_decoded.shape)
-            # print(self.context.shape)
-            # print(self.question.shape)
-            # print(self.rnn_state[0].shape, self.rnn_state[1].shape)
-            # print(self.decoder_output.shape)
             rnn_decoder_outputs = self.mqan_decoder.rnn_decoder(self_attended_decoded, self.context, self.question,
                                                     hidden=self.rnn_state, output=self.decoder_output)
             self.decoder_output, vocab_pointer_switch_input, context_question_switch_input, context_attention, \
@@ -657,13 +689,16 @@ class MQANDecoderWrapper(object):
 
         vocab_pointer_switch = self.mqan_decoder.vocab_pointer_switch(vocab_pointer_switch_input)
         context_question_switch = self.mqan_decoder.context_question_switch(context_question_switch_input)
+        # both (batch; 1; 1)
 
         probs, confidence = self.mqan_decoder.probs(self.decoder_output, vocab_pointer_switch, context_question_switch,
                             context_attention, question_attention,
                             self.context_indices, self.question_indices, self.decoder_vocab)
+        # probs (batch; 1; gen_vocab)
+        # confidence (batch; 1; 1)
 
         self.time += 1
-        return probs.squeeze(1)
+        return probs.squeeze(1), probs.new_zeros([probs.size(0), 1]) if confidence is None else confidence.squeeze(1)
 
     def expand_for_beam_search(self, t, batch_size, num_beams, dim=0):
         if isinstance(t, tuple):
@@ -677,7 +712,6 @@ class MQANDecoderWrapper(object):
                 elements.append(self.expand_for_beam_search(e, batch_size, num_beams, dim))
             return elements
 
-        # print('before expansion: ', t.shape)
         original_size = list(t.shape)
         original_size[dim] *= num_beams
         t = t.unsqueeze(dim+1)
@@ -685,7 +719,6 @@ class MQANDecoderWrapper(object):
         expanded_size[dim+1] = num_beams
         t = t.expand(*expanded_size)
         t = t.contiguous().view(*original_size)  # (batch_size * num_beams, -1)
-        # print('after expansion: ', t.shape)
         return t
 
     def reorder_for_beam_search(self, t, new_order, dim=0):
@@ -700,13 +733,11 @@ class MQANDecoderWrapper(object):
                 elements.append(self.reorder_for_beam_search(e, new_order, dim))
             return elements
 
-        # print('before reordering t = ', t)
         p = [i for i in range(len(t.shape))]
         p[dim] = 0
         p[0] = dim
         t = t.permute(*p)
         t = t[new_order]
         t = t.permute(*p)
-        # print('after reordering t = ', t)
 
         return t

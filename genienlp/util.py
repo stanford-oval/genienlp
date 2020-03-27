@@ -266,8 +266,10 @@ def pad(x, new_channel, dim, val=None):
     padding = x.new(*size).fill_(val)
     return torch.cat([x, padding], dim)
 
+
 def have_multilingual(task_names):
     return any(['multilingual' in name for name in task_names])
+
 
 def load_config_json(args):
     args.almond_type_embeddings = False
@@ -280,11 +282,19 @@ def load_config_json(args):
                     'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'train_encoder_embeddings',
                     'train_context_embeddings', 'train_question_embeddings', 'locale', 'use_pretrained_bert',
                     'train_context_embeddings_after', 'train_question_embeddings_after',
-                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize', 'num_beams']
-
+                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize', 'num_beams',
+                    'confidence_method', 'lambd', 'use_confidence']
+        
+        # if args.use_confidence and not config['use_confidence']:
+        #     raise ValueError('Can not use confidence branch if not trained')
+        # elif not args.use_confidence and config['use_confidence']:
+        #     logger.warning('** Model has been trained with confidence branch but you are not using it during prediction. '
+        #                    'This is not recommended and can hurt the performance.')
+        
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
+                
             # These are for backward compatibility with models that were trained before we added these arguments
             elif r == 'locale':
                 setattr(args, r, 'en')

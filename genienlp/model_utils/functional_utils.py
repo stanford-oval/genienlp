@@ -70,7 +70,7 @@ def pad_to_match(x, y):
     return x, torch.cat((y, extra), 1)
 
 
-def mask(targets, out, squash=True, pad_idx=1):
+def mask(targets, out, pad_idx, squash=True):
     mask = (targets != pad_idx)
     out_mask = mask.unsqueeze(-1).expand_as(out).contiguous()
     if squash:
@@ -82,7 +82,7 @@ def mask(targets, out, squash=True, pad_idx=1):
 
 
 def encode_onehot(labels, n_classes):
-    onehot = torch.zeros(labels.size(0), n_classes).to(labels.get_device())
+    onehot = labels.new_zeros([labels.size(0), n_classes])
     onehot.scatter_(1, labels.view(-1, 1), 1)
     return onehot
 

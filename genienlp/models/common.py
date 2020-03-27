@@ -281,8 +281,7 @@ class PackedLSTM(nn.Module):
     def forward(self, inputs, lengths, hidden=None):
         lens, indices = torch.sort(lengths.clone().detach(), 0, True)
         inputs = inputs[indices] if self.batch_first else inputs[:, indices]
-        outputs, (h, c) = self.rnn(pack(inputs, lens.tolist(),
-                                        batch_first=self.batch_first), hidden)
+        outputs, (h, c) = self.rnn(pack(inputs, lens.tolist(), batch_first=self.batch_first), hidden)
         outputs = unpack(outputs, batch_first=self.batch_first)[0]
         _, _indices = torch.sort(indices, 0)
         outputs = outputs[_indices] if self.batch_first else outputs[:, _indices]

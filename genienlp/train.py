@@ -144,47 +144,65 @@ def prepare_data(args, logger):
     return numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
 accumulated_batch_lengths = 0
+accumulated_confidence_loss_ = 0
 
-def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None, pretraining=False,
-               train_context_embeddings_after=None, train_question_embeddings_after=None,
-               gradient_accumulation_steps=1):
+def train_step(args, model, batch, iteration, opt, devices, lr_scheduler=None, pretraining=False):
     # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of
     # the total batch size
     global accumulated_batch_lengths
+    global accumulated_confidence_loss_
+    
     model.train()
-    model.module.set_train_context_embeddings(train_context_embeddings_after is not None and
-                                              iteration > train_context_embeddings_after)
-    model.module.set_train_question_embeddings(train_question_embeddings_after is not None and
-                                               iteration > train_question_embeddings_after)
+    model.module.set_train_context_embeddings(bool(args.train_context_embeddings_after and
+                                              args.train_context_embeddings and
+                                              iteration > args.train_context_embeddings_after))
+    model.module.set_train_question_embeddings(bool(args.train_question_embeddings_after and
+                                               args.train_question_embeddings and
+                                               iteration > args.train_question_embeddings_after))
         
     loss_dict, predictions = model(batch, iteration, pretraining=pretraining)
-    # element_wise sum for losses coming from each GPU
-    loss = torch.stack(list(loss_dict.values()), 0).sum(0)
+    total_loss = loss_dict['total_loss']
+    confidence_loss = loss_dict['confidence']
     
-    if torch.isnan(loss).any():
+    if torch.isnan(total_loss).any():
         raise RuntimeError('Got NaN loss')
     if len(devices) > 1:
-        loss = loss.mean()
-    non_accumulated_loss = loss.item()
-    loss_ = loss * len(batch[0])
+        total_loss = total_loss.mean()
+        confidence_loss = confidence_loss.mean()
+        
+    non_accumulated_total_loss = total_loss.item()
+    non_accumulated_confidence_loss = confidence_loss.item()
+    
+    total_loss_ = total_loss * len(batch[0])
+    
+    accumulated_confidence_loss_ += non_accumulated_confidence_loss * len(batch[0])
     accumulated_batch_lengths += len(batch[0])
 
-    loss_.backward()
+    total_loss_.backward()
     grad_norm = None
-    if (iteration+1) % gradient_accumulation_steps == 0:
+    if (iteration+1) % args.gradient_accumulation_steps == 0:
         for p in model.parameters():
-            if p.grad:
+            if p.grad is not None:
                 p.grad /= accumulated_batch_lengths
             
-        accumulated_batch_lengths = 0
-        if grad_clip > 0.0:
-            grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
+        
+        if args.grad_clip > 0.0:
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.params, args.grad_clip)
         opt.step()
         if lr_scheduler is not None:
             lr_scheduler.step()
         opt.zero_grad()
+        
+        # update confidence lambd
+        if args.use_confidence:
+            true_confidence_loss = accumulated_confidence_loss_ / accumulated_batch_lengths
+            update_lambd(model, args.budget, true_confidence_loss, args.lambd_clipping)
+        
+        # reset accumulated values
+        accumulated_confidence_loss_ = 0
+        accumulated_batch_lengths = 0
 
-    return non_accumulated_loss, grad_norm
+    return non_accumulated_total_loss, grad_norm
 
 
 def update_fraction(args, task_iteration):
@@ -197,16 +215,21 @@ def update_fraction(args, task_iteration):
 
     return fraction
 
-def update_lambd(model, budget, confidence_loss):
-    cur_lambd = model.module.lambd
+def update_lambd(model, budget, confidence_loss, clip_vals):
+    lambd = model.module.decoder.lambd
     
     with torch.no_grad():
-        if budget <= confidence_loss.data[0]:
-            new_lambd = cur_lambd / 0.99
+        if budget <= confidence_loss:
+            lambd /= 0.99
         else:
-            new_lambd = cur_lambd / 1.01
+            lambd /= 1.01
+            
+        if clip_vals:
+            new_lambd = lambd.clamp(*clip_vals)
+        else:
+            new_lambd = lambd
         
-    model.module.lambd.set_(new_lambd)
+    model.module.decoder.lambd.set_(new_lambd)
     
 
 def should_validate(iteration, val_every, resume, start_iteration):
@@ -413,13 +436,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                                                 timestamp=args.timestamp, log_dir=args.log_dir)
 
             # param update
-            loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
-                                         grad_clip=args.grad_clip, pretraining=pretraining,
-                                         gradient_accumulation_steps=args.gradient_accumulation_steps,
-                                         train_context_embeddings_after=args.train_context_embeddings_after if
-                                                                        args.train_context_embeddings else None,
-                                         train_question_embeddings_after=args.train_question_embeddings_after if
-                                                                         args.train_question_embeddings else None)
+            loss, grad_norm = train_step(args, model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,  pretraining=pretraining)
 
             if loss < 1e-5:
                 zero_loss += 1
@@ -433,9 +450,6 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             if args.use_curriculum:
                 task_fraction[task] = update_fraction(args, task_iteration[task])
                 
-            # update confidence lambd
-            if args.use_confidence:
-                update_lambd(model, args.budget, loss['confidence'])
 
             # train metrics
             local_loss += loss
