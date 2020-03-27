@@ -34,7 +34,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .common import CombinedEmbedding, TransformerDecoder, LSTMDecoderAttention, Feedforward, EPSILON, MultiLSTMCell
-from ..model_utils.functional_utils import mask, make_confidence, positional_encodings_like, encode_onehot, BeamHypotheses
+from ..model_utils.functional_utils import mask, positional_encodings_like, encode_onehot
 
 from ..util import top_k_top_p_filtering
 
@@ -165,7 +165,6 @@ class MQANDecoder(nn.Module):
             losses = dict()
             
             if self.use_confidence:
-                
                 confidence_masked, confidence_pooled = self.process_confidence(confidence, answer_limited, decoder_vocab)
                 labels = encode_onehot(targets, probs.size(-1))
                 # labels is from targets (batch*actual_len ; gen_vocab)
@@ -590,8 +589,8 @@ class LSTMDecoder(nn.Module):
         batch_size = context.size(0)
         h_size = (batch_size, 1, self.d_hid)
         return context.new_zeros(h_size)
-
-
+    
+    
 class MQANDecoderWrapper(object):
     """
     A wrapper for MQANDecoder that wraps around its recurrent neural network, so that we can decode it like a Transformer
@@ -741,3 +740,66 @@ class MQANDecoderWrapper(object):
         t = t.permute(*p)
 
         return t
+    
+# The following code was copied and adapted from Hugginface's library
+# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+class BeamHypotheses(object):
+
+    def __init__(self, n_hyp, max_length, length_penalty, early_stopping):
+        """
+        Initialize n-best list of hypotheses.
+        """
+        self.max_length = max_length - 1  # ignoring bos_token
+        self.length_penalty = length_penalty
+        self.early_stopping = early_stopping
+        self.n_hyp = n_hyp
+        self.hyp = []
+        self.worst_score = 1e9
+
+    def __len__(self):
+        """
+        Number of hypotheses in the list.
+        """
+        return len(self.hyp)
+
+    def add(self, hyp, sum_logprobs):
+        """
+        Add a new hypothesis to the list.
+        """
+        score = sum_logprobs / len(hyp) ** self.length_penalty
+        if len(self) < self.n_hyp or score > self.worst_score:
+            self.hyp.append((score, hyp))
+            if len(self) > self.n_hyp:
+                sorted_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.hyp)])
+                del self.hyp[sorted_scores[0][1]]
+                self.worst_score = sorted_scores[0][0]
+            else:
+                self.worst_score = min(score, self.worst_score)
+
+    def is_done(self, best_sum_logprobs):
+        """
+        If there are enough hypotheses and that none of the hypotheses being generated
+        can become better than the worst one in the heap, then we are done with this sentence.
+        """
+        if len(self) < self.n_hyp:
+            return False
+        elif self.early_stopping:
+            return True
+        else:
+            return self.worst_score >= best_sum_logprobs / self.max_length ** self.length_penalty
+

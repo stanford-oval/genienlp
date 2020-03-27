@@ -162,20 +162,21 @@ def train_step(args, model, batch, iteration, opt, devices, lr_scheduler=None, p
         
     loss_dict, predictions = model(batch, iteration, pretraining=pretraining)
     total_loss = loss_dict['total_loss']
-    confidence_loss = loss_dict['confidence']
+    
+    if args.use_confidence:
+        confidence_loss = loss_dict['confidence']
+        if len(devices) > 1:
+            confidence_loss = confidence_loss.mean()
+            non_accumulated_confidence_loss = confidence_loss.item()
+            accumulated_confidence_loss_ += non_accumulated_confidence_loss * len(batch[0])
     
     if torch.isnan(total_loss).any():
         raise RuntimeError('Got NaN loss')
     if len(devices) > 1:
         total_loss = total_loss.mean()
-        confidence_loss = confidence_loss.mean()
         
     non_accumulated_total_loss = total_loss.item()
-    non_accumulated_confidence_loss = confidence_loss.item()
-    
     total_loss_ = total_loss * len(batch[0])
-    
-    accumulated_confidence_loss_ += non_accumulated_confidence_loss * len(batch[0])
     accumulated_batch_lengths += len(batch[0])
 
     total_loss_.backward()
@@ -185,7 +186,6 @@ def train_step(args, model, batch, iteration, opt, devices, lr_scheduler=None, p
             if p.grad is not None:
                 p.grad /= accumulated_batch_lengths
             
-        
         if args.grad_clip > 0.0:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.params, args.grad_clip)
         opt.step()
