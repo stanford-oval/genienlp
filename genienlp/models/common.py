@@ -37,6 +37,7 @@ from torch.jit import Final
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pack_padded_sequence as pack
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
+from ..model_utils.functional_utils import matmul, positional_encodings_like
 
 INF = 1e10
 EPSILON = 1e-10

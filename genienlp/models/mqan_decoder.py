@@ -221,7 +221,7 @@ class MQANDecoder(nn.Module):
             batch = h.size(1)
             h_flattened = torch.transpose(h, 0, 1).contiguous().view(batch, -1)
     
-            confidence = model.confidence_hidden_projection(h_flattened)
+            confidence = self.confidence_hidden_projection(h_flattened)
             confidence = torch.sigmoid(confidence)
     
         elif confidence_method == 'conv':
