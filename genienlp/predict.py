@@ -55,11 +55,11 @@ def get_all_splits(args):
         logger.info(f'Loading {task}')
         kwargs = {'train': None}
         if args.evaluate == 'valid':
-            kwargs['validation'] = None
-        elif args.evaluate == 'test':
             kwargs['test'] = None
+        elif args.evaluate == 'test':
+            kwargs['validation'] = None
         else:
-            raise ValueError('Validation split should be either valid or test')
+            raise ValueError('Split used for prediction should be either valid or test')
         
         kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
                        'cached_path': os.path.join(args.cache, task.name), 'languages': task_languages})

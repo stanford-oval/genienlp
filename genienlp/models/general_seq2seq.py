@@ -85,7 +85,7 @@ class Seq2Seq(torch.nn.Module):
         self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
             self.encoder(batch)
         encoder_loss = None
-        if self.args.use_encoder_loss:
+        if getattr(self.args, 'use_encoder_loss', None):
             encoder_loss = self.get_encoder_loss(context_rnn_state)
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
                             final_question, question_rnn_state, encoder_loss)

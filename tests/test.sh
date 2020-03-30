@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
+# functional tests
 
 set -e
 set -x
 SRCDIR=`dirname $0`
-
-# functional tests
 
 on_error () {
     rm -fr $workdir
@@ -51,13 +50,15 @@ do
     fi
 
     i=$((i+1))
+
+
 done
 
 
 # test almond_multilingual task
 for hparams in \
       "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-
+      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --sentence_batching --train_batch_size 4 --val_batch_size 4 --use_encoder_loss" ;
 do
 
     # train
@@ -77,7 +78,6 @@ do
 
     i=$((i+1))
 done
-
 
 
 # Train a paraphrasing model for a few iterations

@@ -342,14 +342,14 @@ class AlmondMultiLingual(BaseAlmondTask):
             sort_key_fn = context_answer_len
             batch_size_fn = token_batch_fn
         
-        if kwargs.get('separate_eval', False) and (kwargs['validation'] or kwargs['test']):
+        assert len(all_datasets) >= 1
+        if kwargs.get('separate_eval', False) and (all_datasets[0].eval or all_datasets[0].test):
             return all_datasets
         else:
             return self.combine_datasets(all_datasets, sort_key_fn, batch_size_fn)
 
     def combine_datasets(self, datasets, sort_key_fn, batch_size_fn):
         splits = defaultdict()
-        assert len(datasets) >= 1
         fields = [field for field in datasets[0]._fields if getattr(datasets[0], field) is not None]
         
         for field in fields:
