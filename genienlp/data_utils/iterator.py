@@ -93,8 +93,18 @@ class Iterator(torch.utils.data.IterableDataset):
             if not self.repeat:
                 break
 
-    def _batch(self, data, batch_size):
-        """Yield elements from data in chunks of batch_size."""
+    def _batch(self, data, batch_size, fixed_size_only=False):
+        """
+        
+        :param data:
+        :param batch_size:
+        :param fixed_size_only: only return batches with exactly batch_size number of samples;
+        ** warning: only use this if you are passing actual length not number of tokens as batch_size.
+        :return:
+        """
+        """Yield elements from data in chunks of batch_size.
+        
+        """
         minibatch = []
         size_so_far = 0
         for ex in data:
@@ -104,6 +114,8 @@ class Iterator(torch.utils.data.IterableDataset):
                 yield minibatch
                 minibatch, size_so_far = [], 0
             elif size_so_far > batch_size:
+                if fixed_size_only:
+                    yield []
                 if len(minibatch) == 1:  # if we only have one really big example
                     yield minibatch
                     minibatch, size_so_far = [], 0
@@ -113,7 +125,7 @@ class Iterator(torch.utils.data.IterableDataset):
                     if size_so_far > batch_size:  # if we add a really big example that needs to be on its own to a batch
                         yield minibatch
                         minibatch, size_so_far = [], 0
-        if minibatch:
+        if minibatch and not fixed_size_only:
             yield minibatch
 
 
@@ -136,19 +148,19 @@ class Iterator(torch.utils.data.IterableDataset):
         """
         Sort the dataset using sort_key.
         Divide the batch into groups each representing minibatches of same sentences in different languages
-        Shuffle order of minibatches and also the samples within each minibatch.
+        Shuffle order of minibatches within each minibatch.
         Regroup and return the batch
         """
         dataset_sorted = sorted(data, key=self.sort_key)
-        for batch in self._batch(dataset_sorted, self.batch_size):
+        for batch in self._batch(dataset_sorted, self.batch_size, fixed_size_only=True):
             assert self.batch_size % self.groups == 0
             
             if self.shuffle:
-                minibatches = [batch[i: i+self.groups] for i in range(0, self.batch_size-self.groups, self.groups)]
-                # shuffle order of minibatches and also the samples within each minibatch
+                minibatches = [batch[i: i+self.groups] for i in range(0, self.batch_size, self.groups)]
                 random.shuffle(minibatches)
-                for minibatch in minibatches:
-                    random.shuffle(minibatch)
+                # shuffle samples within each minibatch too
+                # for minibatch in minibatches:
+                #     random.shuffle(minibatch)
                 batch = []
                 for minibatch in minibatches:
                     batch.extend(minibatch)

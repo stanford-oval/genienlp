@@ -95,9 +95,16 @@ def parse_argv(parser):
     parser.add_argument('--val_batch_size', nargs='+', default=[256], type=int,
                         help='Batch size for validation corresponding to tasks in val tasks')
     
-    parser.add_argument('--sentence_batching', action='store_true', help='Batch same sentences together (used for multilingual tasks)')
+    parser.add_argument('--sentence_batching', action='store_true',
+                        help='Batch same sentences together (used for multilingual tasks)')
     parser.add_argument('--train_batch_size', type=int, default=0,
                         help='Number of samples to use in each batch; will be used instead of train_batch_tokens when sentence_batching is on')
+    parser.add_argument('--use_encoder_loss', action='store_true', help='Force encoded values for sentences in different languages to be the same')
+    parser.add_argument('--encoder_loss_type', type=str, default='mean', choices=['mean', 'sum'],
+                        help='Function to calculate encoder_loss_type from the context rnn hidden states')
+    parser.add_argument('--encoder_loss_weight', type=float, default=0.1,
+                        help='multiplicative constant choosing the weight of encoder_loss in total loss')
+    
 
     parser.add_argument('--vocab_tasks', nargs='+', type=str, help='tasks to use in the construction of the vocabulary')
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
@@ -227,6 +234,10 @@ def post_parse(args):
         raise ValueError('Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
     if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
         raise ValueError('Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
+    
+    if args.sentence_batching:
+        args.train_groups = int(args.train_batch_size / len(args.train_languages.split('+')))
+        args.val_groups = int(args.val_batch_size[0] / len(args.eval_languages.split('+')))
     
     args.train_batch_values = args.train_batch_tokens
     if len(args.train_task_names) > 1:
