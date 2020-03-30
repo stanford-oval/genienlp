@@ -32,7 +32,7 @@ import torch
 import random
 
 from .example import Batch
-from ..tasks.generic_dataset import context_answer_len, same_id, token_batch_fn, default_batch_fn
+from ..tasks.generic_dataset import context_answer_len, same_id, default_batch_fn
 
 
 class Iterator(torch.utils.data.IterableDataset):
