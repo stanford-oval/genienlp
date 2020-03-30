@@ -32,6 +32,7 @@ import torch
 import random
 
 from .example import Batch
+from ..tasks.generic_dataset import context_answer_len, same_id, token_batch_fn, default_batch_fn
 
 
 class Iterator(torch.utils.data.IterableDataset):
@@ -40,19 +41,29 @@ class Iterator(torch.utils.data.IterableDataset):
                  batch_size,
                  shuffle=False,
                  repeat=False,
-                 batch_size_fn=None,
+                 use_data_batch_fn=False,
                  bucket_by_sort_key=False):
+        # batch_size can be number of tokens or number of examples
+        # the type is inferred from batch_size_fn
+        
         self.dataset = dataset
-
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.repeat = repeat
-
-        if batch_size_fn is None:
-            def batch_size_fn(new, count, sofar):
-                return count
-        self.batch_size_fn = batch_size_fn
+        
+        # used for sentence_batching
+        self.groups = getattr(dataset, 'groups', None)
+        
+        if use_data_batch_fn:
+            self.batch_size_fn = self.dataset.batch_size_fn
+        else:
+            self.batch_size_fn = default_batch_fn
+        
         self.bucket_by_sort_key = bucket_by_sort_key
+        if bucket_by_sort_key:
+            self.sort_key = self.dataset.sort_key_fn
+        else:
+            self.sort_key = context_answer_len
 
     def __len__(self):
         if self.repeat:
@@ -69,7 +80,10 @@ class Iterator(torch.utils.data.IterableDataset):
                 dataset = self.dataset
 
             if self.bucket_by_sort_key:
-                batches = self._pool(dataset)
+                if self.sort_key == same_id:
+                    batches = self._sentence_batching(dataset)
+                elif self.sort_key == context_answer_len:
+                    batches = self._bucket_batching(dataset)
             else:
                 batches = self._batch(dataset, self.batch_size)
 
@@ -102,7 +116,8 @@ class Iterator(torch.utils.data.IterableDataset):
         if minibatch:
             yield minibatch
 
-    def _pool(self, data):
+
+    def _bucket_batching(self, data):
         """Sort within buckets, then batch, then shuffle batches.
 
         Partitions data into chunks of size 100*batch_size, sorts examples within
@@ -110,9 +125,33 @@ class Iterator(torch.utils.data.IterableDataset):
         batches.
         """
         for p in self._batch(data, self.batch_size * 100):
-            p_batch = self._batch(sorted(p, key=self.dataset.sort_key), self.batch_size)
+            p_batch = self._batch(sorted(p, key=self.sort_key), self.batch_size)
             if self.shuffle:
                 p_batch = list(p_batch)
                 random.shuffle(p_batch)
             for b in p_batch:
                 yield b
+                
+    def _sentence_batching(self, data):
+        """
+        Sort the dataset using sort_key.
+        Divide the batch into groups each representing minibatches of same sentences in different languages
+        Shuffle order of minibatches and also the samples within each minibatch.
+        Regroup and return the batch
+        """
+        dataset_sorted = sorted(data, key=self.sort_key)
+        for batch in self._batch(dataset_sorted, self.batch_size):
+            assert self.batch_size % self.groups == 0
+            
+            if self.shuffle:
+                minibatches = [batch[i: i+self.groups] for i in range(0, self.batch_size-self.groups, self.groups)]
+                # shuffle order of minibatches and also the samples within each minibatch
+                random.shuffle(minibatches)
+                for minibatch in minibatches:
+                    random.shuffle(minibatch)
+                batch = []
+                for minibatch in minibatches:
+                    batch.extend(minibatch)
+            
+            yield batch
+            

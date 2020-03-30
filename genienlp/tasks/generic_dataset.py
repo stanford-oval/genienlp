@@ -49,11 +49,34 @@ logger = logging.getLogger(__name__)
 def make_example_id(dataset, example_id):
     return dataset.name + '/' + str(example_id)
 
+# sort_key funcs
+def context_answer_len(ex):
+    return interleave_keys(len(ex.context), len(ex.answer))
+
+def same_id(ex):
+    id_ = ex.example_id.rsplit('/', 1)
+    id_ = id_[0] if len(id_) == 1 else id_[1]
+    if id_[0] == 'T':
+        id_ = id_[1:]
+    return id_
+
+# batch_size funcs
+def token_batch_fn(new, count, sofar):
+    prev_max_len = sofar / (count - 1) if count > 1 else 0
+    return max(len(new.context), 5 * len(new.answer), prev_max_len) * count
+
+def default_batch_fn(new, count, sofar):
+    return count
+
+
 
 class CQA(Dataset):
-    @staticmethod
-    def sort_key(ex):
-        return interleave_keys(len(ex.context), len(ex.answer))
+    
+    def __init__(self, examples, sort_key_fn=context_answer_len, batch_size_fn=token_batch_fn, groups=None, **kwargs):
+        self.sort_key_fn = sort_key_fn
+        self.batch_size_fn = batch_size_fn
+        self.groups = groups
+        super().__init__(examples, **kwargs)
 
 
 class IMDb(CQA):

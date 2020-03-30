@@ -238,17 +238,13 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def batch_fn(new, i, sofar):
-    prev_max_len = sofar / (i - 1) if i > 1 else 0
-    return max(len(new.context), 5 * len(new.answer), prev_max_len) * i
-
-
-def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False):
+def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, valid=False):
+    
     iterator = Iterator(dataset, batch_size,
-                        batch_size_fn=batch_fn if train else None,
                         shuffle=train,
                         repeat=train,
-                        bucket_by_sort_key=train)
+                        use_data_batch_fn=train or valid,
+                        bucket_by_sort_key=train or valid)
     return torch.utils.data.DataLoader(iterator, batch_size=None,
                                        collate_fn=lambda minibatch: Batch.from_examples(minibatch, numericalizer,
                                                                                         device=device))
