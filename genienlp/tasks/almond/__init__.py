@@ -50,7 +50,8 @@ class AlmondDataset(CQA):
 
 
     def __init__(self, path, *, make_example, subsample=None, cached_path=None, skip_cache=False, **kwargs):
-
+        
+        #TODO fix cache_path for multilingual task
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         if os.path.exists(cache_name) and not skip_cache:

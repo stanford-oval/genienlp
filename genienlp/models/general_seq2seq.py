@@ -85,7 +85,7 @@ class Seq2Seq(torch.nn.Module):
         self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
             self.encoder(batch)
         encoder_loss = None
-        if getattr(self.args, 'use_encoder_loss', None):
+        if getattr(self.args, 'use_encoder_loss', None) and self.training:
             encoder_loss = self.get_encoder_loss(context_rnn_state)
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
                             final_question, question_rnn_state, encoder_loss)
@@ -104,12 +104,8 @@ class Seq2Seq(torch.nn.Module):
             context_rnn_state = torch.cat(context_rnn_state, dim=0)
             
         batch_size = context_rnn_state.size(1)
-        if self.training:
-            groups = self.args.train_groups
-        else:
-            groups = self.args.val_groups
+        groups = len(self.args.train_languages.split('+'))
         assert batch_size % groups == 0
-        steps = int(batch_size/groups)
         
         # reshape to be (batch_size; -1)
         context_rnn_state = context_rnn_state.view(batch_size, -1)
@@ -121,8 +117,8 @@ class Seq2Seq(torch.nn.Module):
             context_value = torch.sum(context_rnn_state, dim=-1)
         
         encoder_loss = 0.0
-        for i in range(0, batch_size, steps):
-            indices = [j for j in range(i, i+steps)]
+        for i in range(0, batch_size, groups):
+            indices = [j for j in range(i, i+groups)]
             groups_vals = context_value[indices]
             encoder_loss += torch.std(groups_vals).item()
             
