@@ -41,7 +41,8 @@ from . import models
 from .data_utils.embeddings import load_embeddings
 from .metrics import compute_metrics
 from .tasks.registry import get_tasks
-from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices
+from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
+    have_multilingual
 
 logger = logging.getLogger(__name__)
 
@@ -213,15 +214,35 @@ def parse_argv(parser):
                         help='directory where cached models should be loaded from')
     parser.add_argument('--subsample', default=20000000, type=int,
                         help='subsample the eval/test datasets (experimental)')
-    
+
     parser.add_argument('--pred_languages', type=str, nargs='+',
                         help='used to specify dataset languages used during prediction for multilingual tasks'
-                             'multiple languages for each task should be concatenated with +')
-    parser.add_argument('--separate_eval', action='store_true', help='evaluate on each language eval set separately')
+                        'multiple languages for each task should be concatenated with +')
+    parser.add_argument('--separate_eval', action='store_true',
+                        help='evaluate on each language eval set separately')
+
+
+def adjust_multilingual_eval(args):
+    if (have_multilingual(args.task_names) and args.pred_languages is None) or (
+            args.pred_languages and len(args.task_names) != len(args.pred_languages)):
+        raise ValueError('You have to define prediction languages when you have a multilingual task'
+                         'Use None for single language tasks. Also provide languages in the same order you provided tasks.')
+
+    if args.pred_languages is None:
+        args.pred_languages = [None for _ in range(len(args.task_names))]
+
+    # preserve backward compatibility for single language tasks
+    for i, task_name in enumerate(args.task_names):
+        if 'multilingual' in task_name and args.pred_languages[i] is None:
+            raise ValueError('You have to define prediction languages for this multilingual task: {}'.format(task_name))
+        elif 'multilingual' not in task_name and args.pred_languages[i] is not None:
+            logger.warning('prediction languages should be empty for single language tasks')
+            args.pred_languages[i] = None
 
 
 def main(args):
     load_config_json(args)
+    adjust_multilingual_eval(args)
     set_seed(args)
     args.tasks = get_tasks(args.task_names, args)
 
