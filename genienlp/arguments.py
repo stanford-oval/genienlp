@@ -249,7 +249,8 @@ def post_parse(args):
             args.train_batch_values = len(args.train_task_names) * args.train_batch_tokens
     indices = indices_of_multilingual(args.train_task_names)
     for i in indices:
-        args.train_batch_values[i] = args.train_batch_size
+        if args.sentence_batching:
+            args.train_batch_values[i] = args.train_batch_size
         
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
