@@ -56,9 +56,9 @@ def get_all_splits(args):
         logger.info(f'Loading {task}')
         kwargs = {'train': None}
         if args.evaluate == 'valid':
-            kwargs['validation'] = None
-        elif args.evaluate == 'test':
             kwargs['test'] = None
+        elif args.evaluate == 'test':
+            kwargs['validation'] = None
         else:
             raise ValueError('Validation split should be either valid or test')
         
