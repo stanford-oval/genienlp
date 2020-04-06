@@ -57,10 +57,12 @@ def get_all_splits(args):
         kwargs = {'train': None}
         if args.evaluate == 'valid':
             kwargs['test'] = None
+            if args.pred_set_name is not None:
+                kwargs['validation'] = args.pred_set_name
         elif args.evaluate == 'test':
             kwargs['validation'] = None
         else:
-            raise ValueError('Validation split should be either valid or test')
+            raise ValueError('Split used for prediction should be either valid or test')
         
         kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
                        'cached_path': os.path.join(args.cache, task.name), 'languages': task_languages})
@@ -188,7 +190,8 @@ def run(args, numericalizer, val_sets, model, device):
 
 def parse_argv(parser):
     parser.add_argument('--path', required=True)
-    parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'], help='Which dataset to evaluate (test or dev)')
+    parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'], help='Which dataset to do predictions for (test or dev)')
+    parser.add_argument('--pred_set_name', type=str, help='Name of dataset to run prediction for; will be ignored if --evaluate is test')
     parser.add_argument('--tasks',
                         default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl',
                                  'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
@@ -238,7 +241,7 @@ def adjust_multilingual_eval(args):
         elif 'multilingual' not in task_name and args.pred_languages[i] is not None:
             logger.warning('prediction languages should be empty for single language tasks')
             args.pred_languages[i] = None
-
+            
 
 def main(args):
     load_config_json(args)

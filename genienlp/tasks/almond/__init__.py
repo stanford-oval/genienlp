@@ -347,7 +347,8 @@ class AlmondMultiLingual(BaseAlmondTask):
         all_datasets = []
         languages = kwargs['languages'].split('+')
         for lang in languages:
-            dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(lang)), make_example=self._make_example, language=lang, **kwargs)
+            dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(lang)),
+                                                  make_example=self._make_example, language=lang, **kwargs)
             all_datasets.append(dataset)
             
         separate_eval = kwargs.get('separate_eval', False)

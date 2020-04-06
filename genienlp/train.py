@@ -99,6 +99,8 @@ def prepare_data(args, logger):
     for task in args.val_tasks:
         logger.info(f'Loading {task.name}')
         kwargs = {'train': None, 'test': None}
+        # choose best model based on this dev set
+        kwargs['validation'] = args.eval_set_name
         kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
                        'cached_path': os.path.join(args.cache, task.name), 'languages': args.eval_languages})
 
