@@ -336,14 +336,19 @@ class AlmondMultiLingual(BaseAlmondTask):
                                                          make_example=self._make_example, language=lang, **kwargs)
             all_datasets.append(almond_dataset)
         
+        assert len(all_datasets) >= 1
         if kwargs.get('sentence_batching', False):
+            length = len(all_datasets[0])
+            if not all(len(data) == length for data in all_datasets):
+                raise ValueError('You should have parallel datasets of the same size for sentence batching to work.')
+            
             sort_key_fn = same_id
             batch_size_fn = default_batch_fn
         else:
             sort_key_fn = context_answer_len
             batch_size_fn = token_batch_fn
         
-        assert len(all_datasets) >= 1
+        
         if kwargs.get('separate_eval', False) and (all_datasets[0].eval or all_datasets[0].test):
             return all_datasets
         else:
