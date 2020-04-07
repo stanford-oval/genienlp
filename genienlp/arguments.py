@@ -94,8 +94,7 @@ def parse_argv(parser):
                         help='whether to allow filtering on the validation sets')
     parser.add_argument('--val_batch_size', nargs='+', default=[256], type=int,
                         help='Batch size for validation corresponding to tasks in val tasks')
-    parser.add_argument('--eval_set_name', default='eval', type=str,
-                        help='Evaluation dataset name to use during training (default is eval)')
+    parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
     
     parser.add_argument('--vocab_tasks', nargs='+', type=str, help='tasks to use in the construction of the vocabulary')
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
