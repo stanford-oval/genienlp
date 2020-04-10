@@ -328,6 +328,12 @@ class AlmondMultiLingual(BaseAlmondTask):
         return Example.from_raw(self.name + '/' + language + '/' + _id, context, question, answer,
                                 tokenize=self.tokenize, lower=False)
     
+    def get_train_processed_ids(self, split):
+        all_ids = []
+        for ex in split.examples:
+            all_ids.append(same_id(ex))
+        return all_ids
+        
     def get_splits(self, root, **kwargs):
         all_datasets = []
         languages = kwargs['languages'].split('+')
@@ -338,9 +344,13 @@ class AlmondMultiLingual(BaseAlmondTask):
         
         assert len(all_datasets) >= 1
         if kwargs.get('sentence_batching', False):
-            length = len(all_datasets[0])
-            if not all(len(data) == length for data in all_datasets):
-                raise ValueError('You should have parallel datasets of the same size for sentence batching to work.')
+            lengths = list(map(lambda dataset: len(dataset), all_datasets))
+            assert len(set(lengths)) == 1, 'When using sentence batching your datasets should have same size.'
+            if kwargs.get('train', False):
+                ids_sets = list(map(lambda dataset: set(self.get_train_processed_ids(dataset.train)), all_datasets))
+                id_set_base = set(ids_sets[0])
+                for id_set in ids_sets:
+                    assert set(id_set) == id_set_base, 'When using sentence batching your datasets should have matching ids'
             
             sort_key_fn = same_id
             batch_size_fn = default_batch_fn
