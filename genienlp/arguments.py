@@ -94,7 +94,7 @@ def parse_argv(parser):
                         help='whether to allow filtering on the validation sets')
     parser.add_argument('--val_batch_size', nargs='+', default=[256], type=int,
                         help='Batch size for validation corresponding to tasks in val tasks')
-    
+
     parser.add_argument('--sentence_batching', action='store_true',
                         help='Batch same sentences together (used for multilingual tasks)')
     parser.add_argument('--train_batch_size', type=int, default=0,
@@ -104,6 +104,7 @@ def parse_argv(parser):
                         help='Function to calculate encoder_loss_type from the context rnn hidden states')
     parser.add_argument('--encoder_loss_weight', type=float, default=0.1,
                         help='multiplicative constant choosing the weight of encoder_loss in total loss')
+    parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
     
 
     parser.add_argument('--vocab_tasks', nargs='+', type=str, help='tasks to use in the construction of the vocabulary')

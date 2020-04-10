@@ -378,6 +378,3 @@ class AlmondMultiLingual(BaseAlmondTask):
                      eval=splits.get('eval'),
                      test=splits.get('test'),
                      aux=splits.get('aux'))
-
-    
-    
