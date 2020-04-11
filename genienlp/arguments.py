@@ -94,8 +94,19 @@ def parse_argv(parser):
                         help='whether to allow filtering on the validation sets')
     parser.add_argument('--val_batch_size', nargs='+', default=[256], type=int,
                         help='Batch size for validation corresponding to tasks in val tasks')
+
+    parser.add_argument('--sentence_batching', action='store_true',
+                        help='Batch same sentences together (used for multilingual tasks)')
+    parser.add_argument('--train_batch_size', type=int, default=0,
+                        help='Number of samples to use in each batch; will be used instead of train_batch_tokens when sentence_batching is on')
+    parser.add_argument('--use_encoder_loss', action='store_true', help='Force encoded values for sentences in different languages to be the same')
+    parser.add_argument('--encoder_loss_type', type=str, default='mean', choices=['mean', 'sum'],
+                        help='Function to calculate encoder_loss_type from the context rnn hidden states')
+    parser.add_argument('--encoder_loss_weight', type=float, default=0.1,
+                        help='multiplicative constant choosing the weight of encoder_loss in total loss')
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
     
+
     parser.add_argument('--vocab_tasks', nargs='+', type=str, help='tasks to use in the construction of the vocabulary')
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
     parser.add_argument('--max_generative_vocab', default=50000, type=int,
@@ -209,14 +220,39 @@ def post_parse(args):
         args.val_task_names.remove('imdb')
 
     args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+    
+    def indices_of_multilingual(train_task_names):
+        indices = []
+        for i, task in enumerate(train_task_names):
+            if 'multilingual' in task:
+                indices.append(i)
+        return indices
+    
+    if args.sentence_batching and args.train_batch_size == 0:
+        raise ValueError('You need to specify train_batch_size value when using sentence batching.')
+    #TODO relax the following assertions by dropping samples from batches in Iter
+    if args.sentence_batching and args.train_batch_size % len(args.train_languages.split('+')) != 0:
+        raise ValueError('Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
+    if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
+        raise ValueError('Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
+    
+    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1) :
+        raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
 
+    
+    args.train_batch_values = args.train_batch_tokens
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
             args.train_iterations = [1]
         if len(args.train_iterations) < len(args.train_task_names):
             args.train_iterations = len(args.train_task_names) * args.train_iterations
         if len(args.train_batch_tokens) < len(args.train_task_names):
-            args.train_batch_tokens = len(args.train_task_names) * args.train_batch_tokens
+            args.train_batch_values = len(args.train_task_names) * args.train_batch_tokens
+    indices = indices_of_multilingual(args.train_task_names)
+    for i in indices:
+        if args.sentence_batching:
+            args.train_batch_values[i] = args.train_batch_size
+        
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
 

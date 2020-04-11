@@ -35,7 +35,7 @@ from collections import defaultdict
 
 from ..base_task import BaseTask
 from ..registry import register_task
-from ..generic_dataset import CQA
+from ..generic_dataset import CQA, same_id, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
 
 from ..base_dataset import Split
@@ -50,7 +50,8 @@ class AlmondDataset(CQA):
 
 
     def __init__(self, path, *, make_example, subsample=None, cached_path=None, skip_cache=False, **kwargs):
-
+        
+        #TODO fix cache_path for multilingual task
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         if os.path.exists(cache_name) and not skip_cache:
@@ -307,7 +308,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
     
-    
+
 @register_task('almond_multilingual')
 class AlmondMultiLingual(BaseAlmondTask):
     """Multi-Language task for Almond
@@ -327,34 +328,53 @@ class AlmondMultiLingual(BaseAlmondTask):
         return Example.from_raw(self.name + '/' + language + '/' + _id, context, question, answer,
                                 tokenize=self.tokenize, lower=False)
     
-    def combine_datasets(self, datasets):
+    def get_train_processed_ids(self, split):
+        all_ids = []
+        for ex in split.examples:
+            all_ids.append(same_id(ex))
+        return all_ids
+        
+    def get_splits(self, root, **kwargs):
+        all_datasets = []
+        languages = kwargs['languages'].split('+')
+        for lang in languages:
+            almond_dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(lang)),
+                                                         make_example=self._make_example, language=lang, **kwargs)
+            all_datasets.append(almond_dataset)
+        
+        assert len(all_datasets) >= 1
+        if kwargs.get('sentence_batching', False):
+            lengths = list(map(lambda dataset: len(dataset), all_datasets))
+            assert len(set(lengths)) == 1, 'When using sentence batching your datasets should have same size.'
+            if kwargs.get('train', False):
+                ids_sets = list(map(lambda dataset: set(self.get_train_processed_ids(dataset.train)), all_datasets))
+                id_set_base = set(ids_sets[0])
+                for id_set in ids_sets:
+                    assert set(id_set) == id_set_base, 'When using sentence batching your datasets should have matching ids'
+            
+            sort_key_fn = same_id
+            batch_size_fn = default_batch_fn
+        else:
+            sort_key_fn = context_answer_len
+            batch_size_fn = token_batch_fn
+        
+        
+        if kwargs.get('separate_eval', False) and (all_datasets[0].eval or all_datasets[0].test):
+            return all_datasets
+        else:
+            return self.combine_datasets(all_datasets, sort_key_fn, batch_size_fn)
+
+    def combine_datasets(self, datasets, sort_key_fn, batch_size_fn):
         splits = defaultdict()
-        assert len(datasets) >= 1
         fields = [field for field in datasets[0]._fields if getattr(datasets[0], field) is not None]
         
         for field in fields:
             all_examples = []
             for dataset in datasets:
                 all_examples.extend(getattr(dataset, field).examples)
-            splits[field] = CQA(all_examples)
+            splits[field] = CQA(all_examples, sort_key_fn=sort_key_fn, batch_size_fn=batch_size_fn, groups=len(datasets))
         
         return Split(train=splits.get('train'),
                      eval=splits.get('eval'),
                      test=splits.get('test'),
                      aux=splits.get('aux'))
-
-    def get_splits(self, root, **kwargs):
-        all_datasets = []
-        languages = kwargs['languages'].split('+')
-        for lang in languages:
-            dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(lang)),
-                                                  make_example=self._make_example, language=lang, **kwargs)
-            all_datasets.append(dataset)
-            
-        separate_eval = kwargs.get('separate_eval', False)
-        if separate_eval:
-            return all_datasets
-        else:
-            return self.combine_datasets(all_datasets)
-    
-    

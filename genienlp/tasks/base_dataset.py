@@ -15,9 +15,6 @@ class Dataset(torch.utils.data.Dataset):
         sort_key (callable): A key to use for sorting dataset examples for batching
             together examples with similar lengths to minimize padding.
         examples (list(Example)): The examples in this dataset.
-            fields: A dictionary containing the name of each column together with
-            its corresponding Field object. Two columns with the same Field
-            object will share a vocabulary.
     """
     sort_key = None
 

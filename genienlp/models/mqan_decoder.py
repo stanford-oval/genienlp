@@ -79,7 +79,7 @@ class MQANDecoder(nn.Module):
             self.decoder_embeddings.set_embeddings(embeddings)
 
     def forward(self, batch, self_attended_context, final_context, context_rnn_state, final_question,
-                question_rnn_state):
+                question_rnn_state, encoder_loss):
         context, context_lengths, context_limited = batch.context.value, batch.context.length, batch.context.limited
         question, question_lengths, question_limited = batch.question.value, batch.question.length, batch.question.limited
         answer, answer_lengths, answer_limited = batch.answer.value, batch.answer.length, batch.answer.limited
@@ -134,6 +134,8 @@ class MQANDecoder(nn.Module):
 
             probs, targets = mask(answer_limited[:, 1:].contiguous(), probs.contiguous(), pad_idx=decoder_vocab.pad_idx)
             loss = F.nll_loss(probs.log(), targets)
+            if encoder_loss is not None:
+                loss += self.args.encoder_loss_weight * encoder_loss
             return loss, None
 
         else:

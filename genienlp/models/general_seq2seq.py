@@ -84,11 +84,58 @@ class Seq2Seq(torch.nn.Module):
     def _normal_forward(self, batch):
         self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
             self.encoder(batch)
+        encoder_loss = None
+        if getattr(self.args, 'use_encoder_loss', None) and self.training:
+            encoder_loss = self.get_encoder_loss(context_rnn_state)
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
-                            final_question, question_rnn_state)
+                            final_question, question_rnn_state, encoder_loss)
 
     def forward(self, batch, iteration, pretraining=False):
         if pretraining:
             return self._pretrain_forward(batch)
         else:
             return self._normal_forward(batch)
+        
+        
+    def get_encoder_loss(self, context_rnn_state):
+        
+        # concat hidden and cell state
+        if len(context_rnn_state) == 2:
+            context_rnn_state = torch.cat(context_rnn_state, dim=0)
+            
+        batch_size = context_rnn_state.size(1)
+        groups = len(self.args.train_languages.split('+'))
+        assert batch_size % groups == 0
+        
+        # reshape to be (batch_size; -1)
+        context_rnn_state = context_rnn_state.view(batch_size, -1)
+        
+        if self.args.encoder_loss_type == 'mean':
+            # element-wise mean of encoder loss https://www.aclweb.org/anthology/W18-3023.pdf
+            context_value = torch.mean(context_rnn_state, dim=-1)
+        elif self.args.encoder_loss_type == 'sum':
+            context_value = torch.sum(context_rnn_state, dim=-1)
+        
+        encoder_loss = 0.0
+        for i in range(0, batch_size, groups):
+            indices = [j for j in range(i, i+groups)]
+            groups_vals = context_value[indices]
+            assert len(groups_vals) > 1
+            encoder_loss += torch.std(groups_vals).item()
+            
+        return encoder_loss
+        
+        
+        
+
+    
+            
+        
+    
+    
+    
+    
+    
+    
+    
+    
