@@ -28,6 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from typing import NamedTuple, List
+import itertools
 
 from .numericalizer.sequential_field import SequentialField
 
@@ -69,7 +70,7 @@ class Batch(NamedTuple):
     decoder_vocab: object
 
     @staticmethod
-    def from_examples(examples, numericalizer, device=None):
+    def from_examples_single(examples, numericalizer, device=None):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         example_ids = [ex.example_id for ex in examples]
         context_input = [(ex.context, ex.context_word_mask) for ex in examples]
@@ -81,4 +82,47 @@ class Batch(NamedTuple):
                      numericalizer.encode(context_input, decoder_vocab, device=device),
                      numericalizer.encode(question_input, decoder_vocab, device=device),
                      numericalizer.encode(answer_input, decoder_vocab, device=device),
+                     decoder_vocab)
+    
+    @staticmethod
+    def from_examples(examples, numericalizer, device=None, paired=False, groups=None):
+        assert all(isinstance(ex.example_id, str) for ex in examples)
+        
+        decoder_vocab = numericalizer.decoder_vocab.clone()
+
+        # process single examples
+        example_ids = [ex.example_id for ex in examples]
+        context_inputs = [(ex.context, ex.context_word_mask) for ex in examples]
+        question_inputs = [(ex.question, ex.question_word_mask) for ex in examples]
+        answer_inputs = [(ex.answer, ex.answer_word_mask) for ex in examples]
+        
+        all_example_ids = example_ids
+        all_context_inputs = numericalizer.encode_single(context_inputs, decoder_vocab, device=device)
+        all_question_inputs = numericalizer.encode_single(question_inputs, decoder_vocab, device=device)
+        all_answer_inputs = numericalizer.encode_single(answer_inputs, decoder_vocab, device=device)
+        
+        
+        if paired:
+            example_pairs = []
+            # get all possible combinations of related example pairs
+            # TODO filter out pairs of same sentences
+            for i in range(0, len(examples), groups):
+                related_examples = [examples[j] for j in range(i, i+groups)]
+                example_pairs.extend(itertools.product(related_examples, related_examples))
+
+            example_ids = [ex_a.example_id + '@' + ex_b.example_id for ex_a, ex_b in example_pairs]
+            context_inputs = [((ex_a.context, ex_a.context_word_mask), (ex_b.context, ex_b.context_word_mask)) for ex_a, ex_b in example_pairs]
+            question_inputs = [((ex_a.question, ex_a.question_word_mask), (ex_b.question, ex_b.question_word_mask)) for ex_a, ex_b in example_pairs]
+            answer_inputs = [((ex_a.answer, ex_a.answer_word_mask), (ex_b.answer, ex_b.answer_word_mask)) for ex_a, ex_b in example_pairs]
+        
+            all_example_ids.extend(example_ids)
+            all_context_inputs.extend(numericalizer.encode_pair(context_inputs, decoder_vocab, device=device))
+            all_question_inputs.extend(numericalizer.encode_pair(question_inputs, decoder_vocab, device=device))
+            all_answer_inputs.extend(numericalizer.encode_pair(answer_inputs, decoder_vocab, device=device))
+        
+
+        return Batch(all_example_ids,
+                     all_context_inputs,
+                     all_question_inputs,
+                     all_answer_inputs,
                      decoder_vocab)

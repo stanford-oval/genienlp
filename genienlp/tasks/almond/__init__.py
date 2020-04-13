@@ -35,19 +35,19 @@ from collections import defaultdict
 
 from ..base_task import BaseTask
 from ..registry import register_task
-from ..generic_dataset import CQA, same_id, context_answer_len, token_batch_fn, default_batch_fn
+from ..generic_dataset import CQA, processed_id, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
 
 from ..base_dataset import Split
 
 logger = logging.getLogger(__name__)
 
+ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Farsi', 'it': 'Italian', 'zh': 'Chinese'}
 
 class AlmondDataset(CQA):
     """Obtaining dataset for Almond semantic parsing task"""
 
     base_url = None
-
 
     def __init__(self, path, *, make_example, subsample=None, cached_path=None, skip_cache=False, **kwargs):
         
@@ -331,35 +331,37 @@ class AlmondMultiLingual(BaseAlmondTask):
     def get_train_processed_ids(self, split):
         all_ids = []
         for ex in split.examples:
-            all_ids.append(same_id(ex))
+            all_ids.append(processed_id(ex))
         return all_ids
         
     def get_splits(self, root, **kwargs):
         all_datasets = []
-        languages = kwargs['languages'].split('+')
-        for lang in languages:
-            almond_dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(lang)),
-                                                         make_example=self._make_example, language=lang, **kwargs)
+        
+        # number of directories to read data from
+        all_dirs = kwargs['all_dirs'].split('+')
+        
+        for dir in all_dirs:
+            language = 'en' if process_type and process_type != 'translated' else ISO_to_LANG[dir]
+            almond_dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
+                                                         make_example=self._make_example, language=language, **kwargs)
             all_datasets.append(almond_dataset)
         
         assert len(all_datasets) >= 1
-        if kwargs.get('sentence_batching', False):
+        if kwargs.get('sentence_batching'):
             lengths = list(map(lambda dataset: len(dataset), all_datasets))
-            assert len(set(lengths)) == 1, 'When using sentence batching your datasets should have same size.'
-            if kwargs.get('train', False):
-                ids_sets = list(map(lambda dataset: set(self.get_train_processed_ids(dataset.train)), all_datasets))
-                id_set_base = set(ids_sets[0])
-                for id_set in ids_sets:
-                    assert set(id_set) == id_set_base, 'When using sentence batching your datasets should have matching ids'
+            assert len(set(lengths)) == 1, 'When using sentence batching your datasets should have the same size.'
+            ids_sets = list(map(lambda dataset: set(self.get_train_processed_ids(dataset.train)), all_datasets))
+            id_set_base = set(ids_sets[0])
+            for id_set in ids_sets:
+                assert set(id_set) == id_set_base, 'When using sentence batching your datasets should have matching ids'
             
-            sort_key_fn = same_id
+            sort_key_fn = processed_id
             batch_size_fn = default_batch_fn
         else:
             sort_key_fn = context_answer_len
             batch_size_fn = token_batch_fn
-        
-        
-        if kwargs.get('separate_eval', False) and (all_datasets[0].eval or all_datasets[0].test):
+            
+        if kwargs.get('separate_eval') and (all_datasets[0].eval or all_datasets[0].test):
             return all_datasets
         else:
             return self.combine_datasets(all_datasets, sort_key_fn, batch_size_fn)
@@ -372,6 +374,7 @@ class AlmondMultiLingual(BaseAlmondTask):
             all_examples = []
             for dataset in datasets:
                 all_examples.extend(getattr(dataset, field).examples)
+                
             splits[field] = CQA(all_examples, sort_key_fn=sort_key_fn, batch_size_fn=batch_size_fn, groups=len(datasets))
         
         return Split(train=splits.get('train'),

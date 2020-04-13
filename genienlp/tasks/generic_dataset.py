@@ -53,10 +53,14 @@ def make_example_id(dataset, example_id):
 def context_answer_len(ex):
     return interleave_keys(len(ex.context), len(ex.answer))
 
-def same_id(ex):
+def processed_id(ex):
     id_ = ex.example_id.rsplit('/', 1)
     id_ = id_[0] if len(id_) == 1 else id_[1]
+    # translated
     if id_[0] == 'T':
+        id_ = id_[1:]
+    # paraphrased
+    if id_[0] == 'P':
         id_ = id_[1:]
     return id_
 

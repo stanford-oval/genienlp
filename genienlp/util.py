@@ -238,16 +238,20 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, valid=False):
+def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, train=False, valid=False):
     
-    iterator = Iterator(dataset, batch_size,
+    iterator = Iterator(dataset,
+                        batch_size,
                         shuffle=train,
                         repeat=train,
                         use_data_batch_fn=train or valid,
-                        bucket_by_sort_key=train or valid)
-    return torch.utils.data.DataLoader(iterator, batch_size=None,
+                        use_data_sort_key=train or valid)
+        
+    return torch.utils.data.DataLoader(iterator,
+                                       batch_size=None,
                                        collate_fn=lambda minibatch: Batch.from_examples(minibatch, numericalizer,
-                                                                                        device=device))
+                                                                            device=device, paired=paired and train,
+                                                                            groups=iterator.groups))
 
 
 def pad(x, new_channel, dim, val=None):

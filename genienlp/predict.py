@@ -65,7 +65,7 @@ def get_all_splits(args):
             raise ValueError('Split used for prediction should be either valid or test')
         
         kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
-                       'cached_path': os.path.join(args.cache, task.name), 'languages': task_languages})
+                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages})
         
         kwargs['separate_eval'] = args.separate_eval
         task_splits = task.get_splits(root=args.data, lower=args.lower, **kwargs)

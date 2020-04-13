@@ -78,7 +78,7 @@ def prepare_data(args, logger):
         logger.info(f'Loading {task.name}')
         kwargs = {'test': None, 'validation': None}
         kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
-                       'cached_path': os.path.join(args.cache, task.name), 'languages': args.train_languages,
+                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.train_languages,
                        'sentence_batching': args.sentence_batching})
         if args.use_curriculum:
             kwargs['curriculum'] = True
@@ -104,8 +104,7 @@ def prepare_data(args, logger):
         if args.eval_set_name is not None:
             kwargs['validation'] = args.eval_set_name
         kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
-                       'cached_path': os.path.join(args.cache, task.name), 'languages': args.eval_languages,
-                       'sentence_batching': args.sentence_batching})
+                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.eval_languages})
 
         logger.info(f'Adding {task.name} to validation datasets')
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
@@ -342,7 +341,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
-    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, train=True))
+    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, paired=args.paired, train=True))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_values)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
