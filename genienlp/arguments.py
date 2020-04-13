@@ -261,6 +261,9 @@ def post_parse(args):
     for i in indices:
         if args.sentence_batching:
             args.train_batch_values[i] = args.train_batch_size
+            if args.paired:
+                logger.warning('Using paired example training will increase effective batch size from {} to {}'.
+                               format(args.train_batch_size, args.train_batch_size*(1+len(args.train_languages))))
         
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size

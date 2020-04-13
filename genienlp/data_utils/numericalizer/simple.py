@@ -111,9 +111,12 @@ class SimpleNumericalizer(object):
         return list(map(lambda x: 1 if x in special_tokens_tuple else 0, tensor))
 
 
-    def encode_single(self, minibatch, decoder_vocab, device=None):
+    def encode_single(self, minibatch, decoder_vocab, device=None, max_length=-1):
         assert isinstance(minibatch, list)
-        if self.fix_length is None:
+        
+        if max_length > -1:
+            max_len = max_length
+        elif self.fix_length is None:
             max_len = max(len(x[0]) for x in minibatch)
         else:
             max_len = self.fix_length

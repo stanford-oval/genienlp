@@ -244,8 +244,8 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                         batch_size,
                         shuffle=train,
                         repeat=train,
-                        use_data_batch_fn=train or valid,
-                        use_data_sort_key=train or valid)
+                        use_data_batch_fn=train,
+                        use_data_sort_key=train)
         
     return torch.utils.data.DataLoader(iterator,
                                        batch_size=None,

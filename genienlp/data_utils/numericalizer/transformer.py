@@ -107,7 +107,7 @@ class TransformerNumericalizer(object):
                                                pad_token=self.pad_token, eos_token=self.eos_token)
 
 
-    def encode_single(self, minibatch, decoder_vocab, device=None):
+    def encode_single(self, minibatch, decoder_vocab, device=None, max_length=-1):
         assert isinstance(minibatch, list)
 
         # apply word-piece tokenization to everything first
@@ -115,10 +115,13 @@ class TransformerNumericalizer(object):
         for tokens, mask in minibatch:
             wp_tokenized.append(self._tokenizer.tokenize(tokens, mask))
 
-        if self.fix_length is None:
+        if max_length > -1:
+            max_len = max_length
+        elif self.fix_length is None:
             max_len = max(len(x) for x in wp_tokenized)
         else:
             max_len = self.fix_length
+            
         padded = []
         lengths = []
         numerical = []
@@ -149,8 +152,6 @@ class TransformerNumericalizer(object):
 
 
     def encode_pair(self, minibatch, decoder_vocab, device=None):
-        assert isinstance(minibatch, list)
-
         # apply word-piece tokenization to everything first
         wp_tokenized_a = []
         wp_tokenized_b = []
@@ -159,9 +160,10 @@ class TransformerNumericalizer(object):
             wp_tokenized_b.append(self._tokenizer.tokenize(tokens_b, mask_b))
 
         if self.fix_length is None:
-            max_len = max(len(x[0]) for x in minibatch)
+            max_len = max(len(wp_a) + len(wp_b) for wp_a, wp_b in zip(wp_tokenized_a, wp_tokenized_b))
         else:
             max_len = self.fix_length
+            
         padded = []
         lengths = []
         numerical = []

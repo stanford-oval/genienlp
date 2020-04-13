@@ -53,6 +53,7 @@ class AlmondDataset(CQA):
         
         #TODO fix cache_path for multilingual task
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
+        dir_name = os.path.basename(os.path.dirname(path))
 
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
@@ -67,7 +68,7 @@ class AlmondDataset(CQA):
             max_examples = min(n, subsample) if subsample is not None else n
             for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
                 parts = line.strip().split('\t')
-                examples.append(make_example(parts, language=kwargs.get('language', None)))
+                examples.append(make_example(parts, dir_name))
                 if len(examples) >= max_examples:
                     break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -313,6 +314,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
 class AlmondMultiLingual(BaseAlmondTask):
     """Multi-Language task for Almond
     """
+
     def _is_program_field(self, field_name):
         return field_name == 'answer'
 
@@ -320,12 +322,13 @@ class AlmondMultiLingual(BaseAlmondTask):
     def metrics(self):
         return ['em', 'bleu']
 
-    def _make_example(self, parts, language=None):
+    def _make_example(self, parts, dir_name):
         _id, sentence, target_code = parts
+        language = ISO_to_LANG.get(dir_name, 'English')
         question = 'translate from {} to thingtalk'.format(language)
         context = sentence
         answer = target_code
-        return Example.from_raw(self.name + '/' + language + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
                                 tokenize=self.tokenize, lower=False)
     
     def get_train_processed_ids(self, split):
@@ -336,14 +339,13 @@ class AlmondMultiLingual(BaseAlmondTask):
         
     def get_splits(self, root, **kwargs):
         all_datasets = []
-        
         # number of directories to read data from
         all_dirs = kwargs['all_dirs'].split('+')
         
         for dir in all_dirs:
-            language = 'en' if process_type and process_type != 'translated' else ISO_to_LANG[dir]
+            language = ISO_to_LANG.get(dir, 'English')
             almond_dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
-                                                         make_example=self._make_example, language=language, **kwargs)
+                                                         make_example=self._make_example, **kwargs)
             all_datasets.append(almond_dataset)
         
         assert len(all_datasets) >= 1
