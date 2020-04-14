@@ -343,7 +343,6 @@ class AlmondMultiLingual(BaseAlmondTask):
         all_dirs = kwargs['all_dirs'].split('+')
         
         for dir in all_dirs:
-            language = ISO_to_LANG.get(dir, 'English')
             almond_dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
                                                          make_example=self._make_example, **kwargs)
             all_datasets.append(almond_dataset)
