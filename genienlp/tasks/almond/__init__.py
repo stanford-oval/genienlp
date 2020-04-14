@@ -125,7 +125,7 @@ class BaseAlmondTask(BaseTask):
     def _is_program_field(self, field_name):
         raise NotImplementedError()
 
-    def _make_example(self, parts, language=None):
+    def _make_example(self, parts, dir_name=None):
         raise NotImplementedError()
 
     def get_splits(self, root, **kwargs):
@@ -169,7 +169,7 @@ class Almond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name == 'answer'
 
-    def _make_example(self, parts, language=None):
+    def _make_example(self, parts, dir_name=None):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
         _id, sentence, target_code = parts
@@ -187,7 +187,7 @@ class ContextualAlmond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
-    def _make_example(self, parts, language=None):
+    def _make_example(self, parts, dir_name=None):
         _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
@@ -207,7 +207,7 @@ class ReverseAlmond(BaseTask):
     def _is_program_field(self, field_name):
         return field_name == 'context'
 
-    def _make_example(self, parts, language=None):
+    def _make_example(self, parts, dir_name=None):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
         _id, sentence, target_code = parts
@@ -227,7 +227,7 @@ class AlmondDialogueNLU(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
-    def _make_example(self, parts, language=None):
+    def _make_example(self, parts, dir_name=None):
         _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
@@ -248,7 +248,7 @@ class AlmondDialogueNLUAgent(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
-    def _make_example(self, parts, language=None):
+    def _make_example(self, parts, dir_name=None):
         _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
@@ -272,7 +272,7 @@ class AlmondDialogueNLG(BaseAlmondTask):
     def metrics(self):
         return ['bleu']
 
-    def _make_example(self, parts, language=None):
+    def _make_example(self, parts, dir_name=None):
         # the question is irrelevant for this task
         _id, context, sentence, target_code = parts
         question = 'what should the agent say ?'
@@ -297,7 +297,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     def metrics(self):
         return ['em', 'bleu']
 
-    def _make_example(self, parts, language=None):
+    def _make_example(self, parts, dir_name=None):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
         _id, context, _sentence, target_code = parts
         question = 'what should the agent do ?'
@@ -347,15 +347,19 @@ class AlmondMultiLingual(BaseAlmondTask):
             almond_dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
                                                          make_example=self._make_example, **kwargs)
             all_datasets.append(almond_dataset)
+            
+        used_fields = [field for field in all_datasets[0]._fields if getattr(all_datasets[0], field) is not None]
         
         assert len(all_datasets) >= 1
         if kwargs.get('sentence_batching'):
-            lengths = list(map(lambda dataset: len(dataset), all_datasets))
-            assert len(set(lengths)) == 1, 'When using sentence batching your datasets should have the same size.'
-            ids_sets = list(map(lambda dataset: set(self.get_train_processed_ids(dataset.train)), all_datasets))
-            id_set_base = set(ids_sets[0])
-            for id_set in ids_sets:
-                assert set(id_set) == id_set_base, 'When using sentence batching your datasets should have matching ids'
+            for field in used_fields:
+                lengths = list(map(lambda dataset: len(getattr(dataset, field)), all_datasets))
+                assert len(set(lengths)) == 1, 'When using sentence batching your datasets should have the same size.'
+            if 'train' in used_fields:
+                ids_sets = list(map(lambda dataset: set(self.get_train_processed_ids(dataset.train)), all_datasets))
+                id_set_base = set(ids_sets[0])
+                for id_set in ids_sets:
+                    assert set(id_set) == id_set_base, 'When using sentence batching your datasets should have matching ids'
             
             sort_key_fn = processed_id
             batch_size_fn = default_batch_fn
@@ -366,13 +370,12 @@ class AlmondMultiLingual(BaseAlmondTask):
         if kwargs.get('separate_eval') and (all_datasets[0].eval or all_datasets[0].test):
             return all_datasets
         else:
-            return self.combine_datasets(all_datasets, sort_key_fn, batch_size_fn)
+            return self.combine_datasets(all_datasets, sort_key_fn, batch_size_fn, used_fields)
 
-    def combine_datasets(self, datasets, sort_key_fn, batch_size_fn):
+    def combine_datasets(self, datasets, sort_key_fn, batch_size_fn, used_fields):
         splits = defaultdict()
-        fields = [field for field in datasets[0]._fields if getattr(datasets[0], field) is not None]
         
-        for field in fields:
+        for field in used_fields:
             all_examples = []
             for dataset in datasets:
                 all_examples.extend(getattr(dataset, field).examples)
