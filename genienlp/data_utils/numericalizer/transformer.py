@@ -233,6 +233,7 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
         self._tokenizer.add_special_tokens({
             'bos_token': "<s>",
             'eos_token': "</s>",
+            'sep_token':"</s>",
             'unk_token': "<unk>",
             'pad_token': "<pad>",
             'mask_token': "<mask>",
@@ -330,6 +331,7 @@ class BertNumericalizer(TransformerNumericalizer):
         self._tokenizer.add_special_tokens({
             'bos_token': '[CLS]',
             'eos_token': '[SEP]',
+            'sep_token': '[SEP]',
             'unk_token': '[UNK]',
             'pad_token': '[PAD]',
             'mask_token': '[MASK]'
