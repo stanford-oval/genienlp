@@ -238,7 +238,7 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, train=False, valid=False):
+def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False, valid=False):
     
     iterator = Iterator(dataset,
                         batch_size,
@@ -251,7 +251,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                                        batch_size=None,
                                        collate_fn=lambda minibatch: Batch.from_examples(minibatch, numericalizer,
                                                                             device=device, paired=paired and train,
-                                                                            groups=iterator.groups))
+                                                                            max_pairs=max_pairs, groups=iterator.groups))
 
 
 def pad(x, new_channel, dim, val=None):

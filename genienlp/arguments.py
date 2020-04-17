@@ -98,6 +98,8 @@ def parse_argv(parser):
     parser.add_argument('--paired', action='store_true',
                         help='Pair related examples before numericalizing the input (e.g. training with synthetic and paraphrase '
                              'sentence pairs for almond task)')
+    parser.add_argument('--max_pairs', type=int, default=1000000,
+                        help='Maximum number of pairs to make for each example group')
     
     parser.add_argument('--sentence_batching', action='store_true',
                         help='Batch same sentences together (used for multilingual tasks)')
@@ -248,7 +250,6 @@ def post_parse(args):
         args.sentence_batching = True
         
 
-    
     args.train_batch_values = args.train_batch_tokens
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
@@ -262,8 +263,11 @@ def post_parse(args):
         if args.sentence_batching:
             args.train_batch_values[i] = args.train_batch_size
             if args.paired:
+                num_train_langs = len(args.train_languages.split('+'))
+                new_batch_size = int(args.train_batch_size * \
+                                 (1 + min(num_train_langs**2 - num_train_langs, args.max_pairs) / num_train_langs))
                 logger.warning('Using paired example training will increase effective batch size from {} to {}'.
-                               format(args.train_batch_size, args.train_batch_size*len(args.train_languages)))
+                               format(args.train_batch_size, new_batch_size))
         
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size

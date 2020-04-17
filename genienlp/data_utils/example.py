@@ -70,7 +70,7 @@ class Batch(NamedTuple):
     decoder_vocab: object
     
     @staticmethod
-    def from_examples(examples, numericalizer, device=None, paired=False, groups=None):
+    def from_examples(examples, numericalizer, device=None, paired=False, max_pairs=None, groups=None):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         
         decoder_vocab = numericalizer.decoder_vocab.clone()
@@ -78,18 +78,22 @@ class Batch(NamedTuple):
 
         if paired:
             example_pairs = []
+            
             # get all possible combinations of related example pairs
             for i in range(0, len(examples), groups):
                 related_examples = [examples[j] for j in range(i, i+groups)]
                 example_pairs.extend(itertools.product(related_examples, related_examples))
-            # filter out pairs of same sentences
+            # filter out pairs with same sentences
             example_pairs = [ex_pair for ex_pair in example_pairs if ex_pair[0] != ex_pair[1]]
             
-            # shuffle example orders (note we only do pairing during training)
-            example_ids = random.shuffle([ex_a.example_id + '@' + ex_b.example_id for ex_a, ex_b in example_pairs])
-            context_inputs = random.shuffle([((ex_a.context, ex_a.context_word_mask), (ex_b.context, ex_b.context_word_mask)) for ex_a, ex_b in example_pairs])
-            question_inputs = random.shuffle([((ex_a.question, ex_a.question_word_mask), (ex_b.question, ex_b.question_word_mask)) for ex_a, ex_b in example_pairs])
-            answer_inputs = random.shuffle([((ex_a.answer, ex_a.answer_word_mask), (ex_b.answer, ex_b.answer_word_mask)) for ex_a, ex_b in example_pairs])
+            # shuffle example orders and select first max_pairs of them
+            random.shuffle(example_pairs)
+            example_pairs = example_pairs[:max_pairs]
+            
+            example_ids = [ex_a.example_id + '@' + ex_b.example_id for ex_a, ex_b in example_pairs]
+            context_inputs = [((ex_a.context, ex_a.context_word_mask), (ex_b.context, ex_b.context_word_mask)) for ex_a, ex_b in example_pairs]
+            question_inputs = [((ex_a.question, ex_a.question_word_mask), (ex_b.question, ex_b.question_word_mask)) for ex_a, ex_b in example_pairs]
+            answer_inputs = [((ex_a.answer, ex_a.answer_word_mask), (ex_b.answer, ex_b.answer_word_mask)) for ex_a, ex_b in example_pairs]
 
             all_example_ids_pair = example_ids
             all_context_inputs_pair = numericalizer.encode_pair(context_inputs, decoder_vocab, device=device)

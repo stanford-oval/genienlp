@@ -32,7 +32,7 @@ import torch
 import random
 
 from .example import Batch
-from ..tasks.generic_dataset import context_answer_len, processed_id, default_batch_fn
+from ..tasks.generic_dataset import context_answer_len, default_batch_fn
 
 
 class Iterator(torch.utils.data.IterableDataset):
@@ -80,9 +80,9 @@ class Iterator(torch.utils.data.IterableDataset):
                 dataset = self.dataset
 
             if self.use_data_sort_key:
-                if self.sort_key == processed_id:
+                if self.groups:
                     batches = self._sentence_batching(dataset)
-                elif self.sort_key == context_answer_len:
+                else:
                     batches = self._bucket_batching(dataset)
             else:
                 batches = self._batch(dataset, self.batch_size)

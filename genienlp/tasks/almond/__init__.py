@@ -35,7 +35,7 @@ from collections import defaultdict
 
 from ..base_task import BaseTask
 from ..registry import register_task
-from ..generic_dataset import CQA, processed_id, context_answer_len, token_batch_fn, default_batch_fn
+from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
 
 from ..base_dataset import Split
@@ -108,7 +108,18 @@ class AlmondDataset(CQA):
     
 
 def is_entity(token):
-    return token[0].isupper()
+    try:
+        return token[0].isupper()
+    except:
+        print('here')
+
+def process_id(ex):
+    id_ = ex.example_id.rsplit('/', 1)
+    id_ = id_[0] if len(id_) == 1 else id_[1]
+    # translated
+    if id_[0] == 'T':
+        id_ = id_[1:]
+    return id_
 
 
 class BaseAlmondTask(BaseTask):
@@ -334,7 +345,7 @@ class AlmondMultiLingual(BaseAlmondTask):
     def get_train_processed_ids(self, split):
         all_ids = []
         for ex in split.examples:
-            all_ids.append(processed_id(ex))
+            all_ids.append(process_id(ex))
         return all_ids
         
     def get_splits(self, root, **kwargs):
@@ -360,7 +371,7 @@ class AlmondMultiLingual(BaseAlmondTask):
                 for id_set in ids_sets:
                     assert set(id_set) == id_set_base, 'When using sentence batching your datasets should have matching ids'
             
-            sort_key_fn = processed_id
+            sort_key_fn = process_id
             batch_size_fn = default_batch_fn
         else:
             sort_key_fn = context_answer_len
