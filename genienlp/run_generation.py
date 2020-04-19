@@ -51,7 +51,7 @@ from transformers import BertForMaskedLM, BertTokenizer
 from .util import set_seed, get_number_of_lines, combine_files_on_disk, split_file_on_disk, get_file_part_path, detokenize, tokenize, lower_case, \
                     top_k_top_p_filtering, SpecialTokenMap, remove_thingtalk_quotes
 from .metrics import computeBLEU
-from .models.common import BeamHypotheses
+# from .models.common import BeamHypotheses
 
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -331,7 +331,7 @@ def input_heuristics(s: str, thingtalk=None, is_cased=False, keep_special_tokens
     s = tokenize(s)
 
     # Put question mark at the end whenever necessary.
-    sentences = [sentence.strip() for sentence in re.split('\s+([.|?|!|:])\s*', s) if len(sentence) > 0]
+    sentences = [sentence.strip() for sentence in re.split('\s+([.?!:])\s*', s) if len(sentence) > 0]
     # print('sentences = ', sentences)
     for idx in range(len(sentences)):
         if sentences[idx] in ['.', '?' , '!', ':']:

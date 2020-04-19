@@ -1,7 +1,5 @@
 from argparse import ArgumentParser
 import csv
-from tqdm import tqdm
-import re
 
 
 def read_dialog_file(dialog_file, args):

@@ -32,7 +32,6 @@ import shutil
 import torch
 import math
 import csv
-import numpy as np
 from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data.distributed import DistributedSampler

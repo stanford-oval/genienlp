@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 import csv
 import sys
 from tqdm import tqdm
-from genienlp.util import detokenize, get_number_of_lines
+from genienlp.util import detokenize
 
 csv.field_size_limit(sys.maxsize)
 
