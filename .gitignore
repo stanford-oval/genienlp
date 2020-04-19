@@ -22,8 +22,6 @@ text/.DS_Store
 src/
 workdir/
 *save*/
-tests/dataset-*
-tests/dataset/*
 
 
 # C extensions
