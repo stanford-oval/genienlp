@@ -45,18 +45,124 @@ from .data_utils.iterator import Iterator
 logger = logging.getLogger(__name__)
 
 
+class SpecialTokenMap:
+    def __init__(self, pattern, forward_func, backward_func=None):
+        """
+        Inputs:
+            pattern: a regex pattern
+            forward_func: a function with signature forward_func(str) -> str
+            backward_func: a function with signature backward_func(str) -> list[str]
+        """
+        if isinstance(forward_func, list):
+            self.forward_func = lambda x: forward_func[int(x)%len(forward_func)]
+        else:
+            self.forward_func = forward_func
+
+        if isinstance(backward_func, list):
+            self.backward_func = lambda x: backward_func[int(x)%len(backward_func)]
+        else:
+            self.backward_func = backward_func
+    
+        self.pattern = pattern
+    
+    def forwad(self, s: str):
+        reverse_map = []
+        matches = re.finditer(self.pattern, s)
+        if matches is None:
+            return s, reverse_map
+        for match in matches:
+            occurance = match.group(0)
+            # print('occurance = ', occurance)
+            parameter = match.group(1)
+            replacement = self.forward_func(parameter)
+            s = s.replace(occurance, replacement)
+            reverse_map.append((self, occurance))
+        return s, reverse_map
+
+    def backward(self, s: str, occurance: str):
+        match = re.match(self.pattern, occurance)
+        parameter = match.group(1)
+        if self.backward_func is None:
+            list_of_strings_to_match = [self.forward_func(parameter)]
+        else:
+            list_of_strings_to_match = sorted(self.backward_func(parameter), key=lambda x:len(x), reverse=True)
+        # print('list_of_strings_to_match = ', list_of_strings_to_match)
+        for string_to_match in list_of_strings_to_match:
+            l = [' '+string_to_match+' ', string_to_match+' ', ' '+string_to_match]
+            o = [' '+occurance+' ', occurance+' ', ' '+occurance]
+            new_s = s
+            for i in range(len(l)):
+                new_s = re.sub(l[i], o[i], s, flags=re.IGNORECASE)
+                if s != new_s:
+                    break
+            if s != new_s:
+                s = new_s
+                break
+            
+        return s
+
+
 def tokenizer(s):
     return s.split()
 
-def detokenize(text):
-    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "'s", ")"]
+def mask_special_tokens(string: str):
+    exceptions = [match.group(0) for match in re.finditer('[A-Za-z:_.]+_[0-9]+', string)]
+    for e in exceptions:
+        string = string.replace(e, '<temp>', 1)
+    return string, exceptions
+
+def unmask_special_tokens(string: str, exceptions: list):
+    for e in exceptions:
+        string = string.replace('<temp>', e, 1)
+    return string
+
+
+def detokenize(string: str):
+    string, exceptions = mask_special_tokens(string)
+    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "!", "'s", ")", ":"]
     for t in tokens:
-        text = text.replace(' ' + t, t)
-    text = text.replace("( ", "(")
-    text = text.replace('gon na', 'gonna')
-    text = text.replace('wan na', 'wanna')
-    return text
-    
+        string = string.replace(' ' + t, t)
+    string = string.replace("( ", "(")
+    string = string.replace('gon na', 'gonna')
+    string = string.replace('wan na', 'wanna')
+    string = unmask_special_tokens(string, exceptions)
+    return string
+
+def tokenize(string: str):
+    string, exceptions = mask_special_tokens(string)
+    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "!", "'s", ")", ":"]
+    for t in tokens:
+        string = string.replace(t, ' ' + t)
+    string = string.replace("(", "( ")
+    string = string.replace('gonna', 'gon na')
+    string = string.replace('wanna', 'wan na')
+    string = re.sub('\s+', ' ', string)
+    string = unmask_special_tokens(string, exceptions)
+    return string.strip()
+
+def lower_case(string):
+    string, exceptions = mask_special_tokens(string)
+    string = string.lower()
+    string = unmask_special_tokens(string, exceptions)
+    return string
+
+def remove_thingtalk_quotes(thingtalk):
+    quote_values = []
+    while True:
+        # print('before: ', thingtalk)
+        l1 = thingtalk.find('"')
+        if l1 < 0:
+            break
+        l2 = thingtalk.find('"', l1+1)
+        if l2 < 0:
+            # ThingTalk code is not syntactic
+            return thingtalk, None
+        quote_values.append(thingtalk[l1+1: l2].strip())
+        thingtalk = thingtalk[:l1] + '<temp>' + thingtalk[l2+1:]
+        # print('after: ', thingtalk)
+    thingtalk = thingtalk.replace('<temp>', '""')
+    return thingtalk, quote_values
+
 def get_number_of_lines(file_path):
     count = 0
     with open(file_path) as f:
