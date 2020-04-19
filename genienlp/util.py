@@ -34,7 +34,7 @@ import logging
 import os
 import random
 import time
-
+import re
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -56,7 +56,7 @@ def detokenize(text):
     text = text.replace('gon na', 'gonna')
     text = text.replace('wan na', 'wanna')
     return text
-
+    
 def get_number_of_lines(file_path):
     count = 0
     with open(file_path) as f:
@@ -93,13 +93,15 @@ def split_file_on_disk(file_path, num_splits):
 
     return all_output_paths
 
-def combine_files_on_disk(file_path_prefix, num_files):
+def combine_files_on_disk(file_path_prefix, num_files, delete=False):
     with open(file_path_prefix, 'w') as combined_file:
         for i in range(num_files):
             file_path = get_file_part_path(file_path_prefix, i)
             with open(file_path, 'r') as file:
                 for line in file:
                     combined_file.write(line)
+            if delete:
+                os.remove(file_path)
 
 def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float('Inf'), min_tokens_to_keep=1):
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
@@ -273,17 +275,23 @@ def load_config_json(args):
         config = json.load(config_file)
         retrieve = ['model', 'seq2seq_encoder', 'seq2seq_decoder', 'transformer_layers', 'rnn_layers', 'rnn_zero_state',
                     'transformer_hidden', 'dimension', 'rnn_dimension', 'load', 'max_val_context_length',
-                    'val_batch_size', 'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower',
+                    'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower',
                     'encoder_embeddings', 'context_embeddings', 'question_embeddings', 'decoder_embeddings',
                     'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'train_encoder_embeddings',
                     'train_context_embeddings', 'train_question_embeddings', 'locale', 'use_pretrained_bert',
                     'train_context_embeddings_after', 'train_question_embeddings_after',
-                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize', 'num_beams']
+                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize']
+
+        # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
+        overwrite = ['val_batch_size', 'num_beams']
+        for o in overwrite:
+            if getattr(args, o) is None:
+                retrieve.append(o)
 
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
-            # These are for backward compatibility with models that were trained before we added these arguments
+            # backward compatibility with models that were trained before we added these arguments
             elif r == 'locale':
                 setattr(args, r, 'en')
             elif r in ('trainable_decoder_embedding', 'trainable_encoder_embeddings', 'pretrain_context',

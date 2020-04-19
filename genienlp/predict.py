@@ -151,7 +151,7 @@ def run(args, numericalizer, val_sets, model, device):
 
             predictions = []
             answers = []
-            with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
+            with open(prediction_file_name, 'w') as prediction_file:
                 for batch_idx, batch in tqdm(enumerate(it), desc="Batches"):
                     _, batch_prediction = model(batch, iteration=1)
 
@@ -166,7 +166,10 @@ def run(args, numericalizer, val_sets, model, device):
                         prediction_file.write(batch.example_id[i] + '\t' + example_prediction + '\n')
 
             if len(answers) > 0:
-                metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)
+                metrics_to_compute = task.metrics
+                if args.main_metric_only:
+                    metrics_to_compute = [metrics_to_compute[0]]
+                metrics, _ = compute_metrics(predictions, answers, metrics_to_compute, args=args)
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')
 
@@ -217,12 +220,18 @@ def parse_argv(parser):
                         help='directory where cached models should be loaded from')
     parser.add_argument('--subsample', default=20000000, type=int,
                         help='subsample the eval/test datasets (experimental)')
-
+                        
     parser.add_argument('--pred_languages', type=str, nargs='+',
                         help='used to specify dataset languages used during prediction for multilingual tasks'
                         'multiple languages for each task should be concatenated with +')
     parser.add_argument('--separate_eval', action='store_true',
                         help='evaluate on each language eval set separately')
+    
+    parser.add_argument('--main_metric_only', action='store_true', help='If True, we only calculate the deca score metric for each task.')
+    # If not None, these values will override the values saved in the trained model's config file
+    parser.add_argument('--val_batch_size', nargs='+', default=None, type=int,
+                        help='Batch size for validation corresponding to tasks in val tasks')
+    parser.add_argument('--num_beams', type=int, default=None, help='number of beams to use for beam search')
 
 
 def adjust_multilingual_eval(args):

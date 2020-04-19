@@ -420,7 +420,10 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
 
 
-def compute_metrics(greedy, answer, requested_metrics, args=None):
+def compute_metrics(greedy, answer, requested_metrics, args=None, batch_mode=True):
+    if not batch_mode:
+        greedy = [greedy]
+        answer = [answer]
     metric_keys = []
     metric_values = []
     if not isinstance(answer[0], list):
