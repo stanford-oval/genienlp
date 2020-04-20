@@ -53,11 +53,9 @@ def make_example_id(dataset, example_id):
 def context_answer_len(ex):
     return interleave_keys(len(ex.context), len(ex.answer))
 
-def same_id(ex):
+def id_value(ex):
     id_ = ex.example_id.rsplit('/', 1)
     id_ = id_[0] if len(id_) == 1 else id_[1]
-    if id_[0] == 'T':
-        id_ = id_[1:]
     return id_
 
 # batch_size funcs

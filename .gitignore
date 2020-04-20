@@ -24,6 +24,7 @@ workdir/
 *save*/
 tests/dataset-*
 tests/dataset/*
+tests/test_py.sh
 
 
 # C extensions

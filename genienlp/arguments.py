@@ -95,6 +95,12 @@ def parse_argv(parser):
     parser.add_argument('--val_batch_size', nargs='+', default=[256], type=int,
                         help='Batch size for validation corresponding to tasks in val tasks')
 
+    parser.add_argument('--paired', action='store_true',
+                        help='Pair related examples before numericalizing the input (e.g. training with synthetic and paraphrase '
+                             'sentence pairs for almond task)')
+    parser.add_argument('--max_pairs', type=int, default=1000000,
+                        help='Maximum number of pairs to make for each example group')
+    
     parser.add_argument('--sentence_batching', action='store_true',
                         help='Batch same sentences together (used for multilingual tasks)')
     parser.add_argument('--train_batch_size', type=int, default=0,
@@ -106,7 +112,6 @@ def parse_argv(parser):
                         help='multiplicative constant choosing the weight of encoder_loss in total loss')
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
     
-
     parser.add_argument('--vocab_tasks', nargs='+', type=str, help='tasks to use in the construction of the vocabulary')
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
     parser.add_argument('--max_generative_vocab', default=50000, type=int,
@@ -238,8 +243,13 @@ def post_parse(args):
     
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1) :
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
-
     
+    if args.paired and not args.sentence_batching:
+        logger.warning('Paired training only works if sentence_batching is used as well.'
+                        'Activating sentence_batching...')
+        args.sentence_batching = True
+        
+
     args.train_batch_values = args.train_batch_tokens
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
@@ -252,6 +262,12 @@ def post_parse(args):
     for i in indices:
         if args.sentence_batching:
             args.train_batch_values[i] = args.train_batch_size
+            if args.paired:
+                num_train_langs = len(args.train_languages.split('+'))
+                new_batch_size = int(args.train_batch_size * \
+                                 (1 + min(num_train_langs**2 - num_train_langs, args.max_pairs) / num_train_langs))
+                logger.warning('Using paired example training will increase effective batch size from {} to {}'.
+                               format(args.train_batch_size, new_batch_size))
         
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
@@ -279,7 +295,7 @@ def post_parse(args):
         args.tensorboard_dir = args.log_dir
     args.dist_sync_file = os.path.join(args.log_dir, 'distributed_sync_file')
     
-    if (have_multilingual(args.train_task_names) and (args.train_languages is None or args.eval_languages is None)):
+    if have_multilingual(args.train_task_names) and (args.train_languages is None or args.eval_languages is None):
         raise ValueError('You have to define training and evaluation languages when you have a multilingual task')
     
     for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
