@@ -246,12 +246,11 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                         repeat=train,
                         use_data_batch_fn=train,
                         use_data_sort_key=train)
+    
+    collate_function = lambda minibatch: Batch.from_examples(minibatch, numericalizer, device=device,
+                                           paired=paired and train, max_pairs=max_pairs, groups=iterator.groups)
         
-    return torch.utils.data.DataLoader(iterator,
-                                       batch_size=None,
-                                       collate_fn=lambda minibatch: Batch.from_examples(minibatch, numericalizer,
-                                                                            device=device, paired=paired and train,
-                                                                            max_pairs=max_pairs, groups=iterator.groups))
+    return torch.utils.data.DataLoader(iterator, batch_size=None, collate_fn=collate_function)
 
 
 def pad(x, new_channel, dim, val=None):

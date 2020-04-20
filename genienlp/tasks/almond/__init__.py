@@ -108,10 +108,7 @@ class AlmondDataset(CQA):
     
 
 def is_entity(token):
-    try:
-        return token[0].isupper()
-    except:
-        print('here')
+    return token[0].isupper()
 
 def process_id(ex):
     id_ = ex.example_id.rsplit('/', 1)
@@ -377,12 +374,14 @@ class AlmondMultiLingual(BaseAlmondTask):
             sort_key_fn = context_answer_len
             batch_size_fn = token_batch_fn
             
+        groups = len(all_datasets) if kwargs.get('sentence_batching') else None
+        
         if kwargs.get('separate_eval') and (all_datasets[0].eval or all_datasets[0].test):
             return all_datasets
         else:
-            return self.combine_datasets(all_datasets, sort_key_fn, batch_size_fn, used_fields)
+            return self.combine_datasets(all_datasets, sort_key_fn, batch_size_fn, used_fields, groups)
 
-    def combine_datasets(self, datasets, sort_key_fn, batch_size_fn, used_fields):
+    def combine_datasets(self, datasets, sort_key_fn, batch_size_fn, used_fields, groups):
         splits = defaultdict()
         
         for field in used_fields:
@@ -390,7 +389,7 @@ class AlmondMultiLingual(BaseAlmondTask):
             for dataset in datasets:
                 all_examples.extend(getattr(dataset, field).examples)
                 
-            splits[field] = CQA(all_examples, sort_key_fn=sort_key_fn, batch_size_fn=batch_size_fn, groups=len(datasets))
+            splits[field] = CQA(all_examples, sort_key_fn=sort_key_fn, batch_size_fn=batch_size_fn, groups=groups)
         
         return Split(train=splits.get('train'),
                      eval=splits.get('eval'),
