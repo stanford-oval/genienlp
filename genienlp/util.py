@@ -197,7 +197,7 @@ def split_file_on_disk(file_path, num_splits, output_paths=None):
     all_output_files = []
     for part_idx in range(num_splits):
         if output_paths is None:
-            output_path = get_file_part_path(file_path, part_idx)
+            output_path = get_part_path(file_path, part_idx)
         else:
             output_path = output_paths[part_idx]
         all_output_paths.append(output_path)
