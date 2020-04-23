@@ -118,6 +118,8 @@ def run(args, numericalizer, val_sets, model, device):
         task_index += 1
 
     log_model_size(logger, model, args.model)
+    if torch.cuda.device_count() > 1:
+        model = torch.nn.DataParallel(model)
     model.to(device)
 
     decaScore = []
@@ -198,8 +200,8 @@ def parse_argv(parser):
     parser.add_argument('--tasks',
                         default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl',
                                  'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
-    parser.add_argument('--devices', default=[0], nargs='+', type=int,
-                        help='a list of devices that can be used (multi-gpu currently WIP)')
+    # parser.add_argument('--devices', default=[0], nargs='+', type=int,
+    #                     help='a list of devices that can be used for prediction')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to save embeddings.')
