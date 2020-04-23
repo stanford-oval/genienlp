@@ -27,6 +27,7 @@ import csv
 import re
 import copy
 import numpy as np
+import os
 
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
@@ -527,6 +528,8 @@ def main(args):
         for p in all_processes:
             p.join()
 
+        for file in all_input_files:
+            os.remove(file)
         combine_files_on_disk(args.output_file, args.n_gpu, delete=True)
 
     else:

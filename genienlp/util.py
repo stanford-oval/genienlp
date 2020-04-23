@@ -210,7 +210,7 @@ def split_file_on_disk(file_path, num_splits, output_paths=None):
         for line in input_file:
             all_output_files[output_file_idx].write(line)
             written_lines += 1
-            if written_lines % (number_of_lines//num_splits) == 0:
+            if number_of_lines >= num_splits and written_lines % (number_of_lines//num_splits) == 0:
                 output_file_idx = min(output_file_idx + 1, len(all_output_files)-1)
 
     for f in all_output_files:
