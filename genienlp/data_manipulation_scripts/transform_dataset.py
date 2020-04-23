@@ -28,6 +28,8 @@ def main():
                         help='Remove duplicate natural utterances. Note that this also removes cases where a natural utterance has multiple ThingTalk codes.')
     parser.add_argument('--output_columns', type=int, nargs='+', default=None,
                         help='The columns to write to output. By default, we output all columns.')
+    parser.add_argument('--id_column', type=int, default=0,
+                        help='The column index in the input file that contains the unique id')
     parser.add_argument('--utterance_column', type=int, default=1,
                         help='The column index in the input file that contains the natural utterance')
     parser.add_argument('--thingtalk_column', type=int, default=2,
@@ -92,9 +94,11 @@ def main():
                     output_rows.append(row)
                     new_query_count += 1
             elif args.transformation == 'replace_queries':
-                for _ in range(args.num_new_queries):
-                    row[args.utterance_column] = new_queries[new_query_count]
-                    output_rows.append(row.copy())
+                for idx in range(args.num_new_queries):
+                    copy_row = row.copy()
+                    copy_row[args.utterance_column] = new_queries[new_query_count]
+                    copy_row[args.id_column] += ('-' + str(idx))
+                    output_rows.append(copy_row)
                     new_query_count += 1
             else:
                 assert args.transformation == 'none'
