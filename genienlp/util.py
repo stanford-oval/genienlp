@@ -32,6 +32,7 @@
 import json
 import logging
 import os
+import shutil
 import random
 import time
 import re
@@ -170,19 +171,37 @@ def get_number_of_lines(file_path):
             count += 1
     return count
 
-def get_file_part_path(file_path, part_idx):
-    return file_path + '_part' + str(part_idx+1)
+def get_part_path(path, part_idx):
+    if path.endswith(os.path.sep):
+        has_separator = True
+        path = path[:-1]
+    else:
+        has_separator = False
+    return path + '_part' + str(part_idx+1) + (os.path.sep if has_separator else '')
 
-def split_file_on_disk(file_path, num_splits):
+def split_folder_on_disk(folder_path, num_splits):
+    new_folder_paths = [get_part_path(folder_path, part_idx) for part_idx in range(num_splits)]
+    for subdir, dirs, files in os.walk(folder_path):
+        for file in files:
+            new_file_paths = [os.path.join(subdir.replace(folder_path, new_folder_paths[part_idx]), file) for part_idx in range(num_splits)]
+            split_file_on_disk(os.path.join(subdir, file), num_splits, output_paths=new_file_paths)
+    return new_folder_paths
+
+
+def split_file_on_disk(file_path, num_splits, output_paths=None):
     """
     """
     number_of_lines = get_number_of_lines(file_path)
 
     all_output_paths = []
     all_output_files = []
-    for i in range(num_splits):
-        output_path = get_file_part_path(file_path, i)
+    for part_idx in range(num_splits):
+        if output_paths is None:
+            output_path = get_part_path(file_path, part_idx)
+        else:
+            output_path = output_paths[part_idx]
         all_output_paths.append(output_path)
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         all_output_files.append(open(output_path, 'w'))
 
     written_lines = 0
@@ -191,7 +210,7 @@ def split_file_on_disk(file_path, num_splits):
         for line in input_file:
             all_output_files[output_file_idx].write(line)
             written_lines += 1
-            if written_lines % (number_of_lines//num_splits) == 0:
+            if number_of_lines >= num_splits and written_lines % (number_of_lines//num_splits) == 0:
                 output_file_idx = min(output_file_idx + 1, len(all_output_files)-1)
 
     for f in all_output_files:
@@ -199,10 +218,45 @@ def split_file_on_disk(file_path, num_splits):
 
     return all_output_paths
 
+def combine_folders_on_disk(folder_path_prefix, num_files, delete=False):
+    folder_paths = [get_part_path(folder_path_prefix, part_idx) for part_idx in range(num_files)]
+    new_to_olds_map = {}
+    for i in range(num_files):
+        for subdir, dirs, files in os.walk(folder_paths[i]):
+            for file in files:
+                new_file_path = os.path.join(subdir.replace(folder_paths[i], folder_path_prefix), file)
+                if new_file_path not in new_to_olds_map:
+                    new_to_olds_map[new_file_path] = []    
+                new_to_olds_map[new_file_path].append(os.path.join(subdir, file))
+    
+    for new, olds in new_to_olds_map.items():
+        os.makedirs(os.path.dirname(new), exist_ok=True)
+        new_json = None
+        with open(new, 'w') as combined_file:
+            for i in range(num_files):
+                old_file_path = olds[i]
+                with open(old_file_path, 'r') as old_file:
+                    if new.endswith('.json'):
+                        if new_json is None:
+                            new_json = json.load(old_file)
+                        else:
+                            for k, v in json.load(old_file).items():
+                                new_json[k] += v
+                    else:
+                        for line in old_file:
+                            combined_file.write(line)
+            if new.endswith('.json'):
+                for k, v in new_json.items():
+                    new_json[k] /= float(num_files)
+                json.dump(new_json, combined_file)
+    if delete:
+        for folder in folder_paths:
+            shutil.rmtree(folder)
+
 def combine_files_on_disk(file_path_prefix, num_files, delete=False):
     with open(file_path_prefix, 'w') as combined_file:
         for i in range(num_files):
-            file_path = get_file_part_path(file_path_prefix, i)
+            file_path = get_part_path(file_path_prefix, i)
             with open(file_path, 'r') as file:
                 for line in file:
                     combined_file.write(line)
@@ -311,7 +365,7 @@ def init_devices(args, devices=None):
     if not torch.cuda.is_available():
         return [torch.device('cpu')]
     if not devices:
-        return [torch.device('cuda:0')]
+        return [torch.device('cuda:'+str(i)) for i in range(torch.cuda.device_count())]
     return [torch.device(ordinal) for ordinal in devices]
 
 

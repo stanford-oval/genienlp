@@ -34,6 +34,15 @@ import os
 from pprint import pformat
 from tqdm import tqdm
 from collections import defaultdict
+import copy
+import shutil
+
+# multiprocessing with CUDA
+from torch.multiprocessing import Process, set_start_method
+try:
+     set_start_method('spawn')
+except RuntimeError:
+    pass
 
 import torch
 
@@ -42,7 +51,7 @@ from .data_utils.embeddings import load_embeddings
 from .metrics import compute_metrics
 from .tasks.registry import get_tasks
 from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
-    have_multilingual
+    have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +105,23 @@ def prepare_data(args, numericalizer, embeddings):
     return splits
 
 
-def run(args, numericalizer, val_sets, model, device):
+def run(args, device):
+    save_dict = torch.load(args.best_checkpoint, map_location=device)
+
+    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
+        load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings, args.decoder_embeddings,
+                        args.max_generative_vocab, logger)
+    numericalizer.load(args.path)
+    for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
+        emb.init_for_vocab(numericalizer.vocab)
+
+    logger.info(f'Initializing Model')
+    Model = getattr(models, args.model)
+    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
+    model_dict = save_dict['model_state_dict']
+    model.load_state_dict(model_dict)
+    val_sets = prepare_data(args, numericalizer, set(context_embeddings + question_embeddings + decoder_embeddings))
+
     logger.info(f'Preparing iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
@@ -108,8 +133,8 @@ def run(args, numericalizer, val_sets, model, device):
         if task_languages is not None and args.separate_eval:
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
-            for index, set in enumerate(val_set):
-                task_iter.append((task, task_languages[index],  make_data_loader(set, numericalizer, bs, device)))
+            for index, set_ in enumerate(val_set):
+                task_iter.append((task, task_languages[index],  make_data_loader(set_, numericalizer, bs, device)))
         # single language task or no separate eval
         else:
            task_iter.append((task, task_languages,  make_data_loader(val_set[0], numericalizer, bs, device)))
@@ -198,8 +223,8 @@ def parse_argv(parser):
     parser.add_argument('--tasks',
                         default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl',
                                  'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
-    parser.add_argument('--devices', default=[0], nargs='+', type=int,
-                        help='a list of devices that can be used (multi-gpu currently WIP)')
+    parser.add_argument('--devices', default=None, nargs='+', type=int,
+                        help='a list of devices that can be used for prediction. By default, all devices will be used.')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to save embeddings.')
@@ -262,20 +287,30 @@ def main(args):
     logger.info(f'Loading from {args.best_checkpoint}')
 
     devices = init_devices(args)
-    save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
+    if args.devices is not None:
+        devices = [devices[i] for i in args.devices]
 
-    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
-        load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings, args.decoder_embeddings,
-                        args.max_generative_vocab, logger)
-    numericalizer.load(args.path)
-    for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
-        emb.init_for_vocab(numericalizer.vocab)
+    if len(devices) > 1:
+        # Independent multi-GPU generation
+        all_processes = []
+        all_data_folders = split_folder_on_disk(args.data, len(devices))
+        
+        for device_id in range(len(devices)):
+            copy_args = copy.copy(args)
+            copy_args.data = all_data_folders[device_id]
+            copy_args.eval_dir = get_part_path(args.eval_dir, device_id)
+            
+            p = Process(target=run, args=(copy_args, devices[device_id]))
+            all_processes.append(p)
+            p.start()
 
-    logger.info(f'Initializing Model')
-    Model = getattr(models, args.model)
-    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
-    model_dict = save_dict['model_state_dict']
-    model.load_state_dict(model_dict)
-    splits = prepare_data(args, numericalizer, set(context_embeddings + question_embeddings + decoder_embeddings))
+        for p in all_processes:
+            p.join()
 
-    run(args, numericalizer, splits, model, devices[0])
+        for folder in all_data_folders:
+            shutil.rmtree(folder)
+        combine_folders_on_disk(args.eval_dir, len(devices), delete=True)
+
+    else:
+        run(args, devices[0])
+        
