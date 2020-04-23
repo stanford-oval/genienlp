@@ -48,7 +48,7 @@ from transformers import CTRLLMHeadModel, CTRLTokenizer
 from transformers import XLMWithLMHeadModel, XLMTokenizer
 from transformers import BertForMaskedLM, BertTokenizer
 
-from .util import set_seed, get_number_of_lines, combine_files_on_disk, split_file_on_disk, get_file_part_path, detokenize, tokenize, lower_case, \
+from .util import set_seed, get_number_of_lines, combine_files_on_disk, split_file_on_disk, get_part_path, detokenize, tokenize, lower_case, \
                     top_k_top_p_filtering, SpecialTokenMap, remove_thingtalk_quotes
 from .metrics import computeBLEU
 # from .models.common import BeamHypotheses
@@ -518,7 +518,7 @@ def main(args):
                 copy_args.device = torch.device("cuda:" + str(gpu_idx))
             copy_args.n_gpu = 1
             copy_args.input_file = all_input_files[gpu_idx]
-            copy_args.output_file = get_file_part_path(args.output_file, gpu_idx)
+            copy_args.output_file = get_part_path(args.output_file, gpu_idx)
             
             p = Process(target=run_generation, args=(copy_args,))
             all_processes.append(p)
