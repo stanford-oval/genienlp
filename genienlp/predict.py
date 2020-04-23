@@ -176,6 +176,7 @@ def run(args, device):
 
             predictions = []
             answers = []
+            contexts = []
             with open(prediction_file_name, 'w') as prediction_file:
                 for batch_idx, batch in tqdm(enumerate(it), desc="Batches"):
                     _, batch_prediction = model(batch, iteration=1)
@@ -186,6 +187,10 @@ def run(args, device):
                     batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize,
                                                          field_name='answer')
                     answers += batch_answer
+                    
+                    batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize,
+                                                         field_name='context')
+                    contexts += batch_context
 
                     for i, example_prediction in enumerate(batch_prediction):
                         prediction_file.write(batch.example_id[i] + '\t' + example_prediction + '\n')
@@ -200,8 +205,8 @@ def run(args, device):
                     results_file.write(json.dumps(metrics) + '\n')
 
                 if not args.silent:
-                    for i, (p, a) in enumerate(zip(predictions, answers)):
-                        logger.info(f'Prediction {i + 1}: {p}\nAnswer {i + 1}: {a}\n')
+                    for i, (c, p, a) in enumerate(zip(contexts, predictions, answers)):
+                        logger.info(f'\nContext {i+1}: {c}\nPrediction {i + 1}: {p}\nAnswer {i + 1}: {a}\n')
                     logger.info(metrics)
                     
                 task_scores[task].append((len(answers), metrics[task.metrics[0]]))
