@@ -212,7 +212,7 @@ def run(args, device):
                 task_scores[task].append((len(answers), metrics[task.metrics[0]]))
     
     for task in task_scores.keys():
-        decaScore.append(sum([lenght * score for lenght, score in task_scores[task]]) / sum([lenght for lenght, score in task_scores[task]]))
+        decaScore.append(sum([length * score for length, score in task_scores[task]]) / sum([length for length, score in task_scores[task]]))
 
     logger.info(f'Evaluated Tasks:\n')
     for i, task in enumerate(args.tasks):
