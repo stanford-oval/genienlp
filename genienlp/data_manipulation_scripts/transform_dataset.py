@@ -26,27 +26,49 @@ def main():
                                                                 'none'], default='none', help='The type of transformation to apply.')
     parser.add_argument('--remove_duplicates', action='store_true',
                         help='Remove duplicate natural utterances. Note that this also removes cases where a natural utterance has multiple ThingTalk codes.')
-    parser.add_argument('--output_columns', type=int, nargs='+', default=None,
-                        help='The columns to write to output. By default, we output all columns.')
-    parser.add_argument('--id_column', type=int, default=0,
-                        help='The column index in the input file that contains the unique id')
-    parser.add_argument('--utterance_column', type=int, default=1,
-                        help='The column index in the input file that contains the natural utterance')
-    parser.add_argument('--thingtalk_column', type=int, default=2,
-                        help='The column index in the input file that contains the ThingTalk code.')
 
     # These arguments are effective only if --transformation=get_wrong_thingtalk
     parser.add_argument('--remove_with_heuristics', action='store_true',
                         help='Remove examples if the values inside quotations in ThingTalk have changed or special words like NUMBER_0 cannot be found in TT anymore.')
     parser.add_argument('--replace_with_gold', action='store_true', help='Instead of the original ThingTalk, output what the parser said is gold.')
 
+    parser.add_argument('--task', type=str, required=True, choices=['almond', 'almond_dialogue_nlu'],
+                        help='Specifies the meaning of columns in the input file and the ones that should go to the output')
+
+    # parser.add_argument('--output_columns', type=int, nargs='+', default=None,
+    #                     help='The columns to write to output. By default, we output all columns.')
+    # parser.add_argument('--id_column', type=int, default=0,
+    #                     help='The column index in the input file that contains the unique id')
+    # parser.add_argument('--utterance_column', type=int, default=1,
+    #                     help='The column index in the input file that contains the natural utterance')
+    # parser.add_argument('--thingtalk_column', type=int, default=2,
+    #                     help='The column index in the input file that contains the ThingTalk code.')
+    # parser.add_argument('--no_duplication_columns', type=int, nargs='+', default=None,
+    #                     help='The columns indices in the input file that determine whether two rows are duplicates of each other or not.')
 
     args = parser.parse_args()
+
+    if args.task == 'almond':
+        args.id_column = 0
+        args.utterance_column = 1
+        args.thingtalk_column = 2
+        args.output_columns = [0, 1, 2]
+        args.no_duplication_columns = [args.utterance_column]
+
+    elif args.task == 'almond_dialogue_nlu':
+        args.id_column = 0
+        # column 1 is ontext (ThingTalk)
+        args.utterance_column = 2
+        args.thingtalk_column = 3
+        args.output_columns = [0, 1, 2, 3]
+        args.no_duplication_columns = [args.utterance_column]
 
     if args.output_columns is None:
         # if args.transformation == 'remove_wrong_thingtalk':
             # args.output_columns = [0, 1, 2, 3, 4] # we add original utterance and ThingTalk as well
         args.output_columns = [0, 1, 2]
+    if args.remove_duplicates and args.no_duplication_columns is None:
+        raise ValueError('You should specify columns that define duplication')
 
     with open(args.input, 'r') as input_file, open(args.output, 'w') as output_file:
         reader = csv.reader(input_file, delimiter='\t')
@@ -67,7 +89,7 @@ def main():
         heuristic_count = 0
         written_count = 0
         if args.remove_duplicates:
-            seen_natural_utterances = set()
+            seen_examples = set()
         for row in tqdm(reader, desc='Lines'):
             output_rows = []
             if args.transformation == 'remove_thingtalk_quotes':
@@ -127,12 +149,13 @@ def main():
                     if should_skip:
                         continue
                 if args.remove_duplicates:
-                    normalized_utterance = re.sub('\s+', '', o[args.utterance_column])
-                    if normalized_utterance in seen_natural_utterances:
+                    normalized_example = re.sub('\s+', '', ''.join([o[i] for i in args.no_duplication_columns]))
+                    print(normalized_example)
+                    if normalized_example in seen_examples:
                         duplicate_count += 1
                         continue
                     else:
-                        seen_natural_utterances.add(normalized_utterance)
+                        seen_examples.add(normalized_example)
                 written_count += 1
                 for i, column in enumerate(args.output_columns):
                     output_row += o[column]
