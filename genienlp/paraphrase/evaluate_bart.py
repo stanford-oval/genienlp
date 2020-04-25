@@ -5,7 +5,7 @@ import torch
 from tqdm import tqdm
 
 from transformers import BartForConditionalGeneration, BartTokenizer
-from genienlp.paraphrase.run_bart import BartSystem
+from genienlp.paraphrase.train_bart import BartSystem
 
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
