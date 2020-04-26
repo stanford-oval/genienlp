@@ -1,5 +1,4 @@
 from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer
-from torch.nn import CrossEntropyLoss
 import torch
 
 class GPT2Seq2Seq(GPT2LMHeadModel):
