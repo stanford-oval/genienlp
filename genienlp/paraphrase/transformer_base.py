@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+import shutil
 
 import numpy as np
 import pytorch_lightning as pl
@@ -19,6 +20,7 @@ from transformers import (
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
+from transformers import BartForConditionalGeneration
 from transformers.modeling_auto import MODEL_MAPPING
 
 
@@ -35,6 +37,8 @@ MODEL_MODES = {
     "pretraining": AutoModelForPreTraining,
     "token-classification": AutoModelForTokenClassification,
     "language-modeling": AutoModelWithLMHead,
+    # added conditional generation with BART
+    "conditional-generation": BartForConditionalGeneration
 }
 
 
@@ -229,7 +233,11 @@ def add_generic_args(parser, root_dir):
         required=True,
         help="The output directory where the model predictions and checkpoints will be written.",
     )
-
+    parser.add_argument(
+        "--exist_ok",
+        action='store_true',
+        help="Overwrite output_directory if already exists"
+    )
     parser.add_argument(
         "--fp16",
         action="store_true",
@@ -275,7 +283,10 @@ def generic_train(model, args):
         ptvsd.wait_for_attach()
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
+        if args.exist_ok:
+            shutil.rmtree(args.output_dir)
+        else:
+            raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5
