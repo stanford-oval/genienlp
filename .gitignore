@@ -22,6 +22,15 @@ text/.DS_Store
 src/
 workdir/
 *save*/
+test_py.sh
+
+# paraphraser
+*/paraphrase/*.txt
+lightning_logs/
+pytorch_model.bin
+*/paraphrase/bart-*
+cnn*
+/tests/*/
 
 
 # C extensions
