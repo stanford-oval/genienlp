@@ -7,6 +7,7 @@ SRCDIR=`dirname $0`
 
 on_error () {
     rm -fr $workdir
+    rm -rf $SRCDIR/torch-shm-file-*
 }
 
 # allow faster local testing
@@ -94,9 +95,9 @@ if test ! -f $workdir/generated.tsv ; then
 fi
 
 # Finetune MBART for one epoch
-python3 $SRCDIR/../genienlp/paraphrase/finetune_bart.py --data_dir $SRCDIR/dataset/paraphrasing/ --model_type bart --model_name_or_path bart-large --learning_rate 3e-5 --train_batch_size 5 --eval_batch_size 5 --output_dir $workdir/bart-large-almond/ --num_train_epochs 1 --n_gpu 0 --do_train --exist_ok --model_mode conditional-generation --max_source_length 64 --max_target_length 64
+python3 $SRCDIR/../genienlp/paraphrase/finetune_bart.py --data_dir $SRCDIR/dataset/paraphrasing/mbart/ --model_type bart --model_name_or_path bart-large --learning_rate 3e-5 --train_batch_size 5 --eval_batch_size 5 --output_dir $workdir/bart-large-almond/ --num_train_epochs 1 --n_gpu 0 --do_train --exist_ok --model_mode conditional-generation --max_source_length 64 --max_target_length 64
 # Use it to correct sentence mistakes in dev set
-python3 $SRCDIR/../genienlp/paraphrase/evaluate_bart.py --source_path $SRCDIR/dataset/paraphrasing/ --output_path $workdir/bart-large-almond_summaries.txt --model_name bart-large --ckpt_path $workdir/bart-large-almond/ --ckpt_name mbart-epoch=00.ckpt --predict_split dev
+python3 $SRCDIR/../genienlp/paraphrase/evaluate_bart.py --source_path $SRCDIR/dataset/paraphrasing/mbart/ --output_path $workdir/bart-large-almond_summaries.txt --model_name bart-large --ckpt_path $workdir/bart-large-almond/ --ckpt_name mbart-epoch=00.ckpt --predict_split dev
 
 # check if result file exists
 if test ! $workdir/bart-large-almond_summaries.txt ; then
@@ -106,3 +107,4 @@ fi
 
 
 rm -fr $workdir
+rm -rf $SRCDIR/torch-shm-file-*
