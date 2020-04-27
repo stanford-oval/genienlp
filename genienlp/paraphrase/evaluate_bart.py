@@ -20,10 +20,9 @@ def chunks(lst, n):
 def generate_summaries(
     examples: list, out_file: str, model_name: str, batch_size: int = 8, device: str = DEFAULT_DEVICE
 ):
-    fout = Path(out_file).open("w")
-    # b = BartSystem.load_from_checkpoint('./workdir/models/bart-large-mw6/checkpointepoch=1.ckpt')
-    # b.model.save_pretrained('./workdir/models/bart-large-mw6/')
-    # b.tokenizer.save_pretrained('./workdir/models/bart-large-mw6/')
+    # b = BartSystem.load_from_checkpoint('./workdir/models/bart-large-2to1/checkpointcheckpoint_ckpt_epoch_1.ckpt')
+    # b.model.save_pretrained('./workdir/models/bart-large-2to1/')
+    # b.tokenizer.save_pretrained('./workdir/models/bart-large-2to1/')
     model = BartForConditionalGeneration.from_pretrained(model_name).to(device)
     model.eval()
     model = model.to(device)
@@ -32,6 +31,7 @@ def generate_summaries(
     max_length = 140
     min_length = 1
 
+    fout = Path(out_file).open("w")
     for batch in tqdm(list(chunks(examples, batch_size))):
         dct = tokenizer.batch_encode_plus(batch, max_length=1024, return_tensors="pt", pad_to_max_length=True)
         # bad = ['which', 'Which', 'restaurant', 'restaurants']
@@ -39,7 +39,7 @@ def generate_summaries(
         summaries = model.generate(
             input_ids=dct["input_ids"].to(device),
             attention_mask=dct["attention_mask"].to(device),
-            num_beams=1,
+            num_beams=16,
             do_sample=False,
             temperature=1,
             length_penalty=1,
@@ -48,7 +48,7 @@ def generate_summaries(
             no_repeat_ngram_size=3,
             early_stopping=True,
             decoder_start_token_id=model.config.eos_token_id,
-            num_return_sequences=1
+            num_return_sequences=4
             # bad_words_ids=bad
         )
         # print(bad)
