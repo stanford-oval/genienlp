@@ -15,7 +15,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Conditional text generation with the auto-regressive models of the library (GPT/GPT-2/CTRL/Transformer-XL/XLNet)
+""" Conditional text generation with GPT-2/BART
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -36,24 +36,17 @@ try:
      set_start_method('spawn')
 except RuntimeError:
     pass
-
+ 
 import torch
-import torch.nn.functional as F
 
-from transformers import GPT2Config, OpenAIGPTConfig, XLNetConfig, TransfoXLConfig, XLMConfig, CTRLConfig, BertConfig
+from transformers import GPT2Config, BartConfig
 
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
-from transformers import OpenAIGPTLMHeadModel, OpenAIGPTTokenizer
-from transformers import XLNetLMHeadModel, XLNetTokenizer
-from transformers import TransfoXLLMHeadModel, TransfoXLTokenizer
-from transformers import CTRLLMHeadModel, CTRLTokenizer
-from transformers import XLMWithLMHeadModel, XLMTokenizer
-from transformers import BertForMaskedLM, BertTokenizer
-
+from transformers import GPT2Tokenizer
+from transformers import BartForConditionalGeneration, BartTokenizer
 from .util import set_seed, get_number_of_lines, combine_files_on_disk, split_file_on_disk, get_part_path, detokenize, tokenize, lower_case, \
-                    top_k_top_p_filtering, SpecialTokenMap, remove_thingtalk_quotes
+                    SpecialTokenMap, remove_thingtalk_quotes
 from .metrics import computeBLEU
-# from .models.common import BeamHypotheses
+from .GPT2Seq2Seq import GPT2Seq2Seq
 
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -61,185 +54,13 @@ logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(messa
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
 
-MAX_LENGTH = int(10000)  # Hardcoded max length to avoid infinite loop
 
-ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (GPT2Config, OpenAIGPTConfig, XLNetConfig, TransfoXLConfig, XLMConfig, CTRLConfig, BertConfig)), ())
+ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (GPT2Config, BartConfig)), ())
 
 MODEL_CLASSES = {
-    'gpt2': (GPT2LMHeadModel, GPT2Tokenizer),
-    'ctrl': (CTRLLMHeadModel, CTRLTokenizer),
-    'openai-gpt': (OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
-    'xlnet': (XLNetLMHeadModel, XLNetTokenizer),
-    'transfo-xl': (TransfoXLLMHeadModel, TransfoXLTokenizer),
-    'xlm': (XLMWithLMHeadModel, XLMTokenizer),
-    'bert': (BertForMaskedLM, BertTokenizer),
+    'gpt2': (GPT2Seq2Seq, GPT2Tokenizer),
+    'bart': (BartForConditionalGeneration, BartTokenizer)
 }
-
-
-def apply_repetition_penalty(logits, context, repetition_penalty, prompt_token_id, pad_token_id):
-    """ repetition penalty from CTRL (https://arxiv.org/abs/1909.05858), but much faster on GPU
-        we penalize only the tokens that appear in the context, not in the generated text
-    """
-    if repetition_penalty == 1.0:
-        return logits
-    m = torch.scatter(input=torch.zeros_like(logits), dim=1, index=context, value=1)
-    m[:prompt_token_id] = 0
-    m[:pad_token_id] = 0
-    # logger.info('m = ', m.shape)
-    need_change = m * logits
-    need_divide = need_change > 0
-    need_multiply = need_change < 0
-    logits = need_divide * logits / repetition_penalty + need_multiply * logits * repetition_penalty + (1-m) * logits
-    
-    # Old, slow implementation
-    # if repetition_penalty != 1.0:
-        # for i in range(context.shape[0]):
-            # for _ in set(generated[i].tolist()):
-                # if logits[i, _] > 0:
-                    # logits[i, _] /= repetition_penalty
-                # else:
-                    # logits[i, _] *= repetition_penalty
-    return logits
-
-
-def sample_sequence(model, length, min_output_length, context, num_samples,
-                    temperature=1.0, top_k=0, top_p=1.0, repetition_penalty=1.0,
-                    is_xlnet=False, is_xlm_mlm=False, xlm_mask_token=None, xlm_lang=None, device='cpu',
-                    stop_token_ids=None, pad_token_id=None, supports_past=False, prompt_token_id=None, segment_token_ids=None,
-                    start_reverse_position_ids=None, output_form=None):
-    """
-    Generates sequence of tokens for the batch of input contexts.
-    Inputs:
-        context: a list of token_ids, sorted by length from longest to shortest
-        num_samples: the number of sequences to output for each input context
-        length: The maximum length of generation in addition to the original sentence's length
-        stop_token_ids: generation of each sequence will stop if we generate any of these tokens
-        supports_past: set to True if the model accepts the 'past' input for more efficient generation. For example, GPT-2/Transfo-XL/XLNet/CTRL do
-        segment_token_ids: a list of two integers that indicate the tokens we should use for each of the two segments
-    """
-    max_length = len(context[0]) # context is sorted by length from longest to shortest
-    min_length = len(context[-1])
-
-    # should not change the elements of context since it will change them outside this function as well.
-    padded_context = []
-    for i in range(len(context)):
-        padded_context.append(context[i] + [pad_token_id] * (max_length-len(context[i]))) # pad to max_length
-    
-    next_index = min_length
-    length = max_length + (max_length - min_length) + length # generate till max_length, then generate another max_length+length tokens
-    max_index = length + next_index
-
-    segment_ids = []
-    position_ids = []
-    for i in range(len(context)):
-        prompt_token_position = context[i].index(prompt_token_id)
-        p = list(range(prompt_token_position+1))
-        segment_ids.append([segment_token_ids[0]]*len(p) + [segment_token_ids[1]]*(max_index - len(p)))
-        if start_reverse_position_ids is None:
-            position_ids.append(p + list(range(max_index - len(p))))
-        else:
-            position_ids.append(p + list(reversed(range(start_reverse_position_ids+len(p)))) + [0]*(max_index-start_reverse_position_ids-2*len(p)))
-
-    position_ids = torch.tensor(position_ids, dtype=torch.long, device=device)
-    position_ids = position_ids.repeat(num_samples, 1)
-    segment_ids = torch.tensor(segment_ids, dtype=torch.long, device=device)
-    segment_ids = segment_ids.repeat(num_samples, 1)
-
-    # logger.info('context = ', context)
-    # logger.info('position_ids = ', position_ids)
-    # logger.info('segment_ids = ', segment_ids)
-
-    context = torch.tensor(padded_context, dtype=torch.long, device=device)
-    context = context.repeat(num_samples, 1)
-    generated = context[:, :next_index]
-    generated_length = torch.zeros((context.shape[0], 1), dtype=torch.long, device=device)
-    should_finish = None
-    generated_logits = None
-    past = None
-    next_token = None
-    with torch.no_grad():
-        # rep_penalty = np.random.random(length) < 0.1
-        # original_rep_penalty = repetition_penalty
-        # logger.info('rep_penalty = ', rep_penalty)
-        for _ in range(length):
-            inputs = {'input_ids': generated, 'position_ids': position_ids[:, :next_index], 'token_type_ids': segment_ids[:, :next_index]}
-            if is_xlnet: 
-                # XLNet is a direct (predict same token, not next token) and bi-directional model by default
-                # => need one additional dummy token in the input (will be masked), attention mask and target mapping (see model docstring)
-                input_ids = torch.cat((generated, torch.zeros((1, 1), dtype=torch.long, device=device)), dim=1)
-                perm_mask = torch.zeros((1, input_ids.shape[1], input_ids.shape[1]), dtype=torch.float, device=device)
-                perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
-                target_mapping = torch.zeros((1, 1, input_ids.shape[1]), dtype=torch.float, device=device)
-                target_mapping[0, 0, -1] = 1.0  # predict last token
-                inputs = {'input_ids': input_ids, 'perm_mask': perm_mask, 'target_mapping': target_mapping}
-
-            if is_xlm_mlm and xlm_mask_token:
-                # XLM MLM models are direct models (predict same token, not next token)
-                # => need one additional dummy token in the input (will be masked and guessed)
-                input_ids = torch.cat((generated, torch.full((1, 1), xlm_mask_token, dtype=torch.long, device=device)), dim=1)
-                inputs = {'input_ids': input_ids}
-
-            if xlm_lang is not None:
-                inputs["langs"] = torch.tensor([xlm_lang] * inputs["input_ids"].shape[1], device=device).view(1, -1)
-
-            if supports_past:
-                inputs['past'] = past
-                if past is not None:
-                    inputs['input_ids'] = next_token
-                    inputs['position_ids'] = position_ids[:, next_index-1]
-                    inputs['token_type_ids'] = segment_ids[:, next_index-1]
-            
-            outputs = model(**inputs)
-            original_next_token_logits = outputs[0][:, -1, :]
-            next_token_logits = original_next_token_logits / (temperature if temperature > 0 else 1.)
-            past = outputs[1]
-
-            next_token_logits = apply_repetition_penalty(next_token_logits, context, repetition_penalty,
-                                                         prompt_token_id=prompt_token_id, pad_token_id=pad_token_id)
-
-            if next_index < context.shape[1]:
-                m = (context[:, next_index:next_index+1] != pad_token_id).long() # m==0 is where next_token should be kept
-            else:
-                m = torch.zeros(1, device=device)
-
-            # prevent stop_tokens if generated_length < min_output_length
-            should_remove_stop_tokens = (generated_length < min_output_length)
-            next_token_logits[:, stop_token_ids] = next_token_logits[:, stop_token_ids].masked_fill(should_remove_stop_tokens, -float('Inf'))
-            # logger.info('after ', next_token_logits[:, stop_token_ids])
-            generated_length = generated_length + (1-m)
-
-            filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
-
-            if temperature == 0: # greedy sampling:
-                next_token = torch.argmax(filtered_logits, dim=-1).unsqueeze(-1)
-            else:
-                next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=1)
-            
-            if output_form == 'logprob':
-                generated_token_logit = F.log_softmax(original_next_token_logits, dim=-1).gather(1, next_token)
-            else:
-                assert output_form == 'logit'
-                generated_token_logit = original_next_token_logits.gather(1, next_token)
-
-            # throw away the tokens that we already have from the context
-            if next_index < context.shape[1]:
-                next_token = m*context[:, next_index:next_index+1] + (1-m)*next_token
-            generated_token_logit = (1-m)*generated_token_logit
-
-            for stop_token_id in stop_token_ids:
-                if should_finish is None:
-                    should_finish = ((next_token == stop_token_id) & (1-m).bool())
-                else:
-                    should_finish = should_finish | ((next_token == stop_token_id) & (1-m).bool())
-            next_index += 1
-            generated = torch.cat((generated, next_token), dim=1)
-            if generated_logits is None:
-                generated_logits = generated_token_logit
-            else:
-                generated_logits = torch.cat((generated_logits, generated_token_logit), dim=1)
-            if should_finish.all():
-                break
-    return generated, generated_logits
 
 
 special_pattern_mapping = [
@@ -259,8 +80,8 @@ special_pattern_mapping = [
     SpecialTokenMap('GENERIC_ENTITY_uk.ac.cam.multiwoz.Restaurant:Restaurant_([0-9]+)', ["restaurant1", "restaurant2", "restaurant3"]) # TODO the only reason we can get away with this unnatural replacement is that actual backward is not going to be called for this
 ]
 
-def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, prompt_column, copy, thingtalk_column, prompt_token,
-                                  skip_heuristics, is_cased):
+def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, prompt_column, copy, thingtalk_column, sep_token,
+                                  skip_heuristics, is_cased, model_type):
     """
     Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
     Outputs:
@@ -269,7 +90,7 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
     all_input_sequences = []
     all_input_sequence_lengths = []
     all_context_tokens = []
-    all_context_lengths = []
+    estimated_output_lengths = []
     all_golds = []
     reverse_maps = []
 
@@ -284,7 +105,7 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
 
 
     for line in tqdm(input_file, desc='Reading Input File', total=number_of_lines, disable=disable_tqdm):
-        row = line.split('\t')
+        row = [r.strip() for r in line.split('\t')]
         input_sequence = row[input_column]
         gold = row[gold_column]
         # logger.info('gold = %s', gold)
@@ -301,28 +122,28 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
             input_sequence, reverse_map = input_heuristics(input_sequence, thingtalk, is_cased)
             # logger.info('input_sequence = %s', input_sequence)
             reverse_maps.append(reverse_map)
-        input_sequence += prompt_token
-        prompt = '' # includes the first few tokens of the output
+        input_sequence_tokens = tokenizer.encode(input_sequence,add_special_tokens=True) # add_special_tokens=True for gpt2 should have no effect, but as of transformers==2.8.0, a bug results in token_ids getting changed
+        
+        prompt_tokens = [] # includes the first few tokens of the output
         if prompt_column is not None and len(row) > prompt_column:
             prompt = row[prompt_column]
             if not skip_heuristics:
                 prompt, _ = input_heuristics(prompt, thingtalk, is_cased)
                 # logger.info('prompt = %s', prompt)
-        input_sequence_tokens = tokenizer.encode(input_sequence, add_special_tokens=False)
-        prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
-        context_tokens = input_sequence_tokens + prompt_tokens
+            prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
         if copy > 0:
-            context_tokens.extend(context_tokens[0 : min(copy, len(context_tokens)-1)]) # -1 since we should not copy prompt_token
+            assert len(prompt_tokens) == 0
+            prompt_tokens = context_tokens[0 : min(copy, len(context_tokens)-1)] # -1 since we should not copy sep_token
+        context_tokens = input_sequence_tokens + [tokenizer.convert_tokens_to_ids(sep_token)] + prompt_tokens
         all_input_sequences.append(input_sequence)
         all_input_sequence_lengths.append(len(input_sequence_tokens))
         all_context_tokens.append(context_tokens)
-        all_context_lengths.append(len(context_tokens))
+        estimated_output_lengths.append(len(input_sequence_tokens)-len(prompt_tokens))
     
     if file_path is not None:
         input_file.close()
 
-    return all_input_sequences, all_input_sequence_lengths, all_context_tokens, all_context_lengths, all_golds, reverse_maps
-
+    return all_input_sequences, all_input_sequence_lengths, all_context_tokens, estimated_output_lengths, all_golds, reverse_maps
 
 def is_question(sentence: str):
     question_words = ['which', 'what', 'where', 'how', 'who', 'when', 'is', 'are', 'am', \
@@ -461,7 +282,6 @@ def parse_argv(parser):
     parser.add_argument('--thingtalk_column', type=int, default=None,
                         help='The column in the input file which contains the ThingTalk program.')
     parser.add_argument("--output_file", type=str, help="When specified, generated text will be written in this file. Defaults to stdout.")
-    parser.add_argument("--xlm_lang", type=str, default="", help="Optional language when used with the XLM model.")
     parser.add_argument("--length", type=int, default=20, help='The generated sentences will have a maximum length of len(input) + arg.length')
     parser.add_argument("--min_output_length", type=int, default=1, help='Will prevent stop tokens from appearing in the first --min_length tokens of the generated sentences.')
     parser.add_argument("--skip_heuristics", action='store_true', help='If True, will not replace special word such as NUMBER_0 in the input.')
@@ -470,20 +290,16 @@ def parse_argv(parser):
     parser.add_argument("--metric_reduction", type=str, choices=['average', 'max'], default='average',
                         help="How we should calculate metrics where there are multiple generations per example.")
     
-    # These can be used for improving the quality of the output
     parser.add_argument("--num_samples", type=int, default=1)
-    parser.add_argument("--selection_criterion", type=str, choices=['none', 'average_logit', 'average_logprob', 'bleu'], default='none',
-                        help='Select one of --num_sample outputs that maximizes this criterion')
 
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate num_samples outputs for each set of hyperparameters.
-    parser.add_argument("--start_reverse_position_ids", type=int, nargs='+', default=[None],
-                        help='If provided, position ids will be the number of tokens left in generation and will start from len(input) + args.start_reverse_position_ids')
     parser.add_argument("--temperature", type=float, nargs='+', default=[1.0],
                         help="temperature of 0 implies greedy sampling")
     parser.add_argument("--repetition_penalty", type=float, nargs='+', default=[1.0],
                         help="primarily useful for CTRL model; in that case, use 1.2")
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[0.9], help='1.0 disables top-p filtering')
+    parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
 
     parser.add_argument("--copy", type=int, default=0,
                         help='Number of tokens that will be copied at the beginning of generation. Helps preserve the original meaning of the input sequence.')
@@ -491,7 +307,7 @@ def parse_argv(parser):
                         help="Avoid using CUDA when available")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
-    parser.add_argument('--prompt_token', type=str, default='<paraphrase>',
+    parser.add_argument('--sep_token', type=str, default='<paraphrase>',
                         help="Token after which text generation starts. We add this to the end of all inputs.")
     parser.add_argument('--stop_tokens', type=str, nargs='+', default=['</paraphrase>'],
                         help="Token at which text generation is stopped. The first element of the list is used as segment id as well.")
@@ -501,7 +317,7 @@ def parse_argv(parser):
 def main(args):
     if args.prompt_column is not None and args.copy is not None and args.copy != 0:
         raise ValueError('Cannot copy from the input and use prompt at the same time. Disable either --copy or --prompt_column.')
-    hyperparameters = ['temperature', 'top_k', 'top_p', 'repetition_penalty', 'start_reverse_position_ids']
+    hyperparameters = ['temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams']
     max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])
     valid_len = [1, max_hyperparameter_len]
     for h in hyperparameters:
@@ -555,169 +371,112 @@ def run_generation(args):
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
     model = model_class.from_pretrained(args.model_name_or_path)
     model.to(args.device)
-
     model.eval()
 
-    if args.length < 0 and model.config.max_position_embeddings > 0:
-        args.length = model.config.max_position_embeddings
-    elif 0 < model.config.max_position_embeddings < args.length:
-        args.length = model.config.max_position_embeddings  # No generation bigger than model size 
-    elif args.length < 0:
-        args.length = MAX_LENGTH  # avoid infinite loop
-
-    logger.info(args)
-    if args.model_type in ["ctrl"]:
-        if args.temperature > 0.7:
-            logger.info('CTRL typically works better with lower temperatures (and lower top_k).')
-
-    xlm_lang = None
-    # XLM Language usage detailed in the issues #1414
-    if args.model_type in ["xlm"] and hasattr(tokenizer, 'lang2id') and hasattr(model.config, 'use_lang_emb') \
-            and model.config.use_lang_emb:
-        if args.xlm_lang:
-            language = args.xlm_lang
-        else:
-            language = None
-            while language not in tokenizer.lang2id.keys():
-                language = input("Using XLM. Select language in " + str(list(tokenizer.lang2id.keys())) + " >>> ")
-        xlm_lang = tokenizer.lang2id[language]
-
-    # XLM masked-language modeling (MLM) models need masked token (see details in sample_sequence)
-    is_xlm_mlm = args.model_type in ["xlm"] and 'mlm' in args.model_name_or_path
-    if is_xlm_mlm:
-        xlm_mask_token = tokenizer.mask_token_id
-    else:
-        xlm_mask_token = None
-
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
-    prompt_token_id = tokenizer.convert_tokens_to_ids(args.prompt_token)
     if pad_token_id is None:
         logger.error('Your tokenizer does not have a padding token')
 
-    all_input_sequences, all_input_sequence_lengths, all_context_tokens, all_context_lengths, all_golds, reverse_maps = \
+    if args.model_type == 'gpt2':
+        model.set_token_ids(end_token_id=tokenizer.convert_tokens_to_ids(args.stop_tokens[0]), 
+                            sep_token_id=tokenizer.convert_tokens_to_ids(args.sep_token), 
+                            pad_token_id=pad_token_id)
+
+    logger.info(args)
+
+    all_input_sequences, all_input_sequence_lengths, all_context_tokens, estimated_output_lengths, all_golds, reverse_maps = \
                                   create_features_from_tsv_file(file_path=args.input_file, tokenizer=tokenizer,
                                   input_column=args.input_column, gold_column=args.gold_column, prompt_column=args.prompt_column,
                                   copy=args.copy,
                                   thingtalk_column=args.thingtalk_column,
-                                  prompt_token=args.prompt_token, skip_heuristics=args.skip_heuristics, is_cased=args.is_cased)
+                                  sep_token=args.sep_token, skip_heuristics=args.skip_heuristics, is_cased=args.is_cased,
+                                  model_type=args.model_type)
 
     
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
-    all_context_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, original_order, reverse_maps = \
-        tuple(zip(*sorted(list(zip(all_context_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, range(len(all_context_tokens)), reverse_maps)), reverse=True)))
+    estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, original_order, reverse_maps = \
+        tuple(zip(*sorted(list(zip(estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, range(len(all_context_tokens)), reverse_maps)), reverse=True)))
     all_outputs = []
 
     stop_token_ids = [tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens]
 
-    for batch in trange(math.ceil(len(all_context_tokens) / args.batch_size), desc="Batch"):
+    for batch in tqdm(range(math.ceil(len(all_context_tokens) / args.batch_size)), desc="Batch"):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_tokens)))
         batch_size = batch_slice[1] - batch_slice[0]
         batch_input_sequences = all_input_sequences[batch_slice[0]: batch_slice[1]]
         batch_input_sequence_lengths = all_input_sequence_lengths[batch_slice[0]: batch_slice[1]]
         batch_context_tokens = all_context_tokens[batch_slice[0]: batch_slice[1]]
         batch_reverse_maps = reverse_maps[batch_slice[0]: batch_slice[1]]
+        # logger.info('batch_context_tokens = %s', str(batch_context_tokens))
+
+        if args.model_type == 'gpt2':
+            batch_context_tensor = torch.tensor(model.pad_to_max_length(batch_context_tokens), dtype=torch.long, device=args.device)
+            attention_mask = None
+        elif args.model_type == 'bart':
+            padded_batch_context_tokens = []
+            max_length = max([len(s) for s in batch_context_tokens])
+            for i in range(len(batch_context_tokens)):
+                padded_batch_context_tokens.append(batch_context_tokens[i]+[pad_token_id]*(max_length-len(batch_context_tokens[i])))
+            batch_context_tensor = torch.tensor(padded_batch_context_tokens, dtype=torch.long, device=args.device)
+            attention_mask = (batch_context_tensor!=pad_token_id).to(torch.long)
+        # logger.info('batch_context_tensor = %s', str(batch_context_tensor))
 
         batch_outputs = [[] for _ in range(batch_size)]
-        batch_criterion = [[] for _ in range(batch_size)]
         for hyperparameter_idx in range(len(args.temperature)):
-            out, out_logits = sample_sequence(
-                model=model,
-                context=batch_context_tokens,
-                num_samples=args.num_samples,
-                length=args.length,
-                min_output_length=args.min_output_length,
-                temperature=args.temperature[hyperparameter_idx],
-                top_k=args.top_k[hyperparameter_idx],
-                top_p=args.top_p[hyperparameter_idx],
-                repetition_penalty=args.repetition_penalty[hyperparameter_idx],
-                is_xlnet=bool(args.model_type == "xlnet"),
-                is_xlm_mlm=is_xlm_mlm,
-                xlm_mask_token=xlm_mask_token,
-                xlm_lang=xlm_lang,
-                device=args.device,
-                stop_token_ids=stop_token_ids,
-                pad_token_id=pad_token_id,
-                supports_past=args.model_type in ['gpt2', 'openai-gpt', 'transfo-xl', 'xlnet', 'ctrl'],
-                prompt_token_id=prompt_token_id,
-                segment_token_ids=[tokenizer.convert_tokens_to_ids(args.prompt_token), tokenizer.convert_tokens_to_ids(args.stop_tokens[0])] if args.model_type=='gpt2' else [0, 1],
-                start_reverse_position_ids=args.start_reverse_position_ids[hyperparameter_idx],
-                output_form='logit' if args.selection_criterion=='average_logit' else 'logprob'
-            )
-            
-            out = out[:, :].tolist()
-            out_logits = out_logits[:, :].tolist()
-            for i, o in enumerate(out):
-                o_logits = out_logits[i]
-                # logger.info('all output tokens: %s', o)
-                # logger.info('all output tokens detokenized: %s', str(tokenizer.decode(o, clean_up_tokenization_spaces=True, skip_special_tokens=False)))
-                o = o[batch_input_sequence_lengths[i % batch_size]:]
-                # logger.info('original context tokens: %s', str(batch_context_tokens[i % batch_size]))
-                # logger.info('original input sequence: %s', str(batch_input_sequences[i % batch_size]))
+            out = model.generate(input_ids=batch_context_tensor,
+                                 attention_mask=attention_mask,
+                                 min_length=args.min_output_length,
+                                 max_length=batch_context_tensor.shape[1]+args.length,
+                                 num_beams=args.num_beams[hyperparameter_idx],
+                                 top_k=args.top_k[hyperparameter_idx],
+                                 top_p=args.top_p[hyperparameter_idx],
+                                 early_stopping=True,
+                                 num_return_sequences=args.num_samples,
+                                 repetition_penalty=args.repetition_penalty[hyperparameter_idx],
+                                 do_sample=args.temperature[hyperparameter_idx]!=0,
+                                 temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0, # if temperature==0, we do not sample
+                                 eos_token_id=stop_token_ids[0],
+                                 pad_token_id=pad_token_id
+                                )
 
+            if not isinstance(out, list):
+                out = out[:, :].tolist()
+            for i, o in enumerate(out):
                 if args.stop_tokens is not None:
-                    min_index = len(o)
+                    min_index = len(o)-1
                     for stop_token_id in stop_token_ids:
                         try:
                             index = o.index(stop_token_id)
                             min_index = min(index, min_index)
                         except ValueError:
                             pass
-                    if min_index < len(o) and o[min_index] == tokenizer.convert_tokens_to_ids('?'):
-                        # always include the question mark
-                        min_index = min_index + 1
-                    if min_index < len(o) and o[min_index] == tokenizer.convert_tokens_to_ids(args.stop_tokens[0]):
-                        # include </paraphrase> in logit calculation
-                        o_logits = o_logits[:len(o_logits)-(len(o)-min_index-1)]
+                    if o[min_index] != stop_token_ids[0]:
+                        min_index = min_index + 1 # include stop_token if it is not end_token
                     o = o[:min_index]
                 
-                text = tokenizer.decode(o, clean_up_tokenization_spaces=True, skip_special_tokens=False)
+                text = tokenizer.decode(o, clean_up_tokenization_spaces=True, skip_special_tokens=True)
 
-                # assert tokenizer.pad_token not in text
-                text = text.replace(tokenizer.pad_token, '')
                 text = re.sub('\s\s+', ' ', text) # remove duplicate white spaces
                 text = text.strip()
                 if not args.skip_heuristics:
-                    text = output_heuristics(text, batch_reverse_maps[i % batch_size])
-                batch_outputs[i % batch_size].append(text)
+                    text = output_heuristics(text, batch_reverse_maps[(i//args.num_samples) % batch_size])
+                batch_outputs[(i//args.num_samples) % batch_size].append(text)
 
-                if args.selection_criterion == 'bleu':
-                    # computeBLEU always converts to lower case first, so do not worry about lower/upper case here
-                    criterion = computeBLEU([text], [[batch_input_sequences[i % batch_size]]])
-                else:
-                    criterion = np.mean(o_logits)
-                batch_criterion[i % batch_size].append(criterion)
-                # logger.info('generated tokens: %s', str(o))
-                # logger.info('o_logits = %s', str(o_logits))
-                # logger.info('generated cirterion: %.2f', criterion)
-                # logger.info('text = %s', text)
-                # logger.info('-'*10)
+        all_outputs.extend(batch_outputs)
 
-
-        if args.selection_criterion == 'none':
-            all_outputs.extend(batch_outputs)
-        else:
-            for idx, example in enumerate(batch_outputs):
-                logger.info('input sequence: %s', str(batch_input_sequences[idx % batch_size]))
-                c, example = tuple(zip(*sorted(list(zip(batch_criterion[idx], example)), reverse=True)))
-                logger.info(example)
-                logger.info(c)
-                logger.info('-'*10)
-                selection = example[0]
-                all_outputs.append([selection])
 
     # sort the results back to their original order
     _, all_outputs = tuple(zip(*sorted(list(zip(original_order, all_outputs)))))
-    
-    metrics = compute_metrics(all_outputs, all_golds, reduction=args.metric_reduction)
 
     if args.output_file is not None:
         with open(args.output_file, 'w') as output_file:
-            if args.output_file is not None:
-                for _ in all_outputs:
-                    for text in _:
-                        output_file.write(text + '\n')
+            for output in all_outputs:
+                for text in output:
+                    output_file.write(text + '\n')
     else:
         print(json.dumps(all_outputs, indent=2))
+
+    metrics = compute_metrics(all_outputs, all_golds, reduction=args.metric_reduction)
     logger.info('Average BLEU score = %.2f', metrics['bleu'])
     logger.info('Exact match score = %.2f', metrics['em'])
 

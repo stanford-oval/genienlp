@@ -119,7 +119,7 @@ def main():
                 for idx in range(args.num_new_queries):
                     copy_row = row.copy()
                     copy_row[args.utterance_column] = new_queries[new_query_count]
-                    copy_row[args.id_column] += ('-' + str(idx))
+                    copy_row[args.id_column] = 'A' + copy_row[args.id_column] + '-' + str(idx) # add 'A' for auto-paraphrasing
                     output_rows.append(copy_row)
                     new_query_count += 1
             else:
