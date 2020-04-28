@@ -63,7 +63,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
     parser.add_argument("--batch_size", type=int, default=8, required=False, help="batch size: how many to summarize at a time")
     parser.add_argument("--ckpt_path", type=str, required=True, help="path to checkpoint file")
-    parser.add_argument("--ckpt_name", type=str, default='checkpointepoch=0.ckpt', help="checkpoint name")
+    parser.add_argument("--ckpt_name", type=str, default='mbart-epoch=00.ckpt', help="checkpoint name")
     parser.add_argument("--predict_split", type=str, default='test', help="data split to run prediction for")
     parser.add_argument(
         "--max_source_length",

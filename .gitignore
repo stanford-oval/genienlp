@@ -23,14 +23,15 @@ src/
 workdir/
 *save*/
 test_py.sh
+/tests/*/
+
 
 # paraphraser
 */paraphrase/*.txt
+*/paraphrase/bart-*
 lightning_logs/
 pytorch_model.bin
-*/paraphrase/bart-*
 cnn*
-/tests/*/
 
 
 # C extensions
