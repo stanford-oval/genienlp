@@ -110,6 +110,7 @@ class AlmondDataset(CQA):
 def is_entity(token):
     return token[0].isupper()
 
+
 def process_id(ex):
     id_ = ex.example_id.rsplit('/', 1)
     id_ = id_[0] if len(id_) == 1 else id_[1]
@@ -233,7 +234,10 @@ class AlmondDialogueNLU(BaseAlmondTask):
     state of the conversation)
     """
     def _is_program_field(self, field_name):
-        return field_name in ('answer', 'context')
+        if self.append_question_to_context_too:
+            return field_name == 'answer'
+        else:
+            return field_name in ('answer', 'context')
 
     def _make_example(self, parts, dir_name=None):
         _id, context, sentence, target_code = parts

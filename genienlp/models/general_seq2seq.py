@@ -91,6 +91,7 @@ class Seq2Seq(torch.nn.Module):
                             final_question, question_rnn_state, encoder_loss)
 
     def forward(self, batch, iteration, pretraining=False):
+        # print('batch = ', batch)
         if pretraining:
             return self._pretrain_forward(batch)
         else:
