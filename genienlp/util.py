@@ -445,7 +445,7 @@ def load_config_json(args):
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         overwrite = ['val_batch_size', 'num_beams']
         for o in overwrite:
-            if o not in args or args[o] is None:
+            if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
 
         for r in retrieve:
