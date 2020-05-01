@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+import shutil
 
 import numpy as np
 import pytorch_lightning as pl
@@ -19,6 +20,7 @@ from transformers import (
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
+from transformers import BartForConditionalGeneration
 from transformers.modeling_auto import MODEL_MAPPING
 
 
@@ -35,6 +37,8 @@ MODEL_MODES = {
     "pretraining": AutoModelForPreTraining,
     "token-classification": AutoModelForTokenClassification,
     "language-modeling": AutoModelWithLMHead,
+    # added conditional generation with BART
+    "conditional-generation": BartForConditionalGeneration
 }
 
 
@@ -229,7 +233,11 @@ def add_generic_args(parser, root_dir):
         required=True,
         help="The output directory where the model predictions and checkpoints will be written.",
     )
-
+    parser.add_argument(
+        "--exist_ok",
+        action='store_true',
+        help="Overwrite output_directory if already exists"
+    )
     parser.add_argument(
         "--fp16",
         action="store_true",
@@ -243,7 +251,8 @@ def add_generic_args(parser, root_dir):
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
         "See details at https://nvidia.github.io/apex/amp.html",
     )
-
+    
+    parser.add_argument("--max_to_keep", type=int, default=2, help="Number of checkpoints to keep")
     parser.add_argument("--n_gpu", type=int, default=1)
     parser.add_argument("--n_tpu_cores", type=int, default=0)
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
@@ -275,11 +284,14 @@ def generic_train(model, args):
         ptvsd.wait_for_attach()
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
+        if args.exist_ok:
+            shutil.rmtree(args.output_dir)
+        else:
+            raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5
-    )
+        filepath=os.path.join(args.output_dir, 'mbart-{epoch:02d}'), monitor="val_loss", mode="min", save_top_k=args.max_to_keep
+)
 
     train_params = dict(
         accumulate_grad_batches=args.gradient_accumulation_steps,

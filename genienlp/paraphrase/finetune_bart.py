@@ -1,5 +1,5 @@
 import argparse
-import glob
+
 import logging
 import os
 import time
@@ -7,19 +7,17 @@ import time
 import torch
 from torch.utils.data import DataLoader
 
-from genienlp.paraphrase.transformer_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
-from genienlp.paraphrase.utils import Seq2SeqDataset
+from genienlp.paraphrase.transformer_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup, MODEL_MODES
+from genienlp.paraphrase.utils import Seq2SeqDataset, sort_checkpoints
 
 
 logger = logging.getLogger(__name__)
 
 
-class BartSystem(BaseTransformer):
-
-    mode = "language-modeling"
+class MBART(BaseTransformer):
 
     def __init__(self, hparams):
-        super().__init__(hparams, num_labels=None, mode=self.mode, output_past=False)
+        super().__init__(hparams, num_labels=None, mode=hparams.model_mode, output_past=False)
 
     def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
         return self.model(
@@ -34,7 +32,6 @@ class BartSystem(BaseTransformer):
         lm_labels[y[:, 1:] == pad_token_id] = -100
         outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,)
         loss = outputs[0]
-        # print('_step() loss = ', loss)
 
         return loss
 
@@ -92,15 +89,10 @@ class BartSystem(BaseTransformer):
 
         return self.test_end(outputs)
 
-    @property
-    def dataset_kwargs(self):
-        return dict(
-            data_dir=self.hparams.data_dir,
-            max_length=self.hparams.max_length,
-        )
 
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool=False) -> DataLoader:
-        dataset = Seq2SeqDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)
+        dataset = Seq2SeqDataset(self.tokenizer, self.hparams.data_dir, type_path,
+                                 self.hparams.max_source_length, self.hparams.max_target_length)
         dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn, num_workers=2, shuffle=shuffle)
         return dataloader
 
@@ -127,14 +119,27 @@ class BartSystem(BaseTransformer):
     def add_model_specific_args(parser, root_dir):
         BaseTransformer.add_model_specific_args(parser, root_dir)
         # Add BART specific options
+        
         parser.add_argument(
-            "--max_length",
-            default=128,
+            "--model_mode",
+            type=str,
+            required=True,
+            help="Model mode selected in the list: " + ", ".join(MODEL_MODES),
+        )
+        parser.add_argument(
+            "--max_source_length",
+            default=1024,
             type=int,
-            help="The maximum total input and output sequence length after tokenization. Sequences longer "
+            help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
         )
-
+        parser.add_argument(
+            "--max_target_length",
+            default=56,
+            type=int,
+            help="The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded.",
+        )
         parser.add_argument(
             "--data_dir",
             default=None,
@@ -148,7 +153,7 @@ class BartSystem(BaseTransformer):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
-    parser = BartSystem.add_model_specific_args(parser, os.getcwd())
+    parser = MBART.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
     # If output_dir not provided, a folder will be generated in pwd
@@ -156,11 +161,11 @@ if __name__ == "__main__":
         args.output_dir = os.path.join("./results", f"{args.task}_{args.model_type}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
 
-    model = BartSystem(args)
+    model = MBART(args)
     trainer = generic_train(model, args)
 
     # Optionally, predict on dev set and write to output_dir
     if args.do_predict:
-        checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
-        BartSystem.load_from_checkpoint(checkpoints[-1])
+        checkpoints = sort_checkpoints(args.output_dir)
+        MBART.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)

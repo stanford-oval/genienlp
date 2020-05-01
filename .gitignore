@@ -23,6 +23,9 @@ src/
 workdir/
 *save*/
 
+lightning_logs/
+pytorch_model.bin
+
 
 # C extensions
 *.so
