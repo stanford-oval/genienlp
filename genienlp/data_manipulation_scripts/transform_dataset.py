@@ -150,7 +150,7 @@ def main():
                         continue
                 if args.remove_duplicates:
                     normalized_example = re.sub('\s+', '', ''.join([o[i] for i in args.no_duplication_columns]))
-                    print(normalized_example)
+                    # print(normalized_example)
                     if normalized_example in seen_examples:
                         duplicate_count += 1
                         continue
