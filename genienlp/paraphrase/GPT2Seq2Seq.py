@@ -11,9 +11,7 @@ class GPT2Seq2Seq(GPT2LMHeadModel):
         self.end_token_id = end_token_id
         self.sep_token_id = sep_token_id
         self.pad_token_id = pad_token_id
-        logging.info('end_token_id = %s', self.end_token_id)
-        logging.info('sep_token_id = %s', self.sep_token_id)
-        logging.info('pad_token_id = %s', self.pad_token_id)
+
 
     def pad_to_max_length(self, input_sequences: List[List[int]]):
         """
@@ -57,6 +55,7 @@ class GPT2Seq2Seq(GPT2LMHeadModel):
         outputs = super().generate(**kwargs)
         outputs = outputs[:, :].tolist()
         for i in range(len(outputs)):
+            # print('index of sep_token_id = ', outputs[i].index(self.sep_token_id))
             outputs[i] = [x for x in outputs[i] if x != self.pad_token_id] # remove padding
             outputs[i] = outputs[i][outputs[i].index(self.sep_token_id)+1:] # only return the output (i.e. after sep_token)
 
@@ -70,7 +69,7 @@ class GPT2Seq2Seq(GPT2LMHeadModel):
         #         print(i, s)
         #         print(input_ids[i])
         #         exit()
-        assert (torch.sum(sep_token_position, dim=1)==1).all(), 'All input_ids must contain exactly one start_token. sep_token_position = %s\nsep_token_id = %d' % (str(sep_token_position), self.sep_token_id)
+        assert (torch.sum(sep_token_position, dim=1)==1).all(), 'All input_ids must contain exactly one sep_token. sep_token_position = %s\nsep_token_id = %d' % (str(sep_token_position), self.sep_token_id)
         token_type_ids = torch.cumsum(sep_token_position, dim=1) - sep_token_position
         attention_mask = (input_ids!=self.pad_token_id).to(torch.long) # 0 means mask, 1 means no mask
         position_ids = (torch.cumsum(attention_mask, dim=1)-1)*(1-token_type_ids)+(torch.cumsum(token_type_ids, dim=1)-1)*token_type_ids
@@ -79,6 +78,7 @@ class GPT2Seq2Seq(GPT2LMHeadModel):
         # print('position_ids = ', position_ids)
         # print('token_type_ids = ', token_type_ids)
         # print('attention_mask = ', attention_mask)
+        
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             position_ids = position_ids[:, -1].unsqueeze(-1)
@@ -86,4 +86,5 @@ class GPT2Seq2Seq(GPT2LMHeadModel):
             attention_mask = attention_mask[:, -1].unsqueeze(-1)
 
         inputs = {"input_ids": input_ids, "position_ids": position_ids, "token_type_ids": token_type_ids, "attention_mask": attention_mask, "past": past}
+        # print('inputs = ', {"input_ids": input_ids[1], "position_ids": position_ids[1], "token_type_ids": token_type_ids[1], "attention_mask": attention_mask[1]})
         return inputs

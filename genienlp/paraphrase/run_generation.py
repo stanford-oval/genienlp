@@ -94,6 +94,7 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
     estimated_output_lengths = []
     all_golds = []
     reverse_maps = []
+    all_prompt_tokens = []
 
     if file_path is not None:
         number_of_lines = get_number_of_lines(file_path)
@@ -135,6 +136,7 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         if copy > 0:
             assert len(prompt_tokens) == 0
             prompt_tokens = input_sequence_tokens[0 : min(copy, len(input_sequence_tokens)-1)]
+        all_prompt_tokens.append(prompt_tokens)
         context_tokens = input_sequence_tokens + [sep_token_id] + prompt_tokens
         all_input_sequences.append(input_sequence)
         all_input_sequence_lengths.append(len(input_sequence_tokens))
@@ -144,7 +146,7 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
     if file_path is not None:
         input_file.close()
 
-    return all_input_sequences, all_input_sequence_lengths, all_context_tokens, estimated_output_lengths, all_golds, reverse_maps
+    return all_input_sequences, all_input_sequence_lengths, all_context_tokens, estimated_output_lengths, all_golds, reverse_maps, all_prompt_tokens
 
 def is_question(sentence: str):
     question_words = ['which', 'what', 'where', 'how', 'who', 'when', 'is', 'are', 'am', \
@@ -281,8 +283,11 @@ def parse_argv(parser):
     parser.add_argument('--thingtalk_column', type=int, default=None,
                         help='The column in the input file which contains the ThingTalk program.')
     parser.add_argument("--output_file", type=str, help="When specified, generated text will be written in this file. Defaults to stdout.")
+
+    parser.add_argument('--output_prompt', action='store_true',
+                        help='Whether we should include the prompt (specified via --prompt_column or --copy) in the output sequence')
     parser.add_argument("--length", type=int, default=20, help='The generated sentences will have a maximum length of len(input) + arg.length')
-    parser.add_argument("--min_output_length", type=int, default=1, help='Will prevent stop tokens from appearing in the first --min_length tokens of the generated sentences.')
+    parser.add_argument("--min_output_length", type=int, default=2, help='Will prevent stop tokens from appearing in the first --min_output_length tokens of the generated sentences.')
     parser.add_argument("--skip_heuristics", action='store_true', help='If True, will not replace special word such as NUMBER_0 in the input.')
     parser.add_argument("--is_cased", action='store_true',
                         help='If True, the trained model is cased, so if --skip_heuristics is not set, we will convert the input to upper case and the output back to lower case.')
@@ -373,14 +378,15 @@ def main(args):
 
 def run_generation(args):
     model_class, tokenizer_class, special_tokens = MODEL_CLASSES[args.model_type]
-    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
     model = model_class.from_pretrained(args.model_name_or_path)
     model.to(args.device)
     model.eval()
 
+    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
     end_token_id = tokenizer.convert_tokens_to_ids(special_tokens['end_token'])
     sep_token_id=tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
+
     if pad_token_id is None:
         logger.error('Your tokenizer does not have a padding token')
 
@@ -391,7 +397,7 @@ def run_generation(args):
 
     logger.info(args)
 
-    all_input_sequences, all_input_sequence_lengths, all_context_tokens, estimated_output_lengths, all_golds, reverse_maps = \
+    all_input_sequences, all_input_sequence_lengths, all_context_tokens, estimated_output_lengths, all_golds, reverse_maps, all_prompt_tokens = \
                                   create_features_from_tsv_file(file_path=args.input_file, tokenizer=tokenizer,
                                   input_column=args.input_column, gold_column=args.gold_column, prompt_column=args.prompt_column,
                                   copy=args.copy,
@@ -399,10 +405,9 @@ def run_generation(args):
                                   sep_token_id=sep_token_id, skip_heuristics=args.skip_heuristics, is_cased=args.is_cased,
                                   model_type=args.model_type)
 
-    
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
-    estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, original_order, reverse_maps = \
-        tuple(zip(*sorted(list(zip(estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, range(len(all_context_tokens)), reverse_maps)), reverse=True)))
+    estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, original_order, reverse_maps, all_prompt_tokens = \
+        tuple(zip(*sorted(list(zip(estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, range(len(all_context_tokens)), reverse_maps, all_prompt_tokens)), reverse=True)))
     all_outputs = []
 
     stop_token_ids = [tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens]
@@ -416,6 +421,7 @@ def run_generation(args):
         batch_input_sequence_lengths = all_input_sequence_lengths[batch_slice[0]: batch_slice[1]]
         batch_context_tokens = all_context_tokens[batch_slice[0]: batch_slice[1]]
         batch_reverse_maps = reverse_maps[batch_slice[0]: batch_slice[1]]
+        batch_prompt_tokens = all_prompt_tokens[batch_slice[0]: batch_slice[1]]
         # logger.info('batch_context_tokens = %s', str(batch_context_tokens))
 
         if args.model_type == 'gpt2':
@@ -434,9 +440,9 @@ def run_generation(args):
         batch_outputs = [[] for _ in range(batch_size)]
         for hyperparameter_idx in range(len(args.temperature)):
             out = model.generate(input_ids=batch_context_tensor,
-                                 bad_words_ids=[[tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])]] if args.model_type=='gpt2' else None,
+                                 bad_words_ids=[[sep_token_id]] if args.model_type=='gpt2' else None,
                                  attention_mask=attention_mask,
-                                 min_length=args.min_output_length,
+                                 min_length=batch_context_tensor.shape[1]+args.min_output_length if args.model_type=='gpt2' else args.min_output_length,
                                  max_length=batch_context_tensor.shape[1]+args.length,
                                  num_beams=args.num_beams[hyperparameter_idx],
                                  top_k=args.top_k[hyperparameter_idx],
@@ -455,7 +461,11 @@ def run_generation(args):
                 out = out[:, :].tolist()
             for i, o in enumerate(out):
                 if args.model_type=='bart':
-                    o = o[1:]
+                    o = o[1:] # remove <s> start token
+                if not args.output_prompt:
+                    # logger.info('o = $s', str(o))
+                    # logger.info('removing %s', str(batch_prompt_tokens[(i//args.num_samples) % batch_size]))
+                    o = o[len(batch_prompt_tokens[(i//args.num_samples) % batch_size]):]
                 min_index = len(o)-1
                 for stop_token_id in stop_token_ids+[end_token_id]:
                     try:
