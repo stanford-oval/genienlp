@@ -44,9 +44,9 @@ from transformers import GPT2Config, BartConfig
 from transformers import GPT2Tokenizer
 from transformers import BartForConditionalGeneration, BartTokenizer
 from transformers import PretrainedConfig
-from .util import set_seed, get_number_of_lines, combine_files_on_disk, split_file_on_disk, get_part_path, detokenize, tokenize, lower_case, \
+from ..util import set_seed, get_number_of_lines, combine_files_on_disk, split_file_on_disk, get_part_path, detokenize, tokenize, lower_case, \
                     SpecialTokenMap, remove_thingtalk_quotes
-from .metrics import computeBLEU
+from ..metrics import computeBLEU
 from .GPT2Seq2Seq import GPT2Seq2Seq
 
 
