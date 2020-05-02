@@ -1,3 +1,4 @@
+import logging
 from typing import List
 from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer
 import torch
@@ -10,7 +11,9 @@ class GPT2Seq2Seq(GPT2LMHeadModel):
         self.end_token_id = end_token_id
         self.sep_token_id = sep_token_id
         self.pad_token_id = pad_token_id
-
+        logging.info('end_token_id = %s', self.end_token_id)
+        logging.info('sep_token_id = %s', self.sep_token_id)
+        logging.info('pad_token_id = %s', self.pad_token_id)
 
     def pad_to_max_length(self, input_sequences: List[List[int]]):
         """
