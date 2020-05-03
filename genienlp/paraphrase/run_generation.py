@@ -77,7 +77,7 @@ special_pattern_mapping = [
                                                           ['$13', 'thirteen dollars', '13 dollars', '$ 13', '$ 13.00', '13.00', '13']]),
     SpecialTokenMap('DURATION_([0-9]+)', ['5 weeks', '6 weeks'], [['5 weeks', 'five weeks'], ['6 weeks', 'six weeks']]),
     SpecialTokenMap('LOCATION_([0-9]+)', ['locatio1n', 'locatio2n'], [['locatio1n', 'locat1n'], ['locatio2n', 'locat2n']]),
-    SpecialTokenMap('QUOTED_STRING_([0-9]+)', lambda x: 'Chinese', lambda x: ['Chinese', 'chinese']), # TODO change to be more general than cuisine
+    SpecialTokenMap('QUOTED_STRING_([0-9]+)', lambda x: 'Chinese', lambda x: ['Chinese', 'chinese', 'china']), # TODO change to be more general than cuisine
     SpecialTokenMap('GENERIC_ENTITY_uk.ac.cam.multiwoz.Restaurant:Restaurant_([0-9]+)', ["restaurant1", "restaurant2", "restaurant3"]) # TODO the only reason we can get away with this unnatural replacement is that actual backward is not going to be called for this
 ]
 
@@ -110,19 +110,18 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         row = [r.strip() for r in line.split('\t')]
         input_sequence = row[input_column]
         gold = row[gold_column]
-        # logger.info('gold = %s', gold)
+        # logger.info('gold (before heuristics) = %s', gold)
         if not skip_heuristics:
             gold, _ = input_heuristics(gold, None, is_cased, keep_special_tokens=True, keep_tokenized=True)
-        # logger.info('gold = %s', gold)
+        # logger.info('gold (after heuristics) = %s', gold)
         all_golds.append(gold)
-        # logger.info('before text = %s', input_sequence)
         if skip_heuristics:
             reverse_maps.append({})
         else:
             thingtalk = row[thingtalk_column] if thingtalk_column is not None else None
-            # logger.info('input_sequence = %s', input_sequence)
+            # logger.info('input_sequence (before heuristics) = %s', input_sequence)
             input_sequence, reverse_map = input_heuristics(input_sequence, thingtalk, is_cased)
-            # logger.info('input_sequence = %s', input_sequence)
+            # logger.info('input_sequence (after heuristics) = %s', input_sequence)
             reverse_maps.append(reverse_map)
         input_sequence_tokens = tokenizer.encode(input_sequence, add_special_tokens=True)
         
@@ -209,7 +208,6 @@ def input_heuristics(s: str, thingtalk=None, is_cased=False, keep_special_tokens
             s, r = spm.forwad(s)
             reverse_map.extend(r)
 
-    # logger.info('s = ', s)
     return s, reverse_map
 
 def output_heuristics(s: str, reverse_map: list):
@@ -384,7 +382,7 @@ def run_generation(args):
 
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
     end_token_id = tokenizer.convert_tokens_to_ids(special_tokens['end_token'])
-    sep_token_id=tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
+    sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
 
     if pad_token_id is None:
@@ -440,10 +438,10 @@ def run_generation(args):
         batch_outputs = [[] for _ in range(batch_size)]
         for hyperparameter_idx in range(len(args.temperature)):
             out = model.generate(input_ids=batch_context_tensor,
-                                 bad_words_ids=[[sep_token_id]] if args.model_type=='gpt2' else None,
+                                 bad_words_ids=None,
                                  attention_mask=attention_mask,
-                                 min_length=batch_context_tensor.shape[1]+args.min_output_length if args.model_type=='gpt2' else args.min_output_length,
-                                 max_length=batch_context_tensor.shape[1]*2+args.length if args.model_type=='gpt2' else batch_context_tensor.shape[1]+args.length,
+                                 min_length=args.min_output_length,
+                                 max_length=batch_context_tensor.shape[1]+args.length,
                                  num_beams=args.num_beams[hyperparameter_idx],
                                  top_k=args.top_k[hyperparameter_idx],
                                  top_p=args.top_p[hyperparameter_idx],
