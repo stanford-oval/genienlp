@@ -106,11 +106,13 @@ class SpecialTokenMap:
 def tokenizer(s):
     return s.split()
 
+
 def mask_special_tokens(string: str):
     exceptions = [match.group(0) for match in re.finditer('[A-Za-z:_.]+_[0-9]+', string)]
     for e in exceptions:
         string = string.replace(e, '<temp>', 1)
     return string, exceptions
+
 
 def unmask_special_tokens(string: str, exceptions: list):
     for e in exceptions:
@@ -129,6 +131,7 @@ def detokenize(string: str):
     string = unmask_special_tokens(string, exceptions)
     return string
 
+
 def tokenize(string: str):
     string, exceptions = mask_special_tokens(string)
     tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "!", "'s", ")", ":"]
@@ -141,11 +144,13 @@ def tokenize(string: str):
     string = unmask_special_tokens(string, exceptions)
     return string.strip()
 
+
 def lower_case(string):
     string, exceptions = mask_special_tokens(string)
     string = string.lower()
     string = unmask_special_tokens(string, exceptions)
     return string
+
 
 def remove_thingtalk_quotes(thingtalk):
     quote_values = []
@@ -164,12 +169,14 @@ def remove_thingtalk_quotes(thingtalk):
     thingtalk = thingtalk.replace('<temp>', '""')
     return thingtalk, quote_values
 
+
 def get_number_of_lines(file_path):
     count = 0
     with open(file_path) as f:
         for line in f:
             count += 1
     return count
+
 
 def get_part_path(path, part_idx):
     if path.endswith(os.path.sep):
@@ -178,6 +185,7 @@ def get_part_path(path, part_idx):
     else:
         has_separator = False
     return path + '_part' + str(part_idx+1) + (os.path.sep if has_separator else '')
+
 
 def split_folder_on_disk(folder_path, num_splits):
     new_folder_paths = [get_part_path(folder_path, part_idx) for part_idx in range(num_splits)]
@@ -204,19 +212,17 @@ def split_file_on_disk(file_path, num_splits, output_paths=None):
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         all_output_files.append(open(output_path, 'w'))
 
-    written_lines = 0
     with open(file_path, 'r') as input_file:
         output_file_idx = 0
         for line in input_file:
             all_output_files[output_file_idx].write(line)
-            written_lines += 1
-            if number_of_lines >= num_splits and written_lines % (number_of_lines//num_splits) == 0:
-                output_file_idx = min(output_file_idx + 1, len(all_output_files)-1)
+            output_file_idx = (output_file_idx + 1) % len(all_output_files)
 
     for f in all_output_files:
         f.close()
 
     return all_output_paths
+
 
 def combine_folders_on_disk(folder_path_prefix, num_files, delete=False):
     folder_paths = [get_part_path(folder_path_prefix, part_idx) for part_idx in range(num_files)]
@@ -231,37 +237,69 @@ def combine_folders_on_disk(folder_path_prefix, num_files, delete=False):
     
     for new, olds in new_to_olds_map.items():
         os.makedirs(os.path.dirname(new), exist_ok=True)
-        new_json = None
         with open(new, 'w') as combined_file:
-            for i in range(num_files):
-                old_file_path = olds[i]
-                with open(old_file_path, 'r') as old_file:
-                    if new.endswith('.json'):
-                        if new_json is None:
-                            new_json = json.load(old_file)
-                        else:
-                            for k, v in json.load(old_file).items():
-                                new_json[k] += v
-                    else:
-                        for line in old_file:
-                            combined_file.write(line)
             if new.endswith('.json'):
+                new_json = None
+                for old in olds:
+                    with open(old, 'r') as f:
+                        if new_json is None:
+                            new_json = json.load(f)
+                        else:
+                            for k, v in json.load(f).items():
+                                new_json[k] += v
                 for k, v in new_json.items():
                     new_json[k] /= float(num_files)
                 json.dump(new_json, combined_file)
+            else:
+                all_old_file_contents = []
+                for old in olds:
+                    with open(old, 'r') as f:
+                        all_old_file_contents.append([line for line in f])
+                old_file_idx = 0
+                all_indices = [0] * len(all_old_file_contents)
+                finished_reading = [False] * len(all_old_file_contents)
+                while True:
+                    line = all_old_file_contents[old_file_idx][all_indices[old_file_idx]]
+                    combined_file.write(line)
+                    all_indices[old_file_idx] += 1
+                    if all_indices[old_file_idx] == len(all_old_file_contents[old_file_idx]):
+                        finished_reading[old_file_idx] = True
+                        if all(finished_reading):
+                            break
+                    old_file_idx = (old_file_idx + 1) % len(all_old_file_contents)
+                
     if delete:
         for folder in folder_paths:
             shutil.rmtree(folder)
 
+
 def combine_files_on_disk(file_path_prefix, num_files, delete=False):
+    all_input_file_contents = []
+    all_input_file_paths = []
+    for i in range(num_files):
+        input_file_path = get_part_path(file_path_prefix, i)
+        all_input_file_paths.append(input_file_path)
+        with open(input_file_path, 'r') as f:
+            all_input_file_contents.append([line for line in f])
+    
+    all_indices = [0] * len(all_input_file_contents)
+    finished_reading = [False] * len(all_input_file_contents)
+    input_file_idx = 0
     with open(file_path_prefix, 'w') as combined_file:
-        for i in range(num_files):
-            file_path = get_part_path(file_path_prefix, i)
-            with open(file_path, 'r') as file:
-                for line in file:
-                    combined_file.write(line)
-            if delete:
-                os.remove(file_path)
+        while True:
+            line = all_input_file_contents[input_file_idx][all_indices[input_file_idx]]
+            combined_file.write(line)
+            all_indices[input_file_idx] += 1
+            if all_indices[input_file_idx] == len(all_input_file_contents[input_file_idx]):
+                finished_reading[input_file_idx] = True
+                if all(finished_reading):
+                    break
+            input_file_idx = (input_file_idx + 1) % len(all_input_file_contents)
+
+    if delete:
+        for file_path in all_input_file_paths:
+            os.remove(file_path)
+
 
 def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float('Inf'), min_tokens_to_keep=1):
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
@@ -301,6 +339,7 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float('Inf')
         indices_to_remove = sorted_indices_to_remove.scatter(dim=1, index=sorted_indices, src=sorted_indices_to_remove)
         logits[indices_to_remove] = filter_value
     return logits
+
 
 def map_filter(callable, iterable):
     output = []
