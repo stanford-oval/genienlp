@@ -443,7 +443,7 @@ def run_generation(args):
                                  bad_words_ids=[[sep_token_id]] if args.model_type=='gpt2' else None,
                                  attention_mask=attention_mask,
                                  min_length=batch_context_tensor.shape[1]+args.min_output_length if args.model_type=='gpt2' else args.min_output_length,
-                                 max_length=batch_context_tensor.shape[1]+args.length,
+                                 max_length=batch_context_tensor.shape[1]*2+args.length if args.model_type=='gpt2' else batch_context_tensor.shape[1]+args.length,
                                  num_beams=args.num_beams[hyperparameter_idx],
                                  top_k=args.top_k[hyperparameter_idx],
                                  top_p=args.top_p[hyperparameter_idx],
