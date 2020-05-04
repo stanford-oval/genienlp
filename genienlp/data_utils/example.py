@@ -28,13 +28,14 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from typing import NamedTuple, List
+import itertools
+import random
 
 from .numericalizer.sequential_field import SequentialField
 
 
 class Example(NamedTuple):
     example_id: str
-
     # for each field in the example, we store the tokenized sentence, and a boolean mask
     # indicating whether the token is a real word (subject to word-piece tokenization)
     # or it should be treated as an opaque symbol
@@ -67,18 +68,66 @@ class Batch(NamedTuple):
     question: SequentialField
     answer: SequentialField
     decoder_vocab: object
-
+    
     @staticmethod
-    def from_examples(examples, numericalizer, device=None):
+    def from_examples(examples, numericalizer, device=None, paired=False, max_pairs=None, groups=None):
         assert all(isinstance(ex.example_id, str) for ex in examples)
-        example_ids = [ex.example_id for ex in examples]
-        context_input = [(ex.context, ex.context_word_mask) for ex in examples]
-        question_input = [(ex.question, ex.question_word_mask) for ex in examples]
-        answer_input = [(ex.answer, ex.answer_word_mask) for ex in examples]
+        
         decoder_vocab = numericalizer.decoder_vocab.clone()
+        max_context_len, max_question_len, max_answer_len = -1, -1, -1
 
-        return Batch(example_ids,
-                     numericalizer.encode(context_input, decoder_vocab, device=device),
-                     numericalizer.encode(question_input, decoder_vocab, device=device),
-                     numericalizer.encode(answer_input, decoder_vocab, device=device),
+        if paired:
+            example_pairs = []
+            
+            # get all possible combinations of related example pairs
+            for i in range(0, len(examples), groups):
+                related_examples = [examples[j] for j in range(i, i+groups)]
+                example_pairs.extend(itertools.product(related_examples, related_examples))
+            # filter out pairs with same sentences
+            example_pairs = [ex_pair for ex_pair in example_pairs if ex_pair[0] != ex_pair[1]]
+            
+            # shuffle example orders and select first max_pairs of them
+            random.shuffle(example_pairs)
+            example_pairs = example_pairs[:max_pairs]
+            
+            example_ids = [ex_a.example_id + '@' + ex_b.example_id for ex_a, ex_b in example_pairs]
+            context_inputs = [((ex_a.context, ex_a.context_word_mask), (ex_b.context, ex_b.context_word_mask)) for ex_a, ex_b in example_pairs]
+            question_inputs = [((ex_a.question, ex_a.question_word_mask), (ex_b.question, ex_b.question_word_mask)) for ex_a, ex_b in example_pairs]
+            answer_inputs = [((ex_a.answer, ex_a.answer_word_mask), (ex_b.answer, ex_b.answer_word_mask)) for ex_a, ex_b in example_pairs]
+
+            all_example_ids_pair = example_ids
+            all_context_inputs_pair = numericalizer.encode_pair(context_inputs, decoder_vocab, device=device)
+            all_question_inputs_pair = numericalizer.encode_pair(question_inputs, decoder_vocab, device=device)
+            all_answer_inputs_pair = numericalizer.encode_pair(answer_inputs, decoder_vocab, device=device)
+
+            max_context_len = all_context_inputs_pair.value.size(1)
+            max_question_len = all_question_inputs_pair.value.size(1)
+            max_answer_len = all_answer_inputs_pair.value.size(1)
+
+        # process single examples
+        example_ids = [ex.example_id for ex in examples]
+        context_inputs = [(ex.context, ex.context_word_mask) for ex in examples]
+        question_inputs = [(ex.question, ex.question_word_mask) for ex in examples]
+        answer_inputs = [(ex.answer, ex.answer_word_mask) for ex in examples]
+        
+        all_example_ids_single = example_ids
+        all_context_inputs_single = numericalizer.encode_single(context_inputs, decoder_vocab, device=device, max_length=max_context_len-2)
+        all_question_inputs_single = numericalizer.encode_single(question_inputs, decoder_vocab, device=device, max_length=max_question_len-2)
+        all_answer_inputs_single = numericalizer.encode_single(answer_inputs, decoder_vocab, device=device, max_length=max_answer_len-2)
+    
+        if paired:
+            all_example_ids = all_example_ids_single + all_example_ids_pair
+            all_context_inputs = SequentialField.from_tensors([all_context_inputs_single, all_context_inputs_pair])
+            all_question_inputs = SequentialField.from_tensors([all_question_inputs_single, all_question_inputs_pair])
+            all_answer_inputs = SequentialField.from_tensors([all_answer_inputs_single, all_answer_inputs_pair])
+        else:
+            all_example_ids = all_example_ids_single
+            all_context_inputs = all_context_inputs_single
+            all_question_inputs = all_question_inputs_single
+            all_answer_inputs = all_answer_inputs_single
+            
+        return Batch(all_example_ids,
+                     all_context_inputs,
+                     all_question_inputs,
+                     all_answer_inputs,
                      decoder_vocab)

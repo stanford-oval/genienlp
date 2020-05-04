@@ -80,7 +80,7 @@ def print_results(keys, values, num_print=1):
         print()
 
 
-def validate(task, val_iter, model, logger, numericalizer, iteration, num_print=10, args=None):
+def validate(task, val_iter, model, logger, numericalizer, iteration, num_print=10):
     with torch.no_grad():
         model.eval()
         names = ['beam search', 'answer', 'context', 'question']
@@ -88,7 +88,7 @@ def validate(task, val_iter, model, logger, numericalizer, iteration, num_print=
             gather_results(model, val_iter, numericalizer, task, iteration)
         predictions = [p.replace('UNK', 'OOV') for p in predictions]
 
-        metrics, answers = compute_metrics(predictions, answers, task.metrics, args=args)
+        metrics, answers = compute_metrics(predictions, answers, task.metrics)
         results = [predictions, answers, contexts, questions]
         print_results(names, results, num_print=num_print)
 

@@ -25,6 +25,9 @@ workdir/
 
 lightning_logs/
 pytorch_model.bin
+tests/dataset-*
+tests/dataset/*
+tests/test_py.sh
 
 
 # C extensions

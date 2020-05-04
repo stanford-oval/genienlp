@@ -122,7 +122,7 @@ def to_lf(s, table):
     return logical_form
 
 
-def computeLFEM(greedy, answer, args):
+def computeLFEM(greedy, answer):
     answer = [x[0] for x in answer]
     count = 0
     correct = 0
@@ -420,7 +420,7 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
 
 
-def compute_metrics(greedy, answer, requested_metrics, args=None, batch_mode=True):
+def compute_metrics(greedy, answer, requested_metrics, batch_mode=True):
     if not batch_mode:
         greedy = [greedy]
         answer = [answer]
@@ -429,7 +429,7 @@ def compute_metrics(greedy, answer, requested_metrics, args=None, batch_mode=Tru
     if not isinstance(answer[0], list):
         answer = [[a] for a in answer]
     if 'lfem' in requested_metrics:
-        lfem, answer = computeLFEM(greedy, answer, args)
+        lfem, answer = computeLFEM(greedy, answer)
         metric_keys += ['lfem']
         metric_values += [lfem]
     if 'joint_goal_em' in requested_metrics:

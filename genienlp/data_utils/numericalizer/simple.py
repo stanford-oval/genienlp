@@ -44,6 +44,7 @@ class SimpleNumericalizer(object):
         self.unk_token = '<unk>'
         self.pad_token = '<pad>'
         self.mask_token = '<mask>'
+        self.sep_token = '<sep>'
 
         self.fix_length = fix_length
         self.pad_first = pad_first
@@ -92,6 +93,7 @@ class SimpleNumericalizer(object):
         self.unk_id = self.vocab.stoi[self.unk_token]
         self.pad_id = self.vocab.stoi[self.pad_token]
         self.mask_id = self.vocab.stoi[self.mask_token]
+        self.sep_id = self.vocab.stoi[self.sep_token]
         self.generative_vocab_size = min(self.max_generative_vocab, len(self.vocab))
 
         assert self.init_id < self.max_generative_vocab
@@ -99,6 +101,7 @@ class SimpleNumericalizer(object):
         assert self.unk_id < self.max_generative_vocab
         assert self.pad_id < self.max_generative_vocab
         assert self.mask_id < self.max_generative_vocab
+        assert self.sep_id < self.max_generative_vocab
 
         self.decoder_vocab = DecoderVocabulary(self.vocab.itos[:self.max_generative_vocab], self.vocab,
                                                pad_token=self.pad_token, eos_token=self.eos_token)
@@ -107,9 +110,13 @@ class SimpleNumericalizer(object):
         special_tokens_tuple = (self.init_id, self.eos_id, self.pad_id, self.mask_id)
         return list(map(lambda x: 1 if x in special_tokens_tuple else 0, tensor))
 
-    def encode(self, minibatch, decoder_vocab, device=None):
+
+    def encode_single(self, minibatch, decoder_vocab, device=None, max_length=-1):
         assert isinstance(minibatch, list)
-        if self.fix_length is None:
+        
+        if max_length > -1:
+            max_len = max_length
+        elif self.fix_length is None:
             max_len = max(len(x[0]) for x in minibatch)
         else:
             max_len = self.fix_length
@@ -140,6 +147,48 @@ class SimpleNumericalizer(object):
         decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
 
         return SequentialField(length=length, value=numerical, limited=decoder_numerical)
+
+
+    def encode_pair(self, minibatch, decoder_vocab, device=None):
+        assert isinstance(minibatch, list)
+        if self.fix_length is None:
+            max_len = max(len(x[0][0]) + len(x[1][0]) for x in minibatch)
+        else:
+            # max_len for each example in pair
+            max_len = self.fix_length
+        padded = []
+        lengths = []
+        numerical = []
+        decoder_numerical = []
+        for (tokens_a, _), (tokens_b, _)  in minibatch:
+            if self.pad_first:
+                padded_example = [self.pad_token] * max(0, 2 * max_len - len(tokens_a) - len(tokens_b)) + \
+                                 [self.init_token] + \
+                                 list(tokens_a[:max_len]) + \
+                                 [self.sep_token] + \
+                                 list(tokens_b[:max_len]) + \
+                                 [self.eos_token]
+                    
+            else:
+                padded_example = [self.init_token] + \
+                                 list(tokens_a[:max_len]) + \
+                                 [self.sep_token] + \
+                                 list(tokens_b[:max_len]) + \
+                                 [self.eos_token] + \
+                                 [self.pad_token] * max(0, 2 * max_len - len(tokens_a) - len(tokens_b))
+
+            padded.append(padded_example)
+            lengths.append(len(padded_example) - max(0, 2 * max_len - len(tokens_a) - len(tokens_b)))
+
+            numerical.append([self.vocab.stoi[word] for word in padded_example])
+            decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
+
+        length = torch.tensor(lengths, dtype=torch.int32, device=device)
+        numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
+        decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
+
+        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
+  
 
     def decode(self, tensor):
         return [self.vocab.itos[idx] for idx in tensor]
