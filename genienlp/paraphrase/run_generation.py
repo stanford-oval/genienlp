@@ -21,16 +21,21 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 from tqdm import tqdm
+import torch
 import math
 import json
 import re
 import copy
 import os
 
+
+from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler
+
+
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
-from genienlp.paraphrase.data_utils import create_features_from_tsv_file, input_heuristics, output_heuristics, is_question
+from genienlp.paraphrase.data_utils import create_features_from_tsv_file, output_heuristics
 from genienlp.paraphrase.model_utils import compute_metrics
 
 try:
@@ -61,9 +66,6 @@ MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'sep_token': '<paraphrase>', 'end_token': '</paraphrase>'}),
     'bart': (BartForConditionalGeneration, BartTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}) # sep_token will not be used for BART
 }
-
-
-
 
 
 def parse_argv(parser):
@@ -286,6 +288,8 @@ def run_generation(args):
     _, all_outputs = tuple(zip(*sorted(list(zip(original_order, all_outputs)))))
 
     if args.output_file is not None:
+        if not os.path.exists(os.path.dirname(args.output_file)):
+            os.makedirs(os.path.dirname(args.output_file), exist_ok=False)
         with open(args.output_file, 'w') as output_file:
             for output in all_outputs:
                 for text in output:

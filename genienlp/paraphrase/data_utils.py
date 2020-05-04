@@ -46,16 +46,16 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, aux=False):
     return dataset
 
 
-def mask_tokens(inputs, labels, tokenizer, args):
+def mask_tokens(inputs, labels, tokenizer, mlm_probability, mlm_ignore_index):
     """
     Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
     """
     # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
-    probability_matrix = torch.full(labels.shape, args.mlm_probability)
+    probability_matrix = torch.full(labels.shape, mlm_probability)
     special_tokens_mask = [tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()]
     probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
     masked_indices = torch.bernoulli(probability_matrix).bool()
-    labels[~masked_indices] = -100  # We only compute loss on masked tokens
+    labels[~masked_indices] = mlm_ignore_index  # We only compute loss on masked tokens
 
     # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
     indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
@@ -130,18 +130,14 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         row = [r.strip() for r in line.split('\t')]
         input_sequence = row[input_column]
         gold = row[gold_column]
-        # logger.info('gold (before heuristics) = %s', gold)
         if not skip_heuristics:
             gold, _ = input_heuristics(gold, None, is_cased, keep_special_tokens=True, keep_tokenized=True)
-        # logger.info('gold (after heuristics) = %s', gold)
         all_golds.append(gold)
         if skip_heuristics:
             reverse_maps.append({})
         else:
             thingtalk = row[thingtalk_column] if thingtalk_column is not None else None
-            # logger.info('input_sequence (before heuristics) = %s', input_sequence)
             input_sequence, reverse_map = input_heuristics(input_sequence, thingtalk, is_cased)
-            # logger.info('input_sequence (after heuristics) = %s', input_sequence)
             reverse_maps.append(reverse_map)
         input_sequence_tokens = tokenizer.encode(input_sequence, add_special_tokens=True)
         

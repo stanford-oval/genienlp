@@ -40,7 +40,8 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer,
                                   RobertaConfig, RobertaForMaskedLM, RobertaTokenizer,
                                   DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer,
-                                  CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
+                                  CamembertConfig, CamembertForMaskedLM, CamembertTokenizer,
+                                  BartConfig, BartForConditionalGeneration, BartTokenizer)
 
 from genienlp.util import set_seed
 from genienlp.paraphrase.data_utils import mask_tokens, get_inbetween_tokens, add_special_tokens, load_and_cache_examples
@@ -56,7 +57,8 @@ MODEL_CLASSES = {
     'bert': (BertConfig, BertForMaskedLM, BertTokenizer),
     'roberta': (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer),
     'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer),
-    'camembert': (CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
+    'camembert': (CamembertConfig, CamembertForMaskedLM, CamembertTokenizer),
+    'bart': (BartConfig, BartForConditionalGeneration, BartTokenizer)
 }
     
 
@@ -167,21 +169,35 @@ def train(args, train_dataset, model, tokenizer):
                 continue
 
             inputs, labels, position_ids, segment_ids = batch # batch is a tuple (input, labels, position_ids, segment_ids)
+            
             if args.mlm:
-                inputs, labels = mask_tokens(inputs, labels, tokenizer, args)
+                inputs, labels = mask_tokens(inputs, labels, tokenizer, args.mlm_probability, args.mlm_ignore_index)
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
             position_ids = position_ids.to(args.device)
             segment_ids = segment_ids.to(args.device)
             model.train()
-            # print('inputs', inputs)
-            # print('labels', labels)
-            # print('position_ids', position_ids.shape)
-            # print('segment_ids', segment_ids.shape)
-            if args.mlm:
-                outputs = model(inputs, masked_lm_labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
+            
+            model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids}
+            
+            # prepare inputs for bart
+            if 'bart' in args.model_type:
+                # this should have been handled internally by huggingfaces's BART code
+                # remove this once they add it
+                decoder_input_ids = labels[:, :-1].contiguous()
+                decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
+                lm_labels = labels[:, 1:].clone()
+                model_inputs['decoder_input_ids'] = decoder_input_ids
+                model_inputs['lm_labels'] = lm_labels
+            
+            # other models
             else:
-                outputs = model(inputs, labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
+                if args.mlm:
+                    model_inputs['masked_lm_labels'] = labels
+                else:
+                    model_inputs['labels'] = labels
+                
+            outputs = model(**model_inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.n_gpu > 1:
@@ -297,7 +313,7 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         inputs, labels, position_ids, segment_ids = batch
         if args.mlm:
-            inputs, labels = mask_tokens(inputs, labels, tokenizer, args)
+            inputs, labels = mask_tokens(inputs, labels, tokenizer, args.mlm_probability, args.mlm_ignore_index)
         inputs = inputs.to(args.device)
         labels = labels.to(args.device)
         position_ids = position_ids.to(args.device)
@@ -327,7 +343,6 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
             writer.write("%s = %s\n" % (key, str(result[key])))
 
     return result
-
 
 
 def parse_argv(parser):
@@ -369,6 +384,8 @@ def parse_argv(parser):
                         help="Train with masked-language modeling loss instead of language modeling.")
     parser.add_argument("--mlm_probability", type=float, default=0.15,
                         help="Ratio of tokens to mask for masked language modeling loss")
+    parser.add_argument("--mlm_ignore_index", type=int, default=-100,
+                        help="Tokens with this label will be ignore when calculating masked language loss")
 
     parser.add_argument("--config_name", default="", type=str,
                         help="Optional pretrained config name or path if not the same as model_name_or_path")
@@ -439,10 +456,7 @@ def parse_argv(parser):
 
 
 def main(args):
-    if args.model_type in ["bert", "roberta", "distilbert", "camembert"] and not args.mlm:
-        raise ValueError("BERT and RoBERTa do not have LM heads but masked LM heads. They must be run using the --mlm "
-                         "flag (masked language modeling).")
-    if args.model_type in ['bert'] and (args.pad_token != '[PAD]' or args.start_special_token != '[SEP]' or args.end_special_token != '[SEP]'):
+    if args.model_type == 'bert' and (args.pad_token != '[PAD]' or args.start_special_token != '[SEP]' or args.end_special_token != '[SEP]'):
         raise ValueError("BERT already has its own special tokens [PAD] and [SEP]. You should use them for better results.")
     if args.do_train:
         if args.train_data_file is None:
@@ -500,7 +514,6 @@ def main(args):
     if args.add_inbetween_as_special_tokens:
         new_tokens = get_inbetween_tokens(args.train_data_file, start_token=args.start_special_token, end_token=args.end_special_token)
         logger.info('Detected %d new tokens', len(new_tokens))
-        # logger.info('New tokens: %s', str([s for s in new_tokens if ('_' in s and '@' not in s and '^' not in s and '(' not in s and ':' not in s)]))
         add_special_tokens(model, tokenizer, additional_special_tokens=list(new_tokens))
     model.to(args.device)
 
