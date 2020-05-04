@@ -49,7 +49,7 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer,
                                   CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
 
-from genienlp.util import set_seed, get_number_of_lines
+from genienlp.util import set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -63,210 +63,6 @@ MODEL_CLASSES = {
     'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer),
     'camembert': (CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
 }
-
-
-class TextDataset(Dataset):
-    def __init__(self, tokenizer, args, file_path=None, block_size=512, evaluate=None):
-        self.tokenizer = tokenizer
-        self.block_size = block_size
-        assert os.path.isfile(file_path)
-        directory, filename = os.path.split(file_path)
-        cached_features_file = os.path.join(directory, os.path.basename(os.path.normpath(args.model_name_or_path)) + '_cached_lm_' + str(self.block_size) + '_' + filename)
-
-        if os.path.exists(cached_features_file) and not args.overwrite_cache:
-            logger.info("Loading features from cached file %s", cached_features_file)
-            with open(cached_features_file, 'rb') as handle:
-                self.examples, self.labels, self.position_ids, self.segment_ids = pickle.load(handle)
-        else:
-            logger.info("Creating features from dataset file at %s", file_path)
-
-            self.prompt_token_id = self.tokenizer.convert_tokens_to_ids(args.start_special_token)
-            self.end_token_id = self.tokenizer.convert_tokens_to_ids(args.end_special_token)
-            self.segment1_id = 0
-            self.segment2_id = 1
-            if args.model_type == 'gpt2':
-                self.segment1_id = self.prompt_token_id
-                self.segment2_id = self.end_token_id
-            # print('prompt_token_id = ', prompt_token_id)
-            self.examples = []
-            self.labels = []
-            self.position_ids = []
-            self.segment_ids = []
-            self.max_input_length = 0
-
-            if not evaluate and args.aux_train_data_file is not None:
-                number_of_lines = get_number_of_lines(args.aux_train_data_file)
-                with open(args.aux_train_data_file, encoding="utf-8") as f:
-                    reader = csv.reader(f, delimiter='\t')
-                    for row in tqdm(reader, desc='Tokenizing Auxiliary File', total=number_of_lines):
-                        self._add_example(row[0], None, args)
-
-            number_of_lines = get_number_of_lines(file_path)
-            with open(file_path, encoding="utf-8") as f:
-                reader = csv.reader(f, delimiter='\t')
-                for row in tqdm(reader, desc='Tokenizing', total=number_of_lines):
-                    self._add_example(row[0], row[1], args)
-
-            
-
-            logger.info('Maximum input length: %d', self.max_input_length)
-            logger.info("Saving features into cached file %s", cached_features_file)
-            with open(cached_features_file, 'wb') as handle:
-                pickle.dump((self.examples, self.labels, self.position_ids, self.segment_ids), handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    def _add_example(self, input_sequence, output_sequence, args):
-        """
-        Args:
-            input_sequence: if None, a corrupted version of the output_sequence will be used
-        """
-        # TODO we should make use of tokenizer.build_inputs_with_special_tokens(sequence1, sequence2). Add special tokens manualy only if our model does not support two sequences (like GPT2).
-        
-        input_token_ids = self.tokenizer.encode(input_sequence, add_special_tokens=False) + [self.tokenizer.convert_tokens_to_ids(args.start_special_token)]
-        if output_sequence is None:
-            output_token_ids = []
-        else:
-            output_token_ids = self.tokenizer.encode(output_sequence, add_special_tokens=False) + [self.tokenizer.convert_tokens_to_ids(args.end_special_token)]
-        tokenized_text = input_token_ids + output_token_ids
-        
-        tokenized_text = tokenized_text[0:self.block_size] # truncate longer sequences
-        # print('tokenized_text = ', tokenized_text)
-
-        example = self.tokenizer.build_inputs_with_special_tokens(tokenized_text)
-        # Remove duplicate end_token for models like BERT and RoBERTa that already add it
-        if example[-2] == self.end_token_id:
-            example = example[:-1]
-        # print('example = ', example)
-        self.max_input_length = max(self.max_input_length, len(example))
-        try:
-            prompt_token_location = example.index(self.prompt_token_id)
-        except ValueError:
-            logger.warning('Prompt token not found after truncating the input. Dropping the example.')
-            return
-
-        self.examples.append(example)
-        if args.train_all_tokens and not evaluate or output_sequence is None:
-            self.labels.append(example)
-        else: # During evaluation, we only care about the output_sequence so we mask the input
-            self.labels.append([-100]*(prompt_token_location+1)+example[prompt_token_location+1:])
-        
-        position_ids2 = range(len(example)-prompt_token_location-1)
-        if args.reverse_position_ids:
-            position_ids2 = reversed(position_ids2)
-        self.position_ids.append(list(range(prompt_token_location+1)) + list(position_ids2))
-        self.segment_ids.append([self.segment1_id]*(prompt_token_location+1) + [self.segment2_id]*(len(example)-prompt_token_location-1))
-
-        # print('position_ids = ', self.position_ids[-1])
-        # print('segment_ids = ', self.segment_ids[-1])
-
-    def __len__(self):
-        return len(self.examples)
-
-    def __getitem__(self, item):
-        return torch.tensor(self.examples[item]), torch.tensor(self.labels[item]), torch.tensor(self.position_ids[item]), torch.tensor(self.segment_ids[item])
-
-
-def get_transformer_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, dimension):
-    num_warmup_steps = max(1, num_warmup_steps)
-
-    def lr_lambda(current_step):
-        current_step += 1
-        return 1. / math.sqrt(dimension) * min(1 / math.sqrt(current_step), current_step / (num_warmup_steps * math.sqrt(num_warmup_steps)))
-
-    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-
-def load_and_cache_examples(args, tokenizer, evaluate=False, aux=False):
-    if evaluate:
-        if aux:
-            file_path = args.aux_eval_data_file
-        else:
-            file_path = args.eval_data_file
-    else:
-        file_path = args.train_data_file
-    dataset = TextDataset(tokenizer, args, file_path=file_path, block_size=args.block_size, evaluate=evaluate)
-    return dataset
-
-
-def _rotate_checkpoints(args, checkpoint_prefix, use_mtime=False):
-    if not args.save_total_limit:
-        return
-    if args.save_total_limit <= 0:
-        return
-
-    # Check if we should delete older checkpoint(s)
-    glob_checkpoints = glob.glob(os.path.join(args.output_dir, '{}-*'.format(checkpoint_prefix)))
-    if len(glob_checkpoints) <= args.save_total_limit:
-        return
-
-    ordering_and_checkpoint_path = []
-    for path in glob_checkpoints:
-        if use_mtime:
-            ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
-        else:
-            regex_match = re.match('.*{}-([0-9]+)'.format(checkpoint_prefix), path)
-            if regex_match and regex_match.groups():
-                ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
-
-    checkpoints_sorted = sorted(ordering_and_checkpoint_path)
-    checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
-    number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - args.save_total_limit)
-    checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
-    for checkpoint in checkpoints_to_be_deleted:
-        logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
-        shutil.rmtree(checkpoint)
-
-
-def mask_tokens(inputs, labels, tokenizer, args):
-    """
-    Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
-    """
-    # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
-    probability_matrix = torch.full(labels.shape, args.mlm_probability)
-    special_tokens_mask = [tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()]
-    # print('labels.tolist() = ', labels.tolist())
-    # print('special_tokens_mask = ', special_tokens_mask)
-    probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
-    masked_indices = torch.bernoulli(probability_matrix).bool()
-    labels[~masked_indices] = -100  # We only compute loss on masked tokens
-
-    # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-    indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
-    inputs[indices_replaced] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
-
-    # 10% of the time, we replace masked input tokens with random word
-    indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-    random_words = torch.randint(len(tokenizer), labels.shape, dtype=torch.long)
-    inputs[indices_random] = random_words[indices_random]
-
-    # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-    return inputs, labels
-
-def pad_collate(batch, pad_token_id):
-    (inputs, labels, position_ids, segment_ids) = zip(*batch)
-    inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=pad_token_id)
-    labels_pad = pad_sequence(labels, batch_first=True, padding_value=-100)
-    position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
-    segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
-
-    return inputs_pad, labels_pad, position_ids, segment_ids
-
-def remove_thingtalk_quotes(thingtalk):
-    while True:
-        l1 = thingtalk.find('"')
-        if l1 < 0:
-            break
-        l2 = thingtalk.find('"', l1+1)
-        assert l2 >= 0
-        thingtalk = thingtalk[:l1] + '<temp>' + thingtalk[l2+1:]
-    return thingtalk
-
-def get_inbetween_tokens(train_data_file, start_token, end_token):
-    new_tokens = set()
-    with open(train_data_file, encoding="utf-8") as f:
-        for line in tqdm(f, desc='Tokenizing'):
-            line = remove_thingtalk_quotes(line)
-            line = line[line.find(start_token)+len(start_token):line.find(end_token)]
-            new_tokens.update(line.split())
-    return new_tokens
     
 
 def train(args, train_dataset, model, tokenizer):
@@ -276,8 +72,7 @@ def train(args, train_dataset, model, tokenizer):
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    collate = partial(pad_collate, pad_token_id=tokenizer.convert_tokens_to_ids(tokenizer.pad_token))
-    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate)
+    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=train_dataset.collate_fn)
 
     if args.max_steps > 0:
         t_total = args.max_steps
@@ -539,16 +334,7 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
 
     return result
 
-def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=None):
-    """ Add special tokens to the tokenizer and the model if they have not already been added. """
-    ATTR_TO_SPECIAL_TOKEN = {'additional_special_tokens': additional_special_tokens}
-    if pad_token is not None:
-        ATTR_TO_SPECIAL_TOKEN['pad_token'] = pad_token
-    orig_num_tokens = len(tokenizer)
-    num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN) # doesn't add if they are already there
-    if num_added_tokens > 0:
-        logger.info('Added %d special tokens', num_added_tokens)
-        model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
+
 
 def parse_argv(parser):
     ## Required parameters

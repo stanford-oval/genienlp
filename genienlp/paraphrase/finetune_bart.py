@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from genienlp.paraphrase.transformer_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup, MODEL_MODES
-from genienlp.paraphrase.utils import Seq2SeqDataset, sort_checkpoints
+from genienlp.paraphrase.data_utils import Seq2SeqDataset, sort_checkpoints
 
 
 logger = logging.getLogger(__name__)
