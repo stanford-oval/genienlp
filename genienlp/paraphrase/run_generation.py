@@ -302,6 +302,8 @@ def parse_argv(parser):
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[0.9], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
+    parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
+    
 
     parser.add_argument("--copy", type=int, default=0,
                         help='Number of tokens that will be copied at the beginning of generation. Helps preserve the original meaning of the input sequence.')
@@ -325,7 +327,7 @@ def main(args):
 
     if args.prompt_column is not None and args.copy is not None and args.copy != 0:
         raise ValueError('Cannot copy from the input and use prompt at the same time. Disable either --copy or --prompt_column.')
-    hyperparameters = ['temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams']
+    hyperparameters = ['temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
     max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])
     valid_len = [1, max_hyperparameter_len]
     for h in hyperparameters:
@@ -448,10 +450,11 @@ def run_generation(args):
                                  early_stopping=True,
                                  num_return_sequences=args.num_samples,
                                  repetition_penalty=args.repetition_penalty[hyperparameter_idx],
+                                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                                  do_sample=args.temperature[hyperparameter_idx]!=0,
                                  temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0, # if temperature==0, we do not sample
                                  eos_token_id=end_token_id,
-                                 pad_token_id=pad_token_id
+                                 pad_token_id=pad_token_id,
                                 )
             # logger.info('out = %s', str(out))
             # logger.info('out text = %s', [tokenizer.decode(o, clean_up_tokenization_spaces=False, skip_special_tokens=False) for o in out])

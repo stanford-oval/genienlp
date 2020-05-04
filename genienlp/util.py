@@ -259,6 +259,9 @@ def combine_folders_on_disk(folder_path_prefix, num_files, delete=False):
                 all_indices = [0] * len(all_old_file_contents)
                 finished_reading = [False] * len(all_old_file_contents)
                 while True:
+                    if finished_reading[old_file_idx]:
+                        old_file_idx = (old_file_idx + 1) % len(all_old_file_contents)
+                        continue
                     line = all_old_file_contents[old_file_idx][all_indices[old_file_idx]]
                     combined_file.write(line)
                     all_indices[old_file_idx] += 1
@@ -287,6 +290,9 @@ def combine_files_on_disk(file_path_prefix, num_files, delete=False):
     input_file_idx = 0
     with open(file_path_prefix, 'w') as combined_file:
         while True:
+            if finished_reading[input_file_idx]:
+                input_file_idx = (input_file_idx + 1) % len(all_input_file_contents)
+                continue
             line = all_input_file_contents[input_file_idx][all_indices[input_file_idx]]
             combined_file.write(line)
             all_indices[input_file_idx] += 1
