@@ -2,8 +2,16 @@ import torch
 import math
 import os
 import glob
+import re
+import logging
+import shutil
 
-from genienlp.paraphrase.data_utils import TextDataset
+from genienlp.metrics import computeBLEU
+
+logger = logging.getLogger(__name__)
+
+def sort_checkpoints(output_dir):
+    return list(sorted(glob.glob(os.path.join(output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
 
 
 def get_transformer_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, dimension):
@@ -15,16 +23,6 @@ def get_transformer_schedule_with_warmup(optimizer, num_warmup_steps, num_traini
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
-def load_and_cache_examples(args, tokenizer, evaluate=False, aux=False):
-    if evaluate:
-        if aux:
-            file_path = args.aux_eval_data_file
-        else:
-            file_path = args.eval_data_file
-    else:
-        file_path = args.train_data_file
-    dataset = TextDataset(tokenizer, args, file_path=file_path, block_size=args.block_size, evaluate=evaluate)
-    return dataset
 
 
 def _rotate_checkpoints(args, checkpoint_prefix, use_mtime=False):
@@ -54,3 +52,37 @@ def _rotate_checkpoints(args, checkpoint_prefix, use_mtime=False):
     for checkpoint in checkpoints_to_be_deleted:
         logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
         shutil.rmtree(checkpoint)
+
+
+def compute_metrics(generations, golds, reduction='average'):
+    """
+    Inputs:
+        generations: a list of list of strings; generations[i] is a list of all generated outputs of the model for example i
+        golds: a list of strings; golds[i] is the gold answer for example i
+        reduction: how we should compute an example's metrics from its multiple generations
+    """
+    total_bleu = 0.0
+    # all_bleu = []
+    total_exact_match = 0.0
+    count = 0.0
+    for idx, output in enumerate(generations):
+        bleu_score = 0.0
+        exact_match = 0.0
+        for sample in output:
+            if reduction == 'average':
+                bleu_score += computeBLEU([sample], [[golds[idx]]])
+            else:
+                bleu_score = max(bleu_score, computeBLEU([sample], [[golds[idx]]]))
+            if re.sub('\s+', '', sample).lower() == re.sub('\s+', '', golds[idx]).lower():
+                if reduction == 'average':
+                    exact_match += 1
+                else:
+                    exact_match = max(exact_match, 1)
+        if reduction == 'average':
+            bleu_score /= len(output)
+            exact_match /= len(output)
+        total_bleu += bleu_score
+        total_exact_match += exact_match
+        count += 1
+
+    return {'bleu': total_bleu/count, 'em': total_exact_match/count*100}

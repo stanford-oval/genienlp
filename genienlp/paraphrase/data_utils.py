@@ -1,13 +1,49 @@
 import os
 import glob
+import sys
+import re
 
+from tqdm import tqdm
 import torch
-from torch.utils.data import Dataset
+import logging
 
-from transformers.tokenization_utils import trim_batch
+from ..util import detokenize, tokenize, lower_case, SpecialTokenMap, remove_thingtalk_quotes
 
-def sort_checkpoints(output_dir):
-    return list(sorted(glob.glob(os.path.join(output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
+from genienlp.paraphrase.dataset import TextDataset
+from genienlp.util import get_number_of_lines
+
+logger = logging.getLogger(__name__)
+
+
+special_pattern_mapping = [
+    SpecialTokenMap('PHONE_NUMBER_([0-9]+)', ['888-8888', '777-8888']),
+    SpecialTokenMap('NUMBER_([0-9]+)', ['2', '3'], [['2', 'two'], ['3', 'three']]),
+    SpecialTokenMap('PATH_NAME_([0-9]+)', ['my1folder', 'my2folder']),
+    SpecialTokenMap('TIME_([0-9]+)', ['1p.m.', '2p.m.'], [['1 pm', '1pm', '1:00 pm', '1:00pm', '1p.m.', '1 p.m.', '1:00 p.m.', '1:00', 'one o\'clock', 'one'],
+                                                            ['2 pm', '2pm', '2:00 pm', '2:00pm', '2p.m.', '2 p.m.', '2:00 p.m.', '2:00', 'two o\'clock', 'two']]),
+    SpecialTokenMap('EMAIL_ADDRESS_([0-9]+)', ['e1@example.com', 'e2@example.com']),
+    SpecialTokenMap('URL_([0-9]+)', ['my1site.com', 'my2site.com']),
+    SpecialTokenMap('DATE_([0-9]+)', ['5-6-2015', '8-3-2016']),
+    SpecialTokenMap('CURRENCY_([0-9]+)', ['$12', '$13'], [['$12', 'twelve dollars', '12 dollars', '$ 12', '$ 12.00', '12.00', '12'],
+                                                          ['$13', 'thirteen dollars', '13 dollars', '$ 13', '$ 13.00', '13.00', '13']]),
+    SpecialTokenMap('DURATION_([0-9]+)', ['5 weeks', '6 weeks'], [['5 weeks', 'five weeks'], ['6 weeks', 'six weeks']]),
+    SpecialTokenMap('LOCATION_([0-9]+)', ['locatio1n', 'locatio2n'], [['locatio1n', 'locat1n'], ['locatio2n', 'locat2n']]),
+    SpecialTokenMap('QUOTED_STRING_([0-9]+)', lambda x: 'Chinese', lambda x: ['Chinese', 'chinese', 'china']), # TODO change to be more general than cuisine
+    SpecialTokenMap('GENERIC_ENTITY_uk.ac.cam.multiwoz.Restaurant:Restaurant_([0-9]+)', ["restaurant1", "restaurant2", "restaurant3"]) # TODO the only reason we can get away with this unnatural replacement is that actual backward is not going to be called for this
+]
+
+
+
+def load_and_cache_examples(args, tokenizer, evaluate=False, aux=False):
+    if evaluate:
+        if aux:
+            file_path = args.aux_eval_data_file
+        else:
+            file_path = args.eval_data_file
+    else:
+        file_path = args.train_data_file
+    dataset = TextDataset(tokenizer, args, file_path=file_path, block_size=args.block_size, evaluate=evaluate)
+    return dataset
 
 
 def mask_tokens(inputs, labels, tokenizer, args):
@@ -17,8 +53,6 @@ def mask_tokens(inputs, labels, tokenizer, args):
     # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
     probability_matrix = torch.full(labels.shape, args.mlm_probability)
     special_tokens_mask = [tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()]
-    # print('labels.tolist() = ', labels.tolist())
-    # print('special_tokens_mask = ', special_tokens_mask)
     probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
     masked_indices = torch.bernoulli(probability_matrix).bool()
     labels[~masked_indices] = -100  # We only compute loss on masked tokens
@@ -67,159 +101,140 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
 
 
-class Seq2SeqDataset(Dataset):
-    def __init__(
-        self,
-        tokenizer,
-        data_dir,
-        type_path,
-        max_source_length,
-        max_target_length
-    ):
-        super().__init__()
-        self.tokenizer = tokenizer
-        self.data_path = os.path.join(data_dir, type_path + ".tsv")
-        self.source = self.encode_file(max_source_length, column=0)
-        self.target = self.encode_file(max_target_length, column=1)
+def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, prompt_column, copy, thingtalk_column, sep_token_id,
+                                  skip_heuristics, is_cased, model_type):
+    """
+    Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
+    Outputs:
 
-    def __len__(self):
-        return self.source["input_ids"].shape[0]
+    """
+    all_input_sequences = []
+    all_input_sequence_lengths = []
+    all_context_tokens = []
+    estimated_output_lengths = []
+    all_golds = []
+    reverse_maps = []
+    all_prompt_tokens = []
 
-    def __getitem__(self, index):
-        source_ids = self.source["input_ids"][index].squeeze()
-        target_ids = self.target["input_ids"][index].squeeze()
-        src_mask = self.source["attention_mask"][index].squeeze()
-        return {"source_ids": source_ids, "source_mask": src_mask, "target_ids": target_ids}
+    if file_path is not None:
+        number_of_lines = get_number_of_lines(file_path)
+        disable_tqdm = False
+        input_file = open(file_path)
+    else:
+        number_of_lines = 1
+        disable_tqdm = True
+        input_file = sys.stdin
 
-    @staticmethod
-    def trim_seq2seq_batch(batch, pad_token_id):
-        target = trim_batch(batch["target_ids"], pad_token_id)
-        source_ids, source_mask = trim_batch(batch["source_ids"], pad_token_id, attention_mask=batch["source_mask"])
-        return source_ids, source_mask, target
-    
-    def encode_file(self, max_length, column, pad_to_max_length=True, return_tensors="pt"):
-        values = []
-        with open(self.data_path, "r") as f:
-            for line in f:
-                line = tuple(map(lambda part: part.strip(), line.split('\t')))[column]
-                values.append(line)
-        encoded_values = self.tokenizer.batch_encode_plus(values, max_length=max_length, pad_to_max_length=pad_to_max_length, return_tensors=return_tensors)
-        return encoded_values
 
-    def collate_fn(self, batch):
-        input_ids = torch.stack([x["source_ids"] for x in batch])
-        masks = torch.stack([x["source_mask"] for x in batch])
-        target_ids = torch.stack([x["target_ids"] for x in batch])
-        pad_token_id = self.tokenizer.pad_token_id
-        target = trim_batch(target_ids, pad_token_id)
-        source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
-        return {"source_ids": source_ids, "source_mask": source_mask, "target_ids": target}
-
-class TextDataset(Dataset):
-    def __init__(self, tokenizer, args, file_path=None, block_size=512, evaluate=None):
-        self.tokenizer = tokenizer
-        self.block_size = block_size
-        assert os.path.isfile(file_path)
-        directory, filename = os.path.split(file_path)
-        cached_features_file = os.path.join(directory, os.path.basename(os.path.normpath(args.model_name_or_path)) + '_cached_lm_' + str(self.block_size) + '_' + filename)
-
-        if os.path.exists(cached_features_file) and not args.overwrite_cache:
-            logger.info("Loading features from cached file %s", cached_features_file)
-            with open(cached_features_file, 'rb') as handle:
-                self.examples, self.labels, self.position_ids, self.segment_ids = pickle.load(handle)
+    for line in tqdm(input_file, desc='Reading Input File', total=number_of_lines, disable=disable_tqdm):
+        row = [r.strip() for r in line.split('\t')]
+        input_sequence = row[input_column]
+        gold = row[gold_column]
+        # logger.info('gold (before heuristics) = %s', gold)
+        if not skip_heuristics:
+            gold, _ = input_heuristics(gold, None, is_cased, keep_special_tokens=True, keep_tokenized=True)
+        # logger.info('gold (after heuristics) = %s', gold)
+        all_golds.append(gold)
+        if skip_heuristics:
+            reverse_maps.append({})
         else:
-            logger.info("Creating features from dataset file at %s", file_path)
+            thingtalk = row[thingtalk_column] if thingtalk_column is not None else None
+            # logger.info('input_sequence (before heuristics) = %s', input_sequence)
+            input_sequence, reverse_map = input_heuristics(input_sequence, thingtalk, is_cased)
+            # logger.info('input_sequence (after heuristics) = %s', input_sequence)
+            reverse_maps.append(reverse_map)
+        input_sequence_tokens = tokenizer.encode(input_sequence, add_special_tokens=True)
+        
+        prompt_tokens = [] # includes the first few tokens of the output
+        if prompt_column is not None and len(row) > prompt_column:
+            prompt = row[prompt_column]
+            if not skip_heuristics:
+                prompt, _ = input_heuristics(prompt, thingtalk, is_cased)
+                # logger.info('prompt = %s', prompt)
+            prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
+        if copy > 0:
+            assert len(prompt_tokens) == 0
+            prompt_tokens = input_sequence_tokens[0 : min(copy, len(input_sequence_tokens)-1)]
+        all_prompt_tokens.append(prompt_tokens)
+        context_tokens = input_sequence_tokens + [sep_token_id] + prompt_tokens
+        all_input_sequences.append(input_sequence)
+        all_input_sequence_lengths.append(len(input_sequence_tokens))
+        all_context_tokens.append(context_tokens)
+        estimated_output_lengths.append(len(input_sequence_tokens)-len(prompt_tokens))
+    
+    if file_path is not None:
+        input_file.close()
 
-            self.prompt_token_id = self.tokenizer.convert_tokens_to_ids(args.start_special_token)
-            self.end_token_id = self.tokenizer.convert_tokens_to_ids(args.end_special_token)
-            self.segment1_id = 0
-            self.segment2_id = 1
-            if args.model_type == 'gpt2':
-                self.segment1_id = self.prompt_token_id
-                self.segment2_id = self.end_token_id
-            # print('prompt_token_id = ', prompt_token_id)
-            self.examples = []
-            self.labels = []
-            self.position_ids = []
-            self.segment_ids = []
-            self.max_input_length = 0
+    return all_input_sequences, all_input_sequence_lengths, all_context_tokens, estimated_output_lengths, all_golds, reverse_maps, all_prompt_tokens
 
-            if not evaluate and args.aux_train_data_file is not None:
-                number_of_lines = get_number_of_lines(args.aux_train_data_file)
-                with open(args.aux_train_data_file, encoding="utf-8") as f:
-                    reader = csv.reader(f, delimiter='\t')
-                    for row in tqdm(reader, desc='Tokenizing Auxiliary File', total=number_of_lines):
-                        self._add_example(row[0], None, args)
 
-            number_of_lines = get_number_of_lines(file_path)
-            with open(file_path, encoding="utf-8") as f:
-                reader = csv.reader(f, delimiter='\t')
-                for row in tqdm(reader, desc='Tokenizing', total=number_of_lines):
-                    self._add_example(row[0], row[1], args)
+def is_question(sentence: str):
+    question_words = ['which', 'what', 'where', 'how', 'who', 'when', 'is', 'are', 'am', \
+                      'can', 'could', 'would', 'will', 'have', 'did', 'do', 'does', 'no is', 'yes is']
+    for w in question_words:
+        if sentence.startswith(w+' '):
+            return True
+    return False
 
+def input_heuristics(s: str, thingtalk=None, is_cased=False, keep_special_tokens=False, keep_tokenized=False):
+    """
+    Changes the input string so that it is closer to what the pre-trained language models have seen during their training.
+    Outputs:
+        s: the new string
+        reverse_map: a list of special tokens. Can be used to recover the original special_tokens in the string
+    """
+    reverse_map = []
+    s = s.strip()
+    s = tokenize(s)
+
+    # Put question mark at the end whenever necessary.
+    sentences = [sentence.strip() for sentence in re.split('\s+([.?!:])\s*', s) if len(sentence) > 0]
+    # logger.info('sentences = %s', sentences)
+    for idx in range(len(sentences)):
+        if sentences[idx] in ['.', '?' , '!', ':']:
+            continue
+        if idx == len(sentences)-1 or sentences[idx+1] not in ['.', '?', '!', ':']:
+            # add the missing punctuation
+            if is_question(sentences[idx]):
+                sentences[idx] = sentences[idx] + '?'
+            else:
+                sentences[idx] = sentences[idx] + '.'
+        else:
+            if is_question(sentences[idx]):
+                assert sentences[idx+1] in ['.', '?', '!', ':']
+                sentences[idx+1] = '?'
+
+        if is_cased:
+            # capitalize the first word and parameters
+            if thingtalk:
+                _, parameters = remove_thingtalk_quotes(thingtalk)
+                # logger.info('parameters = ', parameters)
+                for p in parameters:
+                    capitalized_p = ' '.join([t[0].upper()+t[1:] for t in p.split()])
+                    sentences[idx] = sentences[idx].replace(p, capitalized_p)
+            sentences[idx] = sentences[idx].replace(' i ', ' I ')
+            sentences[idx] = sentences[idx][0].upper()+sentences[idx][1:]
             
-
-            logger.info('Maximum input length: %d', self.max_input_length)
-            logger.info("Saving features into cached file %s", cached_features_file)
-            with open(cached_features_file, 'wb') as handle:
-                pickle.dump((self.examples, self.labels, self.position_ids, self.segment_ids), handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    def _add_example(self, input_sequence, output_sequence, args):
-        """
-        Args:
-            input_sequence: if None, a corrupted version of the output_sequence will be used
-        """
-        # TODO we should make use of tokenizer.build_inputs_with_special_tokens(sequence1, sequence2). Add special tokens manualy only if our model does not support two sequences (like GPT2).
-        
-        input_token_ids = self.tokenizer.encode(input_sequence, add_special_tokens=False) + [self.tokenizer.convert_tokens_to_ids(args.start_special_token)]
-        if output_sequence is None:
-            output_token_ids = []
-        else:
-            output_token_ids = self.tokenizer.encode(output_sequence, add_special_tokens=False) + [self.tokenizer.convert_tokens_to_ids(args.end_special_token)]
-        tokenized_text = input_token_ids + output_token_ids
-        
-        tokenized_text = tokenized_text[0:self.block_size] # truncate longer sequences
-        # print('tokenized_text = ', tokenized_text)
-
-        example = self.tokenizer.build_inputs_with_special_tokens(tokenized_text)
-        # Remove duplicate end_token for models like BERT and RoBERTa that already add it
-        if example[-2] == self.end_token_id:
-            example = example[:-1]
-        # print('example = ', example)
-        self.max_input_length = max(self.max_input_length, len(example))
-        try:
-            prompt_token_location = example.index(self.prompt_token_id)
-        except ValueError:
-            logger.warning('Prompt token not found after truncating the input. Dropping the example.')
-            return
-
-        self.examples.append(example)
-        if args.train_all_tokens and not evaluate or output_sequence is None:
-            self.labels.append(example)
-        else: # During evaluation, we only care about the output_sequence so we mask the input
-            self.labels.append([-100]*(prompt_token_location+1)+example[prompt_token_location+1:])
-        
-        position_ids2 = range(len(example)-prompt_token_location-1)
-        if args.reverse_position_ids:
-            position_ids2 = reversed(position_ids2)
-        self.position_ids.append(list(range(prompt_token_location+1)) + list(position_ids2))
-        self.segment_ids.append([self.segment1_id]*(prompt_token_location+1) + [self.segment2_id]*(len(example)-prompt_token_location-1))
-
-        # print('position_ids = ', self.position_ids[-1])
-        # print('segment_ids = ', self.segment_ids[-1])
-
-    def __len__(self):
-        return len(self.examples)
-
-    def __getitem__(self, item):
-        return torch.tensor(self.examples[item]), torch.tensor(self.labels[item]), torch.tensor(self.position_ids[item]), torch.tensor(self.segment_ids[item])
-
-
-    def collate_fn(self, batch, pad_token_id):
-        (inputs, labels, position_ids, segment_ids) = zip(*batch)
-        inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=pad_token_id)
-        labels_pad = pad_sequence(labels, batch_first=True, padding_value=-100)
-        position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
-        segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
+    s = ' '.join(sentences)
+    if not keep_tokenized:
+        s = detokenize(s)
     
-        return inputs_pad, labels_pad, position_ids, segment_ids
+    if not is_cased:
+        s = lower_case(s)
+
+    # replace special tokens with natural-looking exmaples
+    reverse_map = []
+    if not keep_special_tokens:
+        for spm in special_pattern_mapping:
+            s, r = spm.forwad(s)
+            reverse_map.extend(r)
+
+    return s, reverse_map
+
+def output_heuristics(s: str, reverse_map: list):
+    for spm, occurance in reverse_map:
+        s = spm.backward(s, occurance)
+
+    s = tokenize(s)
+    s = lower_case(s)
+    return s

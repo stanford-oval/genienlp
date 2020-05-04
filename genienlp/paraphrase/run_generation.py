@@ -20,18 +20,19 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-from tqdm import trange, tqdm
+from tqdm import tqdm
 import math
 import json
-import csv
 import re
 import copy
-import numpy as np
 import os
-import sys
 
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
+
+from genienlp.paraphrase.data_utils import create_features_from_tsv_file, input_heuristics, output_heuristics, is_question
+from genienlp.paraphrase.model_utils import compute_metrics
+
 try:
      set_start_method('spawn')
 except RuntimeError:
@@ -44,9 +45,7 @@ from transformers import GPT2Config, BartConfig
 from transformers import GPT2Tokenizer
 from transformers import BartForConditionalGeneration, BartTokenizer
 from transformers import PretrainedConfig
-from ..util import set_seed, get_number_of_lines, combine_files_on_disk, split_file_on_disk, get_part_path, detokenize, tokenize, lower_case, \
-                    SpecialTokenMap, remove_thingtalk_quotes
-from ..metrics import computeBLEU
+from ..util import set_seed, combine_files_on_disk, split_file_on_disk, get_part_path
 from .GPT2Seq2Seq import GPT2Seq2Seq
 
 
@@ -64,209 +63,8 @@ MODEL_CLASSES = {
 }
 
 
-special_pattern_mapping = [
-    SpecialTokenMap('PHONE_NUMBER_([0-9]+)', ['888-8888', '777-8888']),
-    SpecialTokenMap('NUMBER_([0-9]+)', ['2', '3'], [['2', 'two'], ['3', 'three']]),
-    SpecialTokenMap('PATH_NAME_([0-9]+)', ['my1folder', 'my2folder']),
-    SpecialTokenMap('TIME_([0-9]+)', ['1p.m.', '2p.m.'], [['1 pm', '1pm', '1:00 pm', '1:00pm', '1p.m.', '1 p.m.', '1:00 p.m.', '1:00', 'one o\'clock', 'one'],
-                                                            ['2 pm', '2pm', '2:00 pm', '2:00pm', '2p.m.', '2 p.m.', '2:00 p.m.', '2:00', 'two o\'clock', 'two']]),
-    SpecialTokenMap('EMAIL_ADDRESS_([0-9]+)', ['e1@example.com', 'e2@example.com']),
-    SpecialTokenMap('URL_([0-9]+)', ['my1site.com', 'my2site.com']),
-    SpecialTokenMap('DATE_([0-9]+)', ['5-6-2015', '8-3-2016']),
-    SpecialTokenMap('CURRENCY_([0-9]+)', ['$12', '$13'], [['$12', 'twelve dollars', '12 dollars', '$ 12', '$ 12.00', '12.00', '12'], 
-                                                          ['$13', 'thirteen dollars', '13 dollars', '$ 13', '$ 13.00', '13.00', '13']]),
-    SpecialTokenMap('DURATION_([0-9]+)', ['5 weeks', '6 weeks'], [['5 weeks', 'five weeks'], ['6 weeks', 'six weeks']]),
-    SpecialTokenMap('LOCATION_([0-9]+)', ['locatio1n', 'locatio2n'], [['locatio1n', 'locat1n'], ['locatio2n', 'locat2n']]),
-    SpecialTokenMap('QUOTED_STRING_([0-9]+)', lambda x: 'Chinese', lambda x: ['Chinese', 'chinese', 'china']), # TODO change to be more general than cuisine
-    SpecialTokenMap('GENERIC_ENTITY_uk.ac.cam.multiwoz.Restaurant:Restaurant_([0-9]+)', ["restaurant1", "restaurant2", "restaurant3"]) # TODO the only reason we can get away with this unnatural replacement is that actual backward is not going to be called for this
-]
-
-def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, prompt_column, copy, thingtalk_column, sep_token_id,
-                                  skip_heuristics, is_cased, model_type):
-    """
-    Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
-    Outputs:
-
-    """
-    all_input_sequences = []
-    all_input_sequence_lengths = []
-    all_context_tokens = []
-    estimated_output_lengths = []
-    all_golds = []
-    reverse_maps = []
-    all_prompt_tokens = []
-
-    if file_path is not None:
-        number_of_lines = get_number_of_lines(file_path)
-        disable_tqdm = False
-        input_file = open(file_path)
-    else:
-        number_of_lines = 1
-        disable_tqdm = True
-        input_file = sys.stdin
 
 
-    for line in tqdm(input_file, desc='Reading Input File', total=number_of_lines, disable=disable_tqdm):
-        row = [r.strip() for r in line.split('\t')]
-        input_sequence = row[input_column]
-        gold = row[gold_column]
-        # logger.info('gold (before heuristics) = %s', gold)
-        if not skip_heuristics:
-            gold, _ = input_heuristics(gold, None, is_cased, keep_special_tokens=True, keep_tokenized=True)
-        # logger.info('gold (after heuristics) = %s', gold)
-        all_golds.append(gold)
-        if skip_heuristics:
-            reverse_maps.append({})
-        else:
-            thingtalk = row[thingtalk_column] if thingtalk_column is not None else None
-            # logger.info('input_sequence (before heuristics) = %s', input_sequence)
-            input_sequence, reverse_map = input_heuristics(input_sequence, thingtalk, is_cased)
-            # logger.info('input_sequence (after heuristics) = %s', input_sequence)
-            reverse_maps.append(reverse_map)
-        input_sequence_tokens = tokenizer.encode(input_sequence, add_special_tokens=True)
-        
-        prompt_tokens = [] # includes the first few tokens of the output
-        if prompt_column is not None and len(row) > prompt_column:
-            prompt = row[prompt_column]
-            if not skip_heuristics:
-                prompt, _ = input_heuristics(prompt, thingtalk, is_cased)
-                # logger.info('prompt = %s', prompt)
-            prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
-        if copy > 0:
-            assert len(prompt_tokens) == 0
-            prompt_tokens = input_sequence_tokens[0 : min(copy, len(input_sequence_tokens)-1)]
-        all_prompt_tokens.append(prompt_tokens)
-        context_tokens = input_sequence_tokens + [sep_token_id] + prompt_tokens
-        all_input_sequences.append(input_sequence)
-        all_input_sequence_lengths.append(len(input_sequence_tokens))
-        all_context_tokens.append(context_tokens)
-        estimated_output_lengths.append(len(input_sequence_tokens)-len(prompt_tokens))
-    
-    if file_path is not None:
-        input_file.close()
-
-    return all_input_sequences, all_input_sequence_lengths, all_context_tokens, estimated_output_lengths, all_golds, reverse_maps, all_prompt_tokens
-
-def is_question(sentence: str):
-    question_words = ['which', 'what', 'where', 'how', 'who', 'when', 'is', 'are', 'am', \
-                      'can', 'could', 'would', 'will', 'have', 'did', 'do', 'does', 'no is', 'yes is']
-    for w in question_words:
-        if sentence.startswith(w+' '):
-            return True
-    return False
-
-def input_heuristics(s: str, thingtalk=None, is_cased=False, keep_special_tokens=False, keep_tokenized=False):
-    """
-    Changes the input string so that it is closer to what the pre-trained language models have seen during their training.
-    Outputs:
-        s: the new string
-        reverse_map: a list of special tokens. Can be used to recover the original special_tokens in the string
-    """
-    reverse_map = []
-    s = s.strip()
-    s = tokenize(s)
-
-    # Put question mark at the end whenever necessary.
-    sentences = [sentence.strip() for sentence in re.split('\s+([.?!:])\s*', s) if len(sentence) > 0]
-    # logger.info('sentences = %s', sentences)
-    for idx in range(len(sentences)):
-        if sentences[idx] in ['.', '?' , '!', ':']:
-            continue
-        if idx == len(sentences)-1 or sentences[idx+1] not in ['.', '?', '!', ':']:
-            # add the missing punctuation
-            if is_question(sentences[idx]):
-                sentences[idx] = sentences[idx] + '?'
-            else:
-                sentences[idx] = sentences[idx] + '.'
-        else:
-            if is_question(sentences[idx]):
-                assert sentences[idx+1] in ['.', '?', '!', ':']
-                sentences[idx+1] = '?'
-
-        if is_cased:
-            # capitalize the first word and parameters
-            if thingtalk:
-                _, parameters = remove_thingtalk_quotes(thingtalk)
-                # logger.info('parameters = ', parameters)
-                for p in parameters:
-                    capitalized_p = ' '.join([t[0].upper()+t[1:] for t in p.split()])
-                    sentences[idx] = sentences[idx].replace(p, capitalized_p)
-            sentences[idx] = sentences[idx].replace(' i ', ' I ')
-            sentences[idx] = sentences[idx][0].upper()+sentences[idx][1:]
-            
-    s = ' '.join(sentences)
-    if not keep_tokenized:
-        s = detokenize(s)
-    
-    if not is_cased:
-        s = lower_case(s)
-
-    # replace special tokens with natural-looking exmaples
-    reverse_map = []
-    if not keep_special_tokens:
-        for spm in special_pattern_mapping:
-            s, r = spm.forwad(s)
-            reverse_map.extend(r)
-
-    return s, reverse_map
-
-def output_heuristics(s: str, reverse_map: list):
-    for spm, occurance in reverse_map:
-        s = spm.backward(s, occurance)
-
-    s = tokenize(s)
-    s = lower_case(s)
-    return s
-
-
-def compute_metrics(generations, golds, reduction='average'):
-    """
-    Inputs:
-        generations: a list of list of strings; generations[i] is a list of all generated outputs of the model for example i
-        golds: a list of strings; golds[i] is the gold answer for example i
-        reduction: how we should compute an example's metrics from its multiple generations
-    """
-    total_bleu = 0.0
-    # all_bleu = []
-    total_exact_match = 0.0
-    count = 0.0
-    for idx, output in enumerate(generations):
-        bleu_score = 0.0
-        exact_match = 0.0
-        for sample in output:
-            if reduction == 'average':
-                bleu_score += computeBLEU([sample], [[golds[idx]]])
-            else:
-                bleu_score = max(bleu_score, computeBLEU([sample], [[golds[idx]]]))
-            if re.sub('\s+', '', sample).lower() == re.sub('\s+', '', golds[idx]).lower():
-                if reduction == 'average':
-                    exact_match += 1
-                else:
-                    exact_match = max(exact_match, 1)
-            # all_bleu.append(bleu_score)
-        if reduction == 'average':
-            bleu_score /= len(output)
-            exact_match /= len(output)
-        total_bleu += bleu_score
-        total_exact_match += exact_match
-        count += 1
-
-    # from matplotlib import pyplot as plt
-    # import numpy as np
-    # h, b = np.histogram(all_bleu, bins=list(range(0, 105, 5)))
-    # logger.info('all_bleu = ', all_bleu)
-    # logger.info('h = ', h)
-    # logger.info('b = ', b)
-    # h = h / np.sum(h)
-    # logger.info('h = ', h)
-    # plt.title('GPT2 (temp=0, penalty=1.0) Paraphrases for restaurants')
-    # plt.xlabel('BLEU with original')
-    # plt.ylim((0.0, 1.0))
-    # center = (b[:-1] + b[1:]) / 2
-    # plt.bar(center, h, align='center', width=(b[1]-b[0]))
-    # plt.savefig('./fig.png')
-
-    return {'bleu': total_bleu/count, 'em': total_exact_match/count*100}
 
 def parse_argv(parser):
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
@@ -304,14 +102,13 @@ def parse_argv(parser):
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
     
-
     parser.add_argument("--copy", type=int, default=0,
                         help='Number of tokens that will be copied at the beginning of generation. Helps preserve the original meaning of the input sequence.')
     parser.add_argument("--no_cuda", action='store_true',
                         help="Avoid using CUDA when available")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
-    parser.add_argument('--stop_tokens', type=str, nargs='+', default=[],
+    parser.add_argument('--stop_tokens', type=str, nargs='+', default=[], required=True,
                         help="Token at which text generation is stopped.")
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")
@@ -399,11 +196,11 @@ def run_generation(args):
 
     all_input_sequences, all_input_sequence_lengths, all_context_tokens, estimated_output_lengths, all_golds, reverse_maps, all_prompt_tokens = \
                                   create_features_from_tsv_file(file_path=args.input_file, tokenizer=tokenizer,
-                                  input_column=args.input_column, gold_column=args.gold_column, prompt_column=args.prompt_column,
-                                  copy=args.copy,
-                                  thingtalk_column=args.thingtalk_column,
-                                  sep_token_id=sep_token_id, skip_heuristics=args.skip_heuristics, is_cased=args.is_cased,
-                                  model_type=args.model_type)
+                                                                input_column=args.input_column, gold_column=args.gold_column, prompt_column=args.prompt_column,
+                                                                copy=args.copy,
+                                                                thingtalk_column=args.thingtalk_column,
+                                                                sep_token_id=sep_token_id, skip_heuristics=args.skip_heuristics, is_cased=args.is_cased,
+                                                                model_type=args.model_type)
 
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, original_order, reverse_maps, all_prompt_tokens = \
@@ -422,7 +219,6 @@ def run_generation(args):
         batch_context_tokens = all_context_tokens[batch_slice[0]: batch_slice[1]]
         batch_reverse_maps = reverse_maps[batch_slice[0]: batch_slice[1]]
         batch_prompt_tokens = all_prompt_tokens[batch_slice[0]: batch_slice[1]]
-        # logger.info('batch_context_tokens = %s', str(batch_context_tokens))
 
         if args.model_type == 'gpt2':
             batch_context_tensor = torch.tensor(model.pad_to_max_length(batch_context_tokens), dtype=torch.long, device=args.device)
@@ -434,8 +230,6 @@ def run_generation(args):
                 padded_batch_context_tokens.append(batch_context_tokens[i]+[pad_token_id]*(max_length-len(batch_context_tokens[i])))
             batch_context_tensor = torch.tensor(padded_batch_context_tokens, dtype=torch.long, device=args.device)
             attention_mask = (batch_context_tensor!=pad_token_id).to(torch.long)
-        # logger.info('context text = %s', [tokenizer.decode(b, clean_up_tokenization_spaces=False, skip_special_tokens=False) for b in batch_context_tensor])
-        # logger.info('batch_context_tensor = %s', str(batch_context_tensor))
 
         batch_outputs = [[] for _ in range(batch_size)]
         for hyperparameter_idx in range(len(args.temperature)):
@@ -456,16 +250,12 @@ def run_generation(args):
                                  eos_token_id=end_token_id,
                                  pad_token_id=pad_token_id,
                                 )
-            # logger.info('out = %s', str(out))
-            # logger.info('out text = %s', [tokenizer.decode(o, clean_up_tokenization_spaces=False, skip_special_tokens=False) for o in out])
             if not isinstance(out, list):
                 out = out[:, :].tolist()
             for i, o in enumerate(out):
                 if args.model_type=='bart':
                     o = o[1:] # remove <s> start token
                 if not args.output_prompt:
-                    # logger.info('o = $s', str(o))
-                    # logger.info('removing %s', str(batch_prompt_tokens[(i//args.num_samples) % batch_size]))
                     o = o[len(batch_prompt_tokens[(i//args.num_samples) % batch_size]):]
                 min_index = len(o)-1
                 for stop_token_id in stop_token_ids+[end_token_id]:

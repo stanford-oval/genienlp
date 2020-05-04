@@ -78,11 +78,6 @@ class GPT2Seq2Seq(GPT2LMHeadModel):
         position_ids = ((torch.cumsum(attention_mask, dim=1)-1)*(1-token_type_ids)+(torch.cumsum(token_type_ids, dim=1)-1)*token_type_ids).clamp(min=0)
         token_type_ids = self.sep_token_id * (1-token_type_ids) + self.end_token_id * token_type_ids
 
-        # logging.info('input_ids = %s', str(input_ids))
-        # logging.info('position_ids = %s', str(position_ids))
-        # logging.info('token_type_ids = %s', str(token_type_ids))
-        # logging.info('attention_mask = %s', str(attention_mask))
-        
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             position_ids = position_ids[:, -1].unsqueeze(-1)

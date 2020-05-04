@@ -26,16 +26,9 @@ from __future__ import absolute_import, division, print_function
 import glob
 import logging
 import os
-import pickle
-import re
-import shutil
 import torch
-import math
-import csv
 from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler
-from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data.distributed import DistributedSampler
-from functools import partial
 
 from tensorboardX import SummaryWriter
 
@@ -50,6 +43,8 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
 
 from genienlp.util import set_seed
+from genienlp.paraphrase.data_utils import mask_tokens, get_inbetween_tokens, add_special_tokens, load_and_cache_examples
+from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints
 
 
 logger = logging.getLogger(__name__)
@@ -285,8 +280,7 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(eval_dataset)
-    collate = partial(pad_collate, pad_token_id=tokenizer.convert_tokens_to_ids(tokenizer.pad_token))
-    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size, collate_fn=collate)
+    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size, collate_fn=eval_dataset.collate_fn)
 
     # multi-gpu evaluate
     if args.n_gpu > 1:
