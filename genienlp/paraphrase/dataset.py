@@ -48,7 +48,7 @@ class TextDataset(Dataset):
                 number_of_lines = get_number_of_lines(args.aux_train_data_file)
                 with open(args.aux_train_data_file, encoding="utf-8") as f_in:
                     for line in tqdm(f_in, desc='Tokenizing Auxiliary File', total=number_of_lines):
-                        parts = line.split('\t')
+                        parts = list(map(lambda part: part.strip(), line.split('\t')))
                     if 'bart' in args.model_type:
                         self._add_bart_example(parts[0], None, args)
                     else:
@@ -57,7 +57,7 @@ class TextDataset(Dataset):
             number_of_lines = get_number_of_lines(file_path)
             with open(file_path, encoding="utf-8") as f_in:
                 for line in tqdm(f_in, desc='Tokenizing', total=number_of_lines):
-                    parts = line.split('\t')
+                    parts = list(map(lambda part: part.strip(), line.split('\t')))
                     if 'bart' in args.model_type:
                         self._add_bart_example(parts[0], parts[1], args)
                     else:

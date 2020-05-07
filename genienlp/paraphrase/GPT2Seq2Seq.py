@@ -1,4 +1,3 @@
-import logging
 from typing import List
 from transformers import GPT2LMHeadModel
 import torch
