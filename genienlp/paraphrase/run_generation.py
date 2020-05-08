@@ -110,8 +110,8 @@ def parse_argv(parser):
                         help="Avoid using CUDA when available")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
-    parser.add_argument('--stop_tokens', type=str, nargs='+', default=[], required=True,
-                        help="Token at which text generation is stopped.")
+    parser.add_argument('--stop_tokens', type=str, nargs='+', default=[],
+                        help="Tokens (other than the model-specific `end_token`) at which text generation should be stopped.")
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")
 
