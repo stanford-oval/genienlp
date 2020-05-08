@@ -25,7 +25,7 @@ class TextDataset(Dataset):
         if os.path.exists(cached_features_file) and not args.overwrite_cache:
             logger.info("Loading features from cached file %s", cached_features_file)
             with open(cached_features_file, 'rb') as handle:
-                self.examples, self.labels, self.position_ids, self.segment_ids = pickle.load(handle)
+                self.input_ids, self.labels, self.position_ids, self.segment_ids = pickle.load(handle)
         else:
             logger.info("Creating features from dataset file at %s", file_path)
 
