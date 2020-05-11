@@ -7,7 +7,7 @@ The command for AWS CLI is
 aws s3 sync s3://almond-research/sinaj/models/schemaorg/paraphrase/gpt2-medium-parabank-2/ path/to/your/local/model/directory/
 ```
 
-3. Install `genienlp`
+3. Install `genienlp`. Checkout `wip/pplm` branch by running `git checkout wip/pplm`.
 4. To test your installation works, create input.tsv file with sentences you want to paraphrase, one sentence in each line. run the following command.
 
 ```
