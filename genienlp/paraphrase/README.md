@@ -1,9 +1,10 @@
 ## Get Started
 
 1. Install AWS CLI
-2. Download the paraphraing model from s3://almond-research/sinaj/models/schemaorg/paraphrase/gpt2-medium-parabank-2/
+2. Download the paraphraing model from `s3://almond-research/sinaj/models/schemaorg/paraphrase/gpt2-medium-parabank-2/`
+The command for AWS CLI is 
 ```
-The command for AWS CLI is aws s3 sync s3://almond-research/sinaj/models/schemaorg/paraphrase/gpt2-medium-parabank-2/ path/to/your/local/model/directory/
+aws s3 sync s3://almond-research/sinaj/models/schemaorg/paraphrase/gpt2-medium-parabank-2/ path/to/your/local/model/directory/
 ```
 
 3. Install `genienlp`
@@ -22,7 +23,7 @@ Input files have tab-separated value (`.tsv`) format. You should use `--input_co
 
 If `--skip_heuristics` is set, inputs will be fed into the model without any changes.
 
-Set `is_cased` if the paraprhasing model you are using is case-sensitive.
+Set `--is_cased` if the paraprhasing model you are using is case-sensitive.
 
 These arguments specify the hyperparameters of the decoding algorithm.
 `--temperature`, `--top_k`, `--top_p` and `--repetition_penalty` change the token distribution that the decoding algorithm samples from. `--temperature=0` is equivalent to greedy decoding. `--repetition_penalty` reduces the probability of tokens that have already been seen in the full model output (includes model inputs as well).
