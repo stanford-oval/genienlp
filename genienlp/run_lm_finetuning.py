@@ -103,7 +103,7 @@ class TextDataset(Dataset):
                     if args.train_all_tokens and not evaluate:
                         self.labels.append(example)
                     else: # During evaluation, we only care about the output sequence so we mask the input
-                        self.labels.append([-1]*(prompt_token_location+1)+example[prompt_token_location+1:])
+                        self.labels.append([-100]*(prompt_token_location+1)+example[prompt_token_location+1:])
                     self.position_ids.append([pos for pos in range(prompt_token_location+1)]+[pos for pos in range(len(example)-prompt_token_location-1)])
                     self.segment_ids.append([segment1_id]*(prompt_token_location+1)+[segment2_id]*(len(example)-prompt_token_location-1))
 
@@ -161,7 +161,7 @@ def mask_tokens(inputs, tokenizer, args):
     special_tokens_mask = [tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()]
     probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
     masked_indices = torch.bernoulli(probability_matrix).bool()
-    labels[~masked_indices] = -1  # We only compute loss on masked tokens
+    labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
     # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
     indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
@@ -178,7 +178,7 @@ def mask_tokens(inputs, tokenizer, args):
 def pad_collate(batch, pad_token_id):
     (inputs, labels, position_ids, segment_ids) = zip(*batch)
     inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=pad_token_id)
-    labels_pad = pad_sequence(labels, batch_first=True, padding_value=-1)
+    labels_pad = pad_sequence(labels, batch_first=True, padding_value=-100)
     position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
     segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
 
