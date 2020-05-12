@@ -152,8 +152,8 @@ def sample_sequence(model, length, context, position_ids, num_samples=1, tempera
                 inputs['past'] = past
                 if past is not None:
                     inputs['input_ids'] = next_token
-                    inputs['position_ids'] = position_ids[:, next_index-1]
-                    inputs['token_type_ids'] = segment_ids[:, next_index-1]
+                    inputs['position_ids'] = position_ids[:, next_index-1].unsqueeze(-1)
+                    inputs['token_type_ids'] = segment_ids[:, next_index-1].unsqueeze(-1)
             
             outputs = model(**inputs)
             next_token_logits = outputs[0][:, -1, :] / (temperature if temperature > 0 else 1.)
