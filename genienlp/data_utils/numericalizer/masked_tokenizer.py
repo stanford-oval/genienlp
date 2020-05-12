@@ -88,6 +88,8 @@ class MaskedBertWordPieceTokenizer(object):
     def tokenize(self, tokens, mask):
         output_tokens = []
         for token, should_word_split in zip(tokens, mask):
+            # if token.startswith('@'):
+            #     token = token.lower()
             if not should_word_split:
                 if token not in self.vocab and token not in self.added_tokens_encoder:
                     token_id = len(self.vocab) + len(self.added_tokens_encoder)

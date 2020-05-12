@@ -109,10 +109,10 @@ def run(args, numericalizer, val_sets, model, device):
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
             for index, set in enumerate(val_set):
-                task_iter.append((task, task_languages[index],  make_data_loader(set, numericalizer, bs, device)))
+                task_iter.append((task, task_languages[index],  make_data_loader(set, numericalizer, bs, device, append_question_to_context_too=args.append_question_to_context_too)))
         # single language task or no separate eval
         else:
-           task_iter.append((task, task_languages,  make_data_loader(val_set[0], numericalizer, bs, device)))
+           task_iter.append((task, task_languages,  make_data_loader(val_set[0], numericalizer, bs, device, append_question_to_context_too=args.append_question_to_context_too)))
 
         iters.extend(task_iter)
         task_index += 1

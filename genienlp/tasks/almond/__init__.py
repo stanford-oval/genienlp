@@ -110,6 +110,7 @@ class AlmondDataset(CQA):
 def is_entity(token):
     return token[0].isupper()
 
+
 def process_id(ex):
     id_ = ex.example_id.rsplit('/', 1)
     id_ = id_[0] if len(id_) == 1 else id_[1]
