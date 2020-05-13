@@ -45,13 +45,15 @@ class Example(NamedTuple):
     question_word_mask: List[bool]
     answer: List[str]
     answer_word_mask: List[bool]
+    context_plus_question: List[str]
+    context_plus_question_word_mask: List[bool]
 
     vocab_fields = ['context', 'question', 'answer']
 
     @staticmethod
     def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, lower=False):
         args = [example_id]
-        for argname, arg in (('context', context), ('question', question), ('answer', answer)):
+        for argname, arg in (('context', context), ('question', question), ('answer', answer), ('question', context+' '+question)):
             words, mask = tokenize(arg.rstrip('\n'), field_name=argname)
             if mask is None:
                 mask = [True for _ in words]
@@ -59,6 +61,7 @@ class Example(NamedTuple):
                 words = [word.lower() for word in words]
             args.append(words)
             args.append(mask)
+        
         return Example(*args)
 
 
@@ -70,9 +73,8 @@ class Batch(NamedTuple):
     decoder_vocab: object
     
     @staticmethod
-    def from_examples(examples, numericalizer, device=None, paired=False, max_pairs=None, groups=None):
+    def from_examples(examples, numericalizer, device=None, paired=False, max_pairs=None, groups=None, append_question_to_context_too=False):
         assert all(isinstance(ex.example_id, str) for ex in examples)
-        
         decoder_vocab = numericalizer.decoder_vocab.clone()
         max_context_len, max_question_len, max_answer_len = -1, -1, -1
 
@@ -91,8 +93,13 @@ class Batch(NamedTuple):
             example_pairs = example_pairs[:max_pairs]
             
             example_ids = [ex_a.example_id + '@' + ex_b.example_id for ex_a, ex_b in example_pairs]
-            context_inputs = [((ex_a.context, ex_a.context_word_mask), (ex_b.context, ex_b.context_word_mask)) for ex_a, ex_b in example_pairs]
-            question_inputs = [((ex_a.question, ex_a.question_word_mask), (ex_b.question, ex_b.question_word_mask)) for ex_a, ex_b in example_pairs]
+            if append_question_to_context_too:
+                question_inputs = [((ex_a.question, ex_a.question_word_mask), (ex_b.question, ex_b.question_word_mask)) for ex_a, ex_b in example_pairs]
+                context_inputs = [((ex_a.context_plus_question, ex_a.context_plus_question_word_mask), \
+                                    (ex_b.context_plus_question, ex_b.context_plus_question_word_mask)) for ex_a, ex_b in example_pairs]
+            else:
+                context_inputs = [((ex_a.context, ex_a.context_word_mask), (ex_b.context, ex_b.context_word_mask)) for ex_a, ex_b in example_pairs]
+                question_inputs = [((ex_a.question, ex_a.question_word_mask), (ex_b.question, ex_b.question_word_mask)) for ex_a, ex_b in example_pairs]
             answer_inputs = [((ex_a.answer, ex_a.answer_word_mask), (ex_b.answer, ex_b.answer_word_mask)) for ex_a, ex_b in example_pairs]
 
             all_example_ids_pair = example_ids
@@ -106,8 +113,12 @@ class Batch(NamedTuple):
 
         # process single examples
         example_ids = [ex.example_id for ex in examples]
-        context_inputs = [(ex.context, ex.context_word_mask) for ex in examples]
-        question_inputs = [(ex.question, ex.question_word_mask) for ex in examples]
+        if append_question_to_context_too:
+            question_inputs = [(ex.question, ex.question_word_mask) for ex in examples]
+            context_inputs = [(ex.context_plus_question, ex.context_plus_question_word_mask) for ex in examples]
+        else:
+            context_inputs = [(ex.context, ex.context_word_mask) for ex in examples]
+            question_inputs = [(ex.question, ex.question_word_mask) for ex in examples]
         answer_inputs = [(ex.answer, ex.answer_word_mask) for ex in examples]
         
         all_example_ids_single = example_ids
@@ -125,7 +136,6 @@ class Batch(NamedTuple):
             all_context_inputs = all_context_inputs_single
             all_question_inputs = all_question_inputs_single
             all_answer_inputs = all_answer_inputs_single
-            
         return Batch(all_example_ids,
                      all_context_inputs,
                      all_question_inputs,

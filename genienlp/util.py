@@ -427,7 +427,7 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False, valid=False):
+def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False, valid=False, append_question_to_context_too=False):
     
     iterator = Iterator(dataset,
                         batch_size,
@@ -437,7 +437,8 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                         use_data_sort_key=train)
     
     collate_function = lambda minibatch: Batch.from_examples(minibatch, numericalizer, device=device,
-                                           paired=paired and train, max_pairs=max_pairs, groups=iterator.groups)
+                                           paired=paired and train, max_pairs=max_pairs, groups=iterator.groups, 
+                                           append_question_to_context_too=append_question_to_context_too)
         
     return torch.utils.data.DataLoader(iterator, batch_size=None, collate_fn=collate_function)
 
@@ -470,7 +471,7 @@ def load_config_json(args):
                     'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'train_encoder_embeddings',
                     'train_context_embeddings', 'train_question_embeddings', 'locale', 'use_pretrained_bert',
                     'train_context_embeddings_after', 'train_question_embeddings_after',
-                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize']
+                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize', 'num_beams', 'append_question_to_context_too']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         overwrite = ['val_batch_size', 'num_beams']
@@ -513,6 +514,8 @@ def load_config_json(args):
                 setattr(args, r, True)
             elif r == 'num_beams':
                 setattr(args, r, 1)
+            elif r == 'append_question_to_context_too':
+                setattr(args, r, False)
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0
