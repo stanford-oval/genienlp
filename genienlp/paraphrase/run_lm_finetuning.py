@@ -41,7 +41,7 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   RobertaConfig, RobertaForMaskedLM, RobertaTokenizer,
                                   DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer,
                                   CamembertConfig, CamembertForMaskedLM, CamembertTokenizer,
-                                  BartConfig, BartForConditionalGeneration, BartTokenizer)
+                                  BartConfig, BartForConditionalGeneration, BartTokenizer, MBartTokenizer)
 
 from genienlp.util import set_seed
 from genienlp.paraphrase.data_utils import mask_tokens, add_special_tokens, load_and_cache_examples
@@ -58,7 +58,8 @@ MODEL_CLASSES = {
     'roberta': (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer),
     'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer),
     'camembert': (CamembertConfig, CamembertForMaskedLM, CamembertTokenizer),
-    'bart': (BartConfig, BartForConditionalGeneration, BartTokenizer)
+    'bart': (BartConfig, BartForConditionalGeneration, BartTokenizer),
+    'mbart': (BartConfig, BartForConditionalGeneration, MBartTokenizer)
 }
     
 

@@ -7,8 +7,6 @@ from tqdm import tqdm
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
-from transformers.tokenization_utils import trim_batch
-
 from genienlp.util import get_number_of_lines
 
 logger = logging.getLogger(__name__)

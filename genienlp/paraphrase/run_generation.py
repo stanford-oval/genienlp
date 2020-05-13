@@ -45,7 +45,7 @@ import torch
 from transformers import GPT2Config, BartConfig
 
 from transformers import GPT2Tokenizer
-from transformers import BartForConditionalGeneration, BartTokenizer
+from transformers import BartForConditionalGeneration, BartTokenizer, MBartTokenizer
 from transformers import PretrainedConfig
 from ..util import set_seed, combine_files_on_disk, split_file_on_disk, get_part_path
 from .GPT2Seq2Seq import GPT2Seq2Seq
@@ -61,7 +61,8 @@ ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (
 
 MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'sep_token': '<paraphrase>', 'end_token': '</paraphrase>'}),
-    'bart': (BartForConditionalGeneration, BartTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}) # sep_token will not be used for BART
+    'bart': (BartForConditionalGeneration, BartTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}), # sep_token will not be used for BART
+    'mbart': (BartForConditionalGeneration, MBartTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}) # sep_token will not be used for BART
 }
 
 
@@ -114,12 +115,18 @@ def parse_argv(parser):
 
 def main(args):
     config = PretrainedConfig.from_pretrained(args.model_name_or_path)
-    if config.architectures[0] == 'BartForConditionalGeneration':
-        args.model_type = 'bart'
-    elif config.architectures[0] == 'GPT2LMHeadModel':
-        args.model_type = 'gpt2'
+    
+    # get model type from saved config
+    if hasattr(config, 'model_type'):
+        args.model_type = getattr(config, 'model_type')
+        
+        # bart and mbart share the same config
+        # check which model we are actually using
+        if args.model_type == 'bart':
+            if config.normalize_before and config.add_final_layer_norm and config.scale_embedding:
+                args.model_type = 'mbart'
     else:
-        raise ValueError('Model should be either GPT2 or BART')
+        raise ValueError('Model should be either GPT2, BART, or MBART')
 
     if args.prompt_column is not None and args.copy is not None and args.copy != 0:
         raise ValueError('Cannot copy from the input and use prompt at the same time. Disable either --copy or --prompt_column.')
@@ -141,7 +148,6 @@ def main(args):
     args.n_gpu = torch.cuda.device_count()
 
     set_seed(args)
-    args.model_type = args.model_type.lower()
 
     if args.n_gpu > 1:
         if args.input_file is None:
@@ -222,7 +228,7 @@ def run_generation(args):
         if args.model_type == 'gpt2':
             batch_context_tensor = torch.tensor(model.pad_to_max_length(batch_context_tokens), dtype=torch.long, device=args.device)
             attention_mask = None
-        elif args.model_type == 'bart':
+        elif args.model_type == 'bart' or args.model_type == 'mbart':
             padded_batch_context_tokens = []
             max_length = max([len(s) for s in batch_context_tokens])
             for i in range(len(batch_context_tokens)):
@@ -252,7 +258,7 @@ def run_generation(args):
             if not isinstance(out, list):
                 out = out[:, :].tolist()
             for i, o in enumerate(out):
-                if args.model_type=='bart':
+                if args.model_type=='bart' or args.model_type=='mbart':
                     o = o[1:] # remove <s> start token
                 if not args.output_prompt:
                     o = o[len(batch_prompt_tokens[(i//args.num_samples) % batch_size]):]
