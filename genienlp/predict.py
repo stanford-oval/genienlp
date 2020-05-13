@@ -151,6 +151,7 @@ def run(args, numericalizer, val_sets, model, device):
 
             predictions = []
             answers = []
+            contexts = []
             with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
                 for batch_idx, batch in tqdm(enumerate(it), desc="Batches"):
                     _, batch_prediction = model(batch, iteration=1)
@@ -161,6 +162,10 @@ def run(args, numericalizer, val_sets, model, device):
                     batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize,
                                                          field_name='answer')
                     answers += batch_answer
+                    
+                    batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize,
+                                                         field_name='context')
+                    contexts += batch_context
 
                     for i, example_prediction in enumerate(batch_prediction):
                         prediction_file.write(batch.example_id[i] + '\t' + example_prediction + '\n')
@@ -171,14 +176,14 @@ def run(args, numericalizer, val_sets, model, device):
                     results_file.write(json.dumps(metrics) + '\n')
 
                 if not args.silent:
-                    for i, (p, a) in enumerate(zip(predictions, answers)):
-                        logger.info(f'Prediction {i + 1}: {p}\nAnswer {i + 1}: {a}\n')
+                    for i, (c, p, a) in enumerate(zip(contexts, predictions, answers)):
+                        logger.info(f'\nContext {i+1}: {c}\nPrediction {i + 1}: {p}\nAnswer {i + 1}: {a}\n')
                     logger.info(metrics)
                     
                 task_scores[task].append((len(answers), metrics[task.metrics[0]]))
     
     for task in task_scores.keys():
-        decaScore.append(sum([lenght * score for lenght, score in task_scores[task]]) / sum([lenght for lenght, score in task_scores[task]]))
+        decaScore.append(sum([length * score for length, score in task_scores[task]]) / sum([length for length, score in task_scores[task]]))
 
     logger.info(f'Evaluated Tasks:\n')
     for i, task in enumerate(args.tasks):
