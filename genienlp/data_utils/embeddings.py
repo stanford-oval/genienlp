@@ -32,7 +32,7 @@ import torch
 import os
 from collections import defaultdict
 import logging
-from transformers import AutoTokenizer, AutoModel, AutoConfig
+from transformers import AutoTokenizer, AutoModel, AutoConfig, ALL_PRETRAINED_MODEL_ARCHIVE_MAP
 from typing import NamedTuple, List
 
 from .numericalizer.simple import SimpleNumericalizer
@@ -157,7 +157,6 @@ class PretrainedLMEmbedding(torch.nn.Module):
         rnn_output = self.model(pretrained_indices)
         return EmbeddingOutput(all_layers=[rnn_output], last_layer=rnn_output)
 
-
 def _is_bert(embedding_name):
     return embedding_name.startswith('bert-')
 
@@ -214,7 +213,7 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             continue
 
         emb_type = get_embedding_type(emb_name)
-        if _is_bert(emb_name) or _is_xlmr(emb_name):
+        if emb_name in ALL_PRETRAINED_MODEL_ARCHIVE_MAP.keys():
             if numericalizer is not None and numericalizer_type != emb_type and not cache_only:
                 raise ValueError('Cannot specify multiple Transformer embeddings')
 
@@ -251,7 +250,7 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             continue
 
         emb_type = get_embedding_type(emb_name)
-        if _is_bert(emb_type) or _is_xlmr(emb_name):
+        if emb_name in ALL_PRETRAINED_MODEL_ARCHIVE_MAP.keys():
             if numericalizer is not None and numericalizer_type != emb_type:
                 raise ValueError('Cannot specify multiple Transformer embeddings')
 
