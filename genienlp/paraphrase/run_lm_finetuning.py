@@ -44,7 +44,7 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   BartConfig, BartForConditionalGeneration, BartTokenizer)
 
 from genienlp.util import set_seed
-from genienlp.paraphrase.data_utils import mask_tokens, get_inbetween_tokens, add_special_tokens, load_and_cache_examples
+from genienlp.paraphrase.data_utils import mask_tokens, add_special_tokens, load_and_cache_examples
 from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints
 
 
@@ -363,8 +363,6 @@ def parse_argv(parser):
                         help='The special token for the end of paraphrases.')
     parser.add_argument('--pad_token', type=str, default='<pad>',
                         help='The special token for padding..')
-    parser.add_argument('--add_inbetween_as_special_tokens', action='store_true',
-                        help='The space-separated tokens between --start_special_token and --end_special_token will be added as special tokens. Useful for ThingTalk code.')
     parser.add_argument('--train_all_tokens', action='store_true',
                         help='If True, the model will be trained on input and output sequences, as opposed to only tokens of the output sequence')
     parser.add_argument("--reverse_position_ids", action='store_true',
@@ -511,10 +509,6 @@ def main(args):
                                         config=config,
                                         cache_dir=args.cache_dir if args.cache_dir else None)
     add_special_tokens(model, tokenizer, additional_special_tokens=[args.start_special_token, args.end_special_token], pad_token=args.pad_token)
-    if args.add_inbetween_as_special_tokens:
-        new_tokens = get_inbetween_tokens(args.train_data_file, start_token=args.start_special_token, end_token=args.end_special_token)
-        logger.info('Detected %d new tokens', len(new_tokens))
-        add_special_tokens(model, tokenizer, additional_special_tokens=list(new_tokens))
     model.to(args.device)
 
     if args.local_rank == 0:

@@ -152,24 +152,6 @@ def lower_case(string):
     return string
 
 
-def remove_thingtalk_quotes(thingtalk):
-    quote_values = []
-    while True:
-        # print('before: ', thingtalk)
-        l1 = thingtalk.find('"')
-        if l1 < 0:
-            break
-        l2 = thingtalk.find('"', l1+1)
-        if l2 < 0:
-            # ThingTalk code is not syntactic
-            return thingtalk, None
-        quote_values.append(thingtalk[l1+1: l2].strip())
-        thingtalk = thingtalk[:l1] + '<temp>' + thingtalk[l2+1:]
-        # print('after: ', thingtalk)
-    thingtalk = thingtalk.replace('<temp>', '""')
-    return thingtalk, quote_values
-
-
 def get_number_of_lines(file_path):
     count = 0
     with open(file_path) as f:

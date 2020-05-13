@@ -7,7 +7,7 @@ from tqdm import tqdm
 import torch
 import logging
 
-from ..util import detokenize, tokenize, lower_case, SpecialTokenMap, remove_thingtalk_quotes
+from ..util import detokenize, tokenize, lower_case, SpecialTokenMap
 
 from genienlp.paraphrase.dataset import TextDataset
 from genienlp.util import get_number_of_lines
@@ -71,23 +71,22 @@ def mask_tokens(inputs, labels, tokenizer, mlm_probability, mlm_ignore_index):
 
 
 def remove_thingtalk_quotes(thingtalk):
+    quote_values = []
     while True:
+        # print('before: ', thingtalk)
         l1 = thingtalk.find('"')
         if l1 < 0:
             break
         l2 = thingtalk.find('"', l1+1)
-        assert l2 >= 0
+        if l2 < 0:
+            # ThingTalk code is not syntactic
+            return thingtalk, None
+        quote_values.append(thingtalk[l1+1: l2].strip())
         thingtalk = thingtalk[:l1] + '<temp>' + thingtalk[l2+1:]
-    return thingtalk
+        # print('after: ', thingtalk)
+    thingtalk = thingtalk.replace('<temp>', '""')
+    return thingtalk, quote_values
 
-def get_inbetween_tokens(train_data_file, start_token, end_token):
-    new_tokens = set()
-    with open(train_data_file, encoding="utf-8") as f:
-        for line in tqdm(f, desc='Tokenizing'):
-            line = remove_thingtalk_quotes(line)
-            line = line[line.find(start_token)+len(start_token):line.find(end_token)]
-            new_tokens.update(line.split())
-    return new_tokens
 
 def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=None):
     """ Add special tokens to the tokenizer and the model if they have not already been added. """

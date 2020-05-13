@@ -3,11 +3,12 @@ import csv
 from tqdm import tqdm
 import re
 
-from genienlp.util import tokenize, lower_case, remove_thingtalk_quotes
+from genienlp.util import tokenize, lower_case
+from genienlp.paraphrase.data_utils import remove_thingtalk_quotes
 
 def is_subset(set1, set2):
     """
-    Returns if set1 is a subset of or equal to set2
+    Returns True if set1 is a subset of or equal to set2
     """
     return all([e in set2 for e in set1])
 
