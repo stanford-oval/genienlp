@@ -5,6 +5,11 @@ import re
 
 from genienlp.util import tokenize, lower_case, remove_thingtalk_quotes
 
+def is_subset(set1, set2):
+    """
+    Returns if set1 is a subset of or equal to set2
+    """
+    return all([e in set2 for e in set1])
 
 def main():
     parser = ArgumentParser()
@@ -54,6 +59,7 @@ def main():
         args.thingtalk_column = 2
         args.output_columns = [0, 1, 2]
         args.no_duplication_columns = [args.utterance_column]
+        args.input_columns = [1]
 
     elif args.task == 'almond_dialogue_nlu':
         args.id_column = 0
@@ -62,6 +68,7 @@ def main():
         args.thingtalk_column = 3
         args.output_columns = [0, 1, 2, 3]
         args.no_duplication_columns = [args.utterance_column]
+        args.input_columns = [1, 2]
 
     if args.output_columns is None:
         # if args.transformation == 'remove_wrong_thingtalk':
@@ -133,7 +140,10 @@ def main():
             for o in output_rows:
                 output_row = ""
                 if args.remove_with_heuristics:
-                    if set(re.findall('[A-Za-z:_.]+_[0-9]', o[args.utterance_column])) != set(re.findall('[A-Za-z:_.]+_[0-9]', o[args.thingtalk_column])):
+                    all_input_columns = ' '.join([o[c] for c in args.input_columns])
+                    input_special_tokens = set(re.findall('[A-Za-z:_.]+_[0-9]', all_input_columns))
+                    output_special_tokens = set(re.findall('[A-Za-z:_.]+_[0-9]', o[args.thingtalk_column]))
+                    if  not is_subset(output_special_tokens, input_special_tokens) :
                         heuristic_count += 1
                         continue
                     _, quote_values = remove_thingtalk_quotes(o[args.thingtalk_column])
@@ -142,7 +152,7 @@ def main():
                         continue
                     should_skip = False
                     for q in quote_values:
-                        if q not in o[args.utterance_column]:
+                        if q not in all_input_columns:
                             heuristic_count += 1
                             should_skip = True
                             break
