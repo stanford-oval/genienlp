@@ -206,7 +206,7 @@ def split_file_on_disk(file_path, num_splits, output_paths=None):
     return all_output_paths
 
 
-def combine_folders_on_disk(folder_path_prefix, num_files, delete=False):
+def combine_folders_on_disk(folder_path_prefix, num_files, line_group_size, delete=False):
     folder_paths = [get_part_path(folder_path_prefix, part_idx) for part_idx in range(num_files)]
     new_to_olds_map = {}
     for i in range(num_files):
@@ -244,9 +244,10 @@ def combine_folders_on_disk(folder_path_prefix, num_files, delete=False):
                     if finished_reading[old_file_idx]:
                         old_file_idx = (old_file_idx + 1) % len(all_old_file_contents)
                         continue
-                    line = all_old_file_contents[old_file_idx][all_indices[old_file_idx]]
-                    combined_file.write(line)
-                    all_indices[old_file_idx] += 1
+                    for i in range(line_group_size):
+                        line = all_old_file_contents[old_file_idx][all_indices[old_file_idx]]
+                        combined_file.write(line)
+                        all_indices[old_file_idx] += 1
                     if all_indices[old_file_idx] == len(all_old_file_contents[old_file_idx]):
                         finished_reading[old_file_idx] = True
                         if all(finished_reading):
@@ -258,7 +259,7 @@ def combine_folders_on_disk(folder_path_prefix, num_files, delete=False):
             shutil.rmtree(folder)
 
 
-def combine_files_on_disk(file_path_prefix, num_files, delete=False):
+def combine_files_on_disk(file_path_prefix, num_files, line_group_size, delete=False):
     all_input_file_contents = []
     all_input_file_paths = []
     for i in range(num_files):
@@ -275,9 +276,10 @@ def combine_files_on_disk(file_path_prefix, num_files, delete=False):
             if finished_reading[input_file_idx]:
                 input_file_idx = (input_file_idx + 1) % len(all_input_file_contents)
                 continue
-            line = all_input_file_contents[input_file_idx][all_indices[input_file_idx]]
-            combined_file.write(line)
-            all_indices[input_file_idx] += 1
+            for i in range(line_group_size):
+                line = all_input_file_contents[input_file_idx][all_indices[input_file_idx]]
+                combined_file.write(line)
+                all_indices[input_file_idx] += 1
             if all_indices[input_file_idx] == len(all_input_file_contents[input_file_idx]):
                 finished_reading[input_file_idx] = True
                 if all(finished_reading):

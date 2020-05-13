@@ -315,7 +315,7 @@ def main(args):
 
         for folder in all_data_folders:
             shutil.rmtree(folder)
-        combine_folders_on_disk(args.eval_dir, len(devices), delete=True)
+        combine_folders_on_disk(args.eval_dir, len(devices), line_group_size=1, delete=True)
 
     else:
         run(args, devices[0])

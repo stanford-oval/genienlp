@@ -132,7 +132,7 @@ def main(args):
         # If only one value is provided, use the same value for all samples
         setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
 
-    logger.info('Will output %d sequences for each input.', args.batch_size*max_hyperparameter_len*args.num_samples)
+    logger.info('Will output %d sequences for each input.', max_hyperparameter_len*args.num_samples)
     logger.info('Effective batch size for each GPU is %d', args.batch_size*args.num_samples)
 
     if args.gold_column is None:
@@ -166,7 +166,7 @@ def main(args):
 
         for file in all_input_files:
             os.remove(file)
-        combine_files_on_disk(args.output_file, args.n_gpu, delete=True)
+        combine_files_on_disk(args.output_file, args.n_gpu, line_group_size=max_hyperparameter_len*args.num_samples, delete=True)
 
     else:
         run_generation(args)
