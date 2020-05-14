@@ -162,7 +162,7 @@ class BaseAlmondTask(BaseTask):
             return tokens, mask
 
         else:
-            tokens = sentence.split(' ')
+            tokens = sentence.strip().split(' ')
             mask = [not is_entity(token) for token in tokens]
             return tokens, mask
 
