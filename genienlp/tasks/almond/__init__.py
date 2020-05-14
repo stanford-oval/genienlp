@@ -41,9 +41,11 @@ from ...data_utils.example import Example
 
 from ..base_dataset import Split
 
+
 logger = logging.getLogger(__name__)
 
-ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Italian', 'zh': 'Chinese',
+
+ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Farsi', 'it': 'Italian', 'zh': 'Chinese',
                'hr': 'Croatian', 'ja': 'Japanese', 'ko': 'Korean', 'ru': 'Russian', 'es': 'Spanish',
                'sv': 'Swedish', 'tr': 'Turkish', 'hi': 'Hindi', 'fr': 'French', 'de': 'German',
                'pl': 'Polsih', 'ar': 'Arabic', 'vi': 'Vietnamese', 'ji': 'Yiddish', 'pt': 'Portuguese',
