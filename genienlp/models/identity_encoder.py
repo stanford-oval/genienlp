@@ -81,14 +81,8 @@ class IdentityEncoder(nn.Module):
         final_context = context_embedded.last_layer
         final_question = question_embedded.last_layer
 
-        # if self.args.append_question_to_context_too:
-        #     print('question_lengths = ', question_lengths)
-        #     print('context_lengths = ', context_lengths)
-        #     print('final_context = ', final_context)
-        #     print('final_question = ', final_question)
-        #     context_lengths-question_lengths
-        #     context_padding
-            # final_context = final_context
+        if self.args.append_question_to_context_too:
+            context_padding = context_padding | batch.question_in_context_mask
 
         if self.projection is not None:
             final_context = self.dropout(final_context)
