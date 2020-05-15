@@ -30,6 +30,7 @@
 from typing import NamedTuple, List
 import itertools
 import random
+import torch
 
 from .numericalizer.sequential_field import SequentialField
 
@@ -70,6 +71,7 @@ class Batch(NamedTuple):
     context: SequentialField
     question: SequentialField
     answer: SequentialField
+    question_in_context_mask: torch.tensor # True means Mask
     decoder_vocab: object
     
     @staticmethod
@@ -125,6 +127,8 @@ class Batch(NamedTuple):
         all_context_inputs_single = numericalizer.encode_single(context_inputs, decoder_vocab, device=device, max_length=max_context_len-2)
         all_question_inputs_single = numericalizer.encode_single(question_inputs, decoder_vocab, device=device, max_length=max_question_len-2)
         all_answer_inputs_single = numericalizer.encode_single(answer_inputs, decoder_vocab, device=device, max_length=max_answer_len-2)
+
+        question_in_context_mask = torch.tensor([[False]*(len(ex.context_plus_question)-len(ex.question))+[True]*(all_context_inputs_single.value.shape[1]-(len(ex.context_plus_question)-len(ex.question))) for ex in examples])
     
         if paired:
             all_example_ids = all_example_ids_single + all_example_ids_pair
@@ -140,4 +144,5 @@ class Batch(NamedTuple):
                      all_context_inputs,
                      all_question_inputs,
                      all_answer_inputs,
+                     question_in_context_mask,
                      decoder_vocab)

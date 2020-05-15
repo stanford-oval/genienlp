@@ -90,6 +90,16 @@ class MQANDecoder(nn.Module):
         context_padding = context.data == self.pad_idx
         question_padding = question.data == self.pad_idx
 
+        if self.args.append_question_to_context_too:
+            context_padding = context_padding | batch.question_in_context_mask
+            # print('context_padding = ', context_padding)
+            # print('question_in_context_mask = ', batch.question_in_context_mask)
+            # print('context_lengths = ', context_lengths)
+            # print('question_padding = ', question_padding)
+            # print('final_context = ', final_context)
+            # print('final_question = ', final_question)
+            
+
         if self.training:
             if self.args.rnn_layers > 0:
                 self.rnn_decoder.applyMasks(context_padding, question_padding)
