@@ -234,7 +234,7 @@ class AlmondDialogueNLU(BaseAlmondTask):
     state of the conversation)
     """
     def _is_program_field(self, field_name):
-        return field_name in ('answer', 'context')
+        return field_name in ('context')
 
     def _make_example(self, parts, dir_name=None):
         _id, context, sentence, target_code = parts
