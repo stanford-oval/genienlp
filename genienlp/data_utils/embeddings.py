@@ -112,7 +112,9 @@ class TransformerEmbedding(torch.nn.Module):
         self.model.resize_token_embeddings(len(vocab))
 
     def forward(self, input: torch.Tensor, padding=None):
-        last_hidden_state, _pooled, hidden_states = self.model(input, attention_mask=(~padding).to(dtype=torch.float))
+        # print('input = ', input)
+        # print('model = ', self.model)
+        last_hidden_state, _pooled, hidden_states = self.model(input, attention_mask=(~padding).to(dtype=torch.float) if padding is not None else None)
 
         return EmbeddingOutput(all_layers=hidden_states, last_layer=last_hidden_state)
 
@@ -283,12 +285,33 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
     for emb_name in decoder_emb_names:
         if not emb_name:
             continue
-        emb_type = get_embedding_type(emb_name)
-        if _is_bert(emb_name) or _is_xlmr(emb_name):
-            raise ValueError('Transformer embeddings cannot be specified in the decoder')
-
         if emb_name in all_vectors:
             decoder_vectors.append(all_vectors[emb_name])
+            continue
+
+        emb_type = get_embedding_type(emb_name)
+        if _is_bert(emb_type) or _is_xlmr(emb_name):
+            if numericalizer is not None and numericalizer_type != emb_type:
+                raise ValueError('Cannot specify multiple Transformer embeddings')
+
+            config = AutoConfig.from_pretrained(emb_type, cache_dir=cachedir)
+            config.output_hidden_states = True
+            if numericalizer is None:
+                if _is_bert(emb_type):
+                    numericalizer = BertNumericalizer(emb_type, config=config,
+                                                      max_generative_vocab=max_generative_vocab,
+                                                      cache=cachedir)
+                elif _is_xlmr(emb_type):
+                    numericalizer = XLMRobertaNumericalizer(emb_type, config=config,
+                                                            max_generative_vocab=max_generative_vocab,
+                                                            cache=cachedir)
+                numericalizer_type = emb_type
+
+            # load the tokenizer once to ensure all files are downloaded
+            AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
+
+            decoder_vectors.append(
+                TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
         else:
             vec = _name_to_vector(emb_type, cachedir)
             all_vectors[emb_name] = vec
