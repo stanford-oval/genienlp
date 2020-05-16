@@ -37,10 +37,7 @@ def write_to_folder(train_examples, eval_examples, test_examples, folder_path, d
     i = 0
     for e in eval_examples:
         r = random.random()
-        if subset == 'natural':
-            line = 'R'+str(i)+'\t'+e[0]+'\t'+e[2]+'\n'
-        else:
-            line = 'RS'+str(i)+'\t'+e[1]+'\t'+e[2]+'\n'
+        line = 'R'+str(i)+'\t'+e[0]+'\t'+e[2]+'\n' # eval is always natural
         eval_file.write(line)
         i += 1
 
@@ -77,8 +74,8 @@ def main():
             train_examples.append(e)
 
 
-    write_to_folder(train_examples, eval_examples, test_examples, os.path.join(args.output_folder, args.domain_name), args.dev_portion, 'synthetic')
-    write_to_folder(train_examples, eval_examples, test_examples, os.path.join(args.output_folder, args.domain_name), args.dev_portion, 'natural')
+    write_to_folder(train_examples, eval_examples, test_examples, os.path.join(args.output_folder, 'overnight-'+args.domain_name), args.dev_portion, 'synthetic')
+    write_to_folder(train_examples, eval_examples, test_examples, os.path.join(args.output_folder, 'overnight-'+args.domain_name), args.dev_portion, 'natural')
     
 
 if __name__ == '__main__':
