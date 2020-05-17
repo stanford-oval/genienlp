@@ -90,9 +90,9 @@ def parse_argv(parser):
     parser.add_argument("--metric_reduction", type=str, choices=['average', 'max'], default='average',
                         help="How we should calculate metrics where there are multiple generations per example.")
     
-    parser.add_argument("--num_samples", type=int, default=1)
 
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate num_samples outputs for each set of hyperparameters.
+    parser.add_argument("--num_samples", type=int, nargs='+', default=[1])
     parser.add_argument("--temperature", type=float, nargs='+', default=[1.0],
                         help="temperature of 0 implies greedy sampling")
     parser.add_argument("--repetition_penalty", type=float, nargs='+', default=[1.0],
@@ -130,7 +130,7 @@ def main(args):
 
     if args.prompt_column is not None and args.copy is not None and args.copy != 0:
         raise ValueError('Cannot copy from the input and use prompt at the same time. Disable either --copy or --prompt_column.')
-    hyperparameters = ['temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
+    hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
     max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])
     valid_len = [1, max_hyperparameter_len]
     for h in hyperparameters:
@@ -139,8 +139,8 @@ def main(args):
         # If only one value is provided, use the same value for all samples
         setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
 
-    logger.info('Will output %d sequences for each input.', max_hyperparameter_len*args.num_samples)
-    logger.info('Effective batch size for each GPU is %d', args.batch_size*args.num_samples)
+    logger.info('Will output %d sequences for each input.', sum(args.num_samples))
+    logger.info('Effective batch size for each GPU is %d', args.batch_size*max(args.num_samples))
 
     if args.gold_column is None:
         args.gold_column = args.input_column
@@ -172,7 +172,7 @@ def main(args):
 
         for file in all_input_files:
             os.remove(file)
-        combine_files_on_disk(args.output_file, args.n_gpu, line_group_size=max_hyperparameter_len*args.num_samples, delete=True)
+        combine_files_on_disk(args.output_file, args.n_gpu, line_group_size=sum(args.num_samples), delete=True)
 
     else:
         run_generation(args)
@@ -247,7 +247,7 @@ def run_generation(args):
                                  top_k=args.top_k[hyperparameter_idx],
                                  top_p=args.top_p[hyperparameter_idx],
                                  early_stopping=True,
-                                 num_return_sequences=args.num_samples,
+                                 num_return_sequences=args.num_samples[hyperparameter_idx],
                                  repetition_penalty=args.repetition_penalty[hyperparameter_idx],
                                  no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                                  do_sample=args.temperature[hyperparameter_idx]!=0,
@@ -261,7 +261,7 @@ def run_generation(args):
                 if args.model_type=='bart' or args.model_type=='mbart':
                     o = o[1:] # remove <s> start token
                 if not args.output_prompt:
-                    o = o[len(batch_prompt_tokens[(i//args.num_samples) % batch_size]):]
+                    o = o[len(batch_prompt_tokens[(i//args.num_samples[hyperparameter_idx]) % batch_size]):]
                 min_index = len(o)-1
                 for stop_token_id in stop_token_ids+[end_token_id]:
                     try:
@@ -278,8 +278,8 @@ def run_generation(args):
                 text = re.sub('\s\s+', ' ', text) # remove duplicate white spaces
                 text = text.strip()
                 if not args.skip_heuristics:
-                    text = output_heuristics(text, batch_reverse_maps[(i//args.num_samples) % batch_size])
-                batch_outputs[(i//args.num_samples) % batch_size].append(text)
+                    text = output_heuristics(text, batch_reverse_maps[(i//args.num_samples[hyperparameter_idx]) % batch_size])
+                batch_outputs[(i//args.num_samples[hyperparameter_idx]) % batch_size].append(text)
 
         all_outputs.extend(batch_outputs)
         if batch_idx < 1:
