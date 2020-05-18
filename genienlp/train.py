@@ -168,17 +168,17 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
     if len(devices) > 1:
         loss = loss.mean()
     non_accumulated_loss = loss.item()
-    loss = loss*len(batch[0])
+    # loss = loss*len(batch[0])
     accumulated_batch_lengths += len(batch[0])
 
     loss.backward()
     grad_norm = None
     if (iteration+1) % gradient_accumulation_steps == 0:
-        for p in model.parameters():
-            if p.grad is None:
-                continue
-            # print('p.grad = ', p.grad)
-            p.grad /= accumulated_batch_lengths
+        # for p in model.parameters():
+        #     if p.grad is None:
+        #         continue
+        #     # print('p.grad = ', p.grad)
+        #     p.grad /= accumulated_batch_lengths
         accumulated_batch_lengths = 0
         if grad_clip > 0.0:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
