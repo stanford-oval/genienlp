@@ -383,25 +383,27 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
             if iteration < start_iteration:
                 # skip this iteration (this is done to ensure iterators are at the same position when resuming)
-                task_iteration[task] += 1
+                if iteration % args.gradient_accumulation_steps == 0:
+                    task_iteration[task] += 1
                 iteration += 1
                 return
 
-            task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
-            round_progress = f'round_{rnd}:' if rounds else ''
+            if iteration % args.gradient_accumulation_steps == 0:
+                task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
+                round_progress = f'round_{rnd}:' if rounds else ''
 
             # validate
-            if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
-                deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
-                                         train_task=task, round_progress=round_progress,
-                                         task_progress=task_progress, writer=writer, logger=logger)
+                if should_validate(iteration//args.gradient_accumulation_steps, val_every, resume=args.resume, start_iteration=start_iteration):
+                    deca_score = do_validate(iteration//args.gradient_accumulation_steps, args, model, numericalizer, val_iters,
+                                            train_task=task, round_progress=round_progress,
+                                            task_progress=task_progress, writer=writer, logger=logger)
 
-                # saving
-                if should_save(iteration, save_every):
-                    best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
-                                                saver=saver, logger=logger, train_task=task,
-                                                round_progress=round_progress, task_progress=task_progress,
-                                                timestamp=args.timestamp, log_dir=args.log_dir)
+                    # saving
+                    if should_save(iteration//args.gradient_accumulation_steps, save_every):
+                        best_decascore = maybe_save(iteration//args.gradient_accumulation_steps, model, opt, deca_score, best_decascore,
+                                                    saver=saver, logger=logger, train_task=task,
+                                                    round_progress=round_progress, task_progress=task_progress,
+                                                    timestamp=args.timestamp, log_dir=args.log_dir)
 
             # param update
             loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
@@ -412,46 +414,47 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                                          train_question_embeddings_after=args.train_question_embeddings_after if
                                                                          args.train_question_embeddings else None)
             if loss is None:
-                logger.info(
-                    'Encountered NAN loss during training... Continue training ignoring the current batch')
+                logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
                 continue
-            if loss < 1e-5:
-                zero_loss += 1
-                if zero_loss >= 100:
-                    logger.info('Found loss less than 1e-5 for 100 steps, stopping.')
-                    return
-            else:
-                zero_loss = 0
+            if iteration % args.gradient_accumulation_steps == 0:
+                if loss < 1e-5:
+                    zero_loss += 1
+                    if zero_loss >= 100:
+                        logger.info('Found loss less than 1e-5 for 100 steps, stopping.')
+                        return
+                else:
+                    zero_loss = 0
 
-            # update curriculum fraction
-            if args.use_curriculum:
-                task_fraction[task] = update_fraction(args, task_iteration[task])
+                # update curriculum fraction
+                if args.use_curriculum:
+                    task_fraction[task] = update_fraction(args, task_iteration[task])
 
-            # train metrics
-            local_loss += loss
+                # train metrics
+                local_loss += loss
 
             # train logs
             num_examples += batch.context.value.size(0)
             len_contexts += batch.context.value.size(1)
             len_answers += batch.answer.value.size(1)
 
-            if should_log(iteration, log_every):
-                local_loss /= log_every
-                num_examples /= log_every
-                len_contexts /= log_every
-                len_answers /= log_every
-                do_log_training_loss(iteration, local_loss,
-                                     lr_scheduler=lr_scheduler, grad_norm=grad_norm, lr_rate=args.lr_rate,
-                                     num_examples=num_examples, len_contexts=len_contexts, len_answers=len_answers,
-                                     logger=logger, writer=writer, train_task=task, round_progress=round_progress,
-                                     task_progress=task_progress, timestamp=args.timestamp, log_prefix=log_prefix)
-                num_examples = 0
-                len_contexts = 0
-                len_answers = 0
-                local_loss = 0
+            if iteration % args.gradient_accumulation_steps == 0:
+                if should_log(iteration//args.gradient_accumulation_steps, log_every):
+                    local_loss /= log_every
+                    num_examples /= log_every
+                    len_contexts /= log_every
+                    len_answers /= log_every
+                    do_log_training_loss(iteration//args.gradient_accumulation_steps, local_loss,
+                                        lr_scheduler=lr_scheduler, grad_norm=grad_norm, lr_rate=args.lr_rate,
+                                        num_examples=num_examples, len_contexts=len_contexts, len_answers=len_answers,
+                                        logger=logger, writer=writer, train_task=task, round_progress=round_progress,
+                                        task_progress=task_progress, timestamp=args.timestamp, log_prefix=log_prefix)
+                    num_examples = 0
+                    len_contexts = 0
+                    len_answers = 0
+                    local_loss = 0
 
-            # book keeping
-            task_iteration[task] += 1
+                # book keeping
+                task_iteration[task] += 1
             iteration += 1
 
         # book keeping
