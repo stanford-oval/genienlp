@@ -470,7 +470,8 @@ class MQANDecoderWrapper(object):
         question_padding = self.expand_for_beam_search(question_padding, batch_size, num_beams)
         context_indices = self.expand_for_beam_search(context_indices, batch_size, num_beams)
         question_indices = self.expand_for_beam_search(question_indices, batch_size, num_beams)
-        rnn_state = self.expand_for_beam_search(rnn_state, batch_size, num_beams, dim=1)
+        if rnn_state is not None:
+            rnn_state = self.expand_for_beam_search(rnn_state, batch_size, num_beams, dim=1)
         self.self_attended_context = self_attended_context
         self.context = context
         self.context_padding = context_padding
@@ -551,7 +552,7 @@ class MQANDecoderWrapper(object):
             vocab_pointer_switch_input = torch.cat((context_decoder_output, self_attended_decoded), dim=-1)
             context_question_switch_input = torch.cat((question_decoder_output, self_attended_decoded), dim=-1)
 
-            self.decoder_output = self.dropout(context_decoder_output)
+            self.decoder_output = self.mqan_decoder.dropout(context_decoder_output)
 
         vocab_pointer_switch = self.mqan_decoder.vocab_pointer_switch(vocab_pointer_switch_input)
         context_question_switch = self.mqan_decoder.context_question_switch(context_question_switch_input)
