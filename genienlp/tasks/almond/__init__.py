@@ -110,6 +110,8 @@ class AlmondDataset(CQA):
 def is_entity(token):
     return token[0].isupper()
 
+def is_device(token):
+    return token[0] == '@'
 
 def process_id(ex):
     id_ = ex.example_id.rsplit('/', 1)
@@ -163,7 +165,7 @@ class BaseAlmondTask(BaseTask):
 
         else:
             tokens = sentence.split(' ')
-            mask = [not is_entity(token) for token in tokens]
+            mask = [not is_entity(token) and not is_device(token) for token in tokens]
             return tokens, mask
 
     def detokenize(self, tokenized, field_name=None):
