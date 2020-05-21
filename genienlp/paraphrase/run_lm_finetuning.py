@@ -182,9 +182,9 @@ def train(args, train_dataset, model, tokenizer):
             model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids}
             
             # prepare inputs for bart
-            if 'bart' in args.model_type:
+            if args.model_type == 'bart':
                 # this should have been handled internally by huggingfaces's BART code
-                # remove this once they add it
+                # TODO remove this once they add it
                 decoder_input_ids = labels[:, :-1].contiguous()
                 decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
                 lm_labels = labels[:, 1:].clone()
@@ -324,7 +324,13 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
             if args.mlm:
                 outputs = model(inputs, masked_lm_labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
             else:
-                outputs = model(inputs, labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
+                if args.model_type == 'bart':
+                    decoder_input_ids = labels[:, :-1].contiguous()
+                    decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
+                    lm_labels = labels[:, 1:].clone()
+                    outputs = model(inputs, labels=labels, lm_labels=lm_labels, decoder_input_ids=decoder_input_ids, position_ids=position_ids, token_type_ids=segment_ids)
+                else:
+                    outputs = model(inputs, labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
             lm_loss = outputs[0]
             eval_loss += lm_loss.mean().item()
         nb_eval_steps += 1

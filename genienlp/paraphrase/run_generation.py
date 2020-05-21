@@ -123,8 +123,12 @@ def main(args):
         # bart and mbart share the same config
         # check which model we are actually using
         if args.model_type == 'bart':
-            if config.normalize_before and config.add_final_layer_norm and config.scale_embedding:
-                args.model_type = 'mbart'
+            try:
+                if config.normalize_before and config.add_final_layer_norm and config.scale_embedding:
+                    args.model_type = 'mbart'
+            except AttributeError as e:
+                args.model_type = 'bart'
+            
     else:
         raise ValueError('Model should be either GPT2, BART, or MBART')
 
