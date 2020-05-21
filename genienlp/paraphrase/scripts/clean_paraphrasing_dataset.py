@@ -5,7 +5,6 @@ from tqdm import tqdm
 from genienlp.util import detokenize
 import random
 import os
-import matplotlib.pyplot as plt
 
 
 csv.field_size_limit(sys.maxsize)
@@ -62,13 +61,14 @@ def main():
                         help='The path to the input .tsv file.')
     parser.add_argument('output_dir', type=str,
                         help='The path to the folder to save train.tsv and dev.tsv files.')
+    parser.add_argument('--plot_edit_distance', action='store_true', help='Save a plot of the normalized edit distance distribution.')
 
     parser.add_argument('--train_ratio', type=float, required=True,
                         help='The ratio of input examples that go to the training set')
     parser.add_argument('--seed', default=123, type=int, help='Random seed used for train/dev split.')
 
     # By default, we swap the columns so that the target of paraphrasing will be a grammatically correct sentence, i.e. written by a human, not an NMT
-    parser.add_argument('--first_columns', type=int, nargs='+', default=[2, 3], help='The column indices in the input file to put in the first column of the output file')
+    parser.add_argument('--first_columns', type=int, nargs='+', default=[2], help='The column indices in the input file to put in the first column of the output file')
     parser.add_argument('--second_columns', type=int, nargs='+', default=[1], help='The column indices in the input file to put in the second column of the output file')
     
     parser.add_argument('--min_length', type=int, default=0, help='Minimum number of characters that each phrase should have in order to be included')
@@ -149,10 +149,12 @@ def main():
                 if included_examples >= args.max_examples:
                     break
 
-    n, bins, patches = plt.hist(all_normalized_edit_distances, 20)
-    plt.savefig('edit_distance_plot.png')
     print('Dropped', drop_count, 'examples')
     print('Average normalized edit distance between pairs is ', sum_edit_distance / output_size)
+    if args.plot_edit_distance:
+        import matplotlib.pyplot as plt
+        n, bins, patches = plt.hist(all_normalized_edit_distances, 20)
+        plt.savefig(os.path.join(args.output_dir,'edit_distance_plot.png'))
 
 if __name__ == '__main__':
     main()
