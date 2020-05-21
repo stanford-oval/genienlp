@@ -5,6 +5,8 @@ from tqdm import tqdm
 from genienlp.util import detokenize
 import random
 import os
+import matplotlib.pyplot as plt
+
 
 csv.field_size_limit(sys.maxsize)
 
@@ -31,6 +33,29 @@ def is_valid(s):
         and '_' not in s and '%' not in s and '/' not in s and '*' not in s and '\\' not in s \
             and 'www' not in s and sum(c.isdigit() for c in s) <= 10 and s.count('(') == s.count(')')
 
+def normalized_levenshtein(s1, s2, mode='character'):
+    if mode != 'character' and isinstance(s1, str):
+        s1 = s1.split()
+        s2 = s2.split()
+    if len(s1) < len(s2):
+        return normalized_levenshtein(s2, s1)
+
+    # len(s1) >= len(s2)
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1 # j+1 instead of j since previous_row and current_row are one character longer
+            deletions = current_row[j] + 1       # than s2
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    
+    return previous_row[-1] / max(len(s1), len(s2))
+
 def main():
     parser = ArgumentParser()
     parser.add_argument('input', type=str,
@@ -43,11 +68,13 @@ def main():
     parser.add_argument('--seed', default=123, type=int, help='Random seed used for train/dev split.')
 
     # By default, we swap the columns so that the target of paraphrasing will be a grammatically correct sentence, i.e. written by a human, not an NMT
-    parser.add_argument('--first_columns', type=int, nargs='+', default=[1], help='The column indices in the input file to put in the first column of the output file')
-    parser.add_argument('--second_columns', type=int, nargs='+', default=[0], help='The column indices in the input file to put in the second column of the output file')
+    parser.add_argument('--first_columns', type=int, nargs='+', default=[2, 3], help='The column indices in the input file to put in the first column of the output file')
+    parser.add_argument('--second_columns', type=int, nargs='+', default=[1], help='The column indices in the input file to put in the second column of the output file')
     
-    parser.add_argument('--min_length', type=int, default=30, help='Minimum number of characters that each phrase should have in order to be included')
-    parser.add_argument('--max_length', type=int, default=150, help='Maximum number of characters that each phrase should have in order to be included')
+    parser.add_argument('--min_length', type=int, default=0, help='Minimum number of characters that each phrase should have in order to be included')
+    parser.add_argument('--max_length', type=int, default=200, help='Maximum number of characters that each phrase should have in order to be included')
+    parser.add_argument('--min_edit_distance', type=float, default=0.0001, help='We will not include phrase pairs that have a normalized edit distance below this number.')
+    parser.add_argument('--edit_distance_mode', type=str, default='character', choices=['character', 'word'])
     parser.add_argument('--skip_check', action='store_true', help='Skip validity check.')
     parser.add_argument('--skip_normalization', action='store_true', help='Do not remove quotation marks or detokenize.')
     parser.add_argument('--lower_case', action='store_true', help='Convert everything to lower case.')
@@ -61,6 +88,9 @@ def main():
     # number_of_lines = get_number_of_lines(args.input)
     # number_of_lines = get_number_of_lines(args.input)
     output_size = 0
+    included_examples = 0
+    sum_edit_distance = 0
+    all_normalized_edit_distances = []
     with open(args.input, 'r') as input_file, \
         open(os.path.join(args.output_dir, 'train.tsv'), 'w') as train_output_file, \
         open(os.path.join(args.output_dir, 'dev.tsv'), 'w') as dev_output_file:
@@ -101,17 +131,28 @@ def main():
                     if args.lower_case:
                         first = first.lower()
                         second = second.lower()
-                    if first.lower() == second.lower() or first == '' or second == '':
+                    if first == '' or second == '':
                         drop_count += 1
                         continue
+                    normalized_edit_distance = normalized_levenshtein(first.lower(), second.lower(), mode=args.edit_distance_mode)
+                    # print('normalized_edit_distance = ', normalized_edit_distance)
+                    if normalized_edit_distance < args.min_edit_distance:
+                        drop_count += 1
+                        continue
+                    all_normalized_edit_distances.append(normalized_edit_distance)
+                    sum_edit_distance += normalized_edit_distance
                     writer.writerow([first, second])
+                    output_size += 1
                     is_written = True
             if is_written:
-                output_size += 1
-                if output_size >= args.max_examples:
+                included_examples += 1
+                if included_examples >= args.max_examples:
                     break
 
+    n, bins, patches = plt.hist(all_normalized_edit_distances, 20)
+    plt.savefig('edit_distance_plot.png')
     print('Dropped', drop_count, 'examples')
+    print('Average normalized edit distance between pairs is ', sum_edit_distance / output_size)
 
 if __name__ == '__main__':
     main()
