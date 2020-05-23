@@ -113,6 +113,8 @@ def parse_argv(parser):
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
 
     
+    parser.add_argument('--lang_as_question', action='store_true', help='if true will use "Translate from ${language} to ThingTalk" for question')
+    
     parser.add_argument('--vocab_tasks', nargs='+', type=str, help='tasks to use in the construction of the vocabulary')
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
     parser.add_argument('--max_generative_vocab', default=50000, type=int,
