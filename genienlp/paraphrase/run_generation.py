@@ -27,6 +27,7 @@ import json
 import re
 import copy
 import os
+import numpy as np
 
 
 # multiprocessing with CUDA
@@ -79,6 +80,7 @@ def parse_argv(parser):
     parser.add_argument('--thingtalk_column', type=int, default=None,
                         help='The column in the input file which contains the ThingTalk program.')
     parser.add_argument("--output_file", type=str, help="When specified, generated text will be written in this file. Defaults to stdout.")
+    parser.add_argument("--intermediate_file", type=str, default='./paraphrase_tmp.tsv', help="Used to save intermediate results.")
 
     parser.add_argument('--output_prompt', action='store_true',
                         help='Whether we should include the prompt (specified via --prompt_column or --copy) in the output sequence')
@@ -90,7 +92,7 @@ def parse_argv(parser):
     parser.add_argument("--metric_reduction", type=str, choices=['average', 'max'], default='average',
                         help="How we should calculate metrics where there are multiple generations per example.")
     
-
+    parser.add_argument("--pipe_mode", action='store_true', help='If set, we will generate paraphrases of paraphrases of ... as well.')
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate num_samples outputs for each set of hyperparameters.
     parser.add_argument("--num_samples", type=int, nargs='+', default=[1])
     parser.add_argument("--temperature", type=float, nargs='+', default=[1.0],
@@ -113,7 +115,70 @@ def parse_argv(parser):
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")
 
+def group_together(file_paths, num_samples):
+    """
+    """
+    for i in range(1, len(num_samples)):
+        num_samples[i]*=num_samples[i-1]
+    all_lines = []
+    for file_path in file_paths:
+        lines = []
+        with open(file_path) as f:
+            for line in f:
+                lines.append(line.strip())
+        all_lines.append(lines)
+    
+    all_groups = []
+    for i, lines in enumerate(all_lines):
+        for group_idx in range(0, len(lines)//num_samples[i]):
+            g = lines[group_idx*num_samples[i]:(group_idx+1)*num_samples[i]]
+            if len(all_groups) <= group_idx:
+                all_groups.append(g)
+            else:
+                all_groups[group_idx].extend(g)
+    return all_groups
+
+
+
 def main(args):
+    hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
+    max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])
+    valid_len = [1, max_hyperparameter_len]
+    for h in hyperparameters:
+        if (len(getattr(args, h)) not in valid_len):
+            logger.error('Hyperparameters should either have the same number of values as others or have exactly one value.')
+        # If only one value is provided, use the same value for all samples
+        setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
+
+    logger.info('Will output %d sequences for each input.', sum(args.num_samples)if not args.pipe_mode else np.prod(args.num_samples))
+    logger.info('Effective batch size for each GPU is %d', args.batch_size*max(args.num_samples))
+
+    # TODO using intermediate files for pipe_mode is not clean. It needs to change.
+    if args.pipe_mode:
+        intermediate_files = [args.input_file] + [args.intermediate_file+str(i) for i in range(max_hyperparameter_len)]
+        for i in range(max_hyperparameter_len):
+            copy_args = copy.copy(args)
+            for h in hyperparameters:
+                setattr(copy_args, h, [getattr(args, h)[i]])
+            copy_args.input_file = intermediate_files[i]
+            copy_args.output_file = intermediate_files[i+1]
+            run_multi_process_generation(copy_args)
+        all_outputs = group_together(intermediate_files[1:], args.num_samples)
+        for file_path in intermediate_files[1:]:
+            os.remove(file_path)
+        if args.output_file is not None:
+            if not os.path.exists(os.path.dirname(args.output_file)):
+                os.makedirs(os.path.dirname(args.output_file), exist_ok=False)
+            with open(args.output_file, 'w') as output_file:
+                for output in all_outputs:
+                    for text in output:
+                        output_file.write(text + '\n')
+        else:
+            print(json.dumps(all_outputs, indent=2))
+    else:
+        run_multi_process_generation(args)
+
+def run_multi_process_generation(args):
     config = PretrainedConfig.from_pretrained(args.model_name_or_path)
     
     # get model type from saved config
@@ -134,17 +199,6 @@ def main(args):
 
     if args.prompt_column is not None and args.copy is not None and args.copy != 0:
         raise ValueError('Cannot copy from the input and use prompt at the same time. Disable either --copy or --prompt_column.')
-    hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
-    max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])
-    valid_len = [1, max_hyperparameter_len]
-    for h in hyperparameters:
-        if (len(getattr(args, h)) not in valid_len):
-            logger.error('Hyperparameters should either have the same number of values as others or have exactly one value.')
-        # If only one value is provided, use the same value for all samples
-        setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
-
-    logger.info('Will output %d sequences for each input.', sum(args.num_samples))
-    logger.info('Effective batch size for each GPU is %d', args.batch_size*max(args.num_samples))
 
     if args.gold_column is None:
         args.gold_column = args.input_column
@@ -167,7 +221,7 @@ def main(args):
             copy_args.input_file = all_input_files[gpu_idx]
             copy_args.output_file = get_part_path(args.output_file, gpu_idx)
             
-            p = Process(target=run_generation, args=(copy_args,))
+            p = Process(target=run_single_process_generation, args=(copy_args,))
             all_processes.append(p)
             p.start()
 
@@ -179,10 +233,10 @@ def main(args):
         combine_files_on_disk(args.output_file, args.n_gpu, line_group_size=sum(args.num_samples), delete=True)
 
     else:
-        run_generation(args)
+        run_single_process_generation(args)
 
 
-def run_generation(args):
+def run_single_process_generation(args):
     model_class, tokenizer_class, special_tokens = MODEL_CLASSES[args.model_type]
     model = model_class.from_pretrained(args.model_name_or_path)
     model.to(args.device)
