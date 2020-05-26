@@ -53,7 +53,7 @@ class Example(NamedTuple):
     @staticmethod
     def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, lower=False):
         args = [example_id]
-        for argname, arg in (('context', context), ('question', question), ('answer', answer), ('question', context+' '+question)):
+        for argname, arg in (('context', context), ('question', question), ('answer', answer), ('context_question', context+' '+question)):
             words, mask = tokenize(arg.rstrip('\n'), field_name=argname)
             if mask is None:
                 mask = [True for _ in words]

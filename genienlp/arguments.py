@@ -177,6 +177,8 @@ def parse_argv(parser):
                         help='force subword tokenization of code tokens too')
     parser.add_argument('--append_question_to_context_too', action='store_true', default=False,
                         help='')
+    parser.add_argument('--almond_preprocess_context', action='store_true', default=False,
+                        help='')
 
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
