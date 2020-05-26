@@ -156,7 +156,7 @@ class BaseAlmondTask(BaseTask):
             preprocessed_context = []
             for token in sentence.split(' '):
                 if token.startswith('@'):
-                    word = token.rsplit('.')[1]
+                    word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
                     preprocessed_context += word.split('_')
                 elif token.startswith('param:'):
                     word = token[len('param:'):]
