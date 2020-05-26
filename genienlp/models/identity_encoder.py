@@ -93,7 +93,6 @@ class IdentityEncoder(nn.Module):
         if self.args.rnn_layers > 0:
             batch_size = context.size(0)
             if self.args.rnn_zero_state == 'zero':
-
                 zero = torch.zeros(self.args.rnn_layers, batch_size, self.args.rnn_dimension,
                                    dtype=torch.float, requires_grad=False, device=context.device)
                 context_rnn_state = (zero, zero)

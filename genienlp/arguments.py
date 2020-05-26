@@ -169,7 +169,7 @@ def parse_argv(parser):
     parser.add_argument('--decoder_embeddings', default='glove+char',
                         help='which pretrained word embedding to use on the decoder side')
     parser.add_argument('--trainable_encoder_embeddings', default=0, type=int,
-                        help='size of trainable portion of encoder embedding (only for Coattention encoder)')
+                        help='size of trainable portion of encoder embedding (only for Coattention encoder and LSTM encoder)')
     parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
                         help='size of trainable portion of decoder embedding (0 or omit to disable)')
     parser.add_argument('--pretrain_context', default=0, type=int,
