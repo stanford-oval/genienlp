@@ -30,6 +30,7 @@
 import os
 import torch
 import logging
+import re
 from tqdm import tqdm
 from collections import defaultdict
 
@@ -128,6 +129,7 @@ class BaseAlmondTask(BaseTask):
 
     def __init__(self, name, args):
         super().__init__(name, args)
+        self._preprocess_context = args.almond_preprocess_context
 
     @property
     def metrics(self):
@@ -149,10 +151,26 @@ class BaseAlmondTask(BaseTask):
         if self.force_subword_tokenize:
             return sentence.split(' '), None
 
+        tokens = sentence.split(' ')
+        if self._preprocess_context and field_name in ('context', 'context_question'):
+            preprocessed_context = []
+            for token in sentence.split(' '):
+                if token.startswith('@'):
+                    word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
+                    preprocessed_context += word.split('_')
+                elif token.startswith('param:'):
+                    word = token[len('param:'):]
+                    preprocessed_context += word.split('_')
+                elif token.startswith('enum:'):
+                    word = token[len('enum:'):]
+                    preprocessed_context += word.split('_')
+                else:
+                    preprocessed_context.append(token)
+            tokens = preprocessed_context
+
         if self._is_program_field(field_name):
             mask = []
             in_string = False
-            tokens = sentence.split(' ')
             for token in tokens:
                 if token == '"':
                     in_string = not in_string
@@ -164,7 +182,6 @@ class BaseAlmondTask(BaseTask):
             return tokens, mask
 
         else:
-            tokens = sentence.split(' ')
             mask = [not is_entity(token) and not is_device(token) for token in tokens]
             return tokens, mask
 
@@ -240,6 +257,7 @@ class AlmondDialogueNLU(BaseAlmondTask):
 
     def _make_example(self, parts, dir_name=None):
         _id, context, sentence, target_code = parts
+
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
