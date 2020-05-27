@@ -179,7 +179,7 @@ def main():
                         output_row += '\t'
                 output_file.write(output_row + '\n')
             for o in thrown_away_rows:
-                if args.remove_with_heuristics and passes_heuristic_checks(o, args):
+                if passes_heuristic_checks(o, args):
                     all_thrown_away_rows.append(o)
 
         if args.thrown_away is not None:
