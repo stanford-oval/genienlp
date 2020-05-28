@@ -25,8 +25,8 @@ def read_dialog_file(dialog_file, args):
             dialog_index, prompts = read_dialog(dialog_lines[dialog_start_line_idx: idx], args)
             if dialog_index < last_dialog_index:
                 shard += 1
-            print(str(shard)+'/'+str(dialog_index))
-            all_prompts[str(shard)+'/'+str(dialog_index)] = prompts
+            # print(str(shard)+':'+str(dialog_index))
+            all_prompts[str(shard)+':'+str(dialog_index)] = prompts
             last_dialog_index = dialog_index
     return all_prompts
 
