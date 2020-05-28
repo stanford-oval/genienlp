@@ -294,7 +294,7 @@ def run_single_process_generation(args):
             batch_context_tensor = torch.tensor(padded_batch_context_tokens, dtype=torch.long, device=args.device)
             attention_mask = (batch_context_tensor!=pad_token_id).to(torch.long)
 
-        logger.info('Input: %s', str(batch_input_sequences))
+        # logger.info('Input: %s', str(batch_input_sequences))
 
         batch_outputs = [[] for _ in range(batch_size)]
         for hyperparameter_idx in range(len(args.temperature)):
