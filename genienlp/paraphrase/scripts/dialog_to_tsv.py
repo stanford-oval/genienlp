@@ -8,9 +8,13 @@ def read_dialog_file(dialog_file, args):
     with open(dialog_file) as f:
         for l in f:
             dialog_lines.append(l.strip())
+            # if len(dialog_lines)>10000:
+                # break
 
     idx = 0
-    dialog_idx = 0
+    last_dialog_index = -1
+    # TODO remove shard after it is added to dialogue_id in synthetic.txt
+    shard = 0
     while idx < len(dialog_lines):
         if dialog_lines[idx] == args.dialog_start:
             # new dialog started
@@ -18,9 +22,12 @@ def read_dialog_file(dialog_file, args):
             idx += 1
             while idx < len(dialog_lines) and dialog_lines[idx] != args.dialog_start:
                 idx += 1
-            prompts = read_dialog(dialog_lines[dialog_start_line_idx: idx], args)
-            all_prompts[dialog_idx] = prompts
-            dialog_idx += 1
+            dialog_index, prompts = read_dialog(dialog_lines[dialog_start_line_idx: idx], args)
+            if dialog_index < last_dialog_index:
+                shard += 1
+            print(str(shard)+'/'+str(dialog_index))
+            all_prompts[str(shard)+'/'+str(dialog_index)] = prompts
+            last_dialog_index = dialog_index
     return all_prompts
 
 def read_dialog(lines: list, args):
@@ -29,10 +36,9 @@ def read_dialog(lines: list, args):
     previous_ats = []
     next_uts = []
     user_utterance = None
-    # index = 0
     for idx, l in enumerate(lines):
-        # if l.startswith(args.index_prefix):
-            # index = l[len(args.index_prefix):].strip()
+        if l.startswith(args.index_prefix):
+            dialog_index = int(l[len(args.index_prefix):].strip())
         if l.startswith(args.at_prefix):
             previous_ats.append(l[len(args.at_prefix):].strip())
         if l.startswith(args.ut_prefix):
@@ -50,7 +56,7 @@ def read_dialog(lines: list, args):
             last_agent_utterance = agent_utterances[-1]
             prompts.append((last_agent_utterance, user_utterance))
 
-    return prompts
+    return dialog_index, prompts
 
 def main():
     parser = ArgumentParser()
@@ -76,10 +82,10 @@ def main():
         with open(args.output, 'w') as output:
             for row in reader:
                 assert row[0].startswith('RS')
-                # print(row[0])
+                print(row[0])
                 slash = row[0].index('/')
                 dash = row[0].index('-')
-                dialog_index = int(row[0][2:slash])
+                dialog_index = row[0][2:slash]
                 utterance_index = int(row[0][slash+1:dash])
                 # print(row[3])
                 # print(all_prompts[dialog_index][utterance_index][0])
