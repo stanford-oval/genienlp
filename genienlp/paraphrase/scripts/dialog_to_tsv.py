@@ -14,7 +14,7 @@ def read_dialog_file(dialog_file, args):
     idx = 0
     last_dialog_index = -1
     # TODO remove shard after it is added to dialogue_id in synthetic.txt
-    shard = 0
+    shard = 1
     while idx < len(dialog_lines):
         if dialog_lines[idx] == args.dialog_start:
             # new dialog started
@@ -88,7 +88,7 @@ def main():
                 dialog_index = row[0][2:slash]
                 utterance_index = int(row[0][slash+1:dash])
                 # print(row[3])
-                # print(all_prompts[dialog_index][utterance_index][0])
+                # print('dialog_index = ', dialog_index, 'utterance_index = ', utterance_index)
                 last_agent_utterance, user_utterance = all_prompts[dialog_index][utterance_index]
                 user_utterance = row[2]
                 output.write((last_agent_utterance+' '+user_utterance).strip()+'\t'+last_agent_utterance.strip()+'\t'+row[3]+'\t'+user_utterance+'\n')
