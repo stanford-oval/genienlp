@@ -264,6 +264,9 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
         def is_entity(token):
             return token[0].isupper()
 
+        def is_device(token):
+            return token[0] == '@'
+
         def reverse_one(tensor, field_name):
             tokens = []
 
@@ -290,7 +293,7 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
                             tokens.append(token)
 
                     else:
-                        if is_entity(token):
+                        if is_entity(token) or is_device(token):
                             tokens.append(token)
                         else:
                             tokens[-1] += token
