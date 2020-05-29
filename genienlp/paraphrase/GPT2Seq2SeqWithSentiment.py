@@ -1,6 +1,6 @@
-from run_pplm_discrim_train import Discriminator
-from pplm_classification_head import ClassificationHead
-import GPT2Seq2Seq
+from .run_pplm_discrim_train import Discriminator
+from .pplm_classification_head import ClassificationHead
+from .GPT2Seq2Seq import GPT2Seq2Seq
 import logging
 from typing import List
 from transformers import GPT2LMHeadModel

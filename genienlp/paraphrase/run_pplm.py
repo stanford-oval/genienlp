@@ -34,12 +34,12 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from tqdm import trange
 
-from pplm_classification_head import ClassificationHead
+from genienlp.paraphrase.pplm_classification_head import ClassificationHead
 from transformers import GPT2Tokenizer
 from transformers.file_utils import cached_path
 from transformers.modeling_gpt2 import GPT2LMHeadModel
-import GPT2Seq2SeqWithSentiment
-import GPT2Seq2Seq
+from genienlp.paraphrase.GPT2Seq2SeqWithSentiment import GPT2Seq2SeqWithSentiment
+from genienlp.paraphrase.GPT2Seq2Seq import GPT2Seq2Seq
 
 
 PPLM_BOW = 1
