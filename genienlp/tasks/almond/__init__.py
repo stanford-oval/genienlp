@@ -151,7 +151,7 @@ class BaseAlmondTask(BaseTask):
         if self.force_subword_tokenize:
             return sentence.split(' '), None
 
-        tokens = sentence.split(' ')
+        tokens = [t for t in sentence.split(' ') if len(t) > 0]
         if self._preprocess_context and field_name in ('context', 'context_question'):
             preprocessed_context = []
             for token in sentence.split(' '):
