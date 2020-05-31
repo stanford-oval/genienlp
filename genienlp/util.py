@@ -238,7 +238,8 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False, valid=False, append_question_to_context_too=False):
+def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
+                     valid=False, append_question_to_context_too=False, override_question=None):
     
     iterator = Iterator(dataset,
                         batch_size,
@@ -248,8 +249,9 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                         use_data_sort_key=train)
     
     collate_function = lambda minibatch: Batch.from_examples(minibatch, numericalizer, device=device,
-                                           paired=paired and train, max_pairs=max_pairs, groups=iterator.groups, 
-                                           append_question_to_context_too=append_question_to_context_too)
+                                           paired=paired and train, max_pairs=max_pairs, groups=iterator.groups,
+                                           append_question_to_context_too=append_question_to_context_too,
+                                                             override_question=override_question)
         
     return torch.utils.data.DataLoader(iterator, batch_size=None, collate_fn=collate_function)
 
@@ -283,7 +285,7 @@ def load_config_json(args):
                     'train_context_embeddings', 'train_question_embeddings', 'locale', 'use_pretrained_bert',
                     'train_context_embeddings_after', 'train_question_embeddings_after',
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize', 'num_beams',
-                    'append_question_to_context_too', 'almond_preprocess_context']
+                    'append_question_to_context_too', 'almond_preprocess_context', 'override_question']
 
         for r in retrieve:
             if r in config:
