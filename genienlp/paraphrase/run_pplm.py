@@ -28,6 +28,7 @@ import json
 from operator import add
 from typing import List, Optional, Tuple, Union
 
+import logging
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -76,6 +77,13 @@ DISCRIMINATOR_MODELS_PARAMS = {
         "pretrained_model": "gpt2-medium",
     },
 }
+
+MODEL_CLASSES = {
+    'gpt2_sentiment': (GPT2Seq2SeqWithSentiment, GPT2Tokenizer, {'sep_token': '<paraphrase>', 'bos_token': '<|endoftext|>', 'end_token': '</paraphrase>'}),
+    # 'bart': (BartForConditionalGeneration, BartTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}) # sep_token will not be used for BART
+}
+
+logger = logging.getLogger(__name__)
 
 
 def to_var(x, requires_grad=False, volatile=False, device="cuda"):
@@ -470,9 +478,13 @@ def generate_text_pplm(
     repetition_penalty=1.0,
 ):
     output_so_far = None
+    sep_token_position = None
     if context:
-        context_t = torch.tensor(context, device=device, dtype=torch.long)
-        # context_t = torch.tensor(model.pad_to_max_length(context), dtype=torch.long, device=args.device)
+        sep_token_position = len(context)
+        # context_t = torch.tensor(context, device=device, dtype=torch.long)
+
+        # line below may not be necessary if context is never more than 1 example
+        context_t = torch.tensor(model.pad_to_max_length([context]), dtype=torch.long, device=device)
         # attention_mask = None
         while len(context_t.shape) < 2:
             context_t = context_t.unsqueeze(0)
@@ -494,9 +506,10 @@ def generate_text_pplm(
         # run model forward to obtain unperturbed
         if past is None and output_so_far is not None:
             last = output_so_far[:, -1:]
-            if output_so_far.shape[1] > 1:
+            if output_so_far.shape[1] - sep_token_position > 1:
                 _, past, _ = model(output_so_far[:, :-1])
         unpert_logits, unpert_past, unpert_all_hidden = model(output_so_far)
+
         unpert_last_hidden = unpert_all_hidden[-1]
 
         # check if we are abowe grad max length
@@ -651,26 +664,38 @@ def run_pplm_example(
         pretrained_model = DISCRIMINATOR_MODELS_PARAMS[discrim]["pretrained_model"]
         print("discrim = {}, pretrained_model set " "to discriminator's = {}".format(
             discrim, pretrained_model))
+    
+
     # load pretrained model
     pretrained_model = './paraphrase_model' 	### model overwrite hardcoded
-    print('pretrained model overwrittten to ' + pretrained_model)
+    print('pretrained model overwritten to ' + pretrained_model)
 
     # essentially how the model is called in run_generation.py
-    # MODEL_CLASSES[args.model_type] = (GPT2Seq2Seq, GPT2Tokenizer, {'sep_token': '<paraphrase>', 'end_token': '</paraphrase>'})
-    # model_class, tokenizer_class, special_tokens = MODEL_CLASSES[args.model_type]
+    model_class, tokenizer_class, special_tokens = MODEL_CLASSES['gpt2_sentiment'] 
 
     # model = model_class.from_pretrained(args.model_name_or_path)
 
 
     # model = GPT2Seq2Seq.from_pretrained(
     # model = GPT2LMHeadModel.from_pretrained(
-    model = GPT2Seq2SeqWithSentiment.from_pretrained(
+    model = model_class.from_pretrained(
         pretrained_model, output_hidden_states=True)
     model.to(device)
     model.eval()
 
     # load tokenizer
-    tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model)
+    tokenizer = tokenizer_class.from_pretrained(pretrained_model)
+    end_token_id = tokenizer.convert_tokens_to_ids(special_tokens['end_token'])
+    sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
+    bos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['bos_token'])
+    pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
+    if pad_token_id is None:
+        logger.error('Your tokenizer does not have a padding token')
+
+    model.set_token_ids(end_token_id=end_token_id, 
+                        sep_token_id=sep_token_id, 
+                        bos_token_id=bos_token_id,
+                        pad_token_id=pad_token_id)
 
     # Freeze GPT-2 weights
     for param in model.parameters():
@@ -684,7 +709,7 @@ def run_pplm_example(
         while not raw_text:
             print("Did you forget to add `--cond_text`? ")
             raw_text = input("Model prompt >>> ")
-        tokenized_cond_text = tokenizer.encode(tokenizer.bos_token + raw_text)
+        tokenized_cond_text = tokenizer.encode(raw_text + special_tokens['sep_token'])
 
     print("= Prefix of sentence =")
     print(tokenizer.decode(tokenized_cond_text))
@@ -718,7 +743,6 @@ def run_pplm_example(
         kl_scale=kl_scale,
         repetition_penalty=repetition_penalty,
     )
-
     # untokenize unperturbed text
     unpert_gen_text = tokenizer.decode(unpert_gen_tok_text.tolist()[0])
 
