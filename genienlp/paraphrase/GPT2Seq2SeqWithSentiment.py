@@ -12,13 +12,6 @@ class GPT2Seq2SeqWithSentiment(GPT2Seq2Seq):
         # self.pretrained_sentiment_head = ClassificationHead(
           # class_size, self.embed_size)
 
-    def set_token_ids(self, end_token_id, sep_token_id, bos_token_id, pad_token_id):
-        self.bos_token_id = bos_token_id
-        self.sep_token_id = sep_token_id
-        self.pad_token_id = pad_token_id
-        self.end_token_id = end_token_id
-
-    
     def pad_to_max_length(self, input_sequences: List[List[int]]):
         """
         Adds pad tokens to the left of each input_sequence

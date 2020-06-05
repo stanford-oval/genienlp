@@ -16,10 +16,7 @@
 # limitations under the License.
 
 """
-Example command with bag of words:
-python run_pplm.py --bag_of_words space --input_text "The president" --length 100 --gamma 1.5 --num_iterations 3 --num_samples 10 --stepsize 0.01 --window_length 5 --kl_scale 0.01 --gm_scale 0.95
-
-Example command with discriminator:
+Example command:
 python run_pplm.py --discriminator sentiment --class_label 3 --input_text "The lake" --length 10 --gamma 1.0 --num_iterations 30 --num_samples 10 --stepsize 0.01 --kl_scale 0.01 --gm_scale 0.95
 """
 
@@ -40,24 +37,11 @@ from transformers import GPT2Tokenizer
 from transformers.file_utils import cached_path
 from transformers.modeling_gpt2 import GPT2LMHeadModel
 from genienlp.paraphrase.GPT2Seq2SeqWithSentiment import GPT2Seq2SeqWithSentiment
-from genienlp.paraphrase.GPT2Seq2Seq import GPT2Seq2Seq
 
 
-PPLM_BOW = 1
 PPLM_DISCRIM = 2
-PPLM_BOW_DISCRIM = 3
 SMALL_CONST = 1e-15
 BIG_CONST = 1e10
-
-BAG_OF_WORDS_ARCHIVE_MAP = {
-    "legal": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/legal.txt",
-    "military": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/military.txt",
-    "politics": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/politics.txt",
-    "religion": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/religion.txt",
-    "science": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/science.txt",
-    "space": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/space.txt",
-    "technology": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/technology.txt",
-}
 
 DISCRIMINATOR_MODELS_PARAMS = {
     "clickbait": {
@@ -76,10 +60,6 @@ DISCRIMINATOR_MODELS_PARAMS = {
         "default_class": 3,
         "pretrained_model": "gpt2-medium",
     },
-}
-
-MODEL_CLASSES = {
-    'gpt2_sentiment': (GPT2Seq2SeqWithSentiment, GPT2Tokenizer, {'sep_token': '<paraphrase>', 'bos_token': '<|endoftext|>', 'end_token': '</paraphrase>'}),
 }
 
 logger = logging.getLogger(__name__)
@@ -118,7 +98,6 @@ def perturb_past(
     accumulated_hidden=None,
     grad_norms=None,
     stepsize=0.01,
-    one_hot_bows_vectors=None,
     classifier=None,
     class_label=None,
     loss_type=0,
@@ -167,8 +146,7 @@ def perturb_past(
     # accumulate perturbations for num_iterations
     loss_per_iter = []
     new_accumulated_hidden = None
-    for i in range(num_iterations):
-        print("Iteration ", i + 1)
+    for i in trange(num_iterations):
         curr_perturbation = [
             to_var(torch.from_numpy(p_), requires_grad=True, device=device) for p_ in grad_accumulator
         ]
@@ -186,13 +164,6 @@ def perturb_past(
 
         loss = 0.0
         loss_list = []
-        if loss_type == PPLM_BOW or loss_type == PPLM_BOW_DISCRIM:
-            for one_hot_bow in one_hot_bows_vectors:
-                bow_logits = torch.mm(probs, torch.t(one_hot_bow))
-                bow_loss = -torch.log(torch.sum(bow_logits))
-                loss += bow_loss
-                loss_list.append(bow_loss)
-            logger.info(" pplm_bow_loss:", loss.data.cpu().numpy())
 
         if loss_type == 2 or loss_type == 3:
             ce_loss = torch.nn.CrossEntropyLoss()
@@ -208,45 +179,34 @@ def perturb_past(
                 new_accumulated_hidden = new_accumulated_hidden + \
                     torch.sum(curr_hidden, dim=1)
 
-            prediction = classifier(
-                new_accumulated_hidden / (curr_length + 1 + horizon_length))
+            prediction = classifier(new_accumulated_hidden / (curr_length + 1 + horizon_length))
 
-            label = torch.tensor(
-                prediction.shape[0] * [class_label], device=device, dtype=torch.long)
+            label = torch.tensor(prediction.shape[0] * [class_label], device=device, dtype=torch.long)
             discriminator_loss = ce_loss(prediction, label)
-            print(" pplm_discriminator_loss:", discriminator_loss.data.cpu().numpy())
+            logging.debug("pplm_discriminator_loss:", discriminator_loss.data.cpu().numpy())
             loss += discriminator_loss
             loss_list.append(discriminator_loss)
 
         kl_loss = 0.0
         if kl_scale > 0.0:
             unpert_probs = F.softmax(unpert_logits[:, -1, :], dim=-1)
-            unpert_probs = unpert_probs + SMALL_CONST * \
-                (unpert_probs <= SMALL_CONST).float().to(device).detach()
-            correction = SMALL_CONST * \
-                (probs <= SMALL_CONST).float().to(device).detach()
+            unpert_probs = unpert_probs + SMALL_CONST * (unpert_probs <= SMALL_CONST).float().to(device).detach()
+            correction = SMALL_CONST * (probs <= SMALL_CONST).float().to(device).detach()
             corrected_probs = probs + correction.detach()
-            kl_loss = kl_scale * \
-                ((corrected_probs * (corrected_probs / unpert_probs).log()).sum())
-            print(" kl_loss", kl_loss.data.cpu().numpy())
+            kl_loss = kl_scale * ((corrected_probs * (corrected_probs / unpert_probs).log()).sum())
+            logging.debug("kl_loss %f", kl_loss.data.cpu().numpy())
             loss += kl_loss
 
         loss_per_iter.append(loss.data.cpu().numpy())
-        print(" pplm_loss", (loss - kl_loss).data.cpu().numpy())
+        logging.debug("pplm_loss %f", (loss - kl_loss).data.cpu().numpy())
 
         # compute gradients
         loss.backward()
 
         # calculate gradient norms
-        if grad_norms is not None and loss_type == PPLM_BOW:
-            grad_norms = [
-                torch.max(grad_norms[index], torch.norm(p_.grad * window_mask))
-                for index, p_ in enumerate(curr_perturbation)
-            ]
-        else:
-            grad_norms = [
-                (torch.norm(p_.grad * window_mask) + SMALL_CONST) for index, p_ in enumerate(curr_perturbation)
-            ]
+        grad_norms = [
+            (torch.norm(p_.grad * window_mask) + SMALL_CONST) for index, p_ in enumerate(curr_perturbation)
+        ]
 
         # normalize gradients
         grad = [
@@ -276,9 +236,7 @@ def perturb_past(
     return pert_past, new_accumulated_hidden, grad_norms, loss_per_iter
 
 
-def get_classifier(
-    name: Optional[str], class_label: Union[str, int], device: str
-) -> Tuple[Optional[ClassificationHead], Optional[int]]:
+def get_classifier(name: Optional[str], class_label: Union[str, int], device: str) -> Tuple[Optional[ClassificationHead], Optional[int]]:
     if name is None:
         return None, None
 
@@ -320,42 +278,12 @@ def get_classifier(
     return classifier, label_id
 
 
-def get_bag_of_words_indices(bag_of_words_ids_or_paths: List[str], tokenizer) -> List[List[List[int]]]:
-    bow_indices = []
-    for id_or_path in bag_of_words_ids_or_paths:
-        if id_or_path in BAG_OF_WORDS_ARCHIVE_MAP:
-            filepath = cached_path(BAG_OF_WORDS_ARCHIVE_MAP[id_or_path])
-        else:
-            filepath = id_or_path
-        with open(filepath, "r") as f:
-            words = f.read().strip().split("\n")
-        bow_indices.append(
-            [tokenizer.encode(word.strip(), add_prefix_space=True) for word in words])
-    return bow_indices
-
-
-def build_bows_one_hot_vectors(bow_indices, tokenizer, device="cuda"):
-    if bow_indices is None:
-        return None
-
-    one_hot_bows_vectors = []
-    for single_bow in bow_indices:
-        single_bow = list(filter(lambda x: len(x) <= 1, single_bow))
-        single_bow = torch.tensor(single_bow).to(device)
-        num_words = single_bow.shape[0]
-        one_hot_bow = torch.zeros(num_words, tokenizer.vocab_size).to(device)
-        one_hot_bow.scatter_(1, single_bow, 1)
-        one_hot_bows_vectors.append(one_hot_bow)
-    return one_hot_bows_vectors
-
-
 def full_text_generation(
     model,
     tokenizer,
     context=None,
     num_samples=1,
     device="cuda",
-    bag_of_words=None,
     discriminator=None,
     class_label=None,
     length=100,
@@ -376,25 +304,10 @@ def full_text_generation(
 ):
     classifier, class_id = get_classifier(discriminator, class_label, device)
 
-    bow_indices = []
-    if bag_of_words:
-        bow_indices = get_bag_of_words_indices(
-            bag_of_words.split(";"), tokenizer)
-
-    if bag_of_words and classifier:
-        print("Both PPLM-BoW and PPLM-Discrim are on. This is not optimized.")
-        loss_type = PPLM_BOW_DISCRIM
-
-    elif bag_of_words:
-        loss_type = PPLM_BOW
-        print("Using PPLM-BoW")
-
-    elif classifier is not None:
+    if classifier is not None:
         loss_type = PPLM_DISCRIM
-        print("Using PPLM-Discrim")
-
     else:
-        raise Exception("Specify either a bag of words or a discriminator")
+        raise Exception("Specify either a discriminator")
 
     unpert_gen_tok_text, _, _ = generate_text_pplm(
         model=model,
@@ -420,7 +333,6 @@ def full_text_generation(
             context=context,
             device=device,
             perturb=True,
-            bow_indices=bow_indices,
             classifier=classifier,
             class_label=class_id,
             loss_type=loss_type,
@@ -457,7 +369,6 @@ def generate_text_pplm(
     past=None,
     device="cuda",
     perturb=True,
-    bow_indices=None,
     classifier=None,
     class_label=None,
     loss_type=0,
@@ -489,9 +400,6 @@ def generate_text_pplm(
             context_t = context_t.unsqueeze(0)
         output_so_far = context_t
 
-    # collect one hot vectors for bags of words
-    one_hot_bows_vectors = build_bows_one_hot_vectors(
-        bow_indices, tokenizer, device)
 
     grad_norms = None
     last = None
@@ -511,7 +419,7 @@ def generate_text_pplm(
 
         unpert_last_hidden = unpert_all_hidden[-1]
 
-        # check if we are abowe grad max length
+        # check if we are above grad max length
         if i >= grad_length:
             current_stepsize = stepsize * 0
         else:
@@ -535,7 +443,6 @@ def generate_text_pplm(
                     accumulated_hidden=accumulated_hidden,
                     grad_norms=grad_norms,
                     stepsize=current_stepsize,
-                    one_hot_bows_vectors=one_hot_bows_vectors,
                     classifier=classifier,
                     class_label=class_label,
                     loss_type=loss_type,
@@ -623,7 +530,6 @@ def run_pplm_example(
     pretrained_model,
     input_text="",
     num_samples=1,
-    bag_of_words=None,
     discriminator=None,
     discriminator_weights=None,
     discriminator_meta=None,
@@ -638,28 +544,20 @@ def run_pplm_example(
     horizon_length=1,
     window_length=0,
     decay=False,
+    seed=0,
     gamma=1.5,
     gm_scale=0.9,
     kl_scale=0.01,
-    seed=0,
     no_cuda=False,
     repetition_penalty=1.0,
 ):
-    # set Random seed
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-
-
     # load pretrained model
-    print('pretrained model = ' + pretrained_model)
 
     # essentially how the model is called in run_generation.py
-    model_class, tokenizer_class, special_tokens = MODEL_CLASSES['gpt2_sentiment'] 
+    model_class, tokenizer_class, special_tokens = GPT2Seq2SeqWithSentiment, GPT2Tokenizer, {'sep_token': '<paraphrase>', 'end_token': '</paraphrase>'}
 
-    # model = model_class.from_pretrained(args.model_name_or_path)
-
-    # model = GPT2Seq2Seq.from_pretrained(
-    # model = GPT2LMHeadModel.from_pretrained(
+    # load model
+    logger.info('Loading pretrained model from %s', pretrained_model)
     model = model_class.from_pretrained(pretrained_model, output_hidden_states=True)
     model.to(device)
     model.eval()
@@ -668,39 +566,31 @@ def run_pplm_example(
     tokenizer = tokenizer_class.from_pretrained(pretrained_model)
     end_token_id = tokenizer.convert_tokens_to_ids(special_tokens['end_token'])
     sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
-    bos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['bos_token'])
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
     if pad_token_id is None:
         logger.error('Your tokenizer does not have a padding token')
 
     model.set_token_ids(end_token_id=end_token_id, 
                         sep_token_id=sep_token_id, 
-                        bos_token_id=bos_token_id,
                         pad_token_id=pad_token_id)
 
-    # Freeze GPT-2 weights
+    # freeze GPT-2 weights
     for param in model.parameters():
         param.requires_grad = False
 
     # figure out conditioning text
-    raw_text = input_text
-    tokenized_input_text = tokenizer.encode(raw_text + special_tokens['sep_token'])
-
-    print("= Prefix of sentence =")
-    print(tokenizer.decode(tokenized_input_text))
-    print()
+    tokenized_input_text = tokenizer.encode(input_text + special_tokens['sep_token'])
+    logging.info("Tokenized input text = %s", tokenized_input_text)
 
     # generate unperturbed and perturbed texts
 
-    # full_text_generation returns:
-    # unpert_gen_tok_text, pert_gen_tok_texts, discriminator_losses, losses_in_time
+    # full_text_generation returns (unpert_gen_tok_text, pert_gen_tok_texts, discriminator_losses, losses_in_time)
     unpert_gen_tok_text, pert_gen_tok_texts, _, _ = full_text_generation(
         model=model,
         tokenizer=tokenizer,
         context=tokenized_input_text,
         device=device,
         num_samples=num_samples,
-        bag_of_words=bag_of_words,
         discriminator=discriminator,
         class_label=class_label,
         length=length,
@@ -721,27 +611,20 @@ def run_pplm_example(
     # untokenize unperturbed text
     unpert_gen_text = tokenizer.decode(unpert_gen_tok_text.tolist()[0])
 
-    print("-" * 80)
-    print("= Unperturbed generated text =")
-    print(unpert_gen_text)
-    print()
+    logging.info("Unperturbed generated text = %s", unpert_gen_text)
 
     generated_texts = []
 
-    bow_word_ids = set()
     # iterate through the perturbed texts
     for i, pert_gen_tok_text in enumerate(pert_gen_tok_texts):
         try:
             pert_gen_text = tokenizer.decode(pert_gen_tok_text.tolist()[0])
-            print("= Perturbed generated text {} =".format(i + 1))
-            print(pert_gen_text)
-            print()
+            logging.info("Perturbed generated text %d = %s", i + 1, pert_gen_text)
         except Exception as exc:
-            logger.warning("Ignoring error while generating perturbed text:", exc)
+            logger.warning("Ignoring error while generating perturbed text: %s", str(exc))
 
         # keep the prefix, perturbed seq, original seq for each index
-        generated_texts.append(
-            (tokenized_input_text, pert_gen_tok_text, unpert_gen_tok_text))
+        generated_texts.append((tokenized_input_text, pert_gen_tok_text, unpert_gen_tok_text))
 
     return
 
@@ -750,35 +633,41 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pretrained_model", type=str, required=True, help="pretrained model name or path to local checkpoint")
     parser.add_argument("--input_text", type=str, default="The lake", help="Prefix texts to condition on")
-    parser.add_argument("--num_samples", type=int, default=1, help="Number of samples to generate from the modified latents",)
-    parser.add_argument("--bag_of_words", type=str, default=None,
-                        help="Bags of words used for PPLM-BoW. " "Either a BOW id (see list in code) or a filepath. Multiple BoWs separated by ;")
     parser.add_argument("--discriminator", type=str,default=None,choices=("clickbait", "sentiment", "toxicity", "generic"),
                         help="Discriminator to use")
     parser.add_argument("--discriminator_weights", type=str, default=None,help="Weights for the generic discriminator")
     parser.add_argument("--discriminator_meta", type=str, default=None, help="Meta information for the generic discriminator")
     parser.add_argument("--class_label", type=int, default=-1, help="Class label used for the discriminator")
+
+    # generation hyperparameters
+    parser.add_argument("--num_samples", type=int, default=1, help="Number of samples to generate from the modified latents",)
     parser.add_argument("--length", type=int, default=100)
     parser.add_argument("--stepsize", type=float, default=0.02)
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top_k", type=int, default=10)
-    parser.add_argument("--sample", action="store_true",help="Generate from end-of-text as prefix")
+    parser.add_argument("--repetition_penalty", type=float, default=1.0, help="Penalize repetition. More than 1.0 -> less repetition")
+
+    # PPLM's gradient update hyperparameters
     parser.add_argument("--num_iterations", type=int, default=3)
     parser.add_argument("--grad_length", type=int, default=10000)
-    parser.add_argument("--window_length",type=int,default=0, help="Length of past which is being optimized; " "0 corresponds to infinite window length")
+    parser.add_argument("--window_length",type=int, default=0, help="Length of past which is being optimized; " "0 corresponds to infinite window length")
     parser.add_argument("--horizon_length", type=int, default=1, help="Length of future to optimize over")
     parser.add_argument("--decay", action="store_true", help="whether to decay or not")
     parser.add_argument("--gamma", type=float, default=1.5)
     parser.add_argument("--gm_scale", type=float, default=0.9)
     parser.add_argument("--kl_scale", type=float, default=0.01)
+
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--no_cuda", action="store_true", help="no cuda")
-    parser.add_argument("--repetition_penalty", type=float, default=1.0, help="Penalize repetition. More than 1.0 -> less repetition")
 
     args = parser.parse_args()
 
     # set the device
     device = "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
+
+    # set Random seed
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
 
     if args.discriminator == "generic":
         set_generic_model_params(args.discriminator_weights, args.discriminator_meta)
@@ -788,4 +677,5 @@ if __name__ == "__main__":
         # args.pretrained_model = DISCRIMINATOR_MODELS_PARAMS[args.discriminator]["pretrained_model"]
         # logger.info("discriminator = {}, pretrained_model set " "to discriminator's = {}".format(args.discriminator, pretrained_model))
 
+    args.sample = (args.temperature != 0)
     run_pplm_example(**vars(args))
