@@ -17,10 +17,10 @@
 
 """
 Example command with bag of words:
-python run_pplm.py -B space --cond_text "The president" --length 100 --gamma 1.5 --num_iterations 3 --num_samples 10 --stepsize 0.01 --window_length 5 --kl_scale 0.01 --gm_scale 0.95
+python run_pplm.py --bag_of_words space --input_text "The president" --length 100 --gamma 1.5 --num_iterations 3 --num_samples 10 --stepsize 0.01 --window_length 5 --kl_scale 0.01 --gm_scale 0.95
 
 Example command with discriminator:
-python run_pplm.py -D sentiment --class_label 3 --cond_text "The lake" --length 10 --gamma 1.0 --num_iterations 30 --num_samples 10 --stepsize 0.01 --kl_scale 0.01 --gm_scale 0.95
+python run_pplm.py --discriminator sentiment --class_label 3 --input_text "The lake" --length 10 --gamma 1.0 --num_iterations 30 --num_samples 10 --stepsize 0.01 --kl_scale 0.01 --gm_scale 0.95
 """
 
 import argparse
@@ -80,7 +80,6 @@ DISCRIMINATOR_MODELS_PARAMS = {
 
 MODEL_CLASSES = {
     'gpt2_sentiment': (GPT2Seq2SeqWithSentiment, GPT2Tokenizer, {'sep_token': '<paraphrase>', 'bos_token': '<|endoftext|>', 'end_token': '</paraphrase>'}),
-    # 'bart': (BartForConditionalGeneration, BartTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}) # sep_token will not be used for BART
 }
 
 logger = logging.getLogger(__name__)
@@ -193,7 +192,7 @@ def perturb_past(
                 bow_loss = -torch.log(torch.sum(bow_logits))
                 loss += bow_loss
                 loss_list.append(bow_loss)
-            print(" pplm_bow_loss:", loss.data.cpu().numpy())
+            logger.info(" pplm_bow_loss:", loss.data.cpu().numpy())
 
         if loss_type == 2 or loss_type == 3:
             ce_loss = torch.nn.CrossEntropyLoss()
@@ -214,10 +213,10 @@ def perturb_past(
 
             label = torch.tensor(
                 prediction.shape[0] * [class_label], device=device, dtype=torch.long)
-            discrim_loss = ce_loss(prediction, label)
-            print(" pplm_discrim_loss:", discrim_loss.data.cpu().numpy())
-            loss += discrim_loss
-            loss_list.append(discrim_loss)
+            discriminator_loss = ce_loss(prediction, label)
+            print(" pplm_discriminator_loss:", discriminator_loss.data.cpu().numpy())
+            loss += discriminator_loss
+            loss_list.append(discriminator_loss)
 
         kl_loss = 0.0
         if kl_scale > 0.0:
@@ -357,7 +356,7 @@ def full_text_generation(
     num_samples=1,
     device="cuda",
     bag_of_words=None,
-    discrim=None,
+    discriminator=None,
     class_label=None,
     length=100,
     stepsize=0.02,
@@ -375,7 +374,7 @@ def full_text_generation(
     repetition_penalty=1.0,
     **kwargs
 ):
-    classifier, class_id = get_classifier(discrim, class_label, device)
+    classifier, class_id = get_classifier(discriminator, class_label, device)
 
     bow_indices = []
     if bag_of_words:
@@ -411,11 +410,11 @@ def full_text_generation(
         torch.cuda.empty_cache()
 
     pert_gen_tok_texts = []
-    discrim_losses = []
+    discriminator_losses = []
     losses_in_time = []
 
     for i in range(num_samples):
-        pert_gen_tok_text, discrim_loss, loss_in_time = generate_text_pplm(
+        pert_gen_tok_text, discriminator_loss, loss_in_time = generate_text_pplm(
             model=model,
             tokenizer=tokenizer,
             context=context,
@@ -442,13 +441,13 @@ def full_text_generation(
         )
         pert_gen_tok_texts.append(pert_gen_tok_text)
         if classifier is not None:
-            discrim_losses.append(discrim_loss.data.cpu().numpy())
+            discriminator_losses.append(discriminator_loss.data.cpu().numpy())
         losses_in_time.append(loss_in_time)
 
     if device == "cuda":
         torch.cuda.empty_cache()
 
-    return unpert_gen_tok_text, pert_gen_tok_texts, discrim_losses, losses_in_time
+    return unpert_gen_tok_text, pert_gen_tok_texts, discriminator_losses, losses_in_time
 
 
 def generate_text_pplm(
@@ -496,7 +495,7 @@ def generate_text_pplm(
 
     grad_norms = None
     last = None
-    unpert_discrim_loss = 0
+    unpert_discriminator_loss = 0
     loss_in_time = []
     for i in trange(length, ascii=True):
 
@@ -566,13 +565,11 @@ def generate_text_pplm(
         if classifier is not None:
             ce_loss = torch.nn.CrossEntropyLoss()
             prediction = classifier(torch.mean(unpert_last_hidden, dim=1))
-            label = torch.tensor(
-                [class_label], device=device, dtype=torch.long)
-            unpert_discrim_loss = ce_loss(prediction, label)
-            print("unperturbed discrim loss",
-                  unpert_discrim_loss.data.cpu().numpy())
+            label = torch.tensor([class_label], device=device, dtype=torch.long)
+            unpert_discriminator_loss = ce_loss(prediction, label)
+            print("unperturbed discriminator loss", unpert_discriminator_loss.data.cpu().numpy())
         else:
-            unpert_discrim_loss = 0
+            unpert_discriminator_loss = 0
 
         # Fuse the modified model and original model
         if perturb:
@@ -605,32 +602,31 @@ def generate_text_pplm(
 
         print(tokenizer.decode(output_so_far.tolist()[0]))
 
-    return output_so_far, unpert_discrim_loss, loss_in_time
+    return output_so_far, unpert_discriminator_loss, loss_in_time
 
 
-def set_generic_model_params(discrim_weights, discrim_meta):
-    if discrim_weights is None:
+def set_generic_model_params(discriminator_weights, discriminator_meta):
+    if discriminator_weights is None:
         raise ValueError(
-            "When using a generic discriminator, " "discrim_weights need to be specified")
-    if discrim_meta is None:
+            "When using a generic discriminator, " "discriminator_weights need to be specified")
+    if discriminator_meta is None:
         raise ValueError(
-            "When using a generic discriminator, " "discrim_meta need to be specified")
+            "When using a generic discriminator, " "discriminator_meta need to be specified")
 
-    with open(discrim_meta, "r") as discrim_meta_file:
-        meta = json.load(discrim_meta_file)
-    meta["path"] = discrim_weights
+    with open(discriminator_meta, "r") as discriminator_meta_file:
+        meta = json.load(discriminator_meta_file)
+    meta["path"] = discriminator_weights
     DISCRIMINATOR_MODELS_PARAMS["generic"] = meta
 
 
 def run_pplm_example(
-    pretrained_model="gpt2-medium",
-    cond_text="",
-    uncond=False,
+    pretrained_model,
+    input_text="",
     num_samples=1,
     bag_of_words=None,
-    discrim=None,
-    discrim_weights=None,
-    discrim_meta=None,
+    discriminator=None,
+    discriminator_weights=None,
+    discriminator_meta=None,
     class_label=-1,
     length=100,
     stepsize=0.02,
@@ -647,39 +643,24 @@ def run_pplm_example(
     kl_scale=0.01,
     seed=0,
     no_cuda=False,
-    colorama=False,
     repetition_penalty=1.0,
 ):
     # set Random seed
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    # set the device
-    device = "cuda" if torch.cuda.is_available() and not no_cuda else "cpu"
-
-    if discrim == "generic":
-        set_generic_model_params(discrim_weights, discrim_meta)
-
-    if discrim is not None:
-        pretrained_model = DISCRIMINATOR_MODELS_PARAMS[discrim]["pretrained_model"]
-        print("discrim = {}, pretrained_model set " "to discriminator's = {}".format(
-            discrim, pretrained_model))
-    
 
     # load pretrained model
-    pretrained_model = './paraphrase_model' 	### model overwrite hardcoded
-    print('pretrained model overwritten to ' + pretrained_model)
+    print('pretrained model = ' + pretrained_model)
 
     # essentially how the model is called in run_generation.py
     model_class, tokenizer_class, special_tokens = MODEL_CLASSES['gpt2_sentiment'] 
 
     # model = model_class.from_pretrained(args.model_name_or_path)
 
-
     # model = GPT2Seq2Seq.from_pretrained(
     # model = GPT2LMHeadModel.from_pretrained(
-    model = model_class.from_pretrained(
-        pretrained_model, output_hidden_states=True)
+    model = model_class.from_pretrained(pretrained_model, output_hidden_states=True)
     model.to(device)
     model.eval()
 
@@ -702,31 +683,25 @@ def run_pplm_example(
         param.requires_grad = False
 
     # figure out conditioning text
-    if uncond:
-        tokenized_cond_text = tokenizer.encode([tokenizer.bos_token])
-    else:
-        raw_text = cond_text
-        while not raw_text:
-            print("Did you forget to add `--cond_text`? ")
-            raw_text = input("Model prompt >>> ")
-        tokenized_cond_text = tokenizer.encode(raw_text + special_tokens['sep_token'])
+    raw_text = input_text
+    tokenized_input_text = tokenizer.encode(raw_text + special_tokens['sep_token'])
 
     print("= Prefix of sentence =")
-    print(tokenizer.decode(tokenized_cond_text))
+    print(tokenizer.decode(tokenized_input_text))
     print()
 
     # generate unperturbed and perturbed texts
 
     # full_text_generation returns:
-    # unpert_gen_tok_text, pert_gen_tok_texts, discrim_losses, losses_in_time
+    # unpert_gen_tok_text, pert_gen_tok_texts, discriminator_losses, losses_in_time
     unpert_gen_tok_text, pert_gen_tok_texts, _, _ = full_text_generation(
         model=model,
         tokenizer=tokenizer,
-        context=tokenized_cond_text,
+        context=tokenized_input_text,
         device=device,
         num_samples=num_samples,
         bag_of_words=bag_of_words,
-        discrim=discrim,
+        discriminator=discriminator,
         class_label=class_label,
         length=length,
         stepsize=stepsize,
@@ -746,7 +721,7 @@ def run_pplm_example(
     # untokenize unperturbed text
     unpert_gen_text = tokenizer.decode(unpert_gen_tok_text.tolist()[0])
 
-    print("=" * 80)
+    print("-" * 80)
     print("= Unperturbed generated text =")
     print(unpert_gen_text)
     print()
@@ -754,117 +729,63 @@ def run_pplm_example(
     generated_texts = []
 
     bow_word_ids = set()
-    if bag_of_words and colorama:
-        bow_indices = get_bag_of_words_indices(
-            bag_of_words.split(";"), tokenizer)
-        for single_bow_list in bow_indices:
-            # filtering all words in the list composed of more than 1 token
-            filtered = list(filter(lambda x: len(x) <= 1, single_bow_list))
-            # w[0] because we are sure w has only 1 item because previous fitler
-            bow_word_ids.update(w[0] for w in filtered)
-
     # iterate through the perturbed texts
     for i, pert_gen_tok_text in enumerate(pert_gen_tok_texts):
         try:
-            # untokenize unperturbed text
-            if colorama:
-                import colorama
-
-                pert_gen_text = ""
-                for word_id in pert_gen_tok_text.tolist()[0]:
-                    if word_id in bow_word_ids:
-                        pert_gen_text += "{}{}{}".format(
-                            colorama.Fore.RED, tokenizer.decode(
-                                [word_id]), colorama.Style.RESET_ALL
-                        )
-                    else:
-                        pert_gen_text += tokenizer.decode([word_id])
-            else:
-                pert_gen_text = tokenizer.decode(pert_gen_tok_text.tolist()[0])
-
+            pert_gen_text = tokenizer.decode(pert_gen_tok_text.tolist()[0])
             print("= Perturbed generated text {} =".format(i + 1))
             print(pert_gen_text)
             print()
         except Exception as exc:
-            print("Ignoring error while generating perturbed text:", exc)
+            logger.warning("Ignoring error while generating perturbed text:", exc)
 
         # keep the prefix, perturbed seq, original seq for each index
         generated_texts.append(
-            (tokenized_cond_text, pert_gen_tok_text, unpert_gen_tok_text))
+            (tokenized_input_text, pert_gen_tok_text, unpert_gen_tok_text))
 
     return
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--pretrained_model",
-        "-M",
-        type=str,
-        default="gpt2-medium",
-        help="pretrained model name or path to local checkpoint",
-    )
-    parser.add_argument("--cond_text", type=str,
-                        default="The lake", help="Prefix texts to condition on")
-    parser.add_argument("--uncond", action="store_true",
-                        help="Generate from end-of-text as prefix")
-    parser.add_argument(
-        "--num_samples", type=int, default=1, help="Number of samples to generate from the modified latents",
-    )
-    parser.add_argument(
-        "--bag_of_words",
-        "-B",
-        type=str,
-        default=None,
-        help="Bags of words used for PPLM-BoW. "
-        "Either a BOW id (see list in code) or a filepath. "
-        "Multiple BoWs separated by ;",
-    )
-    parser.add_argument(
-        "--discrim",
-        "-D",
-        type=str,
-        default=None,
-        choices=("clickbait", "sentiment", "toxicity", "generic"),
-        help="Discriminator to use",
-    )
-    parser.add_argument("--discrim_weights", type=str, default=None,
-                        help="Weights for the generic discriminator")
-    parser.add_argument(
-        "--discrim_meta", type=str, default=None, help="Meta information for the generic discriminator"
-    )
-    parser.add_argument(
-        "--class_label", type=int, default=-1, help="Class label used for the discriminator",
-    )
+    parser.add_argument("--pretrained_model", type=str, required=True, help="pretrained model name or path to local checkpoint")
+    parser.add_argument("--input_text", type=str, default="The lake", help="Prefix texts to condition on")
+    parser.add_argument("--num_samples", type=int, default=1, help="Number of samples to generate from the modified latents",)
+    parser.add_argument("--bag_of_words", type=str, default=None,
+                        help="Bags of words used for PPLM-BoW. " "Either a BOW id (see list in code) or a filepath. Multiple BoWs separated by ;")
+    parser.add_argument("--discriminator", type=str,default=None,choices=("clickbait", "sentiment", "toxicity", "generic"),
+                        help="Discriminator to use")
+    parser.add_argument("--discriminator_weights", type=str, default=None,help="Weights for the generic discriminator")
+    parser.add_argument("--discriminator_meta", type=str, default=None, help="Meta information for the generic discriminator")
+    parser.add_argument("--class_label", type=int, default=-1, help="Class label used for the discriminator")
     parser.add_argument("--length", type=int, default=100)
     parser.add_argument("--stepsize", type=float, default=0.02)
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top_k", type=int, default=10)
-    parser.add_argument("--sample", action="store_true",
-                        help="Generate from end-of-text as prefix")
+    parser.add_argument("--sample", action="store_true",help="Generate from end-of-text as prefix")
     parser.add_argument("--num_iterations", type=int, default=3)
     parser.add_argument("--grad_length", type=int, default=10000)
-    parser.add_argument(
-        "--window_length",
-        type=int,
-        default=0,
-        help="Length of past which is being optimized; " "0 corresponds to infinite window length",
-    )
-    parser.add_argument(
-        "--horizon_length", type=int, default=1, help="Length of future to optimize over",
-    )
-    parser.add_argument("--decay", action="store_true",
-                        help="whether to decay or not")
+    parser.add_argument("--window_length",type=int,default=0, help="Length of past which is being optimized; " "0 corresponds to infinite window length")
+    parser.add_argument("--horizon_length", type=int, default=1, help="Length of future to optimize over")
+    parser.add_argument("--decay", action="store_true", help="whether to decay or not")
     parser.add_argument("--gamma", type=float, default=1.5)
     parser.add_argument("--gm_scale", type=float, default=0.9)
     parser.add_argument("--kl_scale", type=float, default=0.01)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--no_cuda", action="store_true", help="no cuda")
-    parser.add_argument("--colorama", action="store_true",
-                        help="colors keywords")
-    parser.add_argument(
-        "--repetition_penalty", type=float, default=1.0, help="Penalize repetition. More than 1.0 -> less repetition",
-    )
+    parser.add_argument("--repetition_penalty", type=float, default=1.0, help="Penalize repetition. More than 1.0 -> less repetition")
 
     args = parser.parse_args()
+
+    # set the device
+    device = "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
+
+    if args.discriminator == "generic":
+        set_generic_model_params(args.discriminator_weights, args.discriminator_meta)
+
+    # TODO overwriting args.pretrained_model is temporarily disabled. Enable again after training the new model is done
+    # if args.discriminator is not None:
+        # args.pretrained_model = DISCRIMINATOR_MODELS_PARAMS[args.discriminator]["pretrained_model"]
+        # logger.info("discriminator = {}, pretrained_model set " "to discriminator's = {}".format(args.discriminator, pretrained_model))
+
     run_pplm_example(**vars(args))
