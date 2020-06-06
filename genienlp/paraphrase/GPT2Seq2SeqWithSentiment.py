@@ -7,29 +7,12 @@ from transformers import GPT2LMHeadModel
 import torch
 
 class GPT2Seq2SeqWithSentiment(GPT2Seq2Seq):
-    def __init__(self, config): #, class_size=3
+    def __init__(self, config):
         super().__init__(config)
-        # self.pretrained_sentiment_head = ClassificationHead(
-          # class_size, self.embed_size)
-
-    def pad_to_max_length(self, input_sequences: List[List[int]]):
-        """
-        Adds pad tokens to the left of each input_sequence
-        """
-        # if len(input_sequences) > 0 and type(input_sequences[0]) == int:
-        #     input_sequences = [input_sequences] # pad_to_max_length requires list[list[int]]
-        max_length = max([len(s) for s in input_sequences])
-        copy_input_sequences = []
-        for i in range(len(input_sequences)):
-            initial_end_of_text_index = 50
-            sep_token_index = input_sequences[i].index(self.sep_token_id)
-            copy_input_sequences.append([self.pad_token_id]*(max_length-len(input_sequences[i])) + input_sequences[i])
-
-        return copy_input_sequences
 
     def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
         sep_token_position = (input_ids==self.sep_token_id).to(torch.long)
-        assert (torch.sum(sep_token_position, dim=1)==1).all(), 'All input_ids must contain exactly one sep_token. sep_token_position = %s\nsep_token_id = %d' % (str(sep_token_position), self.sep_token_id)
+        assert (torch.sum(sep_token_position, dim=1)<=1).all(), 'All input_ids must contain zero or one sep_token. sep_token_position = %s\nsep_token_id = %d' % (str(sep_token_position), self.sep_token_id)
         token_type_ids = torch.cumsum(sep_token_position, dim=1) - sep_token_position
         attention_mask = (input_ids!=self.pad_token_id).to(torch.long) # 0 means mask, 1 means no mask
         position_ids = ((torch.cumsum(attention_mask, dim=1)-1)*(1-token_type_ids)+(torch.cumsum(token_type_ids, dim=1)-1)*token_type_ids).clamp(min=0)
@@ -40,17 +23,12 @@ class GPT2Seq2SeqWithSentiment(GPT2Seq2Seq):
             position_ids = position_ids[:, -1].unsqueeze(-1)
             token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
 
-        inputs = {"input_ids": input_ids, "position_ids": position_ids, "token_type_ids": token_type_ids, "attention_mask": attention_mask, "past": past}
+        inputs = {"input_ids": input_ids, "position_ids": position_ids, "token_type_ids": token_type_ids, "past": past}
+        print({"input_ids": input_ids, "position_ids": position_ids, "token_type_ids": token_type_ids})
         return inputs
 
 
-    # def forward(self, args):
-    #     inputs = self.prepare_inputs_for_generation(args)
-    #     super().forward(**inputs)
-
-    '''
-    The following forward function is modified from transformers GPT2LMHeadModel forward fuction
-    '''
+    # The following forward function is modified from transformers GPT2LMHeadModel forward fuction
     def forward(
         self,
         input_ids=None,
@@ -71,79 +49,63 @@ class GPT2Seq2SeqWithSentiment(GPT2Seq2Seq):
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
 
-    Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.GPT2Config`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when ``labels`` is provided)
-            Language modeling loss.
-        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        Return:
+            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.GPT2Config`) and inputs:
+            loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when ``labels`` is provided)
+                Language modeling loss.
+            prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+                Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+            past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
+                Contains pre-computed hidden-states (key and values in the attention blocks).
+                Can be used (see `past` input) to speed up sequential decoding.
+            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+                heads.
 
-    Examples::
+        Examples:
 
-        import torch
-        from transformers import GPT2Tokenizer, GPT2LMHeadModel
+            import torch
+            from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2LMHeadModel.from_pretrained('gpt2')
+            tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+            model = GPT2LMHeadModel.from_pretrained('gpt2')
 
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-        loss, logits = outputs[:2]
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            outputs = model(input_ids, labels=input_ids)
+            loss, logits = outputs[:2]
 
         """
+
         # if past is not None and (input_ids is None or input_ids.shape[1] == 1):
-        transformer_outputs = None
-        if input_ids is None or input_ids.shape[1] == 1:
+        inputs = self.prepare_inputs_for_generation(input_ids, past=past)
+        if inputs_embeds is not None:
             print('no prep')
-            transformer_outputs = self.transformer(
-                input_ids,
-                # inputs['input_ids'],
-                past=past,
-                # past=inputs['past'],
-                attention_mask=attention_mask,
-                # attention_mask=inputs['attention_mask'],
-                token_type_ids=token_type_ids,
-                # token_type_ids=inputs['token_type_ids'],
-                position_ids=position_ids,
-                # position_ids=inputs['position_ids'],
-                head_mask=head_mask,
-                inputs_embeds=inputs_embeds,
-                use_cache=use_cache,
-            )
-        else:
-            inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
-            print('pos ids', inputs['position_ids'])
-            print('att mask', inputs['attention_mask'])
-            print('token types', inputs['token_type_ids'])
-            transformer_outputs = self.transformer(
-                # input_ids,
-                inputs['input_ids'], # this may be modified by prepare_inputs_for_generation
-                # past=past,
-                past=inputs['past'],
-                # attention_mask=attention_mask,
-                attention_mask=inputs['attention_mask'],
-                # token_type_ids=token_type_ids,
-                token_type_ids=inputs['token_type_ids'],
-                # position_ids=position_ids,
-                position_ids=inputs['position_ids'],
-                head_mask=head_mask,
-                inputs_embeds=inputs_embeds,
-                use_cache=use_cache,
-            )
+            print('inputs_embeds = ', inputs_embeds)
+            inputs['input_ids'] = None
+            
+        transformer_outputs = self.transformer(
+            # input_ids,
+            inputs['input_ids'], # this may be modified by prepare_inputs_for_generation
+            # past=past,
+            past=inputs['past'],
+            # attention_mask=attention_mask,
+            # attention_mask=inputs['attention_mask'],
+            # token_type_ids=token_type_ids,
+            token_type_ids=inputs['token_type_ids'],
+            # position_ids=position_ids,
+            position_ids=inputs['position_ids'],
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+        )
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)
