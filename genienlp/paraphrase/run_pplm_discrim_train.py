@@ -45,7 +45,7 @@ max_length_seq = 100
 class Discriminator(torch.nn.Module):
     """Transformer encoder followed by a Classification Head"""
 
-    def __init__(self, class_size, pretrained_model="gpt2-medium", cached_mode=False, device="cpu"):
+    def __init__(self, class_size, pretrained_model="gpt2-medium", mask_tokens_before_paraphrase_token=False, cached_mode=False, device="cpu"):
         super().__init__()
         self.tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model)
         self.encoder = GPT2LMHeadModel.from_pretrained(pretrained_model)
@@ -53,7 +53,9 @@ class Discriminator(torch.nn.Module):
         self.classifier_head = ClassificationHead(class_size=class_size, embed_size=self.embed_size)
         self.cached_mode = cached_mode
         self.device = device
-
+        self.mask_tokens_before_paraphrase = mask_tokens_before_paraphrase_token
+        if self.mask_tokens_before_paraphrase:
+            self.paraphrase_token_id = self.tokenizer.encode('<paraphrase>')[0]
     def get_classifier(self):
         return self.classifier_head
 
@@ -64,6 +66,10 @@ class Discriminator(torch.nn.Module):
 
     def avg_representation(self, x):
         mask = x.ne(0).unsqueeze(2).repeat(1, 1, self.embed_size).float().to(self.device).detach()
+        if self.mask_tokens_before_paraphrase:
+            preparaphrase_mask = (x == self.paraphrase_token_id).to(torch.long).to(self.device).detach()
+            preparaphrase_mask = torch.cumsum(preparaphrase_mask, dim=1) - preparaphrase_mask
+            mask *= preparaphrase_mask.unsqueeze(2)
         hidden, _ = self.encoder.transformer(x)
         masked_hidden = hidden * mask
         avg_hidden = torch.sum(masked_hidden, dim=1) / (torch.sum(mask, dim=1).detach() + EPSILON)
@@ -220,6 +226,7 @@ def train_discriminator(
     dataset,
     dataset_fp=None,
     pretrained_model="gpt2-medium",
+    mask_tokens_before_paraphrase_token=False,
     epochs=10,
     batch_size=64,
     log_interval=10,
@@ -237,7 +244,9 @@ def train_discriminator(
         class2idx = {c: i for i, c in enumerate(idx2class)}
 
         discriminator = Discriminator(
-            class_size=len(idx2class), pretrained_model=pretrained_model, cached_mode=cached, device=device
+            class_size=len(idx2class), pretrained_model=pretrained_model,
+            mask_tokens_before_paraphrase_token=mask_tokens_before_paraphrase_token,
+            cached_mode=cached, device=device
         ).to(device)
 
         text = torchtext_data.Field()
@@ -277,7 +286,9 @@ def train_discriminator(
         class2idx = {c: i for i, c in enumerate(idx2class)}
 
         discriminator = Discriminator(
-            class_size=len(idx2class), pretrained_model=pretrained_model, cached_mode=cached, device=device
+            class_size=len(idx2class), pretrained_model=pretrained_model, 
+            mask_tokens_before_paraphrase_token=mask_tokens_before_paraphrase_token,
+            cached_mode=cached, device=device
         ).to(device)
 
         with open("datasets/clickbait/clickbait_train_prefix.txt") as f:
@@ -325,7 +336,9 @@ def train_discriminator(
         class2idx = {c: i for i, c in enumerate(idx2class)}
 
         discriminator = Discriminator(
-            class_size=len(idx2class), pretrained_model=pretrained_model, cached_mode=cached, device=device
+            class_size=len(idx2class), pretrained_model=pretrained_model,
+            mask_tokens_before_paraphrase_token=mask_tokens_before_paraphrase_token,
+            cached_mode=cached, device=device
         ).to(device)
 
         x = []
@@ -378,7 +391,9 @@ def train_discriminator(
         class2idx = {c: i for i, c in enumerate(idx2class)}
 
         discriminator = Discriminator(
-            class_size=len(idx2class), pretrained_model=pretrained_model, cached_mode=cached, device=device
+            class_size=len(idx2class), pretrained_model=pretrained_model,
+            mask_tokens_before_paraphrase_token=mask_tokens_before_paraphrase_token,
+            cached_mode=cached, device=device
         ).to(device)
 
         x = []
@@ -497,6 +512,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pretrained_model", type=str, default="gpt2-medium", help="Pretrained model to use as encoder"
+    )
+    parser.add_argument(
+        "--mask_tokens_before_paraphrase_token", type=bool, default=False, help="Should be True if classifier is on top of paraphraser model"
     )
     parser.add_argument("--epochs", type=int, default=10, metavar="N", help="Number of training epochs")
     parser.add_argument(
