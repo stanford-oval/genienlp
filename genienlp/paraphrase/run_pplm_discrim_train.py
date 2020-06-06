@@ -258,7 +258,12 @@ def train_discriminator(
         for i in trange(len(train_data), ascii=True):
             seq = TreebankWordDetokenizer().detokenize(vars(train_data[i])["text"])
             seq = discriminator.tokenizer.encode(seq)
-            seq = torch.tensor([50256] + seq, device=device, dtype=torch.long)
+            if mask_tokens_before_paraphrase_token:
+                # Assumption is that paraphraser model and its corresponding discriminator is being used
+                seq = seq + [discriminator.paraphrase_token_id] + seq
+            # do not add <|endoftext|> token to beginning for paraphraser
+            # seq = torch.tensor([50256] + seq, device=device, dtype=torch.long)
+            seq = torch.tensor(seq, device=device, dtype=torch.long)
             x.append(seq)
             y.append(class2idx[vars(train_data[i])["label"]])
         train_dataset = Dataset(x, y)
@@ -268,7 +273,12 @@ def train_discriminator(
         for i in trange(len(test_data), ascii=True):
             seq = TreebankWordDetokenizer().detokenize(vars(test_data[i])["text"])
             seq = discriminator.tokenizer.encode(seq)
-            seq = torch.tensor([50256] + seq, device=device, dtype=torch.long)
+            if mask_tokens_before_paraphrase_token:
+                # Assumption is that paraphraser model and its corresponding discriminator is being used
+                seq = seq + [discriminator.paraphrase_token_id] + seq
+            # do not add <|endoftext|> token to beginning for paraphraser
+            # seq = torch.tensor([50256] + seq, device=device, dtype=torch.long)
+            seq = torch.tensor(seq, device=device, dtype=torch.long)
             test_x.append(seq)
             test_y.append(class2idx[vars(test_data[i])["label"]])
         test_dataset = Dataset(test_x, test_y)
@@ -511,10 +521,10 @@ if __name__ == "__main__":
         help="File path of the dataset to use. " "Needed only in case of generic datadset",
     )
     parser.add_argument(
-        "--pretrained_model", type=str, default="gpt2-medium", help="Pretrained model to use as encoder"
+        "--pretrained_model", type=str, default="./paraphrase_model", help="Pretrained model to use as encoder"
     )
     parser.add_argument(
-        "--mask_tokens_before_paraphrase_token", type=bool, default=False, help="Should be True if classifier is on top of paraphraser model"
+        "--mask_tokens_before_paraphrase_token", type=bool, default=False, help="Should be True if classifier is on top of paraphraser model. Only works with SST Dataset"
     )
     parser.add_argument("--epochs", type=int, default=10, metavar="N", help="Number of training epochs")
     parser.add_argument(
