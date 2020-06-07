@@ -33,6 +33,7 @@ from tqdm import tqdm, trange
 
 from pplm_classification_head import ClassificationHead
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
+from genienlp.paraphrase.GPT2Seq2SeqWithSentiment import GPT2Seq2SeqWithSentiment
 
 
 torch.manual_seed(0)
