@@ -46,7 +46,7 @@ max_length_seq = 100
 class Discriminator(torch.nn.Module):
     """Transformer encoder followed by a Classification Head"""
 
-    def __init__(self, class_size, pretrained_model="gpt2-medium", mask_tokens_before_paraphrase_token=False, cached_mode=False, device="cpu"):
+    def __init__(self, class_size, pretrained_model="gpt2-medium", mask_tokens_before_paraphrase_token=False, pretrained_discriminator=None, cached_mode=False, device="cpu"):
         super().__init__()
         self.tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model)
         if mask_tokens_before_paraphrase_token:
@@ -55,6 +55,8 @@ class Discriminator(torch.nn.Module):
             self.encoder = GPT2LMHeadModel.from_pretrained(pretrained_model)
         self.embed_size = self.encoder.transformer.config.hidden_size
         self.classifier_head = ClassificationHead(class_size=class_size, embed_size=self.embed_size)
+        if pretrained_discriminator is not None:
+            self.classifier_head.load_state_dict(torch.load(pretrained_discriminator, map_location=torch.device(device)))
         self.cached_mode = cached_mode
         self.device = device
         self.mask_tokens_before_paraphrase = mask_tokens_before_paraphrase_token
@@ -231,10 +233,12 @@ def train_discriminator(
     dataset_fp=None,
     pretrained_model="gpt2-medium",
     mask_tokens_before_paraphrase_token=False,
+    pretrained_discriminator=None,
     epochs=10,
     batch_size=64,
     log_interval=10,
     save_model=False,
+    save_location=None,
     cached=False,
     no_cuda=False,
 ):
@@ -249,6 +253,7 @@ def train_discriminator(
         discriminator = Discriminator(
             class_size=len(idx2class), pretrained_model=pretrained_model,
             mask_tokens_before_paraphrase_token=mask_tokens_before_paraphrase_token,
+            pretrained_discriminator=pretrained_discriminator,
             cached_mode=cached, device=device
         ).to(device)
 
@@ -301,6 +306,7 @@ def train_discriminator(
         discriminator = Discriminator(
             class_size=len(idx2class), pretrained_model=pretrained_model, 
             mask_tokens_before_paraphrase_token=mask_tokens_before_paraphrase_token,
+            pretrained_discriminator=pretrained_discriminator,
             cached_mode=cached, device=device
         ).to(device)
 
@@ -351,6 +357,7 @@ def train_discriminator(
         discriminator = Discriminator(
             class_size=len(idx2class), pretrained_model=pretrained_model,
             mask_tokens_before_paraphrase_token=mask_tokens_before_paraphrase_token,
+            pretrained_discriminator=pretrained_discriminator,
             cached_mode=cached, device=device
         ).to(device)
 
@@ -406,6 +413,7 @@ def train_discriminator(
         discriminator = Discriminator(
             class_size=len(idx2class), pretrained_model=pretrained_model,
             mask_tokens_before_paraphrase_token=mask_tokens_before_paraphrase_token,
+            pretrained_discriminator=pretrained_discriminator,
             cached_mode=cached, device=device
         ).to(device)
 
@@ -470,7 +478,7 @@ def train_discriminator(
         test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, collate_fn=collate_fn)
 
     if save_model:
-        with open("{}_classifier_head_meta.json".format(dataset), "w") as meta_file:
+        with open("{}/{}_classifier_head_meta.json".format(save_location, dataset), "w") as meta_file:
             json.dump(discriminator_meta, meta_file)
 
     optimizer = optim.Adam(discriminator.parameters(), lr=0.0001)
@@ -502,7 +510,7 @@ def train_discriminator(
             #               ))
             torch.save(
                 discriminator.get_classifier().state_dict(),
-                "{}_classifier_head_epoch_{}.pt".format(dataset, epoch + 1),
+                "{}/{}_classifier_head_epoch_{}.pt".format(save_location, dataset, epoch + 1),
             )
 
 
@@ -541,6 +549,8 @@ if __name__ == "__main__":
         help="how many batches to wait before logging training status",
     )
     parser.add_argument("--save_model", action="store_true", help="whether to save the model")
+    parser.add_argument("--save_location", type=str, default=None, help="path to use to save trained disciminator (dir must already exist, no final /)")
+    parser.add_argument("--pretrained_discriminator", type=str, default=None, help="path to use to load a partially trained disciminator")
     parser.add_argument("--cached", action="store_true", help="whether to cache the input representations")
     parser.add_argument("--no_cuda", action="store_true", help="use to turn off cuda")
     args = parser.parse_args()
