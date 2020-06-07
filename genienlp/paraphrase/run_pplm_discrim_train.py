@@ -49,7 +49,10 @@ class Discriminator(torch.nn.Module):
     def __init__(self, class_size, pretrained_model="gpt2-medium", mask_tokens_before_paraphrase_token=False, cached_mode=False, device="cpu"):
         super().__init__()
         self.tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model)
-        self.encoder = GPT2LMHeadModel.from_pretrained(pretrained_model)
+        if mask_tokens_before_paraphrase_token:
+            self.encoder = GPT2Seq2SeqWithSentiment.from_pretrained(pretrained_model)
+        else:
+            self.encoder = GPT2LMHeadModel.from_pretrained(pretrained_model)
         self.embed_size = self.encoder.transformer.config.hidden_size
         self.classifier_head = ClassificationHead(class_size=class_size, embed_size=self.embed_size)
         self.cached_mode = cached_mode
@@ -236,7 +239,6 @@ def train_discriminator(
     no_cuda=False,
 ):
     device = "cuda" if torch.cuda.is_available() and not no_cuda else "cpu"
-
     print("Preprocessing {} dataset...".format(dataset))
     start = time.time()
 
