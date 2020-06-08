@@ -50,9 +50,16 @@ class Discriminator(torch.nn.Module):
         super().__init__()
         self.tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model)
         if mask_tokens_before_paraphrase_token:
-            self.encoder = GPT2Seq2SeqWithSentiment.from_pretrained(pretrained_model)
+            self.encoder = GPT2Seq2SeqWithSentiment.from_pretrained(pretrained_model, output_hidden_states=True)
+            end_token_id = self.tokenizer.convert_tokens_to_ids('</paraphrase>')
+            sep_token_id = self.tokenizer.convert_tokens_to_ids('<paraphrase>')
+            pad_token_id = self.tokenizer.convert_tokens_to_ids(self.tokenizer.pad_token)
+
+            self.encoder.set_token_ids(end_token_id=end_token_id, 
+                                        sep_token_id=sep_token_id, 
+                                        pad_token_id=pad_token_id)
         else:
-            self.encoder = GPT2LMHeadModel.from_pretrained(pretrained_model)
+            self.encoder = GPT2LMHeadModel.from_pretrained(pretrained_model, output_hidden_states=True)
         self.embed_size = self.encoder.transformer.config.hidden_size
         self.classifier_head = ClassificationHead(class_size=class_size, embed_size=self.embed_size)
         if pretrained_discriminator is not None:
@@ -76,7 +83,8 @@ class Discriminator(torch.nn.Module):
             preparaphrase_mask = (x == self.paraphrase_token_id).to(torch.long).to(self.device).detach()
             preparaphrase_mask = torch.cumsum(preparaphrase_mask, dim=1) - preparaphrase_mask
             mask *= preparaphrase_mask.unsqueeze(2)
-        hidden, _ = self.encoder.transformer(x)
+        _, _, hidden = self.encoder(x)
+        hidden = hidden[-1]
         masked_hidden = hidden * mask
         avg_hidden = torch.sum(masked_hidden, dim=1) / (torch.sum(mask, dim=1).detach() + EPSILON)
         return avg_hidden

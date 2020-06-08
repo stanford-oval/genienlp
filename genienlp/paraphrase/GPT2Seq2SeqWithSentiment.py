@@ -22,7 +22,7 @@ class GPT2Seq2SeqWithSentiment(GPT2Seq2Seq):
             token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
 
         inputs = {"input_ids": input_ids, "position_ids": position_ids, "token_type_ids": token_type_ids, "past": past}
-        print({"input_ids": input_ids, "position_ids": position_ids, "token_type_ids": token_type_ids})
+        # print({"input_ids": input_ids, "position_ids": position_ids, "token_type_ids": token_type_ids})
         return inputs
 
 
