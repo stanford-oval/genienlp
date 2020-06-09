@@ -48,7 +48,7 @@ setuptools.setup(
 
     install_requires=[
         'numpy>=1.14.5',
-        'torch~=1.4',
+        'torch==1.4.*',
         'revtok==0.0.3',
         'tqdm~=4.0',
         'tensorboardX==2.0.*',
