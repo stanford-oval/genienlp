@@ -478,6 +478,8 @@ def generate_text_pplm(
             _, last = torch.topk(pert_probs, k=1, dim=-1)
 
         # update input_tokens/output_so_far appending the new token
+        if last == tokenizer.convert_tokens_to_ids('</paraphrase>'):
+            break
         output_so_far = last if output_so_far is None else torch.cat((output_so_far, last), dim=1)
 
         logger.info('output so far: %s', tokenizer.decode(output_so_far.tolist()[0]))
@@ -503,7 +505,8 @@ def set_generic_model_params(discriminator_weights, discriminator_meta):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pretrained_model", type=str, required=True, help="pretrained model name or path to local checkpoint")
-    parser.add_argument("--input_text", type=str, default="The lake", help="Prefix texts to condition on")
+    parser.add_argument("--input_file", type=str, required=True, help="The file containing input sentences.")
+    parser.add_argument("--output_file", type=str, required=True, help="The file to write sentences.")
     parser.add_argument("--discriminator", type=str,default=None,choices=("clickbait", "sentiment", "toxicity", "generic"),
                         help="Discriminator to use")
     parser.add_argument("--discriminator_weights", type=str, default=None,help="Weights for the generic discriminator")
@@ -548,7 +551,11 @@ if __name__ == "__main__":
         # args.pretrained_model = DISCRIMINATOR_MODELS_PARAMS[args.discriminator]["pretrained_model"]
         # logger.info("discriminator = {}, pretrained_model set " "to discriminator's = {}".format(args.discriminator, pretrained_model))
 
-    args.sample = (args.temperature != 0)
+    if args.temperature == 0:
+        args.sample = False
+        args.temperature = 1
+    else:
+        args.sample = True
     
     # run PPLM
 
@@ -576,50 +583,65 @@ if __name__ == "__main__":
         param.requires_grad = False
 
     # figure out conditioning text
-    args.input_text = args.input_text.lower()
-    tokenized_input_text = tokenizer.encode(args.input_text + special_tokens['sep_token'])
-    logging.info("Tokenized input text = %s", tokenized_input_text)
+    inputs = []
+    with open(args.input_file) as f:
+        for line in f:
+            line = line.split('\t')
+            inputs.append((line[0].strip(), line[1].lower()))
 
-    # generate unperturbed and perturbed texts
+    with open(args.output_file, 'w') as output_file:
+        for input_id, input_text in inputs:
+            tokenized_input_text = tokenizer.encode(input_text + special_tokens['sep_token'])
+            logging.info("Tokenized input text = %s", tokenized_input_text)
 
-    # full_text_generation returns (unpert_gen_tok_text, pert_gen_tok_texts, discriminator_losses, losses_in_time)
-    unpert_gen_tok_text, pert_gen_tok_texts, _, _ = full_text_generation(
-        model=model,
-        tokenizer=tokenizer,
-        input_tokens=tokenized_input_text,
-        device=device,
-        num_samples=args.num_samples,
-        discriminator=args.discriminator,
-        class_label=args.class_label,
-        length=args.length,
-        step_size=args.step_size,
-        temperature=args.temperature,
-        top_k=args.top_k,
-        sample=args.sample,
-        num_iterations=args.num_iterations,
-        grad_length=args.grad_length,
-        horizon_length=args.horizon_length,
-        window_length=args.window_length,
-        decay=args.decay,
-        gamma=args.gamma,
-        gm_scale=args.gm_scale,
-        kl_scale=args.kl_scale,
-        repetition_penalty=args.repetition_penalty,
-    )
-    # untokenize unperturbed text
-    unpert_gen_text = tokenizer.decode(unpert_gen_tok_text.tolist()[0])
+            # generate unperturbed and perturbed texts
 
-    logging.info("Unperturbed generated text = %s", unpert_gen_text)
+            # full_text_generation returns (unpert_gen_tok_text, pert_gen_tok_texts, discriminator_losses, losses_in_time)
+            unpert_gen_tok_text, pert_gen_tok_texts, _, _ = full_text_generation(
+                model=model,
+                tokenizer=tokenizer,
+                input_tokens=tokenized_input_text,
+                device=device,
+                num_samples=args.num_samples,
+                discriminator=args.discriminator,
+                class_label=args.class_label,
+                length=args.length,
+                step_size=args.step_size,
+                temperature=args.temperature,
+                top_k=args.top_k,
+                sample=args.sample,
+                num_iterations=args.num_iterations,
+                grad_length=args.grad_length,
+                horizon_length=args.horizon_length,
+                window_length=args.window_length,
+                decay=args.decay,
+                gamma=args.gamma,
+                gm_scale=args.gm_scale,
+                kl_scale=args.kl_scale,
+                repetition_penalty=args.repetition_penalty,
+            )
+            # untokenize unperturbed text
+            unpert_gen_text = tokenizer.decode(unpert_gen_tok_text.tolist()[0])
+            s = unpert_gen_text.find('<paraphrase>')
+            unpert_gen_text = unpert_gen_text[s+12:]
 
-    generated_texts = []
+            logging.info("Unperturbed generated text = %s", unpert_gen_text)
+            output_file.write(input_id+'\t')
+            # output_file.write(unpert_gen_text+'\t')
 
-    # iterate through the perturbed texts
-    for i, pert_gen_tok_text in enumerate(pert_gen_tok_texts):
-        try:
-            pert_gen_text = tokenizer.decode(pert_gen_tok_text.tolist()[0])
-            logging.info("Perturbed generated text %d = %s", i + 1, pert_gen_text)
-        except Exception as exc:
-            logger.warning("Ignoring error while generating perturbed text: %s", str(exc))
+            generated_texts = []
 
-        # keep the prefix, perturbed seq, original seq for each index
-        generated_texts.append((tokenized_input_text, pert_gen_tok_text, unpert_gen_tok_text))
+            # iterate through the perturbed texts
+            for i, pert_gen_tok_text in enumerate(pert_gen_tok_texts):
+                try:
+                    pert_gen_text = tokenizer.decode(pert_gen_tok_text.tolist()[0])
+                    s = pert_gen_text.find('<paraphrase>')
+                    pert_gen_text = pert_gen_text[s+12:]
+                    logging.info("Perturbed generated text %d = %s", i + 1, pert_gen_text)
+                    output_file.write(pert_gen_text+'\t')
+                except Exception as exc:
+                    logger.warning("Ignoring error while generating perturbed text: %s", str(exc))
+
+                # keep the prefix, perturbed seq, original seq for each index
+                generated_texts.append((tokenized_input_text, pert_gen_tok_text, unpert_gen_tok_text))
+            output_file.write('\n')

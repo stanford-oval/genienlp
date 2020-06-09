@@ -543,7 +543,7 @@ if __name__ == "__main__":
         "--pretrained_model", type=str, default="./paraphrase_model", help="Pretrained model to use as encoder"
     )
     parser.add_argument(
-        "--mask_tokens_before_paraphrase_token", type=bool, default=False, help="Should be True if classifier is on top of paraphraser model. Only works with SST Dataset"
+        "--mask_tokens_before_paraphrase_token", action='store_true', help="Should be True if classifier is on top of paraphraser model. Only works with SST Dataset"
     )
     parser.add_argument("--epochs", type=int, default=10, metavar="N", help="Number of training epochs")
     parser.add_argument(
