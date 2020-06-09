@@ -111,6 +111,7 @@ def parse_argv(parser):
     parser.add_argument('--encoder_loss_weight', type=float, default=0.1,
                         help='multiplicative constant choosing the weight of encoder_loss in total loss')
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
+
     
     parser.add_argument('--vocab_tasks', nargs='+', type=str, help='tasks to use in the construction of the vocabulary')
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
@@ -180,6 +181,9 @@ def parse_argv(parser):
     parser.add_argument('--override_question', default=None, help='Override the question for all tasks')
     parser.add_argument('--almond_preprocess_context', action='store_true', default=False,
                         help='')
+    parser.add_argument('--almond_lang_as_question', action='store_true',
+                        help='if true will use "Translate from ${language} to ThingTalk" for question')
+
 
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')

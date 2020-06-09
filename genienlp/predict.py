@@ -65,7 +65,8 @@ def get_all_splits(args):
             raise ValueError('Split used for prediction should be either valid or test')
         
         kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
-                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages})
+                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages,
+                       'almond_lang_as_question': args.almond_lang_as_question})
         
         kwargs['separate_eval'] = args.separate_eval
         task_splits = task.get_splits(root=args.data, lower=args.lower, **kwargs)
@@ -236,7 +237,7 @@ def adjust_multilingual_eval(args):
     if (have_multilingual(args.task_names) and args.pred_languages is None) or (
             args.pred_languages and len(args.task_names) != len(args.pred_languages)):
         raise ValueError('You have to define prediction languages when you have a multilingual task'
-                         'Use None for single language tasks. Also provide languages in the same order you provided tasks.')
+                         'Use None for single language tasks. Also provide languages in the same order you provided the tasks.')
 
     if args.pred_languages is None:
         args.pred_languages = [None for _ in range(len(args.task_names))]

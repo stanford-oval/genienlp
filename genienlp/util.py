@@ -285,12 +285,15 @@ def load_config_json(args):
                     'train_context_embeddings', 'train_question_embeddings', 'locale', 'use_pretrained_bert',
                     'train_context_embeddings_after', 'train_question_embeddings_after',
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize', 'num_beams',
-                    'append_question_to_context_too', 'almond_preprocess_context', 'override_question']
+                    'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
+                    'override_question']
 
         for r in retrieve:
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
+            elif r == 'almond_lang_as_question':
+                setattr(args, r, False)
             elif r == 'locale':
                 setattr(args, r, 'en')
             elif r in ('trainable_decoder_embedding', 'trainable_encoder_embeddings', 'pretrain_context',
