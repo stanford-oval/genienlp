@@ -135,7 +135,7 @@ def parse_argv(parser):
     parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules')
-    parser.add_argument('--rnn_zero_state', default='zero', choices=['zero', 'average'],
+    parser.add_argument('--rnn_zero_state', default='zero', choices=['zero', 'average', 'cls'],
                         help='how to construct RNN zero state (for Identity encoder)')
     parser.add_argument('--transformer_layers', default=2, type=int, help='number of layers for transformer modules')
     parser.add_argument('--transformer_hidden', default=150, type=int, help='hidden size of the transformer modules')
