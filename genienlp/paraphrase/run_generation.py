@@ -43,7 +43,7 @@ except RuntimeError:
 import torch
 
 from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_GROUP_MEMBERS
 
 from transformers import GPT2Tokenizer
 from transformers import BartForConditionalGeneration, BartTokenizer, MBartTokenizer
@@ -119,6 +119,9 @@ def parse_argv(parser):
                         help="Batch size for text generation for each GPU.")
     
     parser.add_argument('--trained_model_type', type=str, help='if provided we make sure the loaded model matches the model_type')
+    
+    parser.add_argument('--src_lang', type=str, default='en', help='source language used for translation task')
+    parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
 
 
 def main(args):
@@ -176,10 +179,23 @@ def run_multi_process_generation(args):
                 args.model_type = 'bart'
             
     else:
-        raise ValueError('Model should be either GPT2, BART, or MBART')
+        raise ValueError('Model should be either GPT2, BART, MBART, or Marian')
+    
     
     if args.trained_model_type and args.trained_model_type != '' and args.model_type != args.trained_model_type:
         raise ValueError('The loaded model type does not match with what the user provided')
+    
+    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:
+        if not args.tgt_lang:
+            raise ValueError('For translation task using Marian model, if target language is a group of languages, '
+                             'you have to specify the --tgt_lang flag.')
+        elif args.tgt_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 1)[1]]:
+            raise ValueError('Target language is not in the model group languages, please specify the correct target language.')
+
+    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] not in MARIAN_GROUP_MEMBERS and args.tgt_lang:
+        logger.warning('Target language should not be provided when using models with single language pairs,'
+                       'otherwise the translation outputs will be incorrect; thus we ignore the target language you provided...')
+        args.tgt_lang = None
 
     if args.prompt_column is not None and args.copy is not None and args.copy != 0:
         raise ValueError('Cannot copy from the input and use prompt at the same time. Disable either --copy or --prompt_column.')
@@ -247,7 +263,7 @@ def run_single_process_generation(args):
                                                                 copy=args.copy,
                                                                 thingtalk_column=args.thingtalk_column,
                                                                 sep_token_id=sep_token_id, skip_heuristics=args.skip_heuristics, is_cased=args.is_cased,
-                                                                model_type=args.model_type)
+                                                                model_type=args.model_type, src_lang=args.src_lang, tgt_lang=args.tgt_lang)
 
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, original_order, reverse_maps, all_prompt_tokens = \
