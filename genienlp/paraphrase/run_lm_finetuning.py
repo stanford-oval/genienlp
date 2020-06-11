@@ -182,7 +182,7 @@ def train(args, train_dataset, model, tokenizer):
             model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids}
             
             # prepare inputs for bart
-            if args.model_type == 'bart':
+            if args.model_type in ['bart', 'mbart']:
                 # this should have been handled internally by huggingfaces's BART code
                 # TODO remove this once they add it
                 decoder_input_ids = labels[:, :-1].contiguous()

@@ -21,7 +21,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 from tqdm import tqdm
-import torch
 import math
 import json
 import re
@@ -41,13 +40,18 @@ try:
 except RuntimeError:
     pass
  
-from transformers import GPT2Config, BartConfig
+import torch
+
+from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 from transformers import GPT2Tokenizer
 from transformers import BartForConditionalGeneration, BartTokenizer, MBartTokenizer
+from transformers import MarianMTModel, MarianTokenizer
 from transformers import PretrainedConfig
 from ..util import set_seed, combine_files_on_disk, split_file_on_disk, get_part_path
 from .GPT2Seq2Seq import GPT2Seq2Seq
+from .data_utils import group_together
 
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -56,12 +60,13 @@ logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(messa
 logger = logging.getLogger(__name__)
 
 
-ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (GPT2Config, BartConfig)), ())
+ALL_MODELS = sum((tuple(map.keys()) for map in (GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP)), ())
 
 MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'sep_token': '<paraphrase>', 'end_token': '</paraphrase>'}),
     'bart': (BartForConditionalGeneration, BartTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}), # sep_token will not be used for BART
-    'mbart': (BartForConditionalGeneration, MBartTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}) # sep_token will not be used for BART
+    'mbart': (BartForConditionalGeneration, MBartTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}), # sep_token will not be used for MBART
+    'marian': (MarianMTModel, MarianTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}), # sep_token will not be used for MARIAN
 }
 
 
@@ -112,30 +117,8 @@ def parse_argv(parser):
                         help="Tokens (other than the model-specific `end_token`) at which text generation should be stopped.")
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")
-
-def group_together(file_paths, num_samples):
-    """
-    """
-    for i in range(1, len(num_samples)):
-        num_samples[i]*=num_samples[i-1]
-    all_lines = []
-    for file_path in file_paths:
-        lines = []
-        with open(file_path) as f:
-            for line in f:
-                lines.append(line.strip())
-        all_lines.append(lines)
     
-    all_groups = []
-    for i, lines in enumerate(all_lines):
-        for group_idx in range(0, len(lines)//num_samples[i]):
-            g = lines[group_idx*num_samples[i]:(group_idx+1)*num_samples[i]]
-            if len(all_groups) <= group_idx:
-                all_groups.append(g)
-            else:
-                all_groups[group_idx].extend(g)
-    return all_groups
-
+    parser.add_argument('--trained_model_type', type=str, help='if provided we make sure the loaded model matches the model_type')
 
 
 def main(args):
@@ -194,6 +177,9 @@ def run_multi_process_generation(args):
             
     else:
         raise ValueError('Model should be either GPT2, BART, or MBART')
+    
+    if args.trained_model_type and args.trained_model_type != '' and args.model_type != args.trained_model_type:
+        raise ValueError('The loaded model type does not match with what the user provided')
 
     if args.prompt_column is not None and args.copy is not None and args.copy != 0:
         raise ValueError('Cannot copy from the input and use prompt at the same time. Disable either --copy or --prompt_column.')
@@ -283,7 +269,7 @@ def run_single_process_generation(args):
         if args.model_type == 'gpt2':
             batch_context_tensor = torch.tensor(model.pad_to_max_length(batch_context_tokens), dtype=torch.long, device=args.device)
             attention_mask = None
-        elif args.model_type == 'bart' or args.model_type == 'mbart':
+        else:
             padded_batch_context_tokens = []
             max_length = max([len(s) for s in batch_context_tokens])
             for i in range(len(batch_context_tokens)):
@@ -291,7 +277,6 @@ def run_single_process_generation(args):
             batch_context_tensor = torch.tensor(padded_batch_context_tokens, dtype=torch.long, device=args.device)
             attention_mask = (batch_context_tensor!=pad_token_id).to(torch.long)
 
-        # logger.info('Input: %s', str(batch_input_sequences))
 
         batch_outputs = [[] for _ in range(batch_size)]
         for hyperparameter_idx in range(len(args.temperature)):
@@ -315,10 +300,10 @@ def run_single_process_generation(args):
             if not isinstance(out, list):
                 out = out[:, :].tolist()
             for i, o in enumerate(out):
-                if args.model_type=='bart' or args.model_type=='mbart':
-                    o = o[1:] # remove <s> start token
+                sample_index = (i//args.num_samples[hyperparameter_idx]) % batch_size
+                
                 if not args.output_prompt:
-                    o = o[len(batch_prompt_tokens[(i//args.num_samples[hyperparameter_idx]) % batch_size]):]
+                    o = o[len(batch_prompt_tokens[sample_index]):]
                 min_index = len(o)-1
                 for stop_token_id in stop_token_ids+[end_token_id]:
                     try:
@@ -335,14 +320,13 @@ def run_single_process_generation(args):
                 text = re.sub('\s\s+', ' ', text) # remove duplicate white spaces
                 text = text.strip()
                 if not args.skip_heuristics:
-                    text = output_heuristics(text, batch_reverse_maps[(i//args.num_samples[hyperparameter_idx]) % batch_size])
-                batch_outputs[(i//args.num_samples[hyperparameter_idx]) % batch_size].append(text)
+                    text = output_heuristics(text, batch_reverse_maps[sample_index])
+                batch_outputs[sample_index].append(text)
 
         all_outputs.extend(batch_outputs)
         if batch_idx < 1:
             logger.info('First batch output: %s', str(all_outputs))
             batch_idx += 1
-
 
     # sort the results back to their original order
     _, all_outputs = tuple(zip(*sorted(list(zip(original_order, all_outputs)))))
