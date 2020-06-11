@@ -66,31 +66,29 @@ class SpecialTokenMap:
     
         self.pattern = pattern
     
-    def forwad(self, s: str):
+    def forward(self, s: str):
         reverse_map = []
         matches = re.finditer(self.pattern, s)
         if matches is None:
             return s, reverse_map
         for match in matches:
-            occurance = match.group(0)
-            # print('occurance = ', occurance)
+            occurrence = match.group(0)
             parameter = match.group(1)
             replacement = self.forward_func(parameter)
-            s = s.replace(occurance, replacement)
-            reverse_map.append((self, occurance))
+            s = s.replace(occurrence, replacement)
+            reverse_map.append((self, occurrence))
         return s, reverse_map
 
-    def backward(self, s: str, occurance: str):
-        match = re.match(self.pattern, occurance)
+    def backward(self, s: str, occurrence: str):
+        match = re.match(self.pattern, occurrence)
         parameter = match.group(1)
         if self.backward_func is None:
             list_of_strings_to_match = [self.forward_func(parameter)]
         else:
             list_of_strings_to_match = sorted(self.backward_func(parameter), key=lambda x:len(x), reverse=True)
-        # print('list_of_strings_to_match = ', list_of_strings_to_match)
         for string_to_match in list_of_strings_to_match:
             l = [' '+string_to_match+' ', string_to_match+' ', ' '+string_to_match]
-            o = [' '+occurance+' ', occurance+' ', ' '+occurance]
+            o = [' '+occurrence+' ', occurrence+' ', ' '+occurrence]
             new_s = s
             for i in range(len(l)):
                 new_s = re.sub(l[i], o[i], s, flags=re.IGNORECASE)
