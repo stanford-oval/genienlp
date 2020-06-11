@@ -245,7 +245,7 @@ def input_heuristics(s: str, thingtalk=None, is_cased=False, keep_special_tokens
     reverse_map = []
     if not keep_special_tokens:
         for spm in special_pattern_mapping:
-            s, r = spm.forwad(s)
+            s, r = spm.forward(s)
             reverse_map.extend(r)
 
     return s, reverse_map
