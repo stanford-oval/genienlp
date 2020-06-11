@@ -46,8 +46,12 @@ from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_GROUP_MEMBERS
 
 from transformers import GPT2Tokenizer
-from transformers import BartForConditionalGeneration, BartTokenizer, MBartTokenizer
-from transformers import MarianMTModel, MarianTokenizer
+
+from .transformers_utils import BartForConditionalGeneration
+from .transformers_utils import MarianMTModel
+
+from transformers import BartTokenizer, MBartTokenizer
+from transformers import MarianTokenizer
 from transformers import PretrainedConfig
 from ..util import set_seed, combine_files_on_disk, split_file_on_disk, get_part_path
 from .GPT2Seq2Seq import GPT2Seq2Seq
@@ -165,6 +169,9 @@ def main(args):
 def run_multi_process_generation(args):
     config = PretrainedConfig.from_pretrained(args.model_name_or_path)
     
+    # config.output_attentions = True
+    # config.output_hidden_states = True
+    
     # get model type from saved config
     if hasattr(config, 'model_type'):
         args.model_type = getattr(config, 'model_type')
@@ -221,7 +228,7 @@ def run_multi_process_generation(args):
             copy_args.input_file = all_input_files[gpu_idx]
             copy_args.output_file = get_part_path(args.output_file, gpu_idx)
             
-            p = Process(target=run_single_process_generation, args=(copy_args,))
+            p = Process(target=run_single_process_generation, args=(copy_args, config))
             all_processes.append(p)
             p.start()
 
@@ -233,12 +240,12 @@ def run_multi_process_generation(args):
         combine_files_on_disk(args.output_file, args.n_gpu, line_group_size=sum(args.num_samples), delete=True)
 
     else:
-        run_single_process_generation(args)
+        run_single_process_generation(args, config)
 
 
-def run_single_process_generation(args):
+def run_single_process_generation(args, config):
     model_class, tokenizer_class, special_tokens = MODEL_CLASSES[args.model_type]
-    model = model_class.from_pretrained(args.model_name_or_path)
+    model = model_class.from_pretrained(args.model_name_or_path, output_attentions=True)
     model.to(args.device)
     model.eval()
 
@@ -296,7 +303,7 @@ def run_single_process_generation(args):
 
         batch_outputs = [[] for _ in range(batch_size)]
         for hyperparameter_idx in range(len(args.temperature)):
-            out = model.generate(input_ids=batch_context_tensor,
+            decoded, all_encoder_attentions = model.generate(input_ids=batch_context_tensor,
                                  bad_words_ids=None,
                                  attention_mask=attention_mask,
                                  min_length=args.min_output_length,
@@ -313,25 +320,25 @@ def run_single_process_generation(args):
                                  eos_token_id=end_token_id,
                                  pad_token_id=pad_token_id,
                                 )
-            if not isinstance(out, list):
-                out = out[:, :].tolist()
-            for i, o in enumerate(out):
+            if not isinstance(decoded, list):
+                decoded = decoded[:, :].tolist()
+            for i, out in enumerate(decoded):
                 sample_index = (i//args.num_samples[hyperparameter_idx]) % batch_size
                 
                 if not args.output_prompt:
-                    o = o[len(batch_prompt_tokens[sample_index]):]
-                min_index = len(o)-1
+                    out = out[len(batch_prompt_tokens[sample_index]):]
+                min_index = len(out)-1
                 for stop_token_id in stop_token_ids+[end_token_id]:
                     try:
-                        index = o.index(stop_token_id)
+                        index = out.index(stop_token_id)
                         min_index = min(index, min_index)
                     except ValueError:
                         pass
                 if min_index > 0 and o[min_index] != end_token_id:
                     min_index = min_index + 1 # include the last token if it is not end_token
-                o = o[:min_index]
+                out = out[:min_index]
                 
-                text = tokenizer.decode(o, clean_up_tokenization_spaces=True, skip_special_tokens=True)
+                text = tokenizer.decode(out, clean_up_tokenization_spaces=True, skip_special_tokens=True)
 
                 text = re.sub('\s\s+', ' ', text) # remove duplicate white spaces
                 text = text.strip()
