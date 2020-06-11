@@ -1,5 +1,3 @@
-import os
-import glob
 import sys
 import re
 
@@ -32,6 +30,29 @@ special_pattern_mapping = [
     SpecialTokenMap('GENERIC_ENTITY_uk.ac.cam.multiwoz.Restaurant:Restaurant_([0-9]+)', ["restaurant1", "restaurant2", "restaurant3"]) # TODO the only reason we can get away with this unnatural replacement is that actual backward is not going to be called for this
 ]
 
+
+def group_together(file_paths, num_samples):
+    """
+    """
+    for i in range(1, len(num_samples)):
+        num_samples[i] *= num_samples[i - 1]
+    all_lines = []
+    for file_path in file_paths:
+        lines = []
+        with open(file_path) as f:
+            for line in f:
+                lines.append(line.strip())
+        all_lines.append(lines)
+    
+    all_groups = []
+    for i, lines in enumerate(all_lines):
+        for group_idx in range(0, len(lines) // num_samples[i]):
+            g = lines[group_idx * num_samples[i]:(group_idx + 1) * num_samples[i]]
+            if len(all_groups) <= group_idx:
+                all_groups.append(g)
+            else:
+                all_groups[group_idx].extend(g)
+    return all_groups
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False, aux=False):
@@ -217,7 +238,7 @@ def input_heuristics(s: str, thingtalk=None, is_cased=False, keep_special_tokens
     if not is_cased:
         s = lower_case(s)
 
-    # replace special tokens with natural-looking exmaples
+    # replace special tokens with natural-looking examples
     reverse_map = []
     if not keep_special_tokens:
         for spm in special_pattern_mapping:
