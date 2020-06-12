@@ -176,7 +176,10 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
             assert len(prompt_ids) == 0
             prompt_ids = input_sequence_ids[0 : min(copy, len(input_sequence_ids)-1)]
         all_prompt_ids.append(prompt_ids)
+        
+        #TODO problemtaic for marian and bart models
         context_ids = input_sequence_ids + [sep_token_id] + prompt_ids
+        
         all_input_sequences.append(input_sequence)
         all_input_sequence_lengths.append(len(input_sequence_ids))
         all_context_ids.append(context_ids)

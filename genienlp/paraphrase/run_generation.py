@@ -68,9 +68,9 @@ ALL_MODELS = sum((tuple(map.keys()) for map in (GPT2_PRETRAINED_CONFIG_ARCHIVE_M
 
 MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'sep_token': '<paraphrase>', 'end_token': '</paraphrase>'}),
-    'bart': (BartForConditionalGeneration, BartTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}), # sep_token will not be used for BART
-    'mbart': (BartForConditionalGeneration, MBartTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}), # sep_token will not be used for MBART
-    'marian': (MarianMTModel, MarianTokenizer, {'sep_token': '<s>', 'end_token': '</s>'}), # sep_token will not be used for MARIAN
+    'bart': (BartForConditionalGeneration, BartTokenizer, {'sep_token': '<unk>', 'end_token': '</s>'}), # sep_token will not be used for BART
+    'mbart': (BartForConditionalGeneration, MBartTokenizer, {'sep_token': '<unk>', 'end_token': '</s>'}), # sep_token will not be used for MBART
+    'marian': (MarianMTModel, MarianTokenizer, {'sep_token': '<unk>', 'end_token': '</s>'}), # sep_token will not be used for MARIAN
 }
 
 
@@ -91,7 +91,7 @@ def parse_argv(parser):
 
     parser.add_argument('--output_prompt', action='store_true',
                         help='Whether we should include the prompt (specified via --prompt_column or --copy) in the output sequence')
-    parser.add_argument("--length", type=int, default=20, help='The generated sentences will have a maximum length of len(input) + arg.length')
+    parser.add_argument("--length", type=int, default=50, help='The generated sentences will have a maximum length of len(input) + arg.length')
     parser.add_argument("--min_output_length", type=int, default=2, help='Will prevent stop tokens from appearing in the first --min_output_length tokens of the generated sentences.')
     parser.add_argument("--skip_heuristics", action='store_true', help='If True, will not replace special word such as NUMBER_0 in the input.')
     parser.add_argument("--is_cased", action='store_true',
@@ -264,7 +264,7 @@ def run_single_process_generation(args, config):
 
     logger.info(args)
 
-    all_input_sequences, all_input_sequence_lengths, all_context_tokens, estimated_output_lengths, all_golds, reverse_maps, all_prompt_tokens = \
+    all_input_sequences, all_input_sequence_lengths, all_context_ids, estimated_output_lengths, all_golds, reverse_maps, all_prompt_ids = \
                                   create_features_from_tsv_file(file_path=args.input_file, tokenizer=tokenizer,
                                                                 input_column=args.input_column, gold_column=args.gold_column, prompt_column=args.prompt_column,
                                                                 copy=args.copy,
@@ -273,21 +273,20 @@ def run_single_process_generation(args, config):
                                                                 model_type=args.model_type, src_lang=args.src_lang, tgt_lang=args.tgt_lang)
 
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
-    estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, original_order, reverse_maps, all_prompt_tokens = \
-        tuple(zip(*sorted(list(zip(estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_tokens, range(len(all_context_tokens)), reverse_maps, all_prompt_tokens)), reverse=True)))
+    estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, original_order, reverse_maps, all_prompt_ids = \
+        tuple(zip(*sorted(list(zip(estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, range(len(all_context_ids)), reverse_maps, all_prompt_ids)), reverse=True)))
     all_outputs = []
 
     stop_token_ids = [tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens]
     
     batch_idx = 0
-    for batch in tqdm(range(math.ceil(len(all_context_tokens) / args.batch_size)), desc="Batch"):
+    for batch in tqdm(range(math.ceil(len(all_context_ids) / args.batch_size)), desc="Batch"):
         logging.info('') # to make kubectl properly print tqdm progress bar
-        batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_tokens)))
+        batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_ids)))
         batch_size = batch_slice[1] - batch_slice[0]
-        # batch_input_sequences = all_input_sequences[batch_slice[0]: batch_slice[1]]
-        batch_context_tokens = all_context_tokens[batch_slice[0]: batch_slice[1]]
+        batch_context_tokens = all_context_ids[batch_slice[0]: batch_slice[1]]
         batch_reverse_maps = reverse_maps[batch_slice[0]: batch_slice[1]]
-        batch_prompt_tokens = all_prompt_tokens[batch_slice[0]: batch_slice[1]]
+        batch_prompt_tokens = all_prompt_ids[batch_slice[0]: batch_slice[1]]
 
         if args.model_type == 'gpt2':
             batch_context_tensor = torch.tensor(model.pad_to_max_length(batch_context_tokens), dtype=torch.long, device=args.device)
@@ -303,11 +302,12 @@ def run_single_process_generation(args, config):
 
         batch_outputs = [[] for _ in range(batch_size)]
         for hyperparameter_idx in range(len(args.temperature)):
-            decoded, all_encoder_attentions = model.generate(input_ids=batch_context_tensor,
+            outputs = model.generate(input_ids=batch_context_tensor,
                                  bad_words_ids=None,
                                  attention_mask=attention_mask,
                                  min_length=args.min_output_length,
-                                 max_length=batch_context_tensor.shape[1]+args.length,
+                                 # max_length=batch_context_tensor.shape[1]+args.length,
+                                 max_length=args.length,
                                  num_beams=args.num_beams[hyperparameter_idx],
                                  top_k=args.top_k[hyperparameter_idx],
                                  top_p=args.top_p[hyperparameter_idx],
@@ -320,6 +320,13 @@ def run_single_process_generation(args, config):
                                  eos_token_id=end_token_id,
                                  pad_token_id=pad_token_id,
                                 )
+            
+            if len(outputs) > 1:
+                decoded, all_encoder_attentions = outputs
+            else:
+                decoded = outputs
+                
+
             if not isinstance(decoded, list):
                 decoded = decoded[:, :].tolist()
             for i, out in enumerate(decoded):
@@ -334,8 +341,9 @@ def run_single_process_generation(args, config):
                         min_index = min(index, min_index)
                     except ValueError:
                         pass
-                if min_index > 0 and o[min_index] != end_token_id:
-                    min_index = min_index + 1 # include the last token if it is not end_token
+
+                ### include eos_token too; it will get removed during decoding
+                min_index = min_index + 1
                 out = out[:min_index]
                 
                 text = tokenizer.decode(out, clean_up_tokenization_spaces=True, skip_special_tokens=True)
@@ -346,10 +354,26 @@ def run_single_process_generation(args, config):
                     text = output_heuristics(text, batch_reverse_maps[sample_index])
                 batch_outputs[sample_index].append(text)
 
+                import matplotlib.pyplot as plt
+                import seaborn as sns
+    
+                fig, ax = plt.subplots(figsize=(8, 6))
+                num_layers = len(all_encoder_attentions)
+                src_tokens = tokenizer.convert_ids_to_tokens(batch_context_tensor[i])
+                tgt_tokens = tokenizer.convert_ids_to_tokens(out)
+                # for layer_attention in all_encoder_attentions:
+                layer_attention = all_encoder_attentions[-1]
+                # max pool across heads
+                # for head_idx in range(layer_attention.size(1)):
+                sns.heatmap(torch.log(torch.mean(layer_attention[i, :, :len(tgt_tokens), :len(src_tokens)], dim=0, keepdim=False)), xticklabels=src_tokens, yticklabels=tgt_tokens)
+                plt.show()
+
         all_outputs.extend(batch_outputs)
         if batch_idx < 1:
             logger.info('First batch output: %s', str(all_outputs))
             batch_idx += 1
+
+
 
     # sort the results back to their original order
     _, all_outputs = tuple(zip(*sorted(list(zip(original_order, all_outputs)))))
@@ -368,3 +392,12 @@ def run_single_process_generation(args, config):
     logger.info('Average BLEU score = %.2f', metrics['bleu'])
     logger.info('Exact match score = %.2f', metrics['em'])
 
+
+def print_2d_tensor(tensor):
+    """ Print a 2D tensor """
+    logger.info("lv, h >\t" + "\t".join(f"{x + 1}" for x in range(len(tensor))))
+    for row in range(len(tensor)):
+        if tensor.dtype != torch.long:
+            logger.info(f"layer {row + 1}:\t" + "\t".join(f"{x:.5f}" for x in tensor[row].cpu().data))
+        else:
+            logger.info(f"layer {row + 1}:\t" + "\t".join(f"{x:d}" for x in tensor[row].cpu().data))
