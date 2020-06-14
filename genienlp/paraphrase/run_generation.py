@@ -28,6 +28,12 @@ import copy
 import os
 import numpy as np
 
+import matplotlib.pyplot as plt
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['font.serif'] = ['SimHei']
+import seaborn as sns
+sns.set_style("darkgrid",{"font.sans-serif":['simhei', 'Arial']})
+
 
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
@@ -62,7 +68,7 @@ logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(messa
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
 
-
+language_code_re = re.compile(">>.+<<")
 ALL_MODELS = sum((tuple(map.keys()) for map in (GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP)), ())
 
 MODEL_CLASSES = {
@@ -125,7 +131,8 @@ def parse_argv(parser):
     
     parser.add_argument('--src_lang', type=str, default='en', help='source language used for translation task')
     parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
-
+    parser.add_argument('--att_pooling', type=str, default='max', help='pooling used to calculate decoder-encoder attention values across different heads')
+    parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot decoder-encoder attention heatmaps')
 
 def main(args):
     hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
@@ -210,6 +217,10 @@ def run_multi_process_generation(args):
         args.gold_column = args.input_column
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     args.n_gpu = torch.cuda.device_count()
+    
+    if args.output_file is not None:
+        if not os.path.exists(os.path.dirname(args.output_file)):
+            os.makedirs(os.path.dirname(args.output_file), exist_ok=False)
 
     set_seed(args)
 
@@ -344,43 +355,69 @@ def run_single_process_generation(args, config):
                         pass
 
                 min_index = min_index + 1
-                out = out[:min_index]
+                out_cropped = out[:min_index]
                 
-                text = tokenizer.decode(out, clean_up_tokenization_spaces=True, skip_special_tokens=True)
+                text = tokenizer.decode(out_cropped, clean_up_tokenization_spaces=True, skip_special_tokens=True)
 
                 text = re.sub('\s\s+', ' ', text) # remove duplicate white spaces
                 text = text.strip()
                 if not args.skip_heuristics:
                     text = output_heuristics(text, batch_reverse_maps[sample_index])
                 batch_outputs[sample_index].append(text)
-
-                import matplotlib.pyplot as plt
-                import seaborn as sns
+                
+                if args.plot_heatmaps:
+                    src_tokens = tokenizer.convert_ids_to_tokens(batch_context_tensor[sample_index])
+                    tgt_tokens = tokenizer.convert_ids_to_tokens(out_cropped)
+                    # for layer_attention in all_encoder_attentions:
+                    layer_attention = all_encoder_attentions[-1]
+                    # max pool across heads
+                    # for head_idx in range(layer_attention.size(1)):
+                    print(layer_attention[i, :, :, :].size())
+                    print(len(tgt_tokens), len(src_tokens))
+                    
+                    sample_layer_attention = layer_attention[sample_index, :, :, :]
+                    
+                    if tgt_tokens[0] == tokenizer.pad_token or tgt_tokens[0] == special_tokens['sep_token']:
+                        # shift target tokens left to match the attention positions
+                        tgt_tokens = tgt_tokens[1:]
+                    while src_tokens[-1] == tokenizer.pad_token:
+                        # remove all padding from src
+                        src_tokens = src_tokens[:-1]
+                    if src_tokens[-1] == special_tokens['sep_token']:
+                        # remove trailing sep token
+                        src_tokens = src_tokens[:-1]
+                    if src_tokens[-1] == special_tokens['end_token']:
+                        # remove end token for better heatmap representation
+                        src_tokens = src_tokens[:-1]
+                        
+                    if len(language_code_re.findall(src_tokens[0])):
+                        # remove language code from the beginning of src_tokens and shift layer_attention
+                        src_tokens = src_tokens[1:]
+                        sample_layer_attention = sample_layer_attention[:, :, 1:]
+                        
     
-                fig, ax = plt.subplots(figsize=(8, 6))
-                num_layers = len(all_encoder_attentions)
-                src_tokens = tokenizer.convert_ids_to_tokens(batch_context_tensor[i])
-                tgt_tokens = tokenizer.convert_ids_to_tokens(out)
-                # for layer_attention in all_encoder_attentions:
-                layer_attention = all_encoder_attentions[-1]
-                # max pool across heads
-                # for head_idx in range(layer_attention.size(1)):
-                sns.heatmap(torch.log(torch.mean(layer_attention[i, :, :len(tgt_tokens), :len(src_tokens)], dim=0, keepdim=False)), xticklabels=src_tokens, yticklabels=tgt_tokens)
-                plt.show()
+                    # crop to match src and tgt new lengths
+                    sample_layer_attention = sample_layer_attention[:, :len(tgt_tokens), :len(src_tokens)]
+                    if args.att_pooling == 'mean':
+                        sample_layer_attention_pooled = torch.mean(sample_layer_attention, dim=0, keepdim=False)
+                    elif args.att_pooling == 'max':
+                        sample_layer_attention_pooled = torch.max(sample_layer_attention, dim=0, keepdim=False)[0]
+                        
+                    
+                    sns.heatmap(torch.log(sample_layer_attention_pooled), xticklabels=src_tokens, yticklabels=tgt_tokens, annot=True)
+                    if args.output_file is not None:
+                        plt.savefig(os.path.join(os.path.dirname(args.output_file), 'heatmap_{}'.format(batch_idx*batch_size + i)))
+                    plt.show()
 
         all_outputs.extend(batch_outputs)
         if batch_idx < 1:
             logger.info('First batch output: %s', str(all_outputs))
-            batch_idx += 1
-
-
+        batch_idx += 1
 
     # sort the results back to their original order
     _, all_outputs = tuple(zip(*sorted(list(zip(original_order, all_outputs)))))
 
     if args.output_file is not None:
-        if not os.path.exists(os.path.dirname(args.output_file)):
-            os.makedirs(os.path.dirname(args.output_file), exist_ok=False)
         with open(args.output_file, 'w') as output_file:
             for output in all_outputs:
                 for text in output:
