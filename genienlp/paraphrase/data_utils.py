@@ -122,7 +122,7 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
 
 
 def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, prompt_column, copy, thingtalk_column, sep_token_id,
-                                  skip_heuristics, is_cased, model_type, src_lang, tgt_lang):
+                                  skip_heuristics, is_cased, model_type, src_lang, tgt_lang, subsample):
     """
     Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
     Outputs:
@@ -145,7 +145,7 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         disable_tqdm = True
         input_file = sys.stdin
 
-
+    line_count = 0
     for line in tqdm(input_file, desc='Reading Input File', total=number_of_lines, disable=disable_tqdm):
         row = [r.strip() for r in line.split('\t')]
         input_sequence = row[input_column]
@@ -184,6 +184,11 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         all_input_sequence_lengths.append(len(input_sequence_ids))
         all_context_ids.append(context_ids)
         estimated_output_lengths.append(len(input_sequence_ids)-len(prompt_ids))
+        
+        line_count += 1
+        if line_count >= subsample:
+            break
+    logger.info("Input has {} examples; and we subsampled {} examples".format(number_of_lines, line_count))
     
     if file_path is not None:
         input_file.close()
