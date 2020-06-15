@@ -341,18 +341,23 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
-    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, paired=args.paired, max_pairs=args.max_pairs, train=True, 
-                   append_question_to_context_too=args.append_question_to_context_too))
+    train_iters = [(task,
+                    make_data_loader(x, numericalizer, tok, main_device, paired=args.paired,max_pairs=args.max_pairs,
+                                     train=True,  append_question_to_context_too=args.append_question_to_context_too,
+                                     override_question=args.override_question))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_values)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
     val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False, valid=True,
-                 append_question_to_context_too=args.append_question_to_context_too))
+                                         append_question_to_context_too=args.append_question_to_context_too,
+                                         override_question=args.override_question))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     aux_iters = []
     if use_curriculum:
-        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True))
+        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True,
+                                             append_question_to_context_too=args.append_question_to_context_too,
+                                             override_question=args.override_question))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_values)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         

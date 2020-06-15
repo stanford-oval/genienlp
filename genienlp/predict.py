@@ -109,10 +109,16 @@ def run(args, numericalizer, val_sets, model, device):
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
             for index, set in enumerate(val_set):
-                task_iter.append((task, task_languages[index],  make_data_loader(set, numericalizer, bs, device, append_question_to_context_too=args.append_question_to_context_too)))
+                loader = make_data_loader(set, numericalizer, bs, device,
+                                          append_question_to_context_too=args.append_question_to_context_too,
+                                          override_question=args.override_question)
+                task_iter.append((task, task_languages[index], loader))
         # single language task or no separate eval
         else:
-           task_iter.append((task, task_languages,  make_data_loader(val_set[0], numericalizer, bs, device, append_question_to_context_too=args.append_question_to_context_too)))
+           loader = make_data_loader(val_set[0], numericalizer, bs, device,
+                                     append_question_to_context_too=args.append_question_to_context_too,
+                                     override_question=args.override_question)
+           task_iter.append((task, task_languages, loader))
 
         iters.extend(task_iter)
         task_index += 1
@@ -190,7 +196,8 @@ def run(args, numericalizer, val_sets, model, device):
 
 def parse_argv(parser):
     parser.add_argument('--path', required=True)
-    parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'], help='Which dataset to do predictions for (test or dev)')
+    parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'],
+                        help='Which dataset to do predictions for (test or dev)')
     parser.add_argument('--pred_set_name', type=str, help='Name of dataset to run prediction for; will be ignored if --evaluate is test')
     parser.add_argument('--tasks',
                         default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl',

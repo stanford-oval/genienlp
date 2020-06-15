@@ -65,7 +65,9 @@ class Server:
             emb.grow_for_vocab(self.numericalizer.vocab, new_words)
 
         # batch of size 1
-        return Batch.from_examples([ex], self.numericalizer, device=self.device, append_question_to_context_too=self.args.append_question_to_context_too)
+        return Batch.from_examples([ex], self.numericalizer, device=self.device,
+                                   append_question_to_context_too=self.args.append_question_to_context_too,
+                                   override_question=self.args.override_question)
 
     def handle_request(self, line):
         request = json.loads(line)
