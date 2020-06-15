@@ -29,10 +29,7 @@ import os
 import numpy as np
 
 import matplotlib.pyplot as plt
-plt.rcParams['font.sans-serif'] = ['SimHei']
-plt.rcParams['font.serif'] = ['SimHei']
 import seaborn as sns
-sns.set_style("darkgrid",{"font.sans-serif":['simhei', 'Arial']})
 
 
 # multiprocessing with CUDA
@@ -133,6 +130,12 @@ def parse_argv(parser):
     parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
     parser.add_argument('--att_pooling', type=str, default='max', help='pooling used to calculate decoder-encoder attention values across different heads')
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot decoder-encoder attention heatmaps')
+    parser.add_argument('--replace_qp', action='store_true', help='replace parameter values after translation with source values')
+    parser.add_argument('--subsample', type=int, default=20000000, help='subsample input datasets')
+    
+    parser.add_argument('--task', type=str, required=True, choices=['paraphrase', 'translate'])
+
+
 
 def main(args):
     hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
@@ -263,7 +266,7 @@ def run_single_process_generation(args, config):
     end_token_id = tokenizer.convert_tokens_to_ids(special_tokens['end_token'])
     sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
-
+    
     if pad_token_id is None:
         logger.error('Your tokenizer does not have a padding token')
 
@@ -275,12 +278,20 @@ def run_single_process_generation(args, config):
     logger.info(args)
 
     all_input_sequences, all_input_sequence_lengths, all_context_ids, estimated_output_lengths, all_golds, reverse_maps, all_prompt_ids = \
-                                  create_features_from_tsv_file(file_path=args.input_file, tokenizer=tokenizer,
-                                                                input_column=args.input_column, gold_column=args.gold_column, prompt_column=args.prompt_column,
+                                  create_features_from_tsv_file(file_path=args.input_file,
+                                                                tokenizer=tokenizer,
+                                                                input_column=args.input_column,
+                                                                gold_column=args.gold_column,
+                                                                prompt_column=args.prompt_column,
                                                                 copy=args.copy,
                                                                 thingtalk_column=args.thingtalk_column,
-                                                                sep_token_id=sep_token_id, skip_heuristics=args.skip_heuristics, is_cased=args.is_cased,
-                                                                model_type=args.model_type, src_lang=args.src_lang, tgt_lang=args.tgt_lang)
+                                                                sep_token_id=sep_token_id,
+                                                                skip_heuristics=args.skip_heuristics,
+                                                                is_cased=args.is_cased,
+                                                                model_type=args.model_type,
+                                                                src_lang=args.src_lang,
+                                                                tgt_lang=args.tgt_lang,
+                                                                subsample=args.subsample)
 
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, original_order, reverse_maps, all_prompt_ids = \
@@ -311,7 +322,7 @@ def run_single_process_generation(args, config):
             batch_context_tensor = torch.tensor(padded_batch_context_tokens, dtype=torch.long, device=args.device)
             attention_mask = (batch_context_tensor!=pad_token_id).to(torch.long)
 
-
+        all_encoder_attentions = None
         batch_outputs = [[] for _ in range(batch_size)]
         for hyperparameter_idx in range(len(args.temperature)):
             outputs = model.generate(input_ids=batch_context_tensor,
@@ -356,27 +367,14 @@ def run_single_process_generation(args, config):
 
                 min_index = min_index + 1
                 out_cropped = out[:min_index]
-                
-                text = tokenizer.decode(out_cropped, clean_up_tokenization_spaces=True, skip_special_tokens=True)
-
-                text = re.sub('\s\s+', ' ', text) # remove duplicate white spaces
-                text = text.strip()
-                if not args.skip_heuristics:
-                    text = output_heuristics(text, batch_reverse_maps[sample_index])
-                batch_outputs[sample_index].append(text)
-                
-                if args.plot_heatmaps:
+            
+                if args.task == 'translate':
                     src_tokens = tokenizer.convert_ids_to_tokens(batch_context_tensor[sample_index])
                     tgt_tokens = tokenizer.convert_ids_to_tokens(out_cropped)
-                    # for layer_attention in all_encoder_attentions:
+                    
                     layer_attention = all_encoder_attentions[-1]
-                    # max pool across heads
-                    # for head_idx in range(layer_attention.size(1)):
-                    print(layer_attention[i, :, :, :].size())
-                    print(len(tgt_tokens), len(src_tokens))
-                    
                     sample_layer_attention = layer_attention[sample_index, :, :, :]
-                    
+
                     if tgt_tokens[0] == tokenizer.pad_token or tgt_tokens[0] == special_tokens['sep_token']:
                         # shift target tokens left to match the attention positions
                         tgt_tokens = tgt_tokens[1:]
@@ -389,25 +387,38 @@ def run_single_process_generation(args, config):
                     if src_tokens[-1] == special_tokens['end_token']:
                         # remove end token for better heatmap representation
                         src_tokens = src_tokens[:-1]
-                        
+
                     if len(language_code_re.findall(src_tokens[0])):
                         # remove language code from the beginning of src_tokens and shift layer_attention
                         src_tokens = src_tokens[1:]
                         sample_layer_attention = sample_layer_attention[:, :, 1:]
-                        
-    
+
                     # crop to match src and tgt new lengths
                     sample_layer_attention = sample_layer_attention[:, :len(tgt_tokens), :len(src_tokens)]
-                    if args.att_pooling == 'mean':
-                        sample_layer_attention_pooled = torch.mean(sample_layer_attention, dim=0, keepdim=False)
-                    elif args.att_pooling == 'max':
-                        sample_layer_attention_pooled = torch.max(sample_layer_attention, dim=0, keepdim=False)[0]
-                        
+
+                    sample_layer_attention_pooled = compute_attention(sample_layer_attention, args.att_pooling)
                     
-                    sns.heatmap(torch.log(sample_layer_attention_pooled), xticklabels=src_tokens, yticklabels=tgt_tokens, annot=True)
-                    if args.output_file is not None:
-                        plt.savefig(os.path.join(os.path.dirname(args.output_file), 'heatmap_{}'.format(batch_idx*batch_size + i)))
-                    plt.show()
+                    if args.plot_heatmaps:
+                        sns.heatmap(torch.log(sample_layer_attention_pooled), xticklabels=src_tokens,
+                                    yticklabels=tgt_tokens, annot=True)
+                        if args.output_file is not None:
+                            plt.savefig(os.path.join(os.path.dirname(args.output_file),
+                                                     'heatmap_{}'.format(batch_idx * batch_size + i)))
+                        plt.show()
+                    
+                    if args.replace_qp:
+                        text = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, args.model_type)
+                    else:
+                        text = tokenizer.convert_tokens_to_string(tgt_tokens)
+                else:
+                    text = tokenizer.decode(out_cropped, clean_up_tokenization_spaces=True, skip_special_tokens=True)
+
+                text = re.sub('\s\s+', ' ', text)  # remove duplicate white spaces
+                text = text.strip()
+                if not args.skip_heuristics:
+                    text = output_heuristics(text, batch_reverse_maps[sample_index])
+                batch_outputs[sample_index].append(text)
+                
 
         all_outputs.extend(batch_outputs)
         if batch_idx < 1:
@@ -428,6 +439,112 @@ def run_single_process_generation(args, config):
     metrics = compute_metrics(all_outputs, all_golds, reduction=args.metric_reduction)
     logger.info('Average BLEU score = %.2f', metrics['bleu'])
     logger.info('Exact match score = %.2f', metrics['em'])
+
+
+def compute_attention(sample_layer_attention, att_pooling):
+    sample_layer_attention_pooled = None
+    if att_pooling == 'mean':
+        sample_layer_attention_pooled = torch.mean(sample_layer_attention, dim=0, keepdim=False)
+    elif att_pooling == 'max':
+        sample_layer_attention_pooled = torch.max(sample_layer_attention, dim=0, keepdim=False)[0]
+        
+    return sample_layer_attention_pooled
+
+def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, model_type):
+    # find positions of quotation marks in src and tgt
+    src2tgt_mapping = {}
+    src2tgt_mapping_index = {}
+    
+    quote_wordpiece = tokenizer.tokenize('"')[0]
+    
+    src_spans_ind = [index for index, token in enumerate(src_tokens) if token == quote_wordpiece]
+    tgt_spans_ind = [index for index, token in enumerate(tgt_tokens) if token == quote_wordpiece]
+    
+    if len(src_spans_ind) % 2 != 0:
+        raise ValueError('corrupted span in src text: {}'.format(src_tokens))
+    if len(tgt_spans_ind) % 2 != 0:
+        raise ValueError('corrupted span in tgt text: {}'.format(tgt_tokens))
+    
+    # arrange spans and exclude quotation mark indices
+    src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
+    tgt_spans = [(tgt_spans_ind[i] + 1, tgt_spans_ind[i + 1] - 1) for i in range(0, len(tgt_spans_ind), 2)]
+    
+    if len(src_spans) != len(tgt_spans):
+        raise ValueError('numbers of spans in src and tgt text do not match: {}, {}'.format(src_tokens, tgt_tokens))
+    
+    tgt_span_success = set()
+    for src_idx, (beg, end) in enumerate(src_spans):
+        i = beg
+        tgt_span_idx = None
+        while i <= end:
+            max_tgt_att_idx = torch.argmax(sample_layer_attention_pooled[:, i]).item()
+            
+            # find span in tgt that contains this index
+            for tgt_idx, (s1, s2) in enumerate(tgt_spans):
+                if s1 <= max_tgt_att_idx <= s2 and (s1, s2) not in tgt_span_success:
+                    tgt_span_idx = tgt_idx
+                    src2tgt_mapping[(beg, end)] = (s1, s2)
+                    src2tgt_mapping_index[src_idx] = tgt_span_idx
+                    tgt_span_success.add((s1, s2))
+                    break
+            if tgt_span_idx is not None:
+                break
+            else:
+                # span could not be found; check the next wordpiece
+                i += 1
+        
+        if tgt_span_idx is None:
+            raise ValueError('Could not find a corresponding span in tgt for ({}, {}) src span'.format(beg, end))
+    ####
+    # replacing in word-piece space is not clean since Marian uses different spm models for src and tgt
+    ####
+    # # replace property values (wrapped in quotation marks) in target text with source values
+    # tgt2src_mapping = {v: k for k, v in src2tgt_mapping.items()}
+    # tgt_begin2span = {k[0]: k for k, v in tgt2src_mapping.items()}
+    # all_tgt_begins = set(tgt_begin2span.keys())
+    #
+    # new_tgt_tokens = []
+    # i = 0
+    # while i < len(tgt_tokens):
+    #     if i in all_tgt_begins:
+    #         tgt_span = tgt_begin2span[i]
+    #         src_span = tgt2src_mapping[tgt_span]
+    #         new_tgt_tokens.extend(src_tokens[src_span[0]: src_span[1]+1])
+    #         i += tgt_span[1] - tgt_span[0] + 1
+    #     else:
+    #         new_tgt_tokens.append(tgt_tokens[i])
+    #         i += 1
+    # final_output = tokenizer.convert_tokens_to_ids(new_tgt_tokens)
+    
+    if model_type == 'marian':
+        src_text = tokenizer.spm_source.DecodePieces(src_tokens)
+        tgt_text = tokenizer.spm_target.DecodePieces(tgt_tokens)
+    else:
+        src_text = tokenizer.convert_tokens_to_string(src_tokens)
+        tgt_text = tokenizer.convert_tokens_to_string(tgt_tokens)
+    
+    quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
+    
+    src_matches = list(re.finditer(quoted_pattern_maybe_space, src_text))
+    tgt_matches = list(re.finditer(quoted_pattern_maybe_space, tgt_text))
+    
+    tgt2src_mapping_index = {v: k for k, v in src2tgt_mapping_index.items()}
+    
+    tokens = []
+    curr = 0
+    for pos, match in enumerate(tgt_matches):
+        start, end = match.span()
+        if start > curr:
+            tokens.append(tgt_text[curr:start])
+        replace_match = src_matches[tgt2src_mapping_index[pos]]
+        tokens.append(replace_match.group(0))
+        curr = end
+    if curr < len(tgt_text):
+        tokens.append(tgt_text[curr:])
+    
+    text = ' '.join(tokens)
+    
+    return text
 
 
 def print_2d_tensor(tensor):
