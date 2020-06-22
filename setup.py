@@ -57,6 +57,8 @@ setuptools.setup(
         'requests~=2.22',
         'transformers==2.11',
         'sentencepiece>=0.1.83,<0.2.0',
-        'mosestokenizer~=1.1'
+        'mosestokenizer~=1.1',
+        'matplotlib~=3.1',
+        'seaborn~=0.9'
     ]
 )
