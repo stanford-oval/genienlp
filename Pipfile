@@ -10,7 +10,7 @@ genienlp = "python3 -m genienlp"
 scikit-learn = "*"
 
 [packages]
-numpy = "*"
+numpy = ">=1.14.5"
 torch = "~=1.4"
 revtok = "==0.0.3"
 tqdm = "~=4.0"
