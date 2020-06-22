@@ -121,7 +121,7 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
 
 
-def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, prompt_column, copy, thingtalk_column, sep_token_id,
+def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, copy, thingtalk_column, sep_token_id,
                                   skip_heuristics, is_cased, model_type, src_lang, tgt_lang, subsample):
     """
     Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
@@ -130,6 +130,7 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
     """
     all_input_sequences = []
     all_input_sequence_lengths = []
+    all_example_ids = []
     all_context_ids = []
     estimated_output_lengths = []
     all_golds = []
@@ -150,6 +151,11 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         row = [r.strip() for r in line.split('\t')]
         input_sequence = row[input_column]
         gold = row[gold_column]
+        if id_column is not None:
+            id_ = row[id_column]
+        else:
+            id_ = line_count
+        all_example_ids.append(id_)
         if not skip_heuristics:
             gold, _ = input_heuristics(gold, None, is_cased, keep_special_tokens=True, keep_tokenized=True)
         all_golds.append(gold)
@@ -193,7 +199,7 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
     if file_path is not None:
         input_file.close()
 
-    return all_input_sequences, all_input_sequence_lengths, all_context_ids, estimated_output_lengths, all_golds, reverse_maps, all_prompt_ids
+    return all_input_sequences, all_input_sequence_lengths, all_example_ids, all_context_ids, estimated_output_lengths, all_golds, reverse_maps, all_prompt_ids
 
 
 def is_question(sentence: str):
