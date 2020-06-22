@@ -1,6 +1,8 @@
 from transformers.modeling_bart import _filter_out_falsey_values, PretrainedBartModel, _make_linear_from_emb, LayerNorm, \
     LearnedPositionalEmbedding, BartEncoder, _prepare_bart_decoder_inputs, _reorder_buffer, SelfAttention, invert_mask
 
+MARIAN_SUPPORTED_LANGUAGES = ['https://huggingface.co/Helsinki-NLP']
+
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json",
     "facebook/bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",

@@ -31,7 +31,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
@@ -89,6 +88,8 @@ def parse_argv(parser):
                         help='The column in the input file which contains the gold sentences. Defaults to --input_column if no gold is available.')
     parser.add_argument('--thingtalk_column', type=int, default=None,
                         help='The column in the input file which contains the ThingTalk program.')
+    parser.add_argument('--id_column', type=int, default=None,
+                        help='The column in the input file which contains the example ID.')
     parser.add_argument("--output_file", type=str, help="When specified, generated text will be written in this file. Defaults to stdout.")
     parser.add_argument("--intermediate_file", type=str, default='./paraphrase_tmp.tsv', help="Used to save intermediate results.")
 
@@ -135,6 +136,8 @@ def parse_argv(parser):
     parser.add_argument('--subsample', type=int, default=20000000, help='subsample input datasets')
     
     parser.add_argument('--task', type=str, required=True, choices=['paraphrase', 'translate'])
+
+    parser.add_argument("--output_example_ids_too", action='store_true', help='Generate two column output with ids in the first column')
 
 
 
@@ -278,11 +281,12 @@ def run_single_process_generation(args, config):
 
     logger.info(args)
 
-    all_input_sequences, all_input_sequence_lengths, all_context_ids, estimated_output_lengths, all_golds, reverse_maps, all_prompt_ids = \
+    all_input_sequences, all_input_sequence_lengths, all_example_ids, all_context_ids, estimated_output_lengths, all_golds, reverse_maps, all_prompt_ids = \
                                   create_features_from_tsv_file(file_path=args.input_file,
                                                                 tokenizer=tokenizer,
                                                                 input_column=args.input_column,
                                                                 gold_column=args.gold_column,
+                                                                id_column=args.id_column,
                                                                 prompt_column=args.prompt_column,
                                                                 copy=args.copy,
                                                                 thingtalk_column=args.thingtalk_column,
@@ -430,9 +434,12 @@ def run_single_process_generation(args, config):
 
     if args.output_file is not None:
         with open(args.output_file, 'w') as output_file:
-            for output in all_outputs:
-                for text in output:
-                    output_file.write(text + '\n')
+            for i, output in enumerate(all_outputs):
+                for j, text in enumerate(output):
+                    if args.output_example_ids_too:
+                        output_file.write('\t'.join(['{}-{}'.format(all_example_ids[i], j), text]) + '\n')
+                    else:
+                        output_file.write(text + '\n')
     else:
         print(json.dumps(all_outputs, indent=2))
 
@@ -456,21 +463,36 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     src2tgt_mapping_index = {}
     
     quote_wordpiece = tokenizer.tokenize('"')[0]
+    quote_token = '"'
     
-    src_spans_ind = [index for index, token in enumerate(src_tokens) if token == quote_wordpiece]
-    tgt_spans_ind = [index for index, token in enumerate(tgt_tokens) if token == quote_wordpiece]
+    src_spans_ind = [index for index, token in enumerate(src_tokens) if token in [quote_wordpiece, quote_token]]
+    tgt_spans_ind = [index for index, token in enumerate(tgt_tokens) if token in [quote_wordpiece, quote_token]]
     
     if len(src_spans_ind) % 2 != 0:
-        raise ValueError('corrupted span in src text: {}'.format(src_tokens))
+        logging.error('corrupted span in src text: {}'.format(tokenizer.spm_source.DecodePieces(src_tokens)))
     if len(tgt_spans_ind) % 2 != 0:
-        raise ValueError('corrupted span in tgt text: {}'.format(tgt_tokens))
+        logging.error('corrupted span in tgt text: {} with src text: {}\n'
+                      'outputting example without reverting the parameter'.format(tokenizer.spm_target.DecodePieces(tgt_tokens), tokenizer.spm_source.DecodePieces(src_tokens)))
+        if model_type == 'marian':
+            tgt_text = tokenizer.spm_target.DecodePieces(tgt_tokens)
+        else:
+            tgt_text = tokenizer.convert_tokens_to_string(tgt_tokens)
+    
+        return tgt_text
     
     # arrange spans and exclude quotation mark indices
     src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
     tgt_spans = [(tgt_spans_ind[i] + 1, tgt_spans_ind[i + 1] - 1) for i in range(0, len(tgt_spans_ind), 2)]
     
     if len(src_spans) != len(tgt_spans):
-        raise ValueError('numbers of spans in src and tgt text do not match: {}, {}'.format(src_tokens, tgt_tokens))
+        logging.error('numbers of spans in src and tgt text do not match: {}, {}\n'
+                      'outputting example without reverting the parameter'.format(src_tokens, tgt_tokens))
+        if model_type == 'marian':
+            tgt_text = tokenizer.spm_target.DecodePieces(tgt_tokens)
+        else:
+            tgt_text = tokenizer.convert_tokens_to_string(tgt_tokens)
+            
+        return tgt_text
     
     tgt_span_success = set()
     for src_idx, (beg, end) in enumerate(src_spans):
