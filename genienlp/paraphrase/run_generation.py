@@ -379,6 +379,7 @@ def run_single_process_generation(args, config):
                     src_tokens = tokenizer.convert_ids_to_tokens(batch_context_tensor[sample_index])
                     tgt_tokens = tokenizer.convert_ids_to_tokens(out_cropped)
                     
+                    # get last layer attention vectors
                     layer_attention = all_encoder_attentions[-1]
                     sample_layer_attention = layer_attention[sample_index, :, :, :]
 
@@ -426,7 +427,6 @@ def run_single_process_generation(args, config):
                     text = output_heuristics(text, batch_reverse_maps[sample_index])
                 batch_outputs[sample_index].append(text)
                 
-
         all_outputs.extend(batch_outputs)
         if batch_idx < 1:
             logger.info('First batch output: %s', str(all_outputs))
@@ -465,11 +465,12 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     src2tgt_mapping = {}
     src2tgt_mapping_index = {}
     
-    quote_wordpiece = tokenizer.tokenize('"')[0]
-    quote_token = '"'
+    ## FIXED: quotation marks are exclusively used to wrap parameters so just check if they are present in target token
+    # quote_wordpiece = tokenizer.tokenize('"')[0]
+    # quote_token = '"'
     
-    src_spans_ind = [index for index, token in enumerate(src_tokens) if token in [quote_wordpiece, quote_token]]
-    tgt_spans_ind = [index for index, token in enumerate(tgt_tokens) if token in [quote_wordpiece, quote_token]]
+    src_spans_ind = [index for index, token in enumerate(src_tokens) if '"' in token]
+    tgt_spans_ind = [index for index, token in enumerate(tgt_tokens) if '"' in token]
     
     if model_type == 'marian':
         src_strings = tokenizer.spm_source.DecodePieces(src_tokens)
@@ -563,13 +564,3 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     text = ' '.join(tokens)
     
     return text
-
-
-def print_2d_tensor(tensor):
-    """ Print a 2D tensor """
-    logger.info("lv, h >\t" + "\t".join(f"{x + 1}" for x in range(len(tensor))))
-    for row in range(len(tensor)):
-        if tensor.dtype != torch.long:
-            logger.info(f"layer {row + 1}:\t" + "\t".join(f"{x:.5f}" for x in tensor[row].cpu().data))
-        else:
-            logger.info(f"layer {row + 1}:\t" + "\t".join(f"{x:d}" for x in tensor[row].cpu().data))
