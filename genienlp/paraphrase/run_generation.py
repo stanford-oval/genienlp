@@ -468,31 +468,30 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     src_spans_ind = [index for index, token in enumerate(src_tokens) if token in [quote_wordpiece, quote_token]]
     tgt_spans_ind = [index for index, token in enumerate(tgt_tokens) if token in [quote_wordpiece, quote_token]]
     
-    if len(src_spans_ind) % 2 != 0:
-        logging.error('corrupted span in src text: {}'.format(tokenizer.spm_source.DecodePieces(src_tokens)))
-    if len(tgt_spans_ind) % 2 != 0:
-        logging.error('corrupted span in tgt text: {} with src text: {}\n'
-                      'outputting example without reverting the parameter'.format(tokenizer.spm_target.DecodePieces(tgt_tokens), tokenizer.spm_source.DecodePieces(src_tokens)))
-        if model_type == 'marian':
-            tgt_text = tokenizer.spm_target.DecodePieces(tgt_tokens)
-        else:
-            tgt_text = tokenizer.convert_tokens_to_string(tgt_tokens)
+    if model_type == 'marian':
+        src_strings = tokenizer.spm_source.DecodePieces(src_tokens)
+        tgt_strings = tokenizer.spm_target.DecodePieces(tgt_tokens)
+    else:
+        src_strings = tokenizer.convert_tokens_to_string(src_tokens)
+        tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
     
-        return tgt_text
+    if len(src_spans_ind) % 2 != 0:
+        logging.error('corrupted span in src string: [{}]'.format(src_strings))
+    if len(tgt_spans_ind) % 2 != 0:
+        logging.error('corrupted span in tgt string: [{}] with src string: [{}]\n'
+                      'outputting example without reverting the parameter'.format(tgt_strings, src_strings))
+    
+        return tgt_strings
     
     # arrange spans and exclude quotation mark indices
     src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
     tgt_spans = [(tgt_spans_ind[i] + 1, tgt_spans_ind[i + 1] - 1) for i in range(0, len(tgt_spans_ind), 2)]
     
     if len(src_spans) != len(tgt_spans):
-        logging.error('numbers of spans in src and tgt text do not match: {}, {}\n'
-                      'outputting example without reverting the parameter'.format(src_tokens, tgt_tokens))
-        if model_type == 'marian':
-            tgt_text = tokenizer.spm_target.DecodePieces(tgt_tokens)
-        else:
-            tgt_text = tokenizer.convert_tokens_to_string(tgt_tokens)
+        logging.error('numbers of spans in src and tgt strings do not match: [{}], [{}]\n'
+                      'outputting example without reverting the parameter'.format(src_strings, tgt_strings))
             
-        return tgt_text
+        return tgt_strings
     
     tgt_span_success = set()
     for src_idx, (beg, end) in enumerate(src_spans):
@@ -516,7 +515,8 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
                 i += 1
         
         if tgt_span_idx is None:
-            raise ValueError('Could not find a corresponding span in tgt for ({}, {}) src span'.format(beg, end))
+            logger.error('Could not find a corresponding span in tgt for ({}, {}) src span in src string: [{}]'.format(beg, end, src_strings))
+            return tgt_strings
     ####
     # replacing in word-piece space is not clean since Marian uses different spm models for src and tgt
     ####
@@ -538,17 +538,10 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     #         i += 1
     # final_output = tokenizer.convert_tokens_to_ids(new_tgt_tokens)
     
-    if model_type == 'marian':
-        src_text = tokenizer.spm_source.DecodePieces(src_tokens)
-        tgt_text = tokenizer.spm_target.DecodePieces(tgt_tokens)
-    else:
-        src_text = tokenizer.convert_tokens_to_string(src_tokens)
-        tgt_text = tokenizer.convert_tokens_to_string(tgt_tokens)
-    
     quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
     
-    src_matches = list(re.finditer(quoted_pattern_maybe_space, src_text))
-    tgt_matches = list(re.finditer(quoted_pattern_maybe_space, tgt_text))
+    src_matches = list(re.finditer(quoted_pattern_maybe_space, src_strings))
+    tgt_matches = list(re.finditer(quoted_pattern_maybe_space, tgt_strings))
     
     tgt2src_mapping_index = {v: k for k, v in src2tgt_mapping_index.items()}
     
@@ -557,12 +550,12 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     for pos, match in enumerate(tgt_matches):
         start, end = match.span()
         if start > curr:
-            tokens.append(tgt_text[curr:start])
+            tokens.append(tgt_strings[curr:start])
         replace_match = src_matches[tgt2src_mapping_index[pos]]
         tokens.append(replace_match.group(0))
         curr = end
-    if curr < len(tgt_text):
-        tokens.append(tgt_text[curr:])
+    if curr < len(tgt_strings):
+        tokens.append(tgt_strings[curr:])
     
     text = ' '.join(tokens)
     
