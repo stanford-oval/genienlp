@@ -45,7 +45,7 @@ except RuntimeError:
 import torch
 
 from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_GROUP_MEMBERS
+from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_GROUP_MEMBERS, SPIECE_UNDERLINE
 
 from transformers import GPT2Tokenizer
 
@@ -133,12 +133,11 @@ def parse_argv(parser):
     parser.add_argument('--att_pooling', type=str, default='max', help='pooling used to calculate decoder-encoder attention values across different heads')
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot decoder-encoder attention heatmaps')
     parser.add_argument('--replace_qp', action='store_true', help='replace parameter values after translation with source values')
+    parser.add_argument('--force_replace_qp', action='store_true', help='if we parameters could not be replaced leveraging quotation marks,'
+                                                                        ' rely purely on attention to find text spans')
     parser.add_argument('--subsample', type=int, default=20000000, help='subsample input datasets')
-    
     parser.add_argument('--task', type=str, required=True, choices=['paraphrase', 'translate'])
-
     parser.add_argument("--output_example_ids_too", action='store_true', help='Generate two column output with ids in the first column')
-
 
 
 def main(args):
@@ -412,7 +411,9 @@ def run_single_process_generation(args, config):
                         plt.show()
                     
                     if args.replace_qp:
-                        text = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, args.model_type)
+                        text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, args.model_type)
+                        if not is_replaced and args.force_replace_qp:
+                            text = force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, args.model_type)
                     else:
                         text = tokenizer.convert_tokens_to_string(tgt_tokens)
                 else:
@@ -475,6 +476,7 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     else:
         src_strings = tokenizer.convert_tokens_to_string(src_tokens)
         tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
+
     
     if len(src_spans_ind) % 2 != 0:
         logging.error('corrupted span in src string: [{}]'.format(src_strings))
@@ -482,7 +484,7 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
         logging.error('corrupted span in tgt string: [{}] with src string: [{}]\n'
                       'outputting example without reverting the parameter'.format(tgt_strings, src_strings))
     
-        return tgt_strings
+        return tgt_strings, False
     
     # arrange spans and exclude quotation mark indices
     src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
@@ -492,7 +494,7 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
         logging.error('numbers of spans in src and tgt strings do not match: [{}], [{}]\n'
                       'outputting example without reverting the parameter'.format(src_strings, tgt_strings))
             
-        return tgt_strings
+        return tgt_strings, False
     
     tgt_span_success = set()
     for src_idx, (beg, end) in enumerate(src_spans):
@@ -517,7 +519,7 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
         
         if tgt_span_idx is None:
             logger.error('Could not find a corresponding span in tgt for ({}, {}) src span in src string: [{}]'.format(beg, end, src_strings))
-            return tgt_strings
+            return tgt_strings, False
     ####
     # replacing in word-piece space is not clean since Marian uses different spm models for src and tgt
     ####
@@ -545,7 +547,8 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     tgt_matches = list(re.finditer(quoted_pattern_maybe_space, tgt_strings))
     
     tgt2src_mapping_index = {v: k for k, v in src2tgt_mapping_index.items()}
-    
+
+    # move through characters
     tokens = []
     curr = 0
     for pos, match in enumerate(tgt_matches):
@@ -557,6 +560,65 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
         curr = end
     if curr < len(tgt_strings):
         tokens.append(tgt_strings[curr:])
+    
+    text = ' '.join(tokens)
+    
+    return text, True
+
+
+def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, model_type):
+    # find positions of quotation marks in src and tgt
+    src2tgt_mapping = {}
+    
+    src_spans_ind = [index for index, token in enumerate(src_tokens) if '"' in token]
+    
+    if model_type == 'marian':
+        src_strings = tokenizer.spm_source.DecodePieces(src_tokens)
+        tgt_strings = tokenizer.spm_target.DecodePieces(tgt_tokens)
+    else:
+        src_strings = tokenizer.convert_tokens_to_string(src_tokens)
+        tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
+        
+
+    tgt_is_piece = [1 if token[0] == SPIECE_UNDERLINE else 0 for token in tgt_tokens]
+    tgt_piece2word_mapping = list(np.cumsum(tgt_is_piece) - 1)
+    
+    if len(src_spans_ind) % 2 != 0:
+        logging.error('corrupted span in src string: [{}]'.format(src_strings))
+    
+    # arrange spans and exclude quotation mark indices
+    src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
+    
+    for src_idx, (beg, end) in enumerate(src_spans):
+        # check wordpiece after beg and before end
+        s1 = torch.argmax(sample_layer_attention_pooled[:, beg]).item()
+        s2 = torch.argmax(sample_layer_attention_pooled[:, end]).item()
+        
+        src2tgt_mapping[(beg, end)] = (s1, s2)
+    
+
+    quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
+    
+    src_matches = list(re.finditer(quoted_pattern_maybe_space, src_strings))
+    
+    # update src2tgt_mapping to map to word indices in response
+    for key, value in src2tgt_mapping.items():
+        s1, s2 = value
+        src2tgt_mapping[key] = tgt_piece2word_mapping[s1] - 1, tgt_piece2word_mapping[s2] + 1
+    
+    # move through words
+    tgt_strings_words = tgt_strings.split(' ')
+    tokens = []
+    curr = 0
+    for i , (key, value) in enumerate(src2tgt_mapping.items()):
+        start, end = value
+        if start > curr:
+            tokens.extend(tgt_strings_words[curr:start])
+        replace_match = src_matches[i]
+        tokens.append(replace_match.group(0))
+        curr = end
+    if curr < len(tgt_strings_words):
+        tokens.extend(tgt_strings_words[curr:])
     
     text = ' '.join(tokens)
     
