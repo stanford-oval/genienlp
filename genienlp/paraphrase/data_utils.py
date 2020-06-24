@@ -122,7 +122,7 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
 
 
 def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, copy, thingtalk_column, sep_token_id,
-                                  skip_heuristics, is_cased, model_type, src_lang, tgt_lang, subsample):
+                                  skip_heuristics, is_cased, model_type, src_lang, tgt_lang, subsample, task):
     """
     Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
     Outputs:
@@ -169,6 +169,8 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         if model_type == 'marian' and tgt_lang:
             #TODO check if extra space after pattern is necessary
             input_sequence = '>>{}<< '.format(tgt_lang) + input_sequence
+        elif model_type == 'mbart':
+            tokenizer.cur_lang_code = tokenizer.lang_code_to_id[src_lang]
             
         input_sequence_ids = tokenizer.encode(input_sequence, add_special_tokens=True)
         
@@ -184,7 +186,10 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         all_prompt_ids.append(prompt_ids)
         
         #TODO problemtaic for marian and bart models
-        context_ids = input_sequence_ids + [sep_token_id] + prompt_ids
+        if task != 'translate':
+            context_ids = input_sequence_ids + [sep_token_id] + prompt_ids
+        else:
+            context_ids = input_sequence_ids
         
         all_input_sequences.append(input_sequence)
         all_input_sequence_lengths.append(len(input_sequence_ids))
