@@ -95,7 +95,7 @@ def parse_argv(parser):
 
     parser.add_argument('--output_prompt', action='store_true',
                         help='Whether we should include the prompt (specified via --prompt_column or --copy) in the output sequence')
-    parser.add_argument("--length", type=int, default=50, help='The generated sentences will have a maximum length of len(input) + arg.length')
+    parser.add_argument("--length", type=int, default=15, help='The generated sentences will have a maximum length of len(input) + arg.length')
     parser.add_argument("--min_output_length", type=int, default=2, help='Will prevent stop tokens from appearing in the first --min_output_length tokens of the generated sentences.')
     parser.add_argument("--skip_heuristics", action='store_true', help='If True, will not replace special word such as NUMBER_0 in the input.')
     parser.add_argument("--is_cased", action='store_true',
@@ -333,8 +333,8 @@ def run_single_process_generation(args, config):
                                  bad_words_ids=None,
                                  attention_mask=attention_mask,
                                  min_length=args.min_output_length,
-                                 # max_length=batch_context_tensor.shape[1]+args.length,
-                                 max_length=args.length,
+                                 max_length=batch_context_tensor.shape[1]+args.length,
+                                # max_length=args.length,
                                  num_beams=args.num_beams[hyperparameter_idx],
                                  top_k=args.top_k[hyperparameter_idx],
                                  top_p=args.top_p[hyperparameter_idx],
@@ -347,7 +347,6 @@ def run_single_process_generation(args, config):
                                  eos_token_id=end_token_id,
                                  pad_token_id=pad_token_id,
                                 )
-            
             if len(outputs) > 1:
                 decoded, all_encoder_attentions = outputs
             else:
@@ -357,8 +356,9 @@ def run_single_process_generation(args, config):
             if not isinstance(decoded, list):
                 decoded = decoded[:, :].tolist()
             for i, out in enumerate(decoded):
+                if args.model_type=='bart' or args.model_type=='mbart':
+                    out = out[1:] # remove </s> token at the beginning
                 sample_index = (i//args.num_samples[hyperparameter_idx]) % batch_size
-                
                 if not args.output_prompt:
                     out = out[len(batch_prompt_tokens[sample_index]):]
                 min_index = len(out)-1
