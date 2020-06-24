@@ -65,7 +65,8 @@ def get_all_splits(args):
             raise ValueError('Split used for prediction should be either valid or test')
         
         kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
-                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages})
+                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages,
+                       'almond_lang_as_question': args.almond_lang_as_question})
         
         kwargs['separate_eval'] = args.separate_eval
         task_splits = task.get_splits(root=args.data, lower=args.lower, **kwargs)
@@ -157,6 +158,7 @@ def run(args, numericalizer, val_sets, model, device):
 
             predictions = []
             answers = []
+            contexts = []
             with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
                 for batch_idx, batch in tqdm(enumerate(it), desc="Batches"):
                     _, batch_prediction = model(batch, iteration=1)
@@ -167,6 +169,9 @@ def run(args, numericalizer, val_sets, model, device):
                     batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize,
                                                          field_name='answer')
                     answers += batch_answer
+                    batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize,
+                                                         field_name='context')
+                    contexts += batch_context
 
                     for i, example_prediction in enumerate(batch_prediction):
                         prediction_file.write(batch.example_id[i] + '\t' + example_prediction + '\n')
@@ -177,14 +182,14 @@ def run(args, numericalizer, val_sets, model, device):
                     results_file.write(json.dumps(metrics) + '\n')
 
                 if not args.silent:
-                    for i, (p, a) in enumerate(zip(predictions, answers)):
-                        logger.info(f'Prediction {i + 1}: {p}\nAnswer {i + 1}: {a}\n')
+                    for i, (c, p, a) in enumerate(zip(contexts, predictions, answers)):
+                        logger.info(f'\nContext {i+1}: {c}\nPrediction {i + 1}: {p}\nAnswer {i + 1}: {a}\n')
                     logger.info(metrics)
                     
                 task_scores[task].append((len(answers), metrics[task.metrics[0]]))
     
     for task in task_scores.keys():
-        decaScore.append(sum([lenght * score for lenght, score in task_scores[task]]) / sum([lenght for lenght, score in task_scores[task]]))
+        decaScore.append(sum([length * score for length, score in task_scores[task]]) / sum([length for length, score in task_scores[task]]))
 
     logger.info(f'Evaluated Tasks:\n')
     for i, task in enumerate(args.tasks):
@@ -236,7 +241,7 @@ def adjust_multilingual_eval(args):
     if (have_multilingual(args.task_names) and args.pred_languages is None) or (
             args.pred_languages and len(args.task_names) != len(args.pred_languages)):
         raise ValueError('You have to define prediction languages when you have a multilingual task'
-                         'Use None for single language tasks. Also provide languages in the same order you provided tasks.')
+                         'Use None for single language tasks. Also provide languages in the same order you provided the tasks.')
 
     if args.pred_languages is None:
         args.pred_languages = [None for _ in range(len(args.task_names))]
