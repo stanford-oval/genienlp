@@ -700,123 +700,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
 
 
-@add_start_docstrings(
-    """Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE tasks. """,
-    BART_START_DOCSTRING,
-)
-class BartForSequenceClassification(PretrainedBartModel):
-    def __init__(self, config: BartConfig, **kwargs):
-        super().__init__(config, **kwargs)
-        self.model = BartModel(config)
-        self.classification_head = BartClassificationHead(
-            config.d_model, config.d_model, config.num_labels, config.classif_dropout,
-        )
-        self.model._init_weights(self.classification_head.dense)
-        self.model._init_weights(self.classification_head.out_proj)
-
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
-    def forward(
-        self,
-        input_ids,
-        attention_mask=None,
-        encoder_outputs=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        labels=None,
-    ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-    Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BartConfig`) and inputs:
-            loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
-                Classification loss (cross entropy)
-            logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
-                Classification (or regression if config.num_labels==1) scores (before SoftMax).
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-                Attentions weights after the attention softmax, used to compute the weighted average in the
-                self-attention
-                heads.
-
-    Examples::
-
-        from transformers import BartTokenizer, BartForSequenceClassification
-        import torch
-
-        tokenizer = BartTokenizer.from_pretrained('bart-large')
-        model = BartForSequenceClassification.from_pretrained('bart-large')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute",
-        add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
-        """
-        outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
-        )
-        x = outputs[0]  # last hidden state
-        eos_mask = input_ids.eq(self.config.eos_token_id)
-        if len(torch.unique(eos_mask.sum(1))) > 1:
-            raise ValueError("All examples must have the same number of <eos> tokens.")
-        sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
-        logits = self.classification_head(sentence_representation)
-        # Prepend logits
-        outputs = (logits,) + outputs[1:]  # Add hidden states and attention if they are here
-        if labels is not None:  # prepend loss to output,
-            loss = F.cross_entropy(logits.view(-1, self.config.num_labels), labels.view(-1))
-            outputs = (loss,) + outputs
-
-        return outputs
-
-
-class SinusoidalPositionalEmbedding(nn.Embedding):
-    """This module produces sinusoidal positional embeddings of any length."""
-
-    def __init__(self, num_positions, embedding_dim, padding_idx=None):
-        super().__init__(num_positions, embedding_dim)
-        if embedding_dim % 2 != 0:
-            raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
-        self.weight = self._init_weight(self.weight)
-
-    @staticmethod
-    def _init_weight(out: nn.Parameter):
-        """Identical to the XLM create_sinusoidal_embeddings except features are not interleaved.
-            The cos features are in the 2nd half of the vector. [dim // 2:]
-        """
-        n_pos, dim = out.shape
-        position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
-        )
-        out[:, 0 : dim // 2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))  # This line breaks for odd n_pos
-        out[:, dim // 2 :] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        out.detach_()
-        out.requires_grad = False
-        return out
-
-    @torch.no_grad()
-    def forward(self, input_ids, use_cache=False):
-        """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_ids.shape[:2]
-        if use_cache:
-            positions = input_ids.data.new(1, 1).fill_(seq_len - 1)  # called before slicing
-        else:
-            # starts at 0, ends at 1-seq_len
-            positions = torch.arange(seq_len, dtype=torch.long, device=self.weight.device)
-        return super().forward(positions)
-
   
 # coding=utf-8
 # Copyright 2020 Marian Team Authors and The HuggingFace Inc. team.
@@ -873,4 +756,161 @@ class MarianMTModel(BartForConditionalGeneration):
         return logits
 
 
+# coding=utf-8
+# Copyright 2020 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
+import logging
+
+from transformers.tokenization_roberta import RobertaTokenizer
+from transformers.tokenization_utils import BatchEncoding
+from transformers.tokenization_xlm_roberta import XLMRobertaTokenizer
+
+
+logger = logging.getLogger(__name__)
+
+
+# vocab and merges same as roberta
+vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json"
+merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
+_all_bart_models = [
+    "facebook/bart-large",
+    "facebook/bart-large-mnli",
+    "facebook/bart-large-cnn",
+    "facebook/bart-large-xsum",
+]
+
+
+class BartTokenizer(RobertaTokenizer):
+    # merges and vocab same as Roberta
+    max_model_input_sizes = {m: 1024 for m in _all_bart_models}
+    pretrained_vocab_files_map = {
+        "vocab_file": {m: vocab_url for m in _all_bart_models},
+        "merges_file": {m: merges_url for m in _all_bart_models},
+    }
+
+
+_all_mbart_models = ["facebook/mbart-large-en-ro", "sshleifer/mbart-large-cc25"]
+SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
+
+
+class MBartTokenizer(XLMRobertaTokenizer):
+    """
+    This inherits from XLMRobertaTokenizer. ``prepare_translation_batch`` should be used to encode inputs.
+    Other tokenizer methods like encode do not work properly.
+    The tokenization method is <tokens> <eos> <language code>. There is no BOS token.
+    Examples::
+        from transformers import MBartTokenizer
+        tokenizer = MBartTokenizer.from_pretrained('mbart-large-en-ro')
+        example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
+        expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
+        batch: dict = tokenizer.prepare_translation_batch(
+            example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
+        )
+    """
+
+    vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
+    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
+    pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
+    lang_code_to_id = {  # NOTE(SS): resize embeddings will break this
+        "ar_AR": 250001,
+        "cs_CZ": 250002,
+        "de_DE": 250003,
+        "en_XX": 250004,
+        "es_XX": 250005,
+        "et_EE": 250006,
+        "fi_FI": 250007,
+        "fr_XX": 250008,
+        "gu_IN": 250009,
+        "hi_IN": 250010,
+        "it_IT": 250011,
+        "ja_XX": 250012,
+        "kk_KZ": 250013,
+        "ko_KR": 250014,
+        "lt_LT": 250015,
+        "lv_LV": 250016,
+        "my_MM": 250017,
+        "ne_NP": 250018,
+        "nl_XX": 250019,
+        "ro_RO": 250020,
+        "ru_RU": 250021,
+        "si_LK": 250022,
+        "tr_TR": 250023,
+        "vi_VN": 250024,
+        "zh_CN": 250025,
+    }
+    id_to_lang_code = {v: k for k, v in lang_code_to_id.items()}
+    cur_lang_code = lang_code_to_id["en_XX"]
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+        """Build model inputs from a sequence by appending eos_token_id."""
+        special_tokens = [self.eos_token_id, self.cur_lang_code]
+        if token_ids_1 is None:
+            return token_ids_0 + special_tokens
+        # We don't expect to process pairs, but leave the pair logic for API consistency
+        return token_ids_0 + token_ids_1 + special_tokens
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        if index in self.id_to_lang_code:
+            return self.id_to_lang_code[index]
+        if index == 0:
+            return self.sp_model.IdToPiece(0)
+        return self.sp_model.IdToPiece(index - self.fairseq_offset)
+
+    def prepare_translation_batch(
+        self,
+        src_texts: List[str],
+        src_lang: str = "en_XX",
+        tgt_texts: Optional[List[str]] = None,
+        tgt_lang: str = "ro_RO",
+        max_length: Optional[int] = None,
+        pad_to_max_length: bool = True,
+        return_tensors: str = "pt",
+    ) -> BatchEncoding:
+        """
+        Arguments:
+            src_texts: list of src language texts
+            src_lang: default en_XX (english)
+            tgt_texts: list of tgt language texts
+            tgt_lang: default ro_RO (romanian)
+            max_length: (None) defer to config (1024 for mbart-large-en-ro)
+            pad_to_max_length: (bool)
+        Returns:
+            dict with keys input_ids, attention_mask, decoder_input_ids, each value is a torch.Tensor.
+        """
+        if max_length is None:
+            max_length = self.max_len
+        self.cur_lang_code = self.lang_code_to_id[src_lang]
+        model_inputs: BatchEncoding = self.batch_encode_plus(
+            src_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            pad_to_max_length=pad_to_max_length,
+        )
+        if tgt_texts is None:
+            return model_inputs
+        self.cur_lang_code = self.lang_code_to_id[tgt_lang]
+        decoder_inputs: BatchEncoding = self.batch_encode_plus(
+            tgt_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            pad_to_max_length=pad_to_max_length,
+        )
+        for k, v in decoder_inputs.items():
+            model_inputs[f"decoder_{k}"] = v
+        self.cur_lang_code = self.lang_code_to_id[src_lang]
+        return model_inputs
