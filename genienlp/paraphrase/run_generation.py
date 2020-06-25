@@ -93,8 +93,7 @@ def parse_argv(parser):
 
     parser.add_argument('--output_prompt', action='store_true',
                         help='Whether we should include the prompt (specified via --prompt_column or --copy) in the output sequence')
-    parser.add_argument("--length", type=int, default=15, help='The generated sentences will have a maximum length of len(input) + arg.length for gpt2 models'
-                                                               'and arg.length for other seq2seq models')
+    parser.add_argument("--length", type=int, default=15, help='The generated sentences will have a maximum length of len(input) + arg.length')
     parser.add_argument("--min_output_length", type=int, default=2, help='Will prevent stop tokens from appearing in the first --min_output_length tokens of the generated sentences.')
     parser.add_argument("--skip_heuristics", action='store_true', help='If True, will not replace special word such as NUMBER_0 in the input.')
     parser.add_argument("--is_cased", action='store_true',
@@ -332,11 +331,7 @@ def run_single_process_generation(args, config):
         else:
             decoder_start_token_id = None
             
-        if args.model_type == 'gpt2':
-            max_length = batch_context_tensor.shape[1] + args.length
-        else:
-            max_length = args.length
-            
+        max_length = batch_context_tensor.shape[1] + args.length
 
         all_encoder_attentions = None
         batch_outputs = [[] for _ in range(batch_size)]
