@@ -297,7 +297,7 @@ class AlmondDialogueNLUAgent(BaseAlmondTask):
 class AlmondDialogueNLG(BaseAlmondTask):
     """Multi-turn NLG task for Almond dialogues
     (generate the system utterance, given the current state of the conversation
-    and the desider system dialogue act)
+    and the desired system dialogue act)
     """
     def _is_program_field(self, field_name):
         return field_name == 'context'
@@ -344,36 +344,30 @@ class AlmondDialoguePolicy(BaseAlmondTask):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
     
 
-@register_task('almond_multilingual')
-class AlmondMultiLingual(BaseAlmondTask):
-    """Multi-Language task for Almond
+class BaseAlmondMultiLingualTask(BaseAlmondTask):
+    """ Base task for MultiLingual Almond
     """
-
-    def _is_program_field(self, field_name):
-        return field_name == 'answer'
-
-    @property
-    def metrics(self):
-        return ['em', 'bleu']
-
-    def _make_example(self, parts, dir_name=None, **kwargs):
-        _id, sentence, target_code = parts
-        language = ISO_to_LANG.get(dir_name, 'Undetected').lower()
-        if kwargs.get('almond_lang_as_question'):
-            question = 'translate from {} to thingtalk'.format(language)
-        else:
-            question = 'translate from english to thingtalk'
-        context = sentence
-        answer = target_code
-        return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
-    
     def get_train_processed_ids(self, split):
         all_ids = []
         for ex in split.examples:
             all_ids.append(process_id(ex))
         return all_ids
+
+    def combine_datasets(self, datasets, sort_key_fn, batch_size_fn, used_fields, groups):
+        splits = defaultdict()
+    
+        for field in used_fields:
+            all_examples = []
+            for dataset in datasets:
+                all_examples.extend(getattr(dataset, field).examples)
         
+            splits[field] = CQA(all_examples, sort_key_fn=sort_key_fn, batch_size_fn=batch_size_fn, groups=groups)
+    
+        return Split(train=splits.get('train'),
+                     eval=splits.get('eval'),
+                     test=splits.get('test'),
+                     aux=splits.get('aux'))
+
     def get_splits(self, root, **kwargs):
         all_datasets = []
         # number of directories to read data from
@@ -410,17 +404,67 @@ class AlmondMultiLingual(BaseAlmondTask):
         else:
             return self.combine_datasets(all_datasets, sort_key_fn, batch_size_fn, used_fields, groups)
 
-    def combine_datasets(self, datasets, sort_key_fn, batch_size_fn, used_fields, groups):
-        splits = defaultdict()
-        
-        for field in used_fields:
-            all_examples = []
-            for dataset in datasets:
-                all_examples.extend(getattr(dataset, field).examples)
-                
-            splits[field] = CQA(all_examples, sort_key_fn=sort_key_fn, batch_size_fn=batch_size_fn, groups=groups)
-        
-        return Split(train=splits.get('train'),
-                     eval=splits.get('eval'),
-                     test=splits.get('test'),
-                     aux=splits.get('aux'))
+
+@register_task('almond_multilingual')
+class AlmondMultiLingual(BaseAlmondMultiLingualTask):
+    
+    def _is_program_field(self, field_name):
+        return field_name == 'answer'
+    
+    @property
+    def metrics(self):
+        return ['em', 'bleu']
+    
+    def _make_example(self, parts, dir_name, **kwargs):
+        _id, sentence, target_code = parts
+        language = ISO_to_LANG.get(dir_name, 'English').lower()
+        if kwargs.get('lang_as_question'):
+            question = 'translate from {} to thingtalk'.format(language)
+        else:
+            question = 'translate from english to thingtalk'
+        context = sentence
+        answer = target_code
+        return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
+                                tokenize=self.tokenize, lower=False)
+
+
+@register_task('almond_dialog_multilingual_nlu')
+class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
+    """Multi-turn NLU task (user and agent) for MultiLingual Almond dialogues
+    """
+
+    def _is_program_field(self, field_name):
+        return field_name in ('answer', 'context')
+
+    @property
+    def metrics(self):
+        return ['em', 'bleu']
+
+    def _make_example(self, parts, dir_name=None, **kwargs):
+        _id, context, sentence, target_code = parts
+        answer = target_code
+        question = sentence
+        return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
+                                tokenize=self.tokenize, lower=False)
+
+
+@register_task('almond_dialog_multilingual_nlg')
+class AlmondDialogMultiLingualNLG(BaseAlmondTask):
+    """Multi-turn NLG task (agent) for MultiLingual Almond dialogues
+    """
+    def _is_program_field(self, field_name):
+        return field_name == 'context'
+
+    @property
+    def metrics(self):
+        return ['bleu']
+
+    def _make_example(self, parts, dir_name=None, **kwargs):
+        # the question is irrelevant for this task
+        _id, context, sentence, target_code = parts
+        question = 'what should the agent say ?'
+        context = context + ' ' + target_code
+        answer = sentence
+        return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
+                                tokenize=self.tokenize, lower=False)
+
