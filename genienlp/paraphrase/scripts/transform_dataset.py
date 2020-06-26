@@ -76,7 +76,7 @@ def main():
         args.utterance_column = 1
         args.thingtalk_column = 2
         args.output_columns = [0, 1, 2]
-        args.no_duplication_columns = [args.utterance_column]
+        args.no_duplication_columns = [1]
         args.input_columns = [1]
 
     elif args.task == 'almond_dialogue_nlu':
@@ -85,7 +85,7 @@ def main():
         args.utterance_column = 2
         args.thingtalk_column = 3
         args.output_columns = [0, 1, 2, 3]
-        args.no_duplication_columns = [args.utterance_column]
+        args.no_duplication_columns = [1, 2]
         args.input_columns = [1, 2]
 
     if args.output_columns is None:
