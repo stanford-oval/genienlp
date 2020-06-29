@@ -1,5 +1,6 @@
 from transformers.modeling_bart import _filter_out_falsey_values, PretrainedBartModel, _make_linear_from_emb, LayerNorm, \
-    LearnedPositionalEmbedding, BartEncoder, _prepare_bart_decoder_inputs, _reorder_buffer, SelfAttention, invert_mask
+    LearnedPositionalEmbedding, BartEncoder, _prepare_bart_decoder_inputs, _reorder_buffer, SelfAttention, invert_mask, \
+    SinusoidalPositionalEmbedding
 
 SPIECE_UNDERLINE = "▁"
 
@@ -11,6 +12,7 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
     "facebook/bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
     "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
+    "sshleifer/mbart-large-cc25": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/mbart-large-cc25/config.json",
 }
 MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "Helsinki-NLP/opus-mt-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/config.json",
@@ -635,6 +637,17 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
                 for batch_idx in range(batch_size):
                     next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
+            
+            # #TODO added and modified by mehrad from transformers modeling_utils.py
+            # if self.config.is_encoder_decoder:
+            #     if cur_len == 1:
+            #         self._force_token_ids_generation(next_token_logits, model_specific_kwargs['tgt_lang_id'])
+            #     if cur_len == max_length - 1 and self.config.eos_token_id is not None:
+            #         self._force_token_ids_generation(next_token_logits, self.config.eos_token_id)
+
+            # set bos token prob to zero
+            # if bos_token_id is not None:
+            #     next_token_logits[:, bos_token_id] = -float("inf")
 
             # set eos token prob to zero if min_length is not reached
             if eos_token_id is not None and cur_len < min_length:
@@ -789,6 +802,7 @@ _all_bart_models = [
     "facebook/bart-large-mnli",
     "facebook/bart-large-cnn",
     "facebook/bart-large-xsum",
+    "yjernite/bart_eli5",
 ]
 
 
@@ -852,10 +866,17 @@ class MBartTokenizer(XLMRobertaTokenizer):
     }
     id_to_lang_code = {v: k for k, v in lang_code_to_id.items()}
     cur_lang_code = lang_code_to_id["en_XX"]
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
+        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        self._additional_special_tokens = list(self.lang_code_to_id.keys())
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
-        special_tokens = [self.eos_token_id, self.cur_lang_code]
+        # special_tokens = [self.eos_token_id, self.cur_lang_code]
+        special_tokens = [self.cur_lang_code, self.eos_token_id]
         if token_ids_1 is None:
             return token_ids_0 + special_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
@@ -863,12 +884,10 @@ class MBartTokenizer(XLMRobertaTokenizer):
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.id_to_lang_code:
-            return self.id_to_lang_code[index]
-        if index == 0:
-            return self.sp_model.IdToPiece(0)
+        if index in self.fairseq_ids_to_tokens:
+            return self.fairseq_ids_to_tokens[index]
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
-
+    
     def prepare_translation_batch(
         self,
         src_texts: List[str],
@@ -899,6 +918,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
+            truncation=True,
         )
         if tgt_texts is None:
             return model_inputs
@@ -909,8 +929,10 @@ class MBartTokenizer(XLMRobertaTokenizer):
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
+            truncation=True,
         )
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
         self.cur_lang_code = self.lang_code_to_id[src_lang]
         return model_inputs
+    
