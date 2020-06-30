@@ -100,7 +100,6 @@ class IdentityEncoder(nn.Module):
             else:
                 if self.args.rnn_zero_state == 'cls':
                     packed_rnn_state = self.norm(self.pool(context_embedded.last_layer[:, 0, :]))
-
                 elif self.args.rnn_zero_state == 'average':
                     masked_final_context = context_embedded.last_layer.masked_fill(context_padding.unsqueeze(2), 0)
                     summed_context = torch.sum(masked_final_context, dim=1)
