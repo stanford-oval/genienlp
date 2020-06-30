@@ -455,8 +455,9 @@ class ContextualAlmondMultiLingualNLU(BaseAlmondMultiLingualTask):
         _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
+        extra = '' if kwargs['aux_ex'] is None else kwargs['aux_ex'].question
         return Example.from_raw(self.name + '/' + kwargs['dir_name'] + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False, extra=kwargs['aux_ex'].question, extra_field='question')
+                                tokenize=self.tokenize, lower=False, extra=extra, extra_field='question')
 
 
 @register_task('contextual_almond_multilingual_nlg')
