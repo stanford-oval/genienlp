@@ -48,11 +48,9 @@ EMBEDDING_NAME_TO_NUMERICALIZER_MAP = dict()
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: BertNumericalizer for embedding in BERT_PRETRAINED_MODEL_ARCHIVE_LIST})
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: XLMRobertaNumericalizer for embedding in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST})
 
-
 class EmbeddingOutput(NamedTuple):
     all_layers: List[torch.Tensor]
     last_layer: torch.Tensor
-
 
 class WordVectorEmbedding(torch.nn.Module):
     def __init__(self, vec_collection):
@@ -101,7 +99,6 @@ class WordVectorEmbedding(torch.nn.Module):
         # ignore attempts to move the word embedding
         pass
 
-
 class TransformerEmbedding(torch.nn.Module):
     def __init__(self, model):
         super().__init__()
@@ -120,7 +117,6 @@ class TransformerEmbedding(torch.nn.Module):
         last_hidden_state, _pooled, hidden_states = self.model(input, attention_mask=(~padding).to(dtype=torch.float))
 
         return EmbeddingOutput(all_layers=hidden_states, last_layer=last_hidden_state)
-
 
 class PretrainedLMEmbedding(torch.nn.Module):
     def __init__(self, model_name, cachedir):
@@ -179,13 +175,11 @@ def _name_to_vector(emb_name, cachedir):
     else:
         raise ValueError(f'Unrecognized embedding name {emb_name}')
 
-
 def get_embedding_type(emb_name):
     if '@' in emb_name:
         return emb_name.split('@')[0]
     else:
         return emb_name
-    
 
 def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb_names,
                     max_generative_vocab=50000, logger=_logger, cache_only=False):
@@ -220,6 +214,7 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
                 numericalizer = EMBEDDING_NAME_TO_NUMERICALIZER_MAP[emb_type](emb_type, config=config,
                                                   max_generative_vocab=max_generative_vocab,
                                                   cache=cachedir)
+
                 numericalizer_type = emb_type
 
             # load the tokenizer once to ensure all files are downloaded

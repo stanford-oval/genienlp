@@ -48,7 +48,6 @@ from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_PRETRAINED_CONFI
 from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_GROUP_MEMBERS, SPIECE_UNDERLINE
 
 from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer
-
 from transformers import BartForConditionalGeneration
 from .transformers_utils import MarianMTModel, T5ForConditionalGeneration, BartForConditionalGeneration as MBartForConditionalGeneration
 from .transformers_utils import BartTokenizer, MBartTokenizer
@@ -79,7 +78,7 @@ MODEL_CLASSES = {
 
 def parse_argv(parser):
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
-                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS))
+                        help="Path to pre-trained model or shortcut name selected in the list: ")
     parser.add_argument("--input_file", type=str, help="The file from which we read prompts. Defaults to stdin.")
     parser.add_argument('--input_column', type=int, required=True,
                         help='The column in the input file which contains the input sentences.')

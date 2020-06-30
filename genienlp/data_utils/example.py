@@ -47,15 +47,18 @@ class Example(NamedTuple):
     answer_word_mask: List[bool]
     context_plus_question: List[str]
     context_plus_question_word_mask: List[bool]
+    extra: List[str]
+    extra_word_mask: List[bool]
+    
+    extra_field: str
 
-    vocab_fields = ['context', 'question', 'answer']
+    vocab_fields = ['context', 'question', 'answer', 'extra']
+
 
     @staticmethod
-    def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, lower=False):
+    def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, lower=False, extra='', extra_field=''):
         args = [example_id]
-
-        for argname, arg in (('context', context), ('question', question), ('answer', answer),
-                             ('context_question', context+' '+question)):
+        for argname, arg in (('context', context), ('question', question), ('answer', answer), ('context_question', context+' '+question), (extra_field, extra)):
             words, mask = tokenize(arg.rstrip('\n'), field_name=argname)
             if mask is None:
                 mask = [True for _ in words]
@@ -63,7 +66,7 @@ class Example(NamedTuple):
                 words = [word.lower() for word in words]
             args.append(words)
             args.append(mask)
-        
+        args.append(extra_field)
         return Example(*args)
 
 
@@ -72,12 +75,15 @@ class Batch(NamedTuple):
     context: SequentialField
     question: SequentialField
     answer: SequentialField
+    extra: SequentialField
     decoder_vocab: object
+    extra_field: str
     
     @staticmethod
     def from_examples(examples, numericalizer, device=None, paired=False, max_pairs=None, groups=None,
                       append_question_to_context_too=False, override_question=None):
         assert all(isinstance(ex.example_id, str) for ex in examples)
+        extra_field = examples[0].extra_field
         decoder_vocab = numericalizer.decoder_vocab.clone()
         max_context_len, max_question_len, max_answer_len = -1, -1, -1
 
@@ -111,26 +117,24 @@ class Batch(NamedTuple):
                                    for ex_a, ex_b in example_pairs]
 
             if append_question_to_context_too:
-                context_inputs = [((ex_a.context_plus_question,
-                                    ex_a.context_plus_question_word_mask),
-                                    (ex_b.context_plus_question,
-                                     ex_b.context_plus_question_word_mask))
-                                  for ex_a, ex_b in example_pairs]
+                context_inputs = [((ex_a.context_plus_question, ex_a.context_plus_question_word_mask), \
+                                    (ex_b.context_plus_question, ex_b.context_plus_question_word_mask)) for ex_a, ex_b in example_pairs]
             else:
-                context_inputs = [((ex_a.context, ex_a.context_word_mask),
-                                   (ex_b.context, ex_b.context_word_mask))
-                                  for ex_a, ex_b in example_pairs]
-            answer_inputs = [((ex_a.answer, ex_a.answer_word_mask), (ex_b.answer, ex_b.answer_word_mask))
-                             for ex_a, ex_b in example_pairs]
+                context_inputs = [((ex_a.context, ex_a.context_word_mask), (ex_b.context, ex_b.context_word_mask)) for ex_a, ex_b in example_pairs]
+                
+            answer_inputs = [((ex_a.answer, ex_a.answer_word_mask), (ex_b.answer, ex_b.answer_word_mask)) for ex_a, ex_b in example_pairs]
+            extra_inputs = [((ex_a.extra, ex_a.extra_word_mask), (ex_b.extra, ex_b.extra_word_mask)) for ex_a, ex_b in example_pairs]
 
             all_example_ids_pair = example_ids
             all_context_inputs_pair = numericalizer.encode_pair(context_inputs, decoder_vocab, device=device)
             all_question_inputs_pair = numericalizer.encode_pair(question_inputs, decoder_vocab, device=device)
             all_answer_inputs_pair = numericalizer.encode_pair(answer_inputs, decoder_vocab, device=device)
+            all_extra_inputs_pair = numericalizer.encode_pair(extra_inputs, decoder_vocab, device=device)
 
             max_context_len = all_context_inputs_pair.value.size(1)
             max_question_len = all_question_inputs_pair.value.size(1)
             max_answer_len = all_answer_inputs_pair.value.size(1)
+            max_extra_len = all_extra_inputs_pair.value.size(1)
 
         # process single examples
         example_ids = [ex.example_id for ex in examples]
@@ -143,28 +147,33 @@ class Batch(NamedTuple):
             context_inputs = [(ex.context_plus_question, ex.context_plus_question_word_mask) for ex in examples]
         else:
             context_inputs = [(ex.context, ex.context_word_mask) for ex in examples]
+
         answer_inputs = [(ex.answer, ex.answer_word_mask) for ex in examples]
+        extra_inputs = [(ex.extra, ex.extra_word_mask) for ex in examples]
         
         all_example_ids_single = example_ids
-        all_context_inputs_single = numericalizer.encode_single(context_inputs, decoder_vocab,
-                                                                device=device, max_length=max_context_len-2)
-        all_question_inputs_single = numericalizer.encode_single(question_inputs, decoder_vocab,
-                                                                 device=device, max_length=max_question_len-2)
-        all_answer_inputs_single = numericalizer.encode_single(answer_inputs, decoder_vocab,
-                                                               device=device, max_length=max_answer_len-2)
+        all_context_inputs_single = numericalizer.encode_single(context_inputs, decoder_vocab, device=device, max_length=max_context_len-2)
+        all_question_inputs_single = numericalizer.encode_single(question_inputs, decoder_vocab, device=device, max_length=max_question_len-2)
+        all_answer_inputs_single = numericalizer.encode_single(answer_inputs, decoder_vocab, device=device, max_length=max_answer_len-2)
+        all_extra_inputs_single = numericalizer.encode_single(extra_inputs, decoder_vocab, device=device, max_length=max_answer_len-2)
     
         if paired:
             all_example_ids = all_example_ids_single + all_example_ids_pair
             all_context_inputs = SequentialField.from_tensors([all_context_inputs_single, all_context_inputs_pair])
             all_question_inputs = SequentialField.from_tensors([all_question_inputs_single, all_question_inputs_pair])
             all_answer_inputs = SequentialField.from_tensors([all_answer_inputs_single, all_answer_inputs_pair])
+            all_extra_inputs = SequentialField.from_tensors([all_extra_inputs_single, all_extra_inputs_pair])
         else:
             all_example_ids = all_example_ids_single
             all_context_inputs = all_context_inputs_single
             all_question_inputs = all_question_inputs_single
             all_answer_inputs = all_answer_inputs_single
+            all_extra_inputs = all_extra_inputs_single
+            
         return Batch(all_example_ids,
                      all_context_inputs,
                      all_question_inputs,
                      all_answer_inputs,
-                     decoder_vocab)
+                     all_extra_inputs,
+                     decoder_vocab,
+                     extra_field)

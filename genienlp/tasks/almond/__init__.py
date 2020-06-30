@@ -57,7 +57,7 @@ class AlmondDataset(CQA):
 
     base_url = None
 
-    def __init__(self, path, *, make_example, subsample=None, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, *, make_example, aux_examples=None, subsample=None, cached_path=None, skip_cache=False, **kwargs):
         
         #TODO fix cache_path for multilingual task
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
@@ -72,11 +72,16 @@ class AlmondDataset(CQA):
             with open(path, 'r', encoding='utf-8') as fp:
                 for line in fp:
                     n += 1
+            
+            if aux_examples:
+                m = len(aux_examples)
+                assert m == n, 'aux and train should have equal number of examples when aux is aligned.'
 
             max_examples = min(n, subsample) if subsample is not None else n
             for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
                 parts = line.strip().split('\t')
-                examples.append(make_example(parts, dir_name, **kwargs))
+                aux_ex = None if aux_examples is None else aux_examples[i]
+                examples.append(make_example(parts, dir_name=dir_name, aux_ex=aux_ex, **kwargs))
                 if len(examples) >= max_examples:
                     break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -98,21 +103,22 @@ class AlmondDataset(CQA):
             Remaining keyword arguments: Passed to the splits method of
                 Dataset.
         """
+        aux_data = None
+        use_curriculum = kwargs.get('use_curriculum', False)
+        aux_aligned = kwargs.get('aux_aligned', False)
+        if use_curriculum or aux_aligned:
+            kwargs.pop('use_curriculum', None)
+            kwargs.pop('aux_aligned', None)
+            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), **kwargs)
         
-        train_data = None if train is None else cls(os.path.join(path, train + '.tsv'), **kwargs)
+        train_data = None if train is None else cls(os.path.join(path, train + '.tsv'), aux_data=aux_data if aux_aligned else None, **kwargs)
         validation_data = None if validation is None else cls(os.path.join(path, validation + '.tsv'), **kwargs)
         test_data = None if test is None else cls(os.path.join(path, test + '.tsv'), **kwargs)
-
-        aux_data = None
-        do_curriculum = kwargs.get('curriculum', False)
-        if do_curriculum:
-            kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), **kwargs)
         
         return Split(train=None if train is None else train_data,
                      eval=None if validation is None else validation_data,
                      test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+                     aux=None if not use_curriculum else aux_data)
     
 
 def is_entity(token):
@@ -145,7 +151,7 @@ class BaseAlmondTask(BaseTask):
     def _is_program_field(self, field_name):
         raise NotImplementedError()
 
-    def _make_example(self, parts, dir_name, **kwargs):
+    def _make_example(self, parts, **kwargs):
         raise NotImplementedError()
 
     def get_splits(self, root, **kwargs):
@@ -204,7 +210,7 @@ class Almond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name == 'answer'
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
         _id, sentence, target_code = parts
@@ -222,7 +228,7 @@ class ContextualAlmond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, **kwargs):
         _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
@@ -242,7 +248,7 @@ class ReverseAlmond(BaseTask):
     def _is_program_field(self, field_name):
         return field_name == 'context'
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
         _id, sentence, target_code = parts
@@ -262,7 +268,7 @@ class AlmondDialogueNLU(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, **kwargs):
         _id, context, sentence, target_code = parts
 
         answer = target_code
@@ -284,7 +290,7 @@ class AlmondDialogueNLUAgent(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, **kwargs):
         _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
@@ -308,7 +314,7 @@ class AlmondDialogueNLG(BaseAlmondTask):
     def metrics(self):
         return ['bleu']
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, **kwargs):
         # the question is irrelevant for this task
         _id, context, sentence, target_code = parts
         question = 'what should the agent say ?'
@@ -333,7 +339,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     def metrics(self):
         return ['em', 'bleu']
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, **kwargs):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
         _id, context, _sentence, target_code = parts
         question = 'what should the agent do ?'
@@ -410,7 +416,8 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
 
 @register_task('almond_multilingual')
 class AlmondMultiLingual(BaseAlmondMultiLingualTask):
-    
+    """Single-turn Almond task
+    """
     def _is_program_field(self, field_name):
         return field_name == 'answer'
     
@@ -418,17 +425,18 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     def metrics(self):
         return ['em', 'bleu']
     
-    def _make_example(self, parts, dir_name, **kwargs):
+    def _make_example(self, parts, **kwargs):
         _id, sentence, target_code = parts
-        language = ISO_to_LANG.get(dir_name, 'English').lower()
+        language = ISO_to_LANG.get(kwargs['dir_name'], 'English').lower()
         if kwargs.get('lang_as_question'):
             question = 'translate from {} to thingtalk'.format(language)
         else:
             question = 'translate from english to thingtalk'
         context = sentence
         answer = target_code
-        return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+        extra = '' if kwargs['aux_ex'] is None else kwargs['aux_ex'].context
+        return Example.from_raw(self.name + '/' + kwargs['dir_name'] + '/' + _id, context, question, answer,
+                                tokenize=self.tokenize, lower=False, extra=extra, extra_field='context')
 
 
 @register_task('contextual_almond_multilingual_nlu')
@@ -443,12 +451,12 @@ class ContextualAlmondMultiLingualNLU(BaseAlmondMultiLingualTask):
     def metrics(self):
         return ['em', 'bleu']
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, **kwargs):
         _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
-        return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+        return Example.from_raw(self.name + '/' + kwargs['dir_name'] + '/' + _id, context, question, answer,
+                                tokenize=self.tokenize, lower=False, extra=kwargs['aux_ex'].question, extra_field='question')
 
 
 @register_task('contextual_almond_multilingual_nlg')
@@ -462,12 +470,12 @@ class ContextualAlmondMultiLingualNLG(BaseAlmondTask):
     def metrics(self):
         return ['bleu']
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, **kwargs):
         # the question is irrelevant for this task
         _id, context, sentence, target_code = parts
         question = 'what should the agent say ?'
         context = context + ' ' + target_code
         answer = sentence
-        return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + kwargs['dir_name'] + '/' + _id, context, question, answer,
                                 tokenize=self.tokenize, lower=False)
 

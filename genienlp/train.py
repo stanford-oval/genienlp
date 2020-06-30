@@ -82,7 +82,9 @@ def prepare_data(args, logger):
                        'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question})
 
         if args.use_curriculum:
-            kwargs['curriculum'] = True
+            kwargs['use_curriculum'] = True
+        if args.aux_aligned:
+            kwargs['aux_aligned'] = True
 
         logger.info(f'Adding {task.name} to training datasets')
         split = task.get_splits(args.data, lower=args.lower, **kwargs)

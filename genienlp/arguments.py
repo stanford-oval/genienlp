@@ -217,8 +217,9 @@ def parse_argv(parser):
     parser.add_argument('--skip_cache', action='store_true',
                         help='whether to use exisiting cached splits or generate new ones')
     parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')
-    parser.add_argument('--aux_dataset', default='', type=str,
-                        help='path to auxiliary dataset (ignored if curriculum is not used)')
+    parser.add_argument('--aux_aligned', action='store_true',
+                        help='whether auxiliary examples are aligned with train examples')
+
     parser.add_argument('--curriculum_max_frac', default=1.0, type=float,
                         help='max fraction of harder dataset to keep for curriculum')
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')

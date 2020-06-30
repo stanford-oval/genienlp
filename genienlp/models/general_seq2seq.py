@@ -86,41 +86,57 @@ class Seq2Seq(torch.nn.Module):
             self.encoder(batch)
         encoder_loss = None
         if getattr(self.args, 'use_encoder_loss', None) and self.training:
-            encoder_loss = self.get_encoder_loss(context_rnn_state)
+            if self.args.aux_aligned:
+                encoder_loss = self.get_encoder_loss(batch=batch)
+            else:
+                if batch.extra_field == 'question':
+                    encoder_loss = self.get_encoder_loss(None, question_rnn_state)
+                else:
+                    encoder_loss = self.get_encoder_loss(None, context_rnn_state)
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
                             final_question, question_rnn_state, encoder_loss)
 
     def forward(self, batch, iteration, pretraining=False):
-        # print('batch = ', batch)
         if pretraining:
             return self._pretrain_forward(batch)
         else:
             return self._normal_forward(batch)
         
         
-    def get_encoder_loss(self, context_rnn_state):
+    def get_encoder_loss(self, batch=None, rnn_state=None):
         
+        if rnn_state is None and batch:
+            extra_field = batch.extra_field
+            if extra_field == 'context':
+                encoder_loss_batch = batch._replace(context=batch.extra)
+                _, _, _context_rnn_state, _, _ = self.encoder(encoder_loss_batch)
+                rnn_state = _context_rnn_state
+            else:
+                encoder_loss_batch = batch._replace(question=batch.extra)
+                _, _, _, _, _question_rnn_state = self.encoder(encoder_loss_batch)
+                rnn_state = _question_rnn_state
+
         # concat hidden and cell state
-        if len(context_rnn_state) == 2:
-            context_rnn_state = torch.cat(context_rnn_state, dim=0)
+        if len(rnn_state) == 2:
+            rnn_state = torch.cat(rnn_state, dim=0)
             
-        batch_size = context_rnn_state.size(1)
+        batch_size = rnn_state.size(1)
         groups = len(self.args.train_languages.split('+'))
         assert batch_size % groups == 0
         
         # reshape to be (batch_size; -1)
-        context_rnn_state = context_rnn_state.view(batch_size, -1)
+        rnn_state = rnn_state.view(batch_size, -1)
         
         if self.args.encoder_loss_type == 'mean':
             # element-wise mean of encoder loss https://www.aclweb.org/anthology/W18-3023.pdf
-            context_value = torch.mean(context_rnn_state, dim=-1)
+            rnn_value = torch.mean(rnn_state, dim=-1)
         elif self.args.encoder_loss_type == 'sum':
-            context_value = torch.sum(context_rnn_state, dim=-1)
+            rnn_value = torch.sum(rnn_state, dim=-1)
         
         encoder_loss = 0.0
         for i in range(0, batch_size, groups):
             indices = [j for j in range(i, i+groups)]
-            groups_vals = context_value[indices]
+            groups_vals = rnn_value[indices]
             assert len(groups_vals) > 1
             encoder_loss += torch.std(groups_vals).item()
             
