@@ -1,6 +1,10 @@
+import copy
+
 from transformers.modeling_bart import _filter_out_falsey_values, PretrainedBartModel, _make_linear_from_emb, LayerNorm, \
     LearnedPositionalEmbedding, BartEncoder, _prepare_bart_decoder_inputs, _reorder_buffer, SelfAttention, invert_mask, \
     SinusoidalPositionalEmbedding
+
+from transformers.modeling_t5 import T5ForConditionalGeneration, T5PreTrainedModel, T5LayerNorm, T5Block
 
 SPIECE_UNDERLINE = "▁"
 
@@ -513,10 +517,21 @@ class BartForConditionalGeneration(PretrainedBartModel):
         assert past is not None, "past has to be defined for encoder_outputs"
 
         # first step, decoder_cached_states are empty
-        if not past[1]:
-            encoder_outputs, decoder_cached_states = past, None
+        # first step
+        if kwargs['cur_len'] == 1:
+            encoder_outputs, decoder_cached_states = past[0], None
         else:
-            encoder_outputs, decoder_cached_states = past
+            if use_cache:
+                if len(past) < 2:
+                    encoder_outputs, decoder_cached_states = past[0], None
+                else:
+                    encoder_outputs, decoder_cached_states = past[0], past[1]
+            else:
+                encoder_outputs, decoder_cached_states = past[0], None
+                
+        if not isinstance(encoder_outputs, tuple):
+            encoder_outputs = (encoder_outputs, )
+
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
@@ -598,17 +613,33 @@ class BartForConditionalGeneration(PretrainedBartModel):
         # length of generated sentences / unfinished sentences
         unfinished_sents = input_ids.new(batch_size).fill_(1)
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
-
-        all_encoder_attentions = [input_ids.new_full([batch_size, self.config.encoder_attention_heads, max_length,
-                                                     encoder_outputs[0].size(1)], dtype=torch.float32,
-                                                    fill_value=-1000000) for _ in range(self.config.encoder_layers)]
         
-        # encoder outputs: (encoder hidden outputs of last layer, all hidden states, all attention weights )
+        if getattr(self.config, 'encoder_layers', None):
+            num_layers = self.config.encoder_layers
+        else:
+            num_layers = self.config.num_layers
+
+        if getattr(self.config, 'encoder_attention_heads', None):
+            num_heads = self.config.encoder_attention_heads
+        else:
+            num_heads = self.config.num_heads
+
+        all_encoder_attentions = [input_ids.new_full([batch_size, num_heads, max_length,
+                                                     encoder_outputs[0].size(1)], dtype=torch.float32,
+                                                    fill_value=-1000000) for _ in range(num_layers)]
+        
+        # encoder outputs for Bart and models inheriting from BartModel encoder is (encoder hidden outputs of last layer, all_hidden_states, all_attention_weights )
+        # it always outputs all_hidden_states and all_attention_weights and then filters empty ones out when passed through BartModel
+        
+        # on the other hand, T5 encoder outputs (last-layer hidden state, presents, all_hidden_states, all_attention_weights) only if returning them is requested
+        # otherwise it just returns last-layer hidden states
         past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
+        if not isinstance(past, tuple):
+            past = (past,)
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, cur_len=cur_len, **model_specific_kwargs
             )
 
             outputs = self(**model_inputs)
@@ -623,7 +654,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             next_token_logits = outputs[0][:, -1, :]
             
             index = 2 + int(model_specific_kwargs['return_hidden_states']) + int(use_cache)
-            for i in range(self.config.encoder_layers):
+            for i in range(num_layers):
                 all_encoder_attentions[i][:, :, [cur_len - 1], :] = outputs[index][i]
 
             # if model has past, then set the past variable to speed up decoding
@@ -946,4 +977,249 @@ class MBartTokenizer(XLMRobertaTokenizer):
             model_inputs[f"decoder_{k}"] = v
         self.cur_lang_code = self.lang_code_to_id[src_lang]
         return model_inputs
+
     
+
+class T5Stack(T5PreTrainedModel):
+    def __init__(self, config, embed_tokens=None):
+        super().__init__(config)
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
+
+        self.embed_tokens = embed_tokens
+        self.is_decoder = config.is_decoder
+
+        self.block = nn.ModuleList(
+            [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
+        )
+        self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.dropout = nn.Dropout(config.dropout_rate)
+
+        self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def get_output_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, new_embeddings):
+        self.embed_tokens = new_embeddings
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        inputs_embeds=None,
+        head_mask=None,
+        past_key_value_states=None,
+        use_cache=False,
+    ):
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            if self.is_decoder:
+                raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+            else:
+                raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        batch_size, seq_length = input_shape
+
+        if past_key_value_states is not None:
+            assert seq_length == 1, "Input shape is {}, but should be {} when using past_key_value_sates".format(
+                input_shape, (batch_size, 1)
+            )
+            # required mask seq length can be calculated via length of past
+            # key value states and seq_length = 1 for the last token
+            mask_seq_length = past_key_value_states[0][0].shape[2] + seq_length
+        else:
+            mask_seq_length = seq_length
+
+        if attention_mask is None:
+            attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
+        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
+            encoder_seq_length = encoder_hidden_states.shape[1]
+            encoder_attention_mask = torch.ones(
+                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
+            )
+
+        # initialize past_key_value_states with `None` if past does not exist
+        if past_key_value_states is None:
+            past_key_value_states = [None] * len(self.block)
+
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
+
+        if self.is_decoder and encoder_attention_mask is not None:
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        else:
+            encoder_extended_attention_mask = None
+
+        # Prepare head mask if needed
+        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
+        present_key_value_states = ()
+        all_hidden_states = ()
+        all_attentions = ()
+        cross_attentions = ()
+        position_bias = None
+        encoder_decoder_position_bias = None
+
+        hidden_states = self.dropout(inputs_embeds)
+
+        for i, (layer_module, past_key_value_state) in enumerate(zip(self.block, past_key_value_states)):
+            if self.output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask=extended_attention_mask,
+                position_bias=position_bias,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_extended_attention_mask,
+                encoder_decoder_position_bias=encoder_decoder_position_bias,
+                head_mask=head_mask[i],
+                past_key_value_state=past_key_value_state,
+                use_cache=use_cache,
+            )
+            # layer_outputs is a tuple with:
+            # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+            hidden_states, present_key_value_state = layer_outputs[:2]
+
+            if i == 0:
+                # We share the position biases between the layers - the first layer store them
+                # layer_outputs = hidden-states, key-value-states (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+                position_bias = layer_outputs[3 if self.output_attentions else 2]
+                if self.is_decoder and encoder_hidden_states is not None:
+                    encoder_decoder_position_bias = layer_outputs[5 if self.output_attentions else 3]
+            # append next layer key value states
+            present_key_value_states = present_key_value_states + (present_key_value_state,)
+
+            if self.output_attentions:
+                all_attentions = all_attentions + (layer_outputs[2],)  # add self-attention
+                if self.is_decoder and encoder_hidden_states is not None:
+                    if i==0:
+                        cross_attentions = cross_attentions + (layer_outputs[4],)  # add cross-attention
+                    else:
+                        cross_attentions = cross_attentions + (layer_outputs[3],)  # add cross-attention
+
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        # Add last layer
+        if self.output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        outputs = (hidden_states,)
+        if use_cache is True:
+            assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
+            outputs = outputs + (present_key_value_states,)
+        if self.output_hidden_states:
+            outputs = outputs + (all_hidden_states,)
+        if self.output_attentions:
+            outputs = outputs + (all_attentions,) + (cross_attentions,)
+        return outputs  # last-layer hidden state, (presents,) (all hidden states), (all self_attentions), (all cross_attentions)
+
+
+class T5ForConditionalGeneration(T5ForConditionalGeneration):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model_dim = config.d_model
+
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+
+        encoder_config = copy.deepcopy(config)
+        self.encoder = T5Stack(encoder_config, self.shared)
+
+        decoder_config = copy.deepcopy(config)
+        decoder_config.is_decoder = True
+        self.decoder = T5Stack(decoder_config, self.shared)
+
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+
+        self.init_weights()
+
+        
+    def _generate_no_beam_search(
+            self,
+            input_ids,
+            cur_len,
+            max_length,
+            min_length,
+            do_sample,
+            temperature,
+            top_k,
+            top_p,
+            repetition_penalty,
+            no_repeat_ngram_size,
+            bad_words_ids,
+            bos_token_id,
+            pad_token_id,
+            eos_token_id,
+            decoder_start_token_id,
+            batch_size,
+            encoder_outputs,
+            attention_mask,
+            use_cache,
+            model_specific_kwargs,
+    ):
+        return BartForConditionalGeneration._generate_no_beam_search(
+                self,
+                input_ids,
+                cur_len,
+                max_length,
+                min_length,
+                do_sample,
+                temperature,
+                top_k,
+                top_p,
+                repetition_penalty,
+                no_repeat_ngram_size,
+                bad_words_ids,
+                bos_token_id,
+                pad_token_id,
+                eos_token_id,
+                decoder_start_token_id,
+                batch_size,
+                encoder_outputs,
+                attention_mask,
+                use_cache,
+                model_specific_kwargs,)
+    
+    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, **kwargs):
+        assert past is not None, "past has to be defined for encoder_outputs"
+        
+        # first step
+        if kwargs['cur_len'] == 1:
+            encoder_outputs, decoder_past_key_value_states = past[0], None
+        else:
+            if use_cache:
+                if len(past) < 2:
+                    encoder_outputs, decoder_past_key_value_states = past[0], None
+                else:
+                    encoder_outputs, decoder_past_key_value_states = past[0], past[1]
+            else:
+                encoder_outputs, decoder_past_key_value_states = past[0], None
+                
+        if not isinstance(encoder_outputs, tuple):
+            encoder_outputs = (encoder_outputs, )
+
+        return {
+            "decoder_input_ids": input_ids,
+            "decoder_past_key_value_states": decoder_past_key_value_states,
+            "encoder_outputs": encoder_outputs,
+            "attention_mask": attention_mask,
+            "use_cache": use_cache,
+        }
+
