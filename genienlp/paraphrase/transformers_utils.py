@@ -294,7 +294,7 @@ class BartDecoder(nn.Module):
         # decoder layers
         all_hidden_states = ()
         all_self_attns = ()
-        all_encoder_attns = ()
+        all_cross_attns = ()
         next_decoder_cache = []
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -306,7 +306,7 @@ class BartDecoder(nn.Module):
 
             layer_state = decoder_cached_states[idx] if decoder_cached_states is not None else None
 
-            x, layer_self_attn, layer_encoder_attention, layer_past = decoder_layer(
+            x, layer_self_attn, layer_cross_attention, layer_past = decoder_layer(
                 x,
                 encoder_hidden_states,
                 encoder_attn_mask=encoder_padding_mask,
@@ -322,7 +322,7 @@ class BartDecoder(nn.Module):
                 x = self.layer_norm(x)
             if self.output_attentions:
                 all_self_attns += (layer_self_attn,)
-                all_encoder_attns += (layer_encoder_attention,)
+                all_cross_attns += (layer_cross_attention,)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
@@ -333,7 +333,7 @@ class BartDecoder(nn.Module):
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
         else:
             next_cache = None
-        return x, next_cache, all_hidden_states, list(all_self_attns), list(all_encoder_attns)
+        return x, next_cache, all_hidden_states, list(all_self_attns), list(all_cross_attns)
 
 @add_start_docstrings(
     "The bare BART Model outputting raw hidden-states without any specific head on top.", BART_START_DOCSTRING,
@@ -380,7 +380,7 @@ class BartModel(PretrainedBartModel):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
         assert isinstance(encoder_outputs, tuple)
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_self_attn, dec_cross_attn)
         decoder_outputs = self.decoder(
             decoder_input_ids,
             encoder_outputs[0],
@@ -602,7 +602,8 @@ class BartForConditionalGeneration(PretrainedBartModel):
         all_encoder_attentions = [input_ids.new_full([batch_size, self.config.encoder_attention_heads, max_length,
                                                      encoder_outputs[0].size(1)], dtype=torch.float32,
                                                     fill_value=-1000000) for _ in range(self.config.encoder_layers)]
-
+        
+        # encoder outputs: (encoder hidden outputs of last layer, all hidden states, all attention weights )
         past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
 
         while cur_len < max_length:
@@ -611,10 +612,19 @@ class BartForConditionalGeneration(PretrainedBartModel):
             )
 
             outputs = self(**model_inputs)
+            # decoder_outputs = x, next_cache, all_hidden_states, all_self_attns, all_cross_attns
+            # encoder_outputs = encoder_hidden_last_layer + all_hidden_states + all_self_attns
+            # outputs = decoder_outputs + encoder_outputs
+            
+            # outputs is then filtered if attention weights, hidden states, or cached_decoding_values are empty
+            # so the index below is adjusted
+            # remember we always return attention weights
+            
             next_token_logits = outputs[0][:, -1, :]
             
+            index = 2 + int(model_specific_kwargs['return_hidden_states']) + int(use_cache)
             for i in range(self.config.encoder_layers):
-                all_encoder_attentions[i][:, :, [cur_len - 1], :] = outputs[3][i]
+                all_encoder_attentions[i][:, :, [cur_len - 1], :] = outputs[index][i]
 
             # if model has past, then set the past variable to speed up decoding
             if self._use_cache(outputs, use_cache):
@@ -623,6 +633,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
                 self.enforce_repetition_penalty_(next_token_logits, batch_size, 1, input_ids, repetition_penalty)
+
 
             if no_repeat_ngram_size > 0:
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams

@@ -260,7 +260,11 @@ def run_multi_process_generation(args):
 
 def run_single_process_generation(args, config):
     model_class, tokenizer_class, special_tokens = MODEL_CLASSES[args.model_type]
-    model = model_class.from_pretrained(args.model_name_or_path, output_attentions=True)
+    
+    return_attentions = True
+    return_hidden_states = False
+    
+    model = model_class.from_pretrained(args.model_name_or_path, output_attentions=return_attentions, output_hidden_states=return_hidden_states)
     model.to(args.device)
     model.eval()
 
@@ -354,6 +358,8 @@ def run_single_process_generation(args, config):
                                  temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0, # if temperature==0, we do not sample
                                  eos_token_id=eos_token_id,
                                  pad_token_id=pad_token_id,
+                                 return_attentions=return_attentions,
+                                 return_hidden_states=return_hidden_states,
                                 )
             if len(outputs) > 1:
                 decoded, all_encoder_attentions = outputs
