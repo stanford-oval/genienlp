@@ -122,7 +122,7 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
 
 
 def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, copy, thingtalk_column, sep_token_id,
-                                  skip_heuristics, is_cased, model_type, src_lang, tgt_lang, subsample, task):
+                                  skip_heuristics, is_cased, model_type, src_lang, subsample, task, model_input_prefix):
     """
     Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
     Outputs:
@@ -166,10 +166,12 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
             input_sequence, reverse_map = input_heuristics(input_sequence, thingtalk, is_cased)
             reverse_maps.append(reverse_map)
         
-        if model_type == 'marian' and tgt_lang:
-            #TODO check if extra space after pattern is necessary
-            input_sequence = '>>{}<< '.format(tgt_lang) + input_sequence
-        elif model_type == 'mbart':
+        # add model specific prefix
+        input_sequence = model_input_prefix + input_sequence
+        
+        if model_type == 'mbart':
+            # just make sure source language is used when tokenizing input sentence
+            # tokenizer takes care of adding language code at the end of the sentence
             tokenizer.cur_lang_code = tokenizer.lang_code_to_id[src_lang]
             
         input_sequence_ids = tokenizer.encode(input_sequence, add_special_tokens=True)

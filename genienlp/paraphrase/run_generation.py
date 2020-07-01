@@ -15,7 +15,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Conditional text generation with GPT-2/BART
+""" Conditional text generation with transformer models
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -44,15 +44,14 @@ except RuntimeError:
  
 import torch
 
-from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
+from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_GROUP_MEMBERS, SPIECE_UNDERLINE
 
-from transformers import GPT2Tokenizer
+from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer
 
-from .transformers_utils import BartForConditionalGeneration, MarianMTModel
+from .transformers_utils import BartForConditionalGeneration, MarianMTModel, T5ForConditionalGeneration
 from .transformers_utils import BartTokenizer, MBartTokenizer
 
-from transformers import MarianTokenizer
 from transformers import PretrainedConfig
 from ..util import set_seed, combine_files_on_disk, split_file_on_disk, get_part_path
 from .GPT2Seq2Seq import GPT2Seq2Seq
@@ -65,13 +64,15 @@ logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(messa
 logger = logging.getLogger(__name__)
 
 language_code_re = re.compile(">>.+<<")
-ALL_MODELS = sum((tuple(map.keys()) for map in (GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP)), ())
+ALL_MODELS = sum((tuple(map.keys()) for map in (GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+                                                BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP)), ())
 
 MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'bos_token': '<unk>', 'sep_token': '<paraphrase>', 'eos_token': '</paraphrase>'}),
-    'bart': (BartForConditionalGeneration, BartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}), # sep_token will not be used for BART
-    'mbart': (BartForConditionalGeneration, MBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}), # sep_token will not be used for MBART
-    'marian': (MarianMTModel, MarianTokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}), # sep_token will not be used for MARIAN
+    't5': (T5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'bart': (BartForConditionalGeneration, BartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'mbart': (BartForConditionalGeneration, MBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'marian': (MarianMTModel, MarianTokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
 }
 
 
@@ -284,6 +285,17 @@ def run_single_process_generation(args, config):
 
     logger.info(args)
 
+    model_input_prefix = ''
+    if args.model_type == 'marian' and args.tgt_lang:
+        # TODO check if extra space after pattern is necessary
+        model_input_prefix = '>>{}<< '.format(args.tgt_lang)
+    elif args.model_type == 't5':
+        if args.task == 'translate':
+            t5_task = 'translation_{}_to_{}'.format(args.src_lang, args.tgt_lang)
+        else:
+            t5_task = 'summarization'
+        model_input_prefix = config.task_specific_params[t5_task]['prefix']
+
     all_input_sequences, all_input_sequence_lengths, all_example_ids, all_context_ids, estimated_output_lengths, all_golds, reverse_maps, all_prompt_ids = \
                                   create_features_from_tsv_file(file_path=args.input_file,
                                                                 tokenizer=tokenizer,
@@ -298,9 +310,9 @@ def run_single_process_generation(args, config):
                                                                 is_cased=args.is_cased,
                                                                 model_type=args.model_type,
                                                                 src_lang=args.src_lang,
-                                                                tgt_lang=args.tgt_lang,
                                                                 subsample=args.subsample,
-                                                                task=args.task)
+                                                                task=args.task,
+                                                                model_input_prefix=model_input_prefix)
 
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, original_order, reverse_maps, all_prompt_ids = \
@@ -358,7 +370,9 @@ def run_single_process_generation(args, config):
                                  pad_token_id=pad_token_id,
                                  return_attentions=return_attentions,
                                  return_hidden_states=return_hidden_states,
+                                 use_cache = True,
                                 )
+
             if len(outputs) > 1:
                 decoded, all_encoder_attentions = outputs
             else:
@@ -406,10 +420,10 @@ def run_single_process_generation(args, config):
                         # remove end token for better heatmap representation
                         src_tokens = src_tokens[:-1]
 
-                    if len(language_code_re.findall(src_tokens[0])):
-                        # remove language code from the beginning of src_tokens and shift layer_attention
-                        src_tokens = src_tokens[1:]
-                        sample_layer_attention = sample_layer_attention[:, :, 1:]
+                    # remove language code from the beginning of src_tokens and shift layer_attention
+                    len_prefix_wp = len(tokenizer.tokenize(model_input_prefix))
+                    src_tokens = src_tokens[len_prefix_wp:]
+                    sample_layer_attention = sample_layer_attention[:, :, len_prefix_wp:]
 
                     # crop to match src and tgt new lengths
                     sample_layer_attention = sample_layer_attention[:, :len(tgt_tokens), :len(src_tokens)]
