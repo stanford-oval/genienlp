@@ -446,7 +446,8 @@ def run_single_process_generation(args, config):
                         tgt_tokens = tgt_tokens[:-1]
                     
                     if args.replace_qp:
-                        text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, args.model_type)
+                        tgt_lang = args.tgt_lang if args.tgt_lang else args.model_name_or_path.rsplit('-', 1)[1]
+                        text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, args.model_type, tgt_lang)
                         if not is_replaced and args.force_replace_qp:
                             text = force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, args.model_type)
                     else:
@@ -494,7 +495,7 @@ def compute_attention(sample_layer_attention, att_pooling):
         
     return sample_layer_attention_pooled
 
-def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, model_type):
+def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, model_type, tgt_lang):
     # find positions of quotation marks in src and tgt
     src2tgt_mapping = {}
     src2tgt_mapping_index = {}
@@ -502,9 +503,13 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     ## FIXED: quotation marks are exclusively used to wrap parameters so just check if they are present in target token
     # quote_wordpiece = tokenizer.tokenize('"')[0]
     # quote_token = '"'
+    src_quotation_symbols = ['"']
+    tgt_quotation_symbols = ['"']
+    if tgt_lang == 'ru':
+        tgt_quotation_symbols.extend(['«', '»'])
     
-    src_spans_ind = [index for index, token in enumerate(src_tokens) if '"' in token]
-    tgt_spans_ind = [index for index, token in enumerate(tgt_tokens) if '"' in token]
+    src_spans_ind = [index for index, token in enumerate(src_tokens) if any([symbol in token for symbol in src_quotation_symbols])]
+    tgt_spans_ind = [index for index, token in enumerate(tgt_tokens) if any([symbol in token for symbol in tgt_quotation_symbols])]
     
     if model_type == 'marian':
         src_strings = tokenizer.spm_source.DecodePieces(src_tokens)
@@ -577,10 +582,11 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     #         i += 1
     # final_output = tokenizer.convert_tokens_to_ids(new_tgt_tokens)
     
-    quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
+    src_quoted_pattern_maybe_space = re.compile(r'[{0}]\s?([^{0}]*?)\s?[{0}]'.format(''.join(src_quotation_symbols)))
+    tgt_quoted_pattern_maybe_space = re.compile(r'[{0}]\s?([^{0}]*?)\s?[{0}]'.format(''.join(tgt_quotation_symbols)))
     
-    src_matches = list(re.finditer(quoted_pattern_maybe_space, src_strings))
-    tgt_matches = list(re.finditer(quoted_pattern_maybe_space, tgt_strings))
+    src_matches = list(re.finditer(src_quoted_pattern_maybe_space, src_strings))
+    tgt_matches = list(re.finditer(tgt_quoted_pattern_maybe_space, tgt_strings))
     
     tgt2src_mapping_index = {v: k for k, v in src2tgt_mapping_index.items()}
 
