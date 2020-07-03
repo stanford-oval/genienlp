@@ -98,13 +98,13 @@ if test ! -f $workdir/generated.tsv ; then
 fi
 
 # finetune BART for one epoch
-pipenv run python3 -m genienlp train-paraphrase --train_data_file $workdir/paraphrasing/train.tsv --eval_data_file $workdir/paraphrasing/dev.tsv --output_dir $workdir/save_para_text --model_type bart --model_name_or_path bart-large --do_train --do_eval --evaluate_during_training --logging_steps 2 --save_steps 2 --max_steps 4 --save_total_limit 2 --gradient_accumulation_steps 1 --per_gpu_eval_batch_size 4 --per_gpu_train_batch_size 4 --num_train_epochs 1 --overwrite_output_dir --overwrite_cache --tensorboard_dir $workdir/save_para_text
+pipenv run python3 -m genienlp train-paraphrase --train_data_file $workdir/paraphrasing/train.tsv --eval_data_file $workdir/paraphrasing/dev.tsv --output_dir $workdir/bart-large --model_type bart --model_name_or_path bart-large --do_train --do_eval --evaluate_during_training --logging_steps 2 --save_steps 2 --max_steps 4 --save_total_limit 2 --gradient_accumulation_steps 1 --per_gpu_eval_batch_size 4 --per_gpu_train_batch_size 4 --num_train_epochs 1 --overwrite_output_dir --overwrite_cache --tensorboard_dir $workdir/save_para_text
 
 # correct sentences using BART
-pipenv run python3 -m genienlp run-paraphrase --input_file $workdir/paraphrasing/train.tsv --input_column 1 --output_file $workdir/save_para_text_gen/generated.tsv --model_name_or_path ./save_para_text/checkpoint-4 --length 15 --temperature 0.4 --repetition_penalty 1.0 --num_samples 4 --stop_tokens . ! ?
+pipenv run python3 -m genienlp run-paraphrase --input_file $SRCDIR/dataset/almond/train.tsv --input_column 1 --output_file $workdir/generated.tsv --model_name_or_path $workdir/bart-large --length 15 --temperature 0.4 --repetition_penalty 1.0 --num_samples 4 --stop_tokens . ! ?
 
 # check if generated file exists
-if test ! $workdir/save_para_text_gen/generated.tsv ; then
+if test ! $workdir/generated.tsv ; then
     echo "File not found!"
     exit
 fi
