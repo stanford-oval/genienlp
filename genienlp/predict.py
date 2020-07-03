@@ -134,8 +134,8 @@ def run(args, device):
         if task_languages is not None and args.separate_eval:
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
-            for index, set in enumerate(val_set):
-                loader = make_data_loader(set, numericalizer, bs, device,
+            for index, set_ in enumerate(val_set):
+                loader = make_data_loader(set_, numericalizer, bs, device,
                                           append_question_to_context_too=args.append_question_to_context_too,
                                           override_question=args.override_question)
                 task_iter.append((task, task_languages[index], loader))
