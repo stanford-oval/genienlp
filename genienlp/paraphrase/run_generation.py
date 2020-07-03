@@ -631,6 +631,11 @@ def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_
     for src_idx, (beg, end) in enumerate(src_spans):
         s1 = torch.argmax(sample_layer_attention_pooled[:, beg]).item()
         s2 = torch.argmax(sample_layer_attention_pooled[:, end]).item()
+        
+        # clamp values to max tgt_tokens length
+        s1 = min(s1, len(tgt_tokens)-1)
+        s2 = min(s2, len(tgt_tokens)-1)
+
         src2tgt_mapping[(beg, end)] = (s1, s2)
 
     quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
@@ -640,7 +645,11 @@ def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_
     # update src2tgt_mapping to map to word indices in response
     for key, value in src2tgt_mapping.items():
         s1, s2 = value
-        src2tgt_mapping[key] = tgt_piece2word_mapping[s1] - 1, tgt_piece2word_mapping[s2] + 1
+        try:
+            src2tgt_mapping[key] = (max(0, tgt_piece2word_mapping[s1] - 1), min(tgt_piece2word_mapping[s2] + 1, len(tgt_tokens)))
+        except:
+            raise ValueError('corrupted span in tgt string: [{}] with src string: [{}]\n'
+                              'outputting example without reverting the parameter'.format(tgt_strings, src_strings))
     
     # move through words
     tgt_strings_words = tgt_strings.split(' ')
