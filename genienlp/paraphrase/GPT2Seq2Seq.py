@@ -19,7 +19,6 @@ class GPT2Seq2Seq(GPT2LMHeadModel):
         max_length = max([len(s) for s in input_sequences])
         copy_input_sequences = []
         for i in range(len(input_sequences)):
-            sep_token_index = input_sequences[i].index(self.sep_token_id)
             copy_input_sequences.append([self.pad_token_id]*(max_length-len(input_sequences[i])) + input_sequences[i])
 
         return copy_input_sequences

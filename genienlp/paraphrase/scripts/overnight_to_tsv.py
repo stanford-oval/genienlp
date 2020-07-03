@@ -26,7 +26,6 @@ def write_to_folder(train_examples, eval_examples, test_examples, folder_path, d
 
     i = 0
     for e in train_examples:
-        r = random.random()
         if subset == 'natural':
             line = 'R'+str(i)+'\t'+e[0]+'\t'+e[2]+'\n'
         else:
@@ -36,7 +35,6 @@ def write_to_folder(train_examples, eval_examples, test_examples, folder_path, d
 
     i = 0
     for e in eval_examples:
-        r = random.random()
         line = 'R'+str(i)+'\t'+e[0]+'\t'+e[2]+'\n' # eval is always natural
         eval_file.write(line)
         i += 1

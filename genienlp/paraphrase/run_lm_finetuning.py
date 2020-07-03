@@ -27,7 +27,7 @@ import glob
 import logging
 import os
 import torch
-from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler
+from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from tensorboardX import SummaryWriter

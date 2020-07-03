@@ -153,7 +153,7 @@ def main():
     print('Average normalized edit distance between pairs is ', sum_edit_distance / output_size)
     if args.plot_edit_distance:
         import matplotlib.pyplot as plt
-        n, bins, patches = plt.hist(all_normalized_edit_distances, 20)
+        _, _, _ = plt.hist(all_normalized_edit_distances, 20)
         plt.savefig(os.path.join(args.output_dir,'edit_distance_plot.png'))
 
 if __name__ == '__main__':

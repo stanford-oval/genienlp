@@ -41,8 +41,6 @@ try:
 except RuntimeError:
     pass
  
-import torch
-
 from transformers import GPT2Config, BartConfig
 
 from transformers import GPT2Tokenizer
@@ -277,8 +275,7 @@ def run_single_process_generation(args):
         logging.info('') # to make kubectl properly print tqdm progress bar
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_tokens)))
         batch_size = batch_slice[1] - batch_slice[0]
-        batch_input_sequences = all_input_sequences[batch_slice[0]: batch_slice[1]]
-        batch_input_sequence_lengths = all_input_sequence_lengths[batch_slice[0]: batch_slice[1]]
+        # batch_input_sequences = all_input_sequences[batch_slice[0]: batch_slice[1]]
         batch_context_tokens = all_context_tokens[batch_slice[0]: batch_slice[1]]
         batch_reverse_maps = reverse_maps[batch_slice[0]: batch_slice[1]]
         batch_prompt_tokens = all_prompt_tokens[batch_slice[0]: batch_slice[1]]
@@ -329,7 +326,7 @@ def run_single_process_generation(args):
                         min_index = min(index, min_index)
                     except ValueError:
                         pass
-                if o[min_index] != end_token_id:
+                if min_index > 0 and o[min_index] != end_token_id:
                     min_index = min_index + 1 # include the last token if it is not end_token
                 o = o[:min_index]
                 
