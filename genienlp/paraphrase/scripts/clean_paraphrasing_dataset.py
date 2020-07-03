@@ -5,8 +5,10 @@ from tqdm import tqdm
 from genienlp.util import detokenize
 import random
 import os
+import re
+import nltk
 
-
+nltk.download('averaged_perceptron_tagger')
 csv.field_size_limit(sys.maxsize)
 
 def is_english(s):
@@ -17,7 +19,8 @@ def is_english(s):
     else:
         return True
 
-def remove_quotation(s):
+def normalize(s):
+    # remove quotations
     s = s.replace('``', '')
     s = s.replace('\'\'', '')
     s = s.replace('"', '')
@@ -25,12 +28,19 @@ def remove_quotation(s):
         s = s[1:]
     if s.endswith('\''):
         s = s[:-1]
+
+    s = s.replace('...', '')
+    s = s.replace(',', ', ')
+    s = re.sub('\s\s+', ' ', s)  # remove duplicate white spaces
+    s = s.strip()
+
     return s
 
 def is_valid(s):
     return 'http' not in s and s.count('-') <= 4 and s.count('.') <= 4 and is_english(s) \
-        and '_' not in s and '%' not in s and '/' not in s and '*' not in s and '\\' not in s \
-            and 'www' not in s and sum(c.isdigit() for c in s) <= 10 and s.count('(') == s.count(')')
+        and '_' not in s and '%' not in s and '/' not in s and '[' not in s and ']' not in s \
+        and '*' not in s and '\\' not in s and 'www' not in s and \
+        sum(c.isdigit() for c in s) <= 10 and s.count('(') == s.count(')')
 
 def normalized_levenshtein(s1, s2, mode='character'):
     if mode != 'character' and isinstance(s1, str):
@@ -55,15 +65,19 @@ def normalized_levenshtein(s1, s2, mode='character'):
     
     return previous_row[-1] / max(len(s1), len(s2))
 
+def pos_tag_string(sentence: str):
+    tagged_tokens = nltk.pos_tag(nltk.word_tokenize(sentence))
+    tags = [t[1] for t in tagged_tokens]
+    return ' '.join(tags).lower()
+
 def main():
     parser = ArgumentParser()
     parser.add_argument('input', type=str,
                         help='The path to the input .tsv file.')
     parser.add_argument('output_dir', type=str,
                         help='The path to the folder to save train.tsv and dev.tsv files.')
-    parser.add_argument('--plot_edit_distance', action='store_true', help='Save a plot of the normalized edit distance distribution.')
 
-    parser.add_argument('--train_ratio', type=float, required=True,
+    parser.add_argument('--train_ratio', type=float, default=0.95,
                         help='The ratio of input examples that go to the training set')
     parser.add_argument('--seed', default=123, type=int, help='Random seed used for train/dev split.')
 
@@ -71,13 +85,16 @@ def main():
     parser.add_argument('--first_columns', type=int, nargs='+', default=[2], help='The column indices in the input file to put in the first column of the output file')
     parser.add_argument('--second_columns', type=int, nargs='+', default=[1], help='The column indices in the input file to put in the second column of the output file')
     
-    parser.add_argument('--min_length', type=int, default=0, help='Minimum number of characters that each phrase should have in order to be included')
+    parser.add_argument('--min_length', type=int, default=20, help='Minimum number of characters that each phrase should have in order to be included')
     parser.add_argument('--max_length', type=int, default=200, help='Maximum number of characters that each phrase should have in order to be included')
+    parser.add_argument('--edit_distance_mode', type=str, default='none', choices=['character', 'word', 'none'])
     parser.add_argument('--min_edit_distance', type=float, default=0.0001, help='We will not include phrase pairs that have a normalized edit distance below this number.')
-    parser.add_argument('--edit_distance_mode', type=str, default='character', choices=['character', 'word'])
+    parser.add_argument('--plot_edit_distance', action='store_true', help='Save a plot of the normalized edit distance distribution.')
     parser.add_argument('--skip_check', action='store_true', help='Skip validity check.')
     parser.add_argument('--skip_normalization', action='store_true', help='Do not remove quotation marks or detokenize.')
     parser.add_argument('--lower_case', action='store_true', help='Convert everything to lower case.')
+    parser.add_argument('--prepend_pos_tags', action='store_true', help='Prepend the part-of-speech tag of the output to the beginning of the input.')
+    parser.add_argument('--sep_token', type=str, default='</s>', help='Token to insert between the part-of-speech tag and the input sentence.')
     parser.add_argument('--max_examples', type=int, default=1e10, help='Maximum number of examples in the output.')
 
 
@@ -124,8 +141,8 @@ def main():
                         drop_count += 1
                         continue
                     if not args.skip_normalization:
-                        first = remove_quotation(detokenize(first))
-                        second = remove_quotation(detokenize(second))
+                        first = normalize(detokenize(first))
+                        second = normalize(detokenize(second))
                     first = first.strip()
                     second = second.strip()
                     if args.lower_case:
@@ -134,13 +151,16 @@ def main():
                     if first == '' or second == '':
                         drop_count += 1
                         continue
-                    normalized_edit_distance = normalized_levenshtein(first.lower(), second.lower(), mode=args.edit_distance_mode)
-                    # print('normalized_edit_distance = ', normalized_edit_distance)
-                    if normalized_edit_distance < args.min_edit_distance:
-                        drop_count += 1
-                        continue
-                    all_normalized_edit_distances.append(normalized_edit_distance)
-                    sum_edit_distance += normalized_edit_distance
+                    if args.edit_distance_mode != 'none':
+                        normalized_edit_distance = normalized_levenshtein(first.lower(), second.lower(), mode=args.edit_distance_mode)
+                        # print('normalized_edit_distance = ', normalized_edit_distance)
+                        if normalized_edit_distance < args.min_edit_distance:
+                            drop_count += 1
+                            continue
+                        all_normalized_edit_distances.append(normalized_edit_distance)
+                        sum_edit_distance += normalized_edit_distance
+                    if args.prepend_pos_tags:
+                        first = pos_tag_string(second) + ' ' + args.sep_token + ' ' + first
                     writer.writerow([first, second])
                     output_size += 1
                     is_written = True
@@ -151,7 +171,7 @@ def main():
 
     print('Dropped', drop_count, 'examples')
     print('Average normalized edit distance between pairs is ', sum_edit_distance / output_size)
-    if args.plot_edit_distance:
+    if args.edit_distance_mode != 'none' and args.plot_edit_distance:
         import matplotlib.pyplot as plt
         n, bins, patches = plt.hist(all_normalized_edit_distances, 20)
         plt.savefig(os.path.join(args.output_dir,'edit_distance_plot.png'))
