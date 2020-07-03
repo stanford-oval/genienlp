@@ -1,3 +1,11 @@
+0.3.0
+=====
+
+* New option: sentence batching. Multiple sentences with related properties can be batched
+  together in microbatches within a larger minibatch [#14, #11].
+* Added option to append context and question in a single model input [#18, #20, #22].
+* Updated Transformers dependency to 2.9, and fixed compatibility with newer versions [#18, #24].
+
 0.2.0
 =====
 

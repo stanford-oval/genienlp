@@ -74,7 +74,8 @@ def get_all_splits(args):
             raise ValueError('Split used for prediction should be either valid or test')
         
         kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
-                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages})
+                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages,
+                       'almond_lang_as_question': args.almond_lang_as_question})
         
         kwargs['separate_eval'] = args.separate_eval
         task_splits = task.get_splits(root=args.data, lower=args.lower, **kwargs)
@@ -133,11 +134,17 @@ def run(args, device):
         if task_languages is not None and args.separate_eval:
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
-            for index, set_ in enumerate(val_set):
-                task_iter.append((task, task_languages[index],  make_data_loader(set_, numericalizer, bs, device, append_question_to_context_too=args.append_question_to_context_too)))
+            for index, set in enumerate(val_set):
+                loader = make_data_loader(set, numericalizer, bs, device,
+                                          append_question_to_context_too=args.append_question_to_context_too,
+                                          override_question=args.override_question)
+                task_iter.append((task, task_languages[index], loader))
         # single language task or no separate eval
         else:
-           task_iter.append((task, task_languages,  make_data_loader(val_set[0], numericalizer, bs, device, append_question_to_context_too=args.append_question_to_context_too)))
+           loader = make_data_loader(val_set[0], numericalizer, bs, device,
+                                     append_question_to_context_too=args.append_question_to_context_too,
+                                     override_question=args.override_question)
+           task_iter.append((task, task_languages, loader))
 
         iters.extend(task_iter)
         task_index += 1
@@ -177,7 +184,7 @@ def run(args, device):
             predictions = []
             answers = []
             contexts = []
-            with open(prediction_file_name, 'w') as prediction_file:
+            with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
                 for batch_idx, batch in tqdm(enumerate(it), desc="Batches"):
                     _, batch_prediction = model(batch, iteration=1)
 
@@ -187,7 +194,6 @@ def run(args, device):
                     batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize,
                                                          field_name='answer')
                     answers += batch_answer
-                    
                     batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize,
                                                          field_name='context')
                     contexts += batch_context
@@ -224,7 +230,8 @@ def run(args, device):
 
 def parse_argv(parser):
     parser.add_argument('--path', required=True)
-    parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'], help='Which dataset to do predictions for (test or dev)')
+    parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'],
+                        help='Which dataset to do predictions for (test or dev)')
     parser.add_argument('--pred_set_name', type=str, help='Name of dataset to run prediction for; will be ignored if --evaluate is test')
     parser.add_argument('--tasks',
                         default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl',
@@ -269,7 +276,7 @@ def adjust_multilingual_eval(args):
     if (have_multilingual(args.task_names) and args.pred_languages is None) or (
             args.pred_languages and len(args.task_names) != len(args.pred_languages)):
         raise ValueError('You have to define prediction languages when you have a multilingual task'
-                         'Use None for single language tasks. Also provide languages in the same order you provided tasks.')
+                         'Use None for single language tasks. Also provide languages in the same order you provided the tasks.')
 
     if args.pred_languages is None:
         args.pred_languages = [None for _ in range(len(args.task_names))]

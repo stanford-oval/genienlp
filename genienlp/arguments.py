@@ -111,6 +111,7 @@ def parse_argv(parser):
     parser.add_argument('--encoder_loss_weight', type=float, default=0.1,
                         help='multiplicative constant choosing the weight of encoder_loss in total loss')
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
+
     
     parser.add_argument('--vocab_tasks', nargs='+', type=str, help='tasks to use in the construction of the vocabulary')
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
@@ -135,7 +136,7 @@ def parse_argv(parser):
     parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules')
-    parser.add_argument('--rnn_zero_state', default='zero', choices=['zero', 'average'],
+    parser.add_argument('--rnn_zero_state', default='zero', choices=['zero', 'average', 'cls'],
                         help='how to construct RNN zero state (for Identity encoder)')
     parser.add_argument('--transformer_layers', default=2, type=int, help='number of layers for transformer modules')
     parser.add_argument('--transformer_hidden', default=150, type=int, help='hidden size of the transformer modules')
@@ -177,8 +178,12 @@ def parse_argv(parser):
                         help='force subword tokenization of code tokens too')
     parser.add_argument('--append_question_to_context_too', action='store_true', default=False,
                         help='')
+    parser.add_argument('--override_question', default=None, help='Override the question for all tasks')
     parser.add_argument('--almond_preprocess_context', action='store_true', default=False,
                         help='')
+    parser.add_argument('--almond_lang_as_question', action='store_true',
+                        help='if true will use "Translate from ${language} to ThingTalk" for question')
+
 
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')

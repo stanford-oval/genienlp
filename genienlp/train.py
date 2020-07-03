@@ -79,7 +79,7 @@ def prepare_data(args, logger):
         kwargs = {'test': None, 'validation': None}
         kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.train_languages,
-                       'sentence_batching': args.sentence_batching})
+                       'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question})
         if args.use_curriculum:
             kwargs['curriculum'] = True
 
@@ -104,8 +104,9 @@ def prepare_data(args, logger):
         if args.eval_set_name is not None:
             kwargs['validation'] = args.eval_set_name
         kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
-                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.eval_languages})
-
+                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.eval_languages,
+                        'almond_lang_as_question': args.almond_lang_as_question})
+        
         logger.info(f'Adding {task.name} to validation datasets')
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
         assert not split.train and not split.test and not split.aux
@@ -341,18 +342,23 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
-    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, paired=args.paired, max_pairs=args.max_pairs, train=True, 
-                   append_question_to_context_too=args.append_question_to_context_too))
+    train_iters = [(task,
+                    make_data_loader(x, numericalizer, tok, main_device, paired=args.paired,max_pairs=args.max_pairs,
+                                     train=True,  append_question_to_context_too=args.append_question_to_context_too,
+                                     override_question=args.override_question))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_values)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
     val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False, valid=True,
-                 append_question_to_context_too=args.append_question_to_context_too))
+                                         append_question_to_context_too=args.append_question_to_context_too,
+                                         override_question=args.override_question))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     aux_iters = []
     if use_curriculum:
-        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True))
+        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True,
+                                             append_question_to_context_too=args.append_question_to_context_too,
+                                             override_question=args.override_question))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_values)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         
