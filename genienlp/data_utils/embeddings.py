@@ -213,7 +213,7 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             continue
 
         emb_type = get_embedding_type(emb_name)
-        if emb_name in ALL_PRETRAINED_MODEL_ARCHIVE_MAP.keys():
+        if emb_type in ALL_PRETRAINED_MODEL_ARCHIVE_MAP.keys():
             if numericalizer is not None and numericalizer_type != emb_type and not cache_only:
                 raise ValueError('Cannot specify multiple Transformer embeddings')
 
@@ -250,7 +250,7 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             continue
 
         emb_type = get_embedding_type(emb_name)
-        if emb_name in ALL_PRETRAINED_MODEL_ARCHIVE_MAP.keys():
+        if emb_type in ALL_PRETRAINED_MODEL_ARCHIVE_MAP.keys():
             if numericalizer is not None and numericalizer_type != emb_type:
                 raise ValueError('Cannot specify multiple Transformer embeddings')
 
