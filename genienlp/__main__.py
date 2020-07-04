@@ -30,7 +30,8 @@
 
 import argparse
 
-from . import arguments, train, predict, server, cache_embeddings, run_lm_finetuning, run_generation, export
+from . import arguments, train, predict, server, cache_embeddings, export
+from .paraphrase import run_lm_finetuning, run_generation
 
 subcommands = {
     'train': ('Train a model', arguments.parse_argv, train.main),

@@ -22,6 +22,9 @@ text/.DS_Store
 src/
 workdir/
 *save*/
+
+lightning_logs/
+pytorch_model.bin
 tests/dataset-*
 tests/dataset/*
 tests/test_py.sh

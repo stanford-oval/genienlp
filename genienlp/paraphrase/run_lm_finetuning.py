@@ -26,14 +26,9 @@ from __future__ import absolute_import, division, print_function
 import glob
 import logging
 import os
-import pickle
-import re
-import shutil
 import torch
-from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler
-from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
-from functools import partial
 
 from tensorboardX import SummaryWriter
 
@@ -45,9 +40,12 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer,
                                   RobertaConfig, RobertaForMaskedLM, RobertaTokenizer,
                                   DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer,
-                                  CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
+                                  CamembertConfig, CamembertForMaskedLM, CamembertTokenizer,
+                                  BartConfig, BartForConditionalGeneration, BartTokenizer, MBartTokenizer)
 
 from genienlp.util import set_seed
+from genienlp.paraphrase.data_utils import mask_tokens, add_special_tokens, load_and_cache_examples
+from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints
 
 
 logger = logging.getLogger(__name__)
@@ -59,149 +57,10 @@ MODEL_CLASSES = {
     'bert': (BertConfig, BertForMaskedLM, BertTokenizer),
     'roberta': (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer),
     'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer),
-    'camembert': (CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
+    'camembert': (CamembertConfig, CamembertForMaskedLM, CamembertTokenizer),
+    'bart': (BartConfig, BartForConditionalGeneration, BartTokenizer),
+    'mbart': (BartConfig, BartForConditionalGeneration, MBartTokenizer)
 }
-
-
-class TextDataset(Dataset):
-    def __init__(self, tokenizer, args, file_path=None, block_size=512, prompt_token='<paraphrase>', evaluate=None):
-        assert os.path.isfile(file_path)
-        directory, filename = os.path.split(file_path)
-        cached_features_file = os.path.join(directory, os.path.basename(os.path.normpath(args.model_name_or_path)) + '_cached_lm_' + str(block_size) + '_' + filename)
-
-        if os.path.exists(cached_features_file) and not args.overwrite_cache:
-            logger.info("Loading features from cached file %s", cached_features_file)
-            with open(cached_features_file, 'rb') as handle:
-                self.examples, self.labels, self.position_ids, self.segment_ids = pickle.load(handle)
-        else:
-            logger.info("Creating features from dataset file at %s", file_path)
-
-            prompt_token_id = tokenizer.convert_tokens_to_ids(prompt_token)
-            segment1_id = tokenizer.convert_tokens_to_ids(args.start_special_token)
-            segment2_id = tokenizer.convert_tokens_to_ids(args.end_special_token)
-            # print('prompt_token_id = ', prompt_token_id)
-            self.examples = []
-            self.labels = []
-            self.position_ids = []
-            self.segment_ids = []
-            max_input_length = 0
-            with open(file_path, encoding="utf-8") as f:
-                for line in tqdm(f, desc='Tokenizing'):
-                    tokens = tokenizer.tokenize(line)
-                    tokenized_text = tokenizer.convert_tokens_to_ids(tokens)
-                    tokenized_text = tokenized_text[0:block_size] # truncate longer sequences
-                    # print(tokenized_text)
-                    example = tokenizer.build_inputs_with_special_tokens(tokenized_text)
-                    max_input_length = max(max_input_length, len(example))
-                    try:
-                        prompt_token_location = tokenized_text.index(prompt_token_id)
-                    except ValueError:
-                        logger.warning('Prompt token not found after truncating the input. Dropping the example.')
-                        continue
-
-                    self.examples.append(example)
-                    if args.train_all_tokens and not evaluate:
-                        self.labels.append(example)
-                    else: # During evaluation, we only care about the output sequence so we mask the input
-                        self.labels.append([-100]*(prompt_token_location+1)+example[prompt_token_location+1:])
-                    self.position_ids.append([pos for pos in range(prompt_token_location+1)]+[pos for pos in range(len(example)-prompt_token_location-1)])
-                    self.segment_ids.append([segment1_id]*(prompt_token_location+1)+[segment2_id]*(len(example)-prompt_token_location-1))
-
-            logger.info('Maximum input length: %d', max_input_length)
-            logger.info("Saving features into cached file %s", cached_features_file)
-            with open(cached_features_file, 'wb') as handle:
-                pickle.dump((self.examples, self.labels, self.position_ids, self.segment_ids), handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    def __len__(self):
-        return len(self.examples)
-
-    def __getitem__(self, item):
-        return torch.tensor(self.examples[item]), torch.tensor(self.labels[item]), torch.tensor(self.position_ids[item]), torch.tensor(self.segment_ids[item])
-
-
-def load_and_cache_examples(args, tokenizer, evaluate=False):
-    dataset = TextDataset(tokenizer, args, file_path=args.eval_data_file if evaluate else args.train_data_file, block_size=args.block_size, evaluate=evaluate)
-    return dataset
-
-
-def _rotate_checkpoints(args, checkpoint_prefix, use_mtime=False):
-    if not args.save_total_limit:
-        return
-    if args.save_total_limit <= 0:
-        return
-
-    # Check if we should delete older checkpoint(s)
-    glob_checkpoints = glob.glob(os.path.join(args.output_dir, '{}-*'.format(checkpoint_prefix)))
-    if len(glob_checkpoints) <= args.save_total_limit:
-        return
-
-    ordering_and_checkpoint_path = []
-    for path in glob_checkpoints:
-        if use_mtime:
-            ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
-        else:
-            regex_match = re.match('.*{}-([0-9]+)'.format(checkpoint_prefix), path)
-            if regex_match and regex_match.groups():
-                ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
-
-    checkpoints_sorted = sorted(ordering_and_checkpoint_path)
-    checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
-    number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - args.save_total_limit)
-    checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
-    for checkpoint in checkpoints_to_be_deleted:
-        logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
-        shutil.rmtree(checkpoint)
-
-
-def mask_tokens(inputs, tokenizer, args):
-    """ Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. """
-    labels = inputs.clone()
-    # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
-    probability_matrix = torch.full(labels.shape, args.mlm_probability)
-    special_tokens_mask = [tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()]
-    probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
-    masked_indices = torch.bernoulli(probability_matrix).bool()
-    labels[~masked_indices] = -100  # We only compute loss on masked tokens
-
-    # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-    indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
-    inputs[indices_replaced] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
-
-    # 10% of the time, we replace masked input tokens with random word
-    indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-    random_words = torch.randint(len(tokenizer), labels.shape, dtype=torch.long)
-    inputs[indices_random] = random_words[indices_random]
-
-    # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-    return inputs, labels
-
-def pad_collate(batch, pad_token_id):
-    (inputs, labels, position_ids, segment_ids) = zip(*batch)
-    inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=pad_token_id)
-    labels_pad = pad_sequence(labels, batch_first=True, padding_value=-100)
-    position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
-    segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
-
-    return inputs_pad, labels_pad, position_ids, segment_ids
-
-def remove_thingtalk_quotes(thingtalk):
-    while True:
-        l1 = thingtalk.find('"')
-        if l1 < 0:
-            break
-        l2 = thingtalk.find('"', l1+1)
-        assert l2 >= 0
-        thingtalk = thingtalk[:l1] + '<temp>' + thingtalk[l2+1:]
-    return thingtalk
-
-def get_inbetween_tokens(train_data_file, start_token, end_token):
-    new_tokens = set()
-    with open(train_data_file, encoding="utf-8") as f:
-        for line in tqdm(f, desc='Tokenizing'):
-            line = remove_thingtalk_quotes(line)
-            line = line[line.find(start_token)+len(start_token):line.find(end_token)]
-            new_tokens.update(line.split())
-    return new_tokens
     
 
 def train(args, train_dataset, model, tokenizer):
@@ -211,8 +70,7 @@ def train(args, train_dataset, model, tokenizer):
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    collate = partial(pad_collate, pad_token_id=tokenizer.convert_tokens_to_ids(tokenizer.pad_token))
-    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate)
+    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=train_dataset.collate_fn)
 
     if args.max_steps > 0:
         t_total = args.max_steps
@@ -227,7 +85,19 @@ def train(args, train_dataset, model, tokenizer):
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
+
+    if args.scheduler == 'linear':
+        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
+    elif args.scheduler == 'transformer':
+        if args.model_type == 'bert':
+            dimension = model.config.hidden_size
+        elif args.model_type == 'gpt2':
+            dimension = model.config.n_embd
+        else:
+            logger.error('Cannot detect hidden size dimensions in this model type. Config: %s', model.config)
+        scheduler = get_transformer_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total, dimension=dimension)
+    else:
+        logger.error('Unknown scheduler type.')
 
     # Check if saved optimizer or scheduler states exist
     if os.path.isfile(os.path.join(args.model_name_or_path, 'optimizer.pt')) and os.path.isfile(os.path.join(args.model_name_or_path, 'scheduler.pt')):
@@ -270,7 +140,7 @@ def train(args, train_dataset, model, tokenizer):
         # set global_step to gobal_step of last saved checkpoint from model path
         global_step = int(args.model_name_or_path.split('-')[-1].split('/')[0])
         epochs_trained = global_step // (len(train_dataloader) // args.gradient_accumulation_steps)
-        steps_trained_in_current_epoch = global_step % (len(train_dataloader) // args.gradient_accumulation_steps)
+        steps_trained_in_current_epoch = (global_step % (len(train_dataloader) // args.gradient_accumulation_steps)) * args.gradient_accumulation_steps
 
         logger.info("  Continuing training from checkpoint, will skip to saved global_step")
         logger.info("  Continuing training from epoch %d", epochs_trained)
@@ -299,13 +169,36 @@ def train(args, train_dataset, model, tokenizer):
                 steps_trained_in_current_epoch -= 1
                 continue
 
-            inputs, labels, position_ids, segment_ids = mask_tokens(batch, tokenizer, args) if args.mlm else batch # batch is a tuple (input, labels, position_ids, segment_ids)
+            inputs, labels, position_ids, segment_ids = batch # batch is a tuple (input, labels, position_ids, segment_ids)
+            
+            if args.mlm:
+                inputs, labels = mask_tokens(inputs, labels, tokenizer, args.mlm_probability, args.mlm_ignore_index)
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
             position_ids = position_ids.to(args.device)
             segment_ids = segment_ids.to(args.device)
             model.train()
-            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
+            
+            model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids}
+            
+            # prepare inputs for bart
+            if args.model_type == 'bart':
+                # this should have been handled internally by huggingfaces's BART code
+                # TODO remove this once they add it
+                decoder_input_ids = labels[:, :-1].contiguous()
+                decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
+                lm_labels = labels[:, 1:].clone()
+                model_inputs['decoder_input_ids'] = decoder_input_ids
+                model_inputs['lm_labels'] = lm_labels
+            
+            # other models
+            else:
+                if args.mlm:
+                    model_inputs['masked_lm_labels'] = labels
+                else:
+                    model_inputs['labels'] = labels
+                
+            outputs = model(**model_inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.n_gpu > 1:
@@ -334,6 +227,10 @@ def train(args, train_dataset, model, tokenizer):
                     # Log metrics
                     if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer)
+                        if args.aux_eval_data_file is not None:
+                            aux_results = evaluate(args, model, tokenizer, aux=True)
+                            for key, value in aux_results.items():
+                                tb_writer.add_scalar('auxiliary_eval_{}'.format(key), value, global_step)
                         if best_eval_perplexity > results['perplexity']:
                             best_eval_perplexity = results['perplexity']
                             if not os.path.exists(args.output_dir):
@@ -356,7 +253,7 @@ def train(args, train_dataset, model, tokenizer):
                     tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
                     logging_loss = tr_loss
 
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0 and args.save_total_limit > 0:
                     checkpoint_prefix = 'checkpoint'
                     # Save model checkpoint
                     output_dir = os.path.join(args.output_dir, '{}-{}'.format(checkpoint_prefix, global_step))
@@ -388,11 +285,11 @@ def train(args, train_dataset, model, tokenizer):
     return global_step, tr_loss / global_step
 
 
-def evaluate(args, model, tokenizer, prefix=""):
+def evaluate(args, model, tokenizer, prefix="", aux=False):
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_output_dir = args.output_dir
 
-    eval_dataset = load_and_cache_examples(args, tokenizer, evaluate=True)
+    eval_dataset = load_and_cache_examples(args, tokenizer, evaluate=True, aux=aux)
 
     if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(eval_output_dir)
@@ -400,8 +297,7 @@ def evaluate(args, model, tokenizer, prefix=""):
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(eval_dataset)
-    collate = partial(pad_collate, pad_token_id=tokenizer.convert_tokens_to_ids(tokenizer.pad_token))
-    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size, collate_fn=collate)
+    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size, collate_fn=eval_dataset.collate_fn)
 
     # multi-gpu evaluate
     if args.n_gpu > 1:
@@ -416,14 +312,25 @@ def evaluate(args, model, tokenizer, prefix=""):
     model.eval()
 
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
-        inputs, labels, position_ids, segment_ids = mask_tokens(batch, tokenizer, args) if args.mlm else batch
+        inputs, labels, position_ids, segment_ids = batch
+        if args.mlm:
+            inputs, labels = mask_tokens(inputs, labels, tokenizer, args.mlm_probability, args.mlm_ignore_index)
         inputs = inputs.to(args.device)
         labels = labels.to(args.device)
         position_ids = position_ids.to(args.device)
         segment_ids = segment_ids.to(args.device)
 
         with torch.no_grad():
-            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
+            if args.mlm:
+                outputs = model(inputs, masked_lm_labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
+            else:
+                if args.model_type == 'bart':
+                    decoder_input_ids = labels[:, :-1].contiguous()
+                    decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
+                    lm_labels = labels[:, 1:].clone()
+                    outputs = model(inputs, labels=labels, lm_labels=lm_labels, decoder_input_ids=decoder_input_ids, position_ids=position_ids, token_type_ids=segment_ids)
+                else:
+                    outputs = model(inputs, labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
             lm_loss = outputs[0]
             eval_loss += lm_loss.mean().item()
         nb_eval_steps += 1
@@ -444,37 +351,34 @@ def evaluate(args, model, tokenizer, prefix=""):
 
     return result
 
-def add_special_tokens(model, tokenizer, additional_special_tokens):
-    """ Add special tokens to the tokenizer and the model if they have not already been added. """
-    ATTR_TO_SPECIAL_TOKEN = {'pad_token': '<pad>',
-                         'additional_special_tokens': additional_special_tokens}
-    orig_num_tokens = len(tokenizer)
-    num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN) # doesn't add if they are already there
-    if num_added_tokens > 0:
-        logger.info('Added %d special tokens', num_added_tokens)
-        model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
 
 def parse_argv(parser):
     ## Required parameters
-    parser.add_argument("--train_data_file", default=None, type=str, required=True,
-                        help="The input training data file (a text file).")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
-    parser.add_argument("--tensorboard_dir", default=None, type=str, required=True,
+    
+    ## Other parameters
+    parser.add_argument("--tensorboard_dir", default=None, type=str,
                         help="The output directory where the tensorboard files will be written.")
-                        
-
+    parser.add_argument("--train_data_file", default=None, type=str,
+                        help="The input training data file.")
+    parser.add_argument("--aux_train_data_file", default=None, type=str,
+                        help="An input training data file for the target domain.")
     parser.add_argument('--start_special_token', type=str, default='<paraphrase>',
                         help='The special token for the start of paraphrases.')
     parser.add_argument('--end_special_token', type=str, default='</paraphrase>',
                         help='The special token for the end of paraphrases.')
-    parser.add_argument('--add_inbetween_as_special_tokens', action='store_true',
-                        help='The space-separated tokens between --start_special_token and --end_special_token will be added as special tokens. Useful for ThingTalk code.')
+    parser.add_argument('--pad_token', type=str, default='<pad>',
+                        help='The special token for padding..')
     parser.add_argument('--train_all_tokens', action='store_true',
                         help='If True, the model will be trained on input and output sequences, as opposed to only tokens of the output sequence')
-    ## Other parameters
+    parser.add_argument("--reverse_position_ids", action='store_true',
+                        help='If we assume we know the length of the output sequence beforehand, we can do a better job at generation.')
+
     parser.add_argument("--eval_data_file", default=None, type=str,
                         help="An optional input evaluation data file to evaluate the perplexity on (a text file).")
+    parser.add_argument("--aux_eval_data_file", default=None, type=str,
+                        help="An additional input evaluation data file to evaluate the perplexity on (a text file).")
 
     parser.add_argument("--model_type", default="bert", type=str,
                         help="The model architecture to be fine-tuned.")
@@ -485,6 +389,8 @@ def parse_argv(parser):
                         help="Train with masked-language modeling loss instead of language modeling.")
     parser.add_argument("--mlm_probability", type=float, default=0.15,
                         help="Ratio of tokens to mask for masked language modeling loss")
+    parser.add_argument("--mlm_ignore_index", type=int, default=-100,
+                        help="Tokens with this label will be ignore when calculating masked language loss")
 
     parser.add_argument("--config_name", default="", type=str,
                         help="Optional pretrained config name or path if not the same as model_name_or_path")
@@ -525,6 +431,8 @@ def parse_argv(parser):
                         help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
     parser.add_argument("--warmup_steps", default=0, type=int,
                         help="Linear warmup over warmup_steps.")
+    parser.add_argument("--scheduler", default='linear', type=str, choices=['linear', 'transformer'],
+                        help="The type of learning rate scheduler to use.")
 
     parser.add_argument('--logging_steps', type=int, default=50,
                         help="Log every X updates steps.")
@@ -553,9 +461,15 @@ def parse_argv(parser):
 
 
 def main(args):
-    if args.model_type in ["bert", "roberta", "distilbert", "camembert"] and not args.mlm:
-        raise ValueError("BERT and RoBERTa do not have LM heads but masked LM heads. They must be run using the --mlm "
-                         "flag (masked language modeling).")
+    if args.model_type == 'bert' and (args.pad_token != '[PAD]' or args.start_special_token != '[SEP]' or args.end_special_token != '[SEP]'):
+        raise ValueError("BERT already has its own special tokens [PAD] and [SEP]. You should use them for better results.")
+    if args.do_train:
+        if args.train_data_file is None:
+            raise ValueError("Cannot do training without a training data file. Either supply a file to --train_data_file "
+                            "or remove the --do_train argument.")
+        if args.tensorboard_dir is None:
+            raise ValueError("Cannot do training without specifying --tensorboard_dir")
+
     if args.eval_data_file is None and args.do_eval:
         raise ValueError("Cannot do evaluation without an evaluation data file. Either supply a file to --eval_data_file "
                          "or remove the --do_eval argument.")
@@ -601,12 +515,7 @@ def main(args):
                                         from_tf=bool('.ckpt' in args.model_name_or_path),
                                         config=config,
                                         cache_dir=args.cache_dir if args.cache_dir else None)
-    add_special_tokens(model, tokenizer, additional_special_tokens=[args.start_special_token, args.end_special_token])
-    if args.add_inbetween_as_special_tokens:
-        new_tokens = get_inbetween_tokens(args.train_data_file, start_token=args.start_special_token, end_token=args.end_special_token)
-        logger.info('Detected %d new tokens', len(new_tokens))
-        # logger.info('New tokens: %s', str([s for s in new_tokens if ('_' in s and '@' not in s and '^' not in s and '(' not in s and ':' not in s)]))
-        add_special_tokens(model, tokenizer, additional_special_tokens=list(new_tokens))
+    add_special_tokens(model, tokenizer, additional_special_tokens=[args.start_special_token, args.end_special_token], pad_token=args.pad_token)
     model.to(args.device)
 
     if args.local_rank == 0:

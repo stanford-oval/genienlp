@@ -165,7 +165,7 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
         opt.zero_grad()
     loss, predictions = model(batch, iteration, pretraining=pretraining)
     if torch.isnan(loss).any():
-        raise RuntimeError('Got NaN loss')
+        raise RuntimeError('Got NaN loss %s', str(loss))
     if len(devices) > 1:
         loss = loss.mean()
     non_accumulated_loss = loss.item()
@@ -421,7 +421,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 logger.info(
                     'Encountered NAN loss during training... Continue training ignoring the current batch')
                 continue
-            if loss < 1e-5:
+            if loss < 1e-6:
                 zero_loss += 1
                 if zero_loss >= 100:
                     logger.info('Found loss less than 1e-5 for 100 steps, stopping.')
