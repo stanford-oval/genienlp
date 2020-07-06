@@ -49,7 +49,8 @@ from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETR
 
 from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer
 
-from .transformers_utils import BartForConditionalGeneration, MarianMTModel, T5ForConditionalGeneration
+from transformers import BartForConditionalGeneration
+from .transformers_utils import MarianMTModel, T5ForConditionalGeneration, BartForConditionalGeneration as MBartForConditionalGeneration
 from .transformers_utils import BartTokenizer, MBartTokenizer
 
 from transformers import PretrainedConfig
@@ -71,7 +72,7 @@ MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'bos_token': '<unk>', 'sep_token': '<paraphrase>', 'eos_token': '</paraphrase>'}),
     't5': (T5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
     'bart': (BartForConditionalGeneration, BartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'mbart': (BartForConditionalGeneration, MBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'mbart': (MBartForConditionalGeneration, MBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
     'marian': (MarianMTModel, MarianTokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
 }
 
@@ -370,10 +371,11 @@ def run_single_process_generation(args, config):
                                  pad_token_id=pad_token_id,
                                  return_attentions=return_attentions,
                                  return_hidden_states=return_hidden_states,
-                                 use_cache = True,
+                                 use_cache=True,
                                 )
 
-            if len(outputs) > 1:
+            # TODO fix the way output attention is handled. Some models do not support it.
+            if return_attentions and args.model_type!='bart' and args.model_type!='gpt2':
                 decoded, all_encoder_attentions = outputs
             else:
                 decoded = outputs

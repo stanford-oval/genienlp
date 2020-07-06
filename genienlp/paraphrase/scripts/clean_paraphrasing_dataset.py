@@ -148,7 +148,7 @@ def main():
                     if args.lower_case:
                         first = first.lower()
                         second = second.lower()
-                    if first == '' or second == '':
+                    if first == '' or second == '' or first.lower() == second.lower():
                         drop_count += 1
                         continue
                     if args.edit_distance_mode != 'none':
