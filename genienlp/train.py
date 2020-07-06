@@ -485,6 +485,23 @@ def init_model(args, numericalizer, context_embeddings, question_embeddings, dec
     model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
     model.params = params
 
+    # if using EWC, estimate Fisher matrix here
+    if args.use_ewc:
+        assert not args.first_task_dataset == ''
+        logger.info(f'Loading original dataset from {os.path.join(args.first_task_dataset)}')
+
+        kwargs = {'test': None, 'validation': None}
+        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
+                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.train_languages,
+                       'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question})
+
+        split = args.train_tasks[0].get_splits(args.first_task_dataset, lower=args.lower, **kwargs)
+        main_device = devices[0]
+        data_loader = make_data_loader(split.train, numericalizer, 1, main_device, paired=args.paired,max_pairs=args.max_pairs,
+                        train=False,  append_question_to_context_too=args.append_question_to_context_too,
+                        override_question=args.override_question)
+        model.estimate_fisher(data_loader)
+
     return model
 
 
