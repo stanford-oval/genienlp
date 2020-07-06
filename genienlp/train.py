@@ -481,10 +481,6 @@ def init_model(args, numericalizer, context_embeddings, question_embeddings, dec
         save_dict = torch.load(os.path.join(args.save, args.load))
         model.load_state_dict(save_dict['model_state_dict'])
 
-    model.to(devices[0])
-    model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
-    model.params = params
-
     # if using EWC, estimate Fisher matrix here
     if args.use_ewc:
         assert not args.first_task_dataset == ''
@@ -501,6 +497,10 @@ def init_model(args, numericalizer, context_embeddings, question_embeddings, dec
                         train=False,  append_question_to_context_too=args.append_question_to_context_too,
                         override_question=args.override_question)
         model.estimate_fisher(data_loader)
+
+    model.to(devices[0])
+    model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
+    model.params = params
 
     return model
 
