@@ -492,7 +492,7 @@ def init_model(args, numericalizer, context_embeddings, question_embeddings, dec
 
         kwargs = {'test': None, 'validation': None}
         kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
-                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.train_languages,
+                       'all_dirs': args.train_languages,
                        'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question})
 
         split = args.train_tasks[0].get_splits(args.first_task_dataset, lower=args.lower, **kwargs)
