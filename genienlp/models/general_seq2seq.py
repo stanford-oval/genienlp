@@ -102,7 +102,7 @@ class Seq2Seq(torch.nn.Module):
         if pretraining:
             loss, predictions = self._pretrain_forward(batch)
 
-            if self.args.ewc:
+            if self.args.use_ewc:
                 # add EWC loss
                 ewc_loss = self.ewc_loss()
                 if self.args.ewc_lambda>0:
@@ -112,7 +112,7 @@ class Seq2Seq(torch.nn.Module):
         else:
             loss, predictions = self._normal_forward(batch)
 
-            if self.args.ewc:
+            if self.args.use_ewc:
                 # add EWC loss
                 ewc_loss = self.ewc_loss()
                 if self.args.ewc_lambda>0:
