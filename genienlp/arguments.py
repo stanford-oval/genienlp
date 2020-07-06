@@ -112,7 +112,7 @@ def parse_argv(parser):
                         help='multiplicative constant choosing the weight of encoder_loss in total loss')
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
     parser.add_argument('--use_ewc', action='store_true', default=False, help='Use Elastic Weight Consolidation loss')
-    parser.add_argument('--ewc_lambda', default=0, type=int, help='How strong to weigh the EWC loss from the previous task')
+    parser.add_argument('--ewc_lambda', default=0.0, type=float, help='How strong to weigh the EWC loss from the previous task')
     parser.add_argument('--first_task_dataset', default='', type=str, help='Dataset used for the previous task. Ignored if EWC is not used')
 
     parser.add_argument('--vocab_tasks', nargs='+', type=str, help='tasks to use in the construction of the vocabulary')
