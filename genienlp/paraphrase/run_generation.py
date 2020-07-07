@@ -523,10 +523,10 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     
     if len(src_spans_ind) % 2 != 0:
         logging.error('corrupted span in src string: [{}]'.format(src_strings))
+        return tgt_strings, False
     if len(tgt_spans_ind) % 2 != 0:
         logging.error('corrupted span in tgt string: [{}] with src string: [{}]\n'
                       'outputting example without reverting the parameter'.format(tgt_strings, src_strings))
-    
         return tgt_strings, False
     
     # arrange spans and exclude quotation mark indices
@@ -615,21 +615,24 @@ def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_
     src2tgt_mapping = {}
     
     src_spans_ind = [index for index, token in enumerate(src_tokens) if '"' in token]
-    
+    tgt_is_piece = [1 if token[0] == SPIECE_UNDERLINE else 0 for token in tgt_tokens]
+    tgt_piece2word_mapping = list(np.cumsum(tgt_is_piece) - 1)
+
+    if len(src_spans_ind) % 2 != 0:
+        logging.error('corrupted span in src string: [{}]'.format(tokenizer.spm_source.DecodePieces(src_tokens)))
+        # this almost never happens but if it does it is usually because quotation is missing from the end of src_tokens
+        # we temporary fix this by adding '"' to the end of src_tokens
+        src_tokens += tokenizer.tokenize('"')
+        src_spans_ind = [index for index, token in enumerate(src_tokens) if '"' in token]
+
     if model_type == 'marian':
         src_strings = tokenizer.spm_source.DecodePieces(src_tokens)
         tgt_strings = tokenizer.spm_target.DecodePieces(tgt_tokens)
     else:
         src_strings = tokenizer.convert_tokens_to_string(src_tokens)
         tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
-        
+    
 
-    tgt_is_piece = [1 if token[0] == SPIECE_UNDERLINE else 0 for token in tgt_tokens]
-    tgt_piece2word_mapping = list(np.cumsum(tgt_is_piece) - 1)
-    
-    if len(src_spans_ind) % 2 != 0:
-        logging.error('corrupted span in src string: [{}]'.format(src_strings))
-    
     # arrange spans and exclude quotation mark indices
     src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
     
