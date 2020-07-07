@@ -15,12 +15,12 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
     "facebook/bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
     "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
-    "sshleifer/mbart-large-cc25": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/mbart-large-cc25/config.json",
+    "facebook/mbart-large-cc25": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-cc25/config.json",
 }
+
 MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "Helsinki-NLP/opus-mt-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/config.json",
 }
-
 
 MARIAN_GROUP_MEMBERS = {
     'ZH': ['cmn', 'cn', 'yue', 'ze_zh', 'zh_cn', 'zh_CN', 'zh_HK', 'zh_tw', 'zh_TW', 'zh_yue', 'zhs', 'zht', 'zh'],
@@ -614,7 +614,7 @@ class BartTokenizer(RobertaTokenizer):
     }
 
 
-_all_mbart_models = ["facebook/mbart-large-en-ro", "sshleifer/mbart-large-cc25"]
+_all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
 SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
 
 
