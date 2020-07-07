@@ -181,14 +181,15 @@ class Seq2Seq(torch.nn.Module):
 
         # Set model to evaluation mode
         mode = self.training
-        self.eval()        
+        self.eval()
 
         # Estimate the FI-matrix for [self.fisher_n] batches of size 1
-        for index,(x,y) in enumerate(data_loader):
-            # break from for-loop if max number of samples has been reached
-            if self.fisher_n is not None:
-                if index >= self.fisher_n:
-                    break
+        data_loader = iter(data_loader)
+        for index, (x, y) in enumerate(data_loader):
+            # TODO break from for-loop if max number of samples has been reached
+            # if self.fisher_n is not None:
+            #     if index >= self.fisher_n:
+            #         break
             # run forward pass of model
             x = x.to(self._device())
             output = self(x)
