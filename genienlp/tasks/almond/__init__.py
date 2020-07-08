@@ -57,7 +57,7 @@ class AlmondDataset(CQA):
 
     base_url = None
 
-    def __init__(self, path, *, make_example, aux_examples=None, subsample=None, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, *, make_example, aux_examples=None, subsample=None, cached_path=None, skip_cache=False, cache_input_data=False, **kwargs):
         
         #TODO fix cache_path for multilingual task
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
@@ -85,8 +85,9 @@ class AlmondDataset(CQA):
                 if len(examples) >= max_examples:
                     break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            logger.info(f'Caching data to {cache_name}')
-            torch.save(examples, cache_name)
+            if cache_input_data:
+                logger.info(f'Caching data to {cache_name}')
+                torch.save(examples, cache_name)
 
         super().__init__(examples, **kwargs)
         

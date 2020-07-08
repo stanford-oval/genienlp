@@ -73,7 +73,7 @@ def get_all_splits(args):
         else:
             raise ValueError('Split used for prediction should be either valid or test')
         
-        kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
+        kwargs.update({'skip_cache': False, 'subsample': args.subsample,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages,
                        'almond_lang_as_question': args.almond_lang_as_question})
         

@@ -216,6 +216,8 @@ def parse_argv(parser):
 
     parser.add_argument('--skip_cache', action='store_true',
                         help='whether to use exisiting cached splits or generate new ones')
+    parser.add_argument('--cache_input_data', action='store_true',
+                        help='Cache examples from input data for faster subsequent trainings')
     parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')
     parser.add_argument('--aux_aligned', action='store_true',
                         help='whether auxiliary examples are aligned with train examples')

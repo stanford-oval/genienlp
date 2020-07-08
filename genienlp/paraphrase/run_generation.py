@@ -344,6 +344,8 @@ def run_single_process_generation(args, config):
             
         if args.model_type == 'mbart':
             decoder_start_token_id = tokenizer.lang_code_to_id[args.tgt_lang]
+            # decoder_start_token_id = None
+        
         else:
             decoder_start_token_id = None
             
@@ -383,8 +385,8 @@ def run_single_process_generation(args, config):
             if not isinstance(decoded, list):
                 decoded = decoded[:, :].tolist()
             for i, out in enumerate(decoded):
-                if args.model_type=='bart' or args.model_type=='mbart':
-                    out = out[1:] # remove </s> token at the beginning
+                # if args.model_type=='bart' or args.model_type=='mbart':
+                #     out = out[1:] # remove </s> token at the beginning
                 sample_index = (i//args.num_samples[hyperparameter_idx]) % batch_size
                 if not args.output_prompt:
                     out = out[len(batch_prompt_tokens[sample_index]):]
@@ -409,7 +411,7 @@ def run_single_process_generation(args, config):
                     sample_layer_attention = layer_attention[sample_index, :, :, :]
 
                     if tgt_tokens[0] == tokenizer.pad_token or tgt_tokens[0] == special_tokens['sep_token'] or \
-                            tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]:
+                            (decoder_start_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]):
                         # shift target tokens left to match the attention positions
                         tgt_tokens = tgt_tokens[1:]
                     while src_tokens[-1] == tokenizer.pad_token:
