@@ -77,7 +77,7 @@ def prepare_data(args, logger):
     for task in args.train_tasks:
         logger.info(f'Loading {task.name}')
         kwargs = {'test': None, 'validation': None}
-        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
+        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.train_languages,
                        'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question})
         if args.use_curriculum:
@@ -103,7 +103,7 @@ def prepare_data(args, logger):
         # choose best model based on this dev set
         if args.eval_set_name is not None:
             kwargs['validation'] = args.eval_set_name
-        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
+        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.eval_languages,
                         'almond_lang_as_question': args.almond_lang_as_question})
         

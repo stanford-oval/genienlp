@@ -418,7 +418,7 @@ def run_single_process_generation(args, config):
                     sample_layer_attention = layer_attention[sample_index, :, :, :]
 
                     if tgt_tokens[0] == tokenizer.pad_token or tgt_tokens[0] == special_tokens['sep_token'] or \
-                            tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]:
+                            (decoder_start_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]):
                         # shift target tokens left to match the attention positions
                         tgt_tokens = tgt_tokens[1:]
                     while src_tokens[-1] == tokenizer.pad_token:
