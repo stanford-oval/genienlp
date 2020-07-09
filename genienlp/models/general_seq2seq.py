@@ -231,7 +231,7 @@ class Seq2Seq(torch.nn.Module):
         # set model back to initial mode
         self.train(mode=mode)
 
-    def fisher_data_loader(dataset, batch_size, cuda=False, collate_fn=None, drop_last=False):
+    def fisher_data_loader(dataset, batch_size=100, cuda=False, collate_fn=None, drop_last=False):
         '''Return <DataLoader>-object for the provided <DataSet>-object [dataset].'''
 
         # Create and return the <DataLoader>-object

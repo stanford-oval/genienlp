@@ -79,8 +79,8 @@ class AlmondDataset(CQA):
                 if len(examples) >= max_examples:
                     break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            logger.info(f'Caching data to {cache_name}')
-            torch.save(examples, cache_name)
+            # logger.info(f'Caching data to {cache_name}')
+            # torch.save(examples, cache_name)
 
         super().__init__(examples, **kwargs)
         
