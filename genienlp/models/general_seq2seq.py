@@ -37,6 +37,7 @@ from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
 from .common import mask_tokens
 from torch.nn import functional as F
+from torch.utils.data import DataLoader
 
 ENCODERS = {
     'MQANEncoder': MQANEncoder,
@@ -169,8 +170,8 @@ class Seq2Seq(torch.nn.Module):
             # EWC-loss is 0 if there are no stored mode and precision yet
             return torch.tensor(0., device=self._device())
     
-    def estimate_fisher(self, data_loader):
-        '''After completing training on a task, estimate diagonal of Fisher Information matrix.'''
+    def estimate_fisher(self, dataset):
+        '''Estimate diagonal of Fisher Information matrix.'''
 
         # Prepare <dict> to store estimated Fisher Information matrix
         est_fisher_info = {}
@@ -183,17 +184,15 @@ class Seq2Seq(torch.nn.Module):
         mode = self.training
         self.eval()
 
-        # Estimate the FI-matrix for [self.fisher_n] batches of size 1
-        data_loader = iter(data_loader)
+        # Estimate the FI-matrix for batches of size 1
+        data_loader = fisher_data_Loader(dataset, batch_size=1, cuda=self._is_on_cuda())
         for index, (x, y) in enumerate(data_loader):
-            # TODO break from for-loop if max number of samples has been reached
-            # if self.fisher_n is not None:
-            #     if index >= self.fisher_n:
-            #         break
+
             # run forward pass of model
             x = x.to(self._device())
             output = self(x)
-            # -use predicted label to calculate loglikelihood:
+
+            # use predicted label to calculate loglikelihood
             label = output.max(1)[1]
             # calculate negative log-likelihood
             negloglikelihood = F.nll_loss(F.log_softmax(output, dim=1), label)
@@ -231,3 +230,13 @@ class Seq2Seq(torch.nn.Module):
 
         # set model back to initial mode
         self.train(mode=mode)
+
+    def fisher_data_Loader(dataset, batch_size, cuda=False, collate_fn=None, drop_last=False):
+        '''Return <DataLoader>-object for the provided <DataSet>-object [dataset].'''
+
+        # Create and return the <DataLoader>-object
+        return DataLoader(
+            dataset, batch_size=batch_size, shuffle=True,
+            collate_fn=(collate_fn or default_collate), drop_last=drop_last,
+            **({'num_workers': 0, 'pin_memory': True} if cuda else {})
+    )
