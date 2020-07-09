@@ -45,13 +45,14 @@ except RuntimeError:
 import torch
 
 from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_GROUP_MEMBERS, SPIECE_UNDERLINE
-
 from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer
 from transformers import BartForConditionalGeneration
+from transformers import PretrainedConfig
+
 from .transformers_utils import MarianMTModel, T5ForConditionalGeneration, BartForConditionalGeneration as MBartForConditionalGeneration
 from .transformers_utils import BartTokenizer, MBartTokenizer
-from transformers import PretrainedConfig
+from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_GROUP_MEMBERS, SPIECE_UNDERLINE
+
 from ..util import set_seed, combine_files_on_disk, split_file_on_disk, get_part_path
 from .GPT2Seq2Seq import GPT2Seq2Seq
 from .data_utils import group_together
@@ -125,7 +126,11 @@ def parse_argv(parser):
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")
     
+    parser.add_argument('--cache_dir', default='.embeddings', type=str, help='where to save transforemrs cached models, configs, and tokenizers.')
     parser.add_argument('--trained_model_type', type=str, help='if provided we make sure the loaded model matches the model_type')
+    
+    parser.add_argument('--return_attentions', action='store_true', help='return self and cross attention weights for seq2seq models')
+    parser.add_argument('--return_hidden_states', action='store_true', help='return all hidden states for seq2seq models')
     
     parser.add_argument('--src_lang', type=str, default='en', help='source language used for translation task')
     parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
@@ -137,6 +142,9 @@ def parse_argv(parser):
     parser.add_argument('--subsample', type=int, default=20000000, help='subsample input datasets')
     parser.add_argument('--task', type=str, required=True, choices=['paraphrase', 'translate'])
     parser.add_argument("--output_example_ids_too", action='store_true', help='Generate two column output with ids in the first column')
+
+    parser.add_argument('--masked_paraphrasing', action='store_true', help='mask input tokens and infill them using denoising pretrained model')
+    parser.add_argument('--fairseq_mask_prob', type=float, default=0.15, help='Probability of an input token being masked in the sentence for masked_paraphrasing')
 
 
 def main(args):
@@ -178,10 +186,7 @@ def main(args):
         run_multi_process_generation(args)
 
 def run_multi_process_generation(args):
-    config = PretrainedConfig.from_pretrained(args.model_name_or_path)
-    
-    # config.output_attentions = True
-    # config.output_hidden_states = True
+    config = PretrainedConfig.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     
     # get model type from saved config
     if hasattr(config, 'model_type'):
@@ -261,14 +266,18 @@ def run_multi_process_generation(args):
 def run_single_process_generation(args, config):
     model_class, tokenizer_class, special_tokens = MODEL_CLASSES[args.model_type]
     
-    return_attentions = True
-    return_hidden_states = False
+    return_attentions = args.return_attentions
+    return_hidden_states = args.return_hidden_states
     
-    model = model_class.from_pretrained(args.model_name_or_path, output_attentions=return_attentions, output_hidden_states=return_hidden_states)
+    model = model_class.from_pretrained(args.model_name_or_path,
+                                        output_attentions=return_attentions,
+                                        output_hidden_states=return_hidden_states,
+                                        cache_dir=args.cache_dir)
     model.to(args.device)
     model.eval()
 
-    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
+    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
+    
     bos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['bos_token'])
     eos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['eos_token'])
     sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
@@ -302,8 +311,8 @@ def run_single_process_generation(args, config):
                                                                 gold_column=args.gold_column,
                                                                 id_column=args.id_column,
                                                                 prompt_column=args.prompt_column,
-                                                                copy=args.copy,
                                                                 thingtalk_column=args.thingtalk_column,
+                                                                copy=args.copy,
                                                                 sep_token_id=sep_token_id,
                                                                 skip_heuristics=args.skip_heuristics,
                                                                 is_cased=args.is_cased,
@@ -311,7 +320,9 @@ def run_single_process_generation(args, config):
                                                                 src_lang=args.src_lang,
                                                                 subsample=args.subsample,
                                                                 task=args.task,
-                                                                model_input_prefix=model_input_prefix)
+                                                                model_input_prefix=model_input_prefix,
+                                                                masked_paraphrasing=args.masked_paraphrasing,
+                                                                fairseq_mask_prob=args.fairseq_mask_prob)
 
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, original_order, reverse_maps, all_prompt_ids = \
@@ -344,8 +355,6 @@ def run_single_process_generation(args, config):
             
         if args.model_type == 'mbart':
             decoder_start_token_id = tokenizer.lang_code_to_id[args.tgt_lang]
-            # decoder_start_token_id = None
-        
         else:
             decoder_start_token_id = None
             
@@ -385,8 +394,8 @@ def run_single_process_generation(args, config):
             if not isinstance(decoded, list):
                 decoded = decoded[:, :].tolist()
             for i, out in enumerate(decoded):
-                # if args.model_type=='bart' or args.model_type=='mbart':
-                #     out = out[1:] # remove </s> token at the beginning
+                if args.model_type=='bart' or args.model_type=='mbart':
+                    out = out[1:] # remove </s> token at the beginning
                 sample_index = (i//args.num_samples[hyperparameter_idx]) % batch_size
                 if not args.output_prompt:
                     out = out[len(batch_prompt_tokens[sample_index]):]
@@ -411,7 +420,7 @@ def run_single_process_generation(args, config):
                     sample_layer_attention = layer_attention[sample_index, :, :, :]
 
                     if tgt_tokens[0] == tokenizer.pad_token or tgt_tokens[0] == special_tokens['sep_token'] or \
-                            (decoder_start_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]):
+                       (decoder_start_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]):
                         # shift target tokens left to match the attention positions
                         tgt_tokens = tgt_tokens[1:]
                     while src_tokens[-1] == tokenizer.pad_token:

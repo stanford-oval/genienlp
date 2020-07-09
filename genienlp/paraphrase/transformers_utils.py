@@ -1,4 +1,5 @@
 import copy
+
 from transformers.modeling_bart import LayerNorm, LearnedPositionalEmbedding, BartEncoder, SelfAttention, invert_mask, \
     SinusoidalPositionalEmbedding, BartModel, BartForConditionalGeneration
 from transformers.modeling_t5 import T5ForConditionalGeneration, T5PreTrainedModel, T5LayerNorm, T5Block
@@ -615,6 +616,7 @@ class BartTokenizer(RobertaTokenizer):
 _all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
 SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
 
+
 class MBartTokenizer(XLMRobertaTokenizer):
     """
     This inherits from XLMRobertaTokenizer. ``prepare_translation_batch`` should be used to encode inputs.
@@ -630,7 +632,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
         ... )
     """
-
+    
     vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
@@ -665,21 +667,21 @@ class MBartTokenizer(XLMRobertaTokenizer):
     cur_lang_code = lang_code_to_id["en_XX"]
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
-
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
         self.reset_special_tokens()
-
+    
     def reset_special_tokens(self) -> None:
         """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, cur_lang_code]."""
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
-
+    
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
@@ -701,9 +703,10 @@ class MBartTokenizer(XLMRobertaTokenizer):
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
-
+    
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None,
+            already_has_special_tokens: bool = False
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -718,7 +721,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         Returns:
             :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
-
+        
         if already_has_special_tokens:
             if token_ids_1 is not None:
                 raise ValueError(
@@ -731,23 +734,23 @@ class MBartTokenizer(XLMRobertaTokenizer):
         if token_ids_1 is None:
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
-
+    
     def set_lang(self, lang: str) -> None:
         """Set the current language code in order to call tokenizer properly."""
         self.cur_lang_code = self.lang_code_to_id[lang]
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
-
+    
     def prepare_translation_batch(
-        self,
-        src_texts: List[str],
-        src_lang: str = "en_XX",
-        tgt_texts: Optional[List[str]] = None,
-        tgt_lang: str = "ro_RO",
-        max_length: Optional[int] = None,
-        padding: str = "longest",
-        return_tensors: str = "pt",
-        **kwargs,
+            self,
+            src_texts: List[str],
+            src_lang: str = "en_XX",
+            tgt_texts: Optional[List[str]] = None,
+            tgt_lang: str = "ro_RO",
+            max_length: Optional[int] = None,
+            padding: str = "longest",
+            return_tensors: str = "pt",
+            **kwargs,
     ) -> BatchEncoding:
         """Prepare a batch that can be passed directly to an instance of MBartModel.
         Arguments:
@@ -790,7 +793,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self.cur_lang_code = self.lang_code_to_id[src_lang]
         self.reset_special_tokens()  # sets to src_lang
         return model_inputs
-    
+
 
 class T5Stack(T5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):

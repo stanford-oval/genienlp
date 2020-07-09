@@ -396,7 +396,7 @@ def parse_argv(parser):
                         help="Optional pretrained config name or path if not the same as model_name_or_path")
     parser.add_argument("--tokenizer_name", default="", type=str,
                         help="Optional pretrained tokenizer name or path if not the same as model_name_or_path")
-    parser.add_argument("--cache_dir", default="", type=str,
+    parser.add_argument("--cache_dir", default=".embeddings", type=str,
                         help="Optional directory to store the pre-trained models downloaded from s3 (instread of the default one)")
     parser.add_argument("--block_size", default=-1, type=int,
                         help="Optional input sequence length after tokenization."
