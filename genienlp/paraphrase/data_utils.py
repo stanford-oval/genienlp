@@ -1,5 +1,6 @@
 import sys
 import re
+import random
 
 from tqdm import tqdm
 import torch
@@ -119,10 +120,21 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
     if num_added_tokens > 0:
         logger.info('Added %d special tokens', num_added_tokens)
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
+        
+        
+def fairseq_mask(input_sequence, tokenizer, mlm_probability):
+    input_tokens = input_sequence.split(' ')
+    input_length = len(input_tokens)
+    # don't mask first and last tokens
+    for i in range(1, input_length-1):
+        if random.random() < mlm_probability:
+            input_tokens[i] = getattr(tokenizer, 'mask_token', '<mask>')
+    return ' '.join(input_tokens)
+    
 
 
-def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, copy, thingtalk_column, sep_token_id,
-                                  skip_heuristics, is_cased, model_type, src_lang, subsample, task, model_input_prefix):
+def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column, copy, sep_token_id,
+                                  skip_heuristics, is_cased, model_type, src_lang, subsample, task, model_input_prefix, masked_paraphrasing, fairseq_mask_prob):
     """
     Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
     Outputs:
@@ -165,6 +177,9 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
             thingtalk = row[thingtalk_column] if thingtalk_column is not None else None
             input_sequence, reverse_map = input_heuristics(input_sequence, thingtalk, is_cased)
             reverse_maps.append(reverse_map)
+            
+        if masked_paraphrasing:
+            input_sequence = fairseq_mask(input_sequence, tokenizer, fairseq_mask_prob)
         
         # add model specific prefix
         input_sequence = model_input_prefix + input_sequence
