@@ -485,8 +485,13 @@ def init_model(args, numericalizer, context_embeddings, question_embeddings, dec
     if args.use_ewc:
         assert not args.first_task_dataset == ''
         logger.info(f'Loading original dataset from {os.path.join(args.first_task_dataset)}')
+        kwargs = {'test': None, 'validation': None}
+        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
+                       'cached_path': os.path.join(args.cache, 'first-task-dataset'), 'all_dirs': args.train_languages,
+                       'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question})
 
         train_split = args.train_tasks[0].get_splits(args.first_task_dataset, lower=args.lower, **kwargs)
+        logger.info('Estimating Fisher matrix')
         model.estimate_fisher(train_split)
 
     model.to(devices[0])
