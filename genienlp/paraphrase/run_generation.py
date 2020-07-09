@@ -127,6 +127,8 @@ def parse_argv(parser):
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")
     
+    parser.add_argument('--cache_dir', default='.embeddings', type=str, help='where to save transforemrs cached models, configs, and tokenizers.')
+    
     parser.add_argument('--trained_model_type', type=str, help='if provided we make sure the loaded model matches the model_type')
     
     parser.add_argument('--src_lang', type=str, default='en', help='source language used for translation task')
@@ -139,6 +141,10 @@ def parse_argv(parser):
     parser.add_argument('--subsample', type=int, default=20000000, help='subsample input datasets')
     parser.add_argument('--task', type=str, required=True, choices=['paraphrase', 'translate'])
     parser.add_argument("--output_example_ids_too", action='store_true', help='Generate two column output with ids in the first column')
+    
+    parser.add_argument('--masked_paraphrasing', action='store_true', help='mask input tokens and infill them using denoising pretrained model')
+    parser.add_argument('--fairseq_mask_prob', type=float, default=0.15, help='Probability of an input token being masked in the sentence for masked_paraphrasing')
+
 
 
 def main(args):
@@ -180,7 +186,7 @@ def main(args):
         run_multi_process_generation(args)
 
 def run_multi_process_generation(args):
-    config = PretrainedConfig.from_pretrained(args.model_name_or_path)
+    config = PretrainedConfig.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     
     # config.output_attentions = True
     # config.output_hidden_states = True
@@ -266,11 +272,14 @@ def run_single_process_generation(args, config):
     return_attentions = True
     return_hidden_states = False
     
-    model = model_class.from_pretrained(args.model_name_or_path, output_attentions=return_attentions, output_hidden_states=return_hidden_states)
+    model = model_class.from_pretrained(args.model_name_or_path,
+                                        output_attentions=return_attentions,
+                                        output_hidden_states=return_hidden_states,
+                                        cache_dir=args.cache_dir)
     model.to(args.device)
     model.eval()
 
-    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
+    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     bos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['bos_token'])
     eos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['eos_token'])
     sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
@@ -304,8 +313,8 @@ def run_single_process_generation(args, config):
                                                                 gold_column=args.gold_column,
                                                                 id_column=args.id_column,
                                                                 prompt_column=args.prompt_column,
-                                                                copy=args.copy,
                                                                 thingtalk_column=args.thingtalk_column,
+                                                                copy=args.copy,
                                                                 sep_token_id=sep_token_id,
                                                                 skip_heuristics=args.skip_heuristics,
                                                                 is_cased=args.is_cased,
@@ -313,7 +322,9 @@ def run_single_process_generation(args, config):
                                                                 src_lang=args.src_lang,
                                                                 subsample=args.subsample,
                                                                 task=args.task,
-                                                                model_input_prefix=model_input_prefix)
+                                                                model_input_prefix=model_input_prefix,
+                                                                masked_paraphrasing=args.masked_paraphrasing,
+                                                                fairseq_mask_prob=args.fairseq_mask_prob)
 
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, original_order, reverse_maps, all_prompt_ids = \
