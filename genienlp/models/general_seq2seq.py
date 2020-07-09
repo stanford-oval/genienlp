@@ -240,3 +240,6 @@ class Seq2Seq(torch.nn.Module):
             collate_fn=(collate_fn or default_collate), drop_last=drop_last,
             **({'num_workers': 0, 'pin_memory': True} if cuda else {})
     )
+
+    def _is_on_cuda(self):
+        return next(self.parameters()).is_cuda
