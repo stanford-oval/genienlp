@@ -185,7 +185,7 @@ class Seq2Seq(torch.nn.Module):
         self.eval()
 
         # Estimate the FI-matrix for batches of size 1
-        data_loader = self.fisher_data_loader(dataset, batch_size=1, cuda=self._is_on_cuda())
+        data_loader = self.fisher_data_loader(dataset, 1, cuda=self._is_on_cuda())
         for index, (x, y) in enumerate(data_loader):
 
             # run forward pass of model
@@ -231,12 +231,12 @@ class Seq2Seq(torch.nn.Module):
         # set model back to initial mode
         self.train(mode=mode)
 
-    def fisher_data_loader(dataset, batch_size=100, cuda=False, collate_fn=None, drop_last=False):
+    def fisher_data_loader(dataset, batch, cuda=False, collate_fn=None, drop_last=False):
         '''Return <DataLoader>-object for the provided <DataSet>-object [dataset].'''
 
         # Create and return the <DataLoader>-object
         return DataLoader(
-            dataset, batch_size=batch_size, shuffle=True,
+            dataset, batch_size=batch, shuffle=True,
             collate_fn=(collate_fn or default_collate), drop_last=drop_last,
             **({'num_workers': 0, 'pin_memory': True} if cuda else {})
     )
