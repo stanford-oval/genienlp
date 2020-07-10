@@ -189,6 +189,7 @@ class Seq2Seq(torch.nn.Module):
             dataset, batch_size=1, shuffle=True,
             drop_last=False,
             **({'num_workers': 0, 'pin_memory': True} if next(self.parameters()).is_cuda else {})
+        )
         for index, (x, y) in enumerate(data_loader):
 
             # run forward pass of model
