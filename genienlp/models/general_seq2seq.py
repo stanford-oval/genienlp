@@ -190,11 +190,11 @@ class Seq2Seq(torch.nn.Module):
             drop_last=False,
             **({'num_workers': 0, 'pin_memory': True} if next(self.parameters()).is_cuda else {})
         )
-        for index, (x, y) in enumerate(data_loader):
+        for index, ex in enumerate(data_loader):
 
             # run forward pass of model
-            x = x.to(self._device())
-            output = self(x)
+            ex = ex.to(self._device())
+            output = self(ex)
 
             # use predicted label to calculate loglikelihood
             label = output.max(1)[1]
