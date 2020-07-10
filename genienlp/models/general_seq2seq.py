@@ -193,7 +193,7 @@ class Seq2Seq(torch.nn.Module):
         for index, ex in enumerate(data_loader):
 
             # run forward pass of model
-            ex = ex.to(self._device())
+            # ex = ex.to(self._device())
             output = self(ex)
 
             # use predicted label to calculate loglikelihood
