@@ -98,12 +98,12 @@ class Seq2Seq(torch.nn.Module):
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
                             final_question, question_rnn_state, encoder_loss)
 
-    def forward(self, batch, iteration, pretraining=False):
+    def forward(self, batch, iteration, pretraining=False, fisher=False):
         # print('batch = ', batch)
         if pretraining:
             loss, predictions = self._pretrain_forward(batch)
 
-            if self.args.use_ewc:
+            if self.args.use_ewc and not fisher:
                 # add EWC loss
                 ewc_loss = self.ewc_loss()
                 if self.args.ewc_lambda>0:
@@ -113,7 +113,7 @@ class Seq2Seq(torch.nn.Module):
         else:
             loss, predictions = self._normal_forward(batch)
 
-            if self.args.use_ewc:
+            if self.args.use_ewc and not fisher:
                 # add EWC loss
                 ewc_loss = self.ewc_loss()
                 if self.args.ewc_lambda>0:
@@ -194,7 +194,7 @@ class Seq2Seq(torch.nn.Module):
 
             # run forward pass of model
             # ex = ex.to(self._device())
-            output = self(ex)
+            output = self(ex, index, fisher=True)
 
             # use predicted label to calculate loglikelihood
             label = output.max(1)[1]
