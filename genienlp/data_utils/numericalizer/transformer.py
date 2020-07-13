@@ -238,17 +238,17 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
                                  list(wp_tokens_b[:max_len]) + \
                                  [self.eos_token] + \
                                  [self.pad_token] * max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b))
-        
+
             padded.append(padded_example)
             lengths.append(len(padded_example) - max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b)))
-        
+
             numerical.append(self._tokenizer.convert_tokens_to_ids(padded_example))
             decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
-    
+
         length = torch.tensor(lengths, dtype=torch.int32, device=device)
         numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
         decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-    
+
         return SequentialField(length=length, value=numerical, limited=decoder_numerical)
 
     def reverse(self, batch, detokenize, field_name=None):
@@ -380,17 +380,17 @@ class BertNumericalizer(TransformerNumericalizer):
                                  list(wp_tokens_b[:max_len]) + \
                                  [self.eos_token] + \
                                  [self.pad_token] * max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b))
-        
+
             padded.append(padded_example)
             lengths.append(len(padded_example) - max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b)))
-        
+
             numerical.append(self._tokenizer.convert_tokens_to_ids(padded_example))
             decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
-    
+
         length = torch.tensor(lengths, dtype=torch.int32, device=device)
         numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
         decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-    
+
         return SequentialField(length=length, value=numerical, limited=decoder_numerical)
 
     def reverse(self, batch, detokenize, field_name=None):

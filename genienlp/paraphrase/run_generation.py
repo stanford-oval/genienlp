@@ -278,7 +278,6 @@ def run_single_process_generation(args, config):
 
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     
-    bos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['bos_token'])
     eos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['eos_token'])
     sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
@@ -336,8 +335,6 @@ def run_single_process_generation(args, config):
         logging.info('') # to make kubectl properly print tqdm progress bar
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_ids)))
         batch_size = batch_slice[1] - batch_slice[0]
-        batch_input_sequences = all_input_sequences[batch_slice[0]: batch_slice[1]]
-        batch_input_sequence_lengths = all_input_sequence_lengths[batch_slice[0]: batch_slice[1]]
         batch_context_tokens = all_context_ids[batch_slice[0]: batch_slice[1]]
         batch_reverse_maps = reverse_maps[batch_slice[0]: batch_slice[1]]
         batch_prompt_tokens = all_prompt_ids[batch_slice[0]: batch_slice[1]]

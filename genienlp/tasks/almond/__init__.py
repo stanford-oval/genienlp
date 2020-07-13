@@ -429,7 +429,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     def _make_example(self, parts, **kwargs):
         _id, sentence, target_code = parts
         language = ISO_to_LANG.get(kwargs['dir_name'], 'English').lower()
-        if kwargs.get('lang_as_question'):
+        if kwargs.get('almond_lang_as_question'):
             question = 'translate from {} to thingtalk'.format(language)
         else:
             question = 'translate from english to thingtalk'
