@@ -28,9 +28,9 @@ TMPDIR=`pwd`
 workdir=`mktemp -d $TMPDIR/genieNLP-tests-XXXXXX`
 trap on_error ERR INT TERM
 
+
 i=0
 for hparams in \
-      "--encoder_embeddings=small_glove+char --decoder_embeddings=small_glove+char" \
       "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
       "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50" \
       "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
@@ -42,8 +42,8 @@ do
     # train
     pipenv run python3 -m genienlp train --train_tasks almond  --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
 
-    # greedy decode
-    pipenv run python3 -m genienlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $embedding_dir
+    # greedy prediction
+    pipenv run python3 -m genienlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $embedding_dir --skip_cache
 
     # check if result file exists
     if test ! -f $workdir/model_$i/eval_results/test/almond.tsv ; then
@@ -55,7 +55,6 @@ do
 
     i=$((i+1))
 done
-
 
 # test almond_multilingual task
 for hparams in \
@@ -85,34 +84,57 @@ do
 done
 
 
-# train a GPT2 paraphrasing model for a few iterations
+# paraphrasing tests
 cp -r $SRCDIR/dataset/paraphrasing/ $workdir/paraphrasing/
-pipenv run python3 -m genienlp train-paraphrase --train_data_file $workdir/paraphrasing/train.tsv --eval_data_file $workdir/paraphrasing/dev.tsv --output_dir $workdir/gpt2-small-1 --tensorboard_dir $workdir/tensorboard/ --model_type gpt2 --do_train --do_eval --evaluate_during_training --overwrite_output_dir --logging_steps 1000 --save_steps 1000 --max_steps 4 --save_total_limit 1 --gradient_accumulation_steps 1 --per_gpu_eval_batch_size 1 --per_gpu_train_batch_size 1 --num_train_epochs 1 --model_name_or_path gpt2
+for model in  "gpt2" "sshleifer/bart-tiny-random" ; do
 
-# use it to paraphrase almond's train set
-pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $workdir/gpt2-small-1/ --length 15 --temperature 0.4 --repetition_penalty 1.0 --num_samples 4 --input_file $SRCDIR/dataset/almond/train.tsv --input_column 1 --output_file $workdir/generated.tsv
+  if [[ $model == *gpt2* ]] ; then
+    model_type="gpt2"
+  elif [[ $model == */bart* ]] ; then
+    model_type="bart"
+  fi
 
-# check if result file exists
-if test ! -f $workdir/generated.tsv ; then
-    echo "File not found!"
-    exit
-fi
+  # train a GPT2 paraphrasing model for a few iterations
+  pipenv run python3 -m genienlp train-paraphrase --train_data_file $workdir/paraphrasing/train.tsv --eval_data_file $workdir/paraphrasing/dev.tsv --output_dir $workdir/"$model_type" --tensorboard_dir $workdir/tensorboard/ --model_type $model_type --do_train --do_eval --evaluate_during_training --overwrite_output_dir --logging_steps 1000 --save_steps 1000 --max_steps 4 --save_total_limit 1 --gradient_accumulation_steps 1 --per_gpu_eval_batch_size 1 --per_gpu_train_batch_size 1 --num_train_epochs 1 --model_name_or_path $model
 
-rm -rf $workdir/gpt2-small-1/
+  # use it to paraphrase almond's train set
+  pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $workdir/"$model_type" --length 15 --temperature 0.4 --repetition_penalty 1.0 --num_samples 4 --input_file $SRCDIR/dataset/almond/train.tsv --input_column 1 --output_file $workdir/generated_"$model_type".tsv --task paraphrase
 
-# TODO BART-large model does not fit on Travis and bart-base is not added in transformers==2.9 yet. Uncomment the following test after updating to transoformers>=2.11
-# finetune BART for one epoch
-# pipenv run python3 -m genienlp train-paraphrase --train_data_file $workdir/paraphrasing/train.tsv --eval_data_file $workdir/paraphrasing/dev.tsv --output_dir $workdir/bart-large-1 --tensorboard_dir $workdir/tensorboard/ --model_type bart --do_train --do_eval --evaluate_during_training --overwrite_output_dir --logging_steps 1000 --save_steps 1000 --max_steps 4 --save_total_limit 1 --gradient_accumulation_steps 1 --per_gpu_eval_batch_size 1 --per_gpu_train_batch_size 1 --num_train_epochs 1 --model_name_or_path bart-large
+  # check if result file exists
+  if test ! -f $workdir/generated_"$model_type".tsv ; then
+      echo "File not found!"
+      exit
+  fi
+  rm -rf $workdir/generated_"$model_type".tsv
 
-# correct sentences using BART
-# pipenv run python3 -m genienlp run-paraphrase --input_file $SRCDIR/dataset/almond/train.tsv --input_column 1 --output_file $workdir/generated.tsv --model_name_or_path $workdir/bart-large-1 --length 15 --temperature 0.4 --repetition_penalty 1.0 --num_samples 4 --stop_tokens . ! ?
+done
 
-# check if generated file exists
-# if test ! $workdir/generated.tsv ; then
-#     echo "File not found!"
-#     exit
-# fi
+# translation tests
+mkdir -p $workdir/translation
+cp -r $SRCDIR/dataset/translation/en-de $workdir/translation
 
+for model in "t5-small" "Helsinki-NLP/opus-mt-en-de" ; do
 
-rm -fr $workdir
-rm -rf $SRCDIR/torch-shm-file-*
+  if [[ $model == *t5* ]] ; then
+    base_model="t5"
+  elif [[ $model == Helsinki-NLP* ]] ; then
+    base_model="marian"
+  fi
+
+  # use a pre-trained model
+  pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $model --length 15 --temperature 0 --repetition_penalty 1.0 --num_samples 1 --batch_size 3 --input_file $workdir/translation/en-de/dev_"$base_model".tsv --input_column 0 --gold_column 1 --output_file $workdir/generated_"$base_model".tsv  --skip_heuristics --att_pooling mean --task translate --tgt_lang de --replace_qp --return_attentions
+
+  cut -f2 $workdir/translation/en-de/dev_"$base_model".tsv | diff -u - $workdir/generated_"$base_model".tsv
+
+  # check if result file exists and exact match accuracy is 100%
+  if test ! -f $workdir/generated_"$base_model".tsv   ; then
+      echo "File not found!"
+      exit
+  fi
+
+  rm -rf $workdir/generated_"$base_model".tsv
+
+done
+
+#rm -fr $workdir
+#rm -rf $SRCDIR/torch-shm-file-*
