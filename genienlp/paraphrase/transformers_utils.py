@@ -406,9 +406,9 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
             # outputs is then filtered if attention weights, hidden states, or cached_decoding_values are empty
             # so the index below is adjusted
             # remember we always return attention weights
-            
+
             next_token_logits = outputs[0][:, -1, :]
-            
+
             index = 2 + int(model_specific_kwargs['return_hidden_states']) + int(use_cache)
             for i in range(num_layers):
                 all_encoder_attentions[i][:, :, [cur_len - 1], :] = outputs[index][i]
@@ -508,7 +508,6 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
         all_encoder_attentions = [layer_all_encoder_attentions[:, :, :sent_lengths.max().item(), :] for layer_all_encoder_attentions in all_encoder_attentions]
 
         return decoded, all_encoder_attentions
-
 
 
   
