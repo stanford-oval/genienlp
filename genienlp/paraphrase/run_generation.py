@@ -386,7 +386,7 @@ def run_single_process_generation(args, config):
                                 )
 
             # TODO fix the way output attention is handled. Some models do not support it.
-            if return_attentions and args.model_type!='bart' and args.model_type!='gpt2':
+            if return_attentions and args.task == 'translate':
                 decoded, all_encoder_attentions = outputs
             else:
                 decoded = outputs
