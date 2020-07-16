@@ -280,7 +280,6 @@ def run_single_process_generation(args, config):
     model.eval()
 
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
-    bos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['bos_token'])
     eos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['eos_token'])
     sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)

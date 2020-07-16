@@ -49,24 +49,17 @@ MARIAN_GROUP_MEMBERS = {
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch BART model, ported from the fairseq repo."""
-import logging
 import math
 import random
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 
-import numpy as np
 import torch
-from torch import Tensor, nn
+import torch.nn as nn
 import torch.nn.functional as F
 
 from transformers.activations import ACT2FN
 from transformers.configuration_bart import BartConfig
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from transformers.modeling_utils import calc_banned_ngram_tokens, calc_banned_bad_words_ids, top_k_top_p_filtering
-
-
-logger = logging.getLogger(__name__)
-
 
 
 class DecoderLayer(nn.Module):
@@ -583,14 +576,9 @@ class MarianMTModel(BartForConditionalGeneration):
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
-
 from transformers.tokenization_roberta import RobertaTokenizer
 from transformers.tokenization_utils import BatchEncoding
 from transformers.tokenization_xlm_roberta import XLMRobertaTokenizer
-
-
-logger = logging.getLogger(__name__)
 
 
 # vocab and merges same as roberta
