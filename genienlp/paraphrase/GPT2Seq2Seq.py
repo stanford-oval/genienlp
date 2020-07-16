@@ -6,8 +6,8 @@ class GPT2Seq2Seq(GPT2LMHeadModel):
     def __init__(self, config):
         super().__init__(config)
     
-    def set_token_ids(self, end_token_id, sep_token_id, pad_token_id):
-        self.end_token_id = end_token_id
+    def set_token_ids(self, eos_token_id, sep_token_id, pad_token_id):
+        self.eos_token_id = eos_token_id
         self.sep_token_id = sep_token_id
         self.pad_token_id = pad_token_id
 
@@ -74,7 +74,7 @@ class GPT2Seq2Seq(GPT2LMHeadModel):
         token_type_ids = torch.cumsum(sep_token_position, dim=1) - sep_token_position
         attention_mask = (input_ids!=self.pad_token_id).to(torch.long) # 0 means mask, 1 means no mask
         position_ids = ((torch.cumsum(attention_mask, dim=1)-1)*(1-token_type_ids)+(torch.cumsum(token_type_ids, dim=1)-1)*token_type_ids).clamp(min=0)
-        token_type_ids = self.sep_token_id * (1-token_type_ids) + self.end_token_id * token_type_ids
+        token_type_ids = self.sep_token_id * (1-token_type_ids) + self.eos_token_id * token_type_ids
 
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
