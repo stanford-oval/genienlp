@@ -34,8 +34,9 @@ from .coatt_encoder import CoattentionEncoder
 from .lstm_encoder import BiLSTMEncoder
 from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
-from .mqan_decoder import MQANDecoder
+from .mqan_decoder import MQANDecoder, MQANDecoderWrapper
 from .common import mask_tokens
+from transformers import PreTrainedModel, PretrainedConfig
 
 ENCODERS = {
     'MQANEncoder': MQANEncoder,
@@ -48,11 +49,29 @@ DECODERS = {
 }
 
 
-class Seq2Seq(torch.nn.Module):
-    def __init__(self, numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings):
-        super().__init__()
-        self.args = args
+class Seq2Seq(PreTrainedModel):
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        args = kwargs.pop("args", None)
+        device = kwargs.pop("device", None)
+        numericalizer = kwargs.pop("numericalizer", None)
+        context_embeddings = kwargs.pop("context_embeddings", None)
+        question_embeddings = kwargs.pop("question_embedding", None)
+        decoder_embeddings = kwargs.pop("decoder_embeddings", None)
+        # print('args = ', args)
+        # print('pretrained_model_name_or_path = ', pretrained_model_name_or_path)
+        save_dict = torch.load(args.best_checkpoint, map_location=device)
+        # print(save_dict)
+        # exit(0)
+        model = Seq2Seq(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
+        model_dict = save_dict['model_state_dict']
+        model.load_state_dict(model_dict)
+        return model
+
+    def __init__(self, numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings):
+        super().__init__(PretrainedConfig()) # dummy PretrainedConfig
+        self.args = args
         self.numericalizer = numericalizer
         self.encoder = ENCODERS[args.seq2seq_encoder](numericalizer, args, context_embeddings, question_embeddings)
         self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings)
@@ -81,21 +100,22 @@ class Seq2Seq(torch.nn.Module):
         loss = torch.nn.functional.cross_entropy(context_logits, masked_labels, ignore_index=self.numericalizer.pad_id)
         return loss, predictions
 
-    def _normal_forward(self, batch):
+    def _normal_forward(self, batch, current_token_id, past=None):
         self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
             self.encoder(batch)
         encoder_loss = None
         if getattr(self.args, 'use_encoder_loss', None) and self.training:
             encoder_loss = self.get_encoder_loss(context_rnn_state)
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
-                            final_question, question_rnn_state, encoder_loss)
+                            final_question, question_rnn_state, encoder_loss, current_token_id, decoder_wrapper=past)
 
-    def forward(self, batch, iteration, pretraining=False):
+    # TODO iteration is unused, remove it
+    def forward(self, batch, iteration=0, pretraining=False, current_token_id=None, past=None):
         # print('batch = ', batch)
         if pretraining:
             return self._pretrain_forward(batch)
         else:
-            return self._normal_forward(batch)
+            return self._normal_forward(batch, current_token_id, past)
         
         
     def get_encoder_loss(self, context_rnn_state):
@@ -126,7 +146,24 @@ class Seq2Seq(torch.nn.Module):
             
         return encoder_loss
         
-        
+    def get_output_embeddings(self):
+        return self.decoder.decoder_embeddings
+
+    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, batch):
+        # print('input_ids = ', input_ids)
+        # exit(0)
+        return {"batch": batch, "past": past, "current_token_id": input_ids[:,-1:]}
+
+    def generate(self, batch, **kwargs):
+        # print('batch = ', batch)
+        batch_size = len(batch.example_id)
+        input_ids = torch.full((batch_size, 1), self.decoder.init_idx, dtype=torch.long, device=batch.context.value.device)
+
+        generated = super().generate(input_ids=input_ids, bos_token_id=self.decoder.init_idx, batch=batch, do_sample=False, temperature=1,
+                                    eos_token_id=batch.decoder_vocab.eos_idx, num_beams=1, 
+                                    top_k=0, top_p=1, pad_token_id=batch.decoder_vocab.pad_idx)
+        generated = generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device) # remove bos and map to full vocabulary
+        return generated
         
 
     

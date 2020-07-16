@@ -107,8 +107,6 @@ def prepare_data(args, numericalizer, embeddings):
 
 
 def run(args, device):
-    save_dict = torch.load(args.best_checkpoint, map_location=device)
-
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
         load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings, args.decoder_embeddings,
                         args.max_generative_vocab, logger)
@@ -118,9 +116,13 @@ def run(args, device):
 
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
-    model_dict = save_dict['model_state_dict']
-    model.load_state_dict(model_dict)
+    model = Model.from_pretrained(args.path, numericalizer=numericalizer,
+                                  context_embeddings=context_embeddings,
+                                  question_embeddings=question_embeddings,
+                                  decoder_embeddings=decoder_embeddings,
+                                  args=args,
+                                  device=device
+                                  )
     val_sets = prepare_data(args, numericalizer, set(context_embeddings + question_embeddings + decoder_embeddings))
 
     logger.info(f'Preparing iterators')
@@ -186,7 +188,10 @@ def run(args, device):
             contexts = []
             with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
                 for batch_idx, batch in tqdm(enumerate(it), desc="Batches"):
-                    _, batch_prediction = model(batch, iteration=1)
+                    # _, batch_prediction = model(batch, iteration=1)
+                    batch_prediction = model.generate(batch)
+                    # print('batch_prediction = ', batch_prediction)
+                    # exit(0)
 
                     batch_prediction = numericalizer.reverse(batch_prediction, detokenize=task.detokenize,
                                                              field_name='answer')

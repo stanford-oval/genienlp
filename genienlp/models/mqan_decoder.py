@@ -79,17 +79,16 @@ class MQANDecoder(nn.Module):
             self.decoder_embeddings.set_embeddings(embeddings)
 
     def forward(self, batch, self_attended_context, final_context, context_rnn_state, final_question,
-                question_rnn_state, encoder_loss):
+                question_rnn_state, encoder_loss, current_token_id=None, decoder_wrapper=None):
+
         context, context_lengths, context_limited = batch.context.value, batch.context.length, batch.context.limited
         question, question_lengths, question_limited = batch.question.value, batch.question.length, batch.question.limited
         answer, answer_lengths, answer_limited = batch.answer.value, batch.answer.length, batch.answer.limited
         decoder_vocab = batch.decoder_vocab
-
         self.map_to_full = decoder_vocab.decode
-
         context_padding = context.data == self.pad_idx
         question_padding = question.data == self.pad_idx
-
+            
         if self.training:
             if self.args.rnn_layers > 0:
                 self.rnn_decoder.applyMasks(context_padding, question_padding)
@@ -112,7 +111,7 @@ class MQANDecoder(nn.Module):
 
             if self.args.rnn_layers > 0:
                 rnn_decoder_outputs = self.rnn_decoder(self_attended_decoded, final_context, final_question,
-                                                       hidden=context_rnn_state)
+                                                        hidden=context_rnn_state)
                 decoder_output, vocab_pointer_switch_input, context_question_switch_input, context_attention, \
                 question_attention, rnn_state = rnn_decoder_outputs
             else:
@@ -128,20 +127,26 @@ class MQANDecoder(nn.Module):
             context_question_switch = self.context_question_switch(context_question_switch_input)
 
             probs = self.probs(decoder_output, vocab_pointer_switch, context_question_switch,
-                               context_attention, question_attention,
-                               context_limited, question_limited,
-                               decoder_vocab)
+                                context_attention, question_attention,
+                                context_limited, question_limited,
+                                decoder_vocab)
 
+        
             probs, targets = mask(answer_limited[:, 1:].contiguous(), probs.contiguous(), pad_idx=decoder_vocab.pad_idx)
             loss = F.nll_loss(probs.log(), targets)
             if encoder_loss is not None:
                 loss += self.args.encoder_loss_weight * encoder_loss
             return loss, None
-
         else:
-            return None, self.decode(self_attended_context, final_context, context_padding, final_question, question_padding,
-                                     context_limited, question_limited,
-                                     decoder_vocab, rnn_state=context_rnn_state).data
+            if decoder_wrapper is None:
+                decoder_wrapper = self.decoder_wrapper(self_attended_context, final_context, context_padding, final_question, question_padding,
+                                                    context_limited, question_limited, decoder_vocab, rnn_state=context_rnn_state)
+            else:
+                current_token_id = current_token_id.cpu().apply_(self.map_to_full).to(current_token_id.device)
+            # return (next_token_logits, past) where `past` includes all the states needed to continue generation
+            logits = decoder_wrapper.next_token_probs(current_token_id)
+            # print('logits', logits.shape)
+            return logits, decoder_wrapper
 
     def probs(self, outputs, vocab_pointer_switches, context_question_switches,
               context_attention, question_attention,
@@ -174,46 +179,15 @@ class MQANDecoder(nn.Module):
 
         return scaled_p_vocab
 
-    def decode(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
+    def decoder_wrapper(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                decoder_vocab, rnn_state=None):
         batch_size = context.size()[0]
         max_decoder_time = self.args.max_output_length
 
-        input_ids = self_attended_context[-1].new_full((batch_size, 1), self.init_idx, dtype=torch.long)
-
-
         decoder_wrapper = MQANDecoderWrapper(self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
-               decoder_vocab, rnn_state, batch_size, max_decoder_time, self, num_beams=self.args.num_beams)
+                                             decoder_vocab, rnn_state, batch_size, max_decoder_time, self, num_beams=self.args.num_beams)
         
-        if self.args.num_beams > 1:
-            outputs = self._decode_beam_search(
-                input_ids=input_ids,
-                max_length=self.args.max_output_length,
-                do_sample=False,
-                temperature=1.0,
-                top_k=0,
-                top_p=1.0,
-                repetition_penalty=1.0,
-                pad_token_id=decoder_vocab.pad_idx,
-                eos_token_ids=[decoder_vocab.eos_idx],
-                batch_size=batch_size,
-                length_penalty=1.0,
-                num_beams=self.args.num_beams,
-                vocab_size=len(decoder_vocab),
-                decoder_wrapper=decoder_wrapper,
-            )
-        else:
-            outputs = self._decode_greedy(
-                input_ids=input_ids,
-                max_length=self.args.max_output_length,
-                pad_token_id=decoder_vocab.pad_idx,
-                eos_token_id=decoder_vocab.eos_idx,
-                batch_size=batch_size,
-                decoder_wrapper=decoder_wrapper,
-            )
-
-        # print('outputs = ', outputs.shape)
-        return outputs
+        return decoder_wrapper
 
     def _decode_greedy(
         self,
@@ -421,6 +395,8 @@ class LSTMDecoder(nn.Module):
         for decoder_input in input.split(1, dim=1):
             context_output = self.dropout(context_output)
             if self.input_feed:
+                # print('decoder_input', decoder_input.shape)
+                # print('context_output', context_output.shape)
                 rnn_input = torch.cat([decoder_input, context_output], 2)
             else:
                 rnn_input = decoder_input
@@ -519,7 +495,7 @@ class MQANDecoderWrapper(object):
 
 
     def next_token_probs(self, current_token_id):
-        # print('current_`token_id = ', current_token_id, current_token_id.shape)
+        # print('current_token_id = ', current_token_id, current_token_id.shape)
         embedding = self.mqan_decoder.decoder_embeddings(current_token_id).last_layer
 
         if self.mqan_decoder.args.transformer_layers > 0:
@@ -540,9 +516,9 @@ class MQANDecoderWrapper(object):
             # print(self.context.shape)
             # print(self.question.shape)
             # print(self.rnn_state[0].shape, self.rnn_state[1].shape)
-            # print(self.decoder_output.shape)
+            # print(self.decoder_output)
             rnn_decoder_outputs = self.mqan_decoder.rnn_decoder(self_attended_decoded, self.context, self.question,
-                                                    hidden=self.rnn_state, output=self.decoder_output)
+                                                                hidden=self.rnn_state, output=self.decoder_output)
             self.decoder_output, vocab_pointer_switch_input, context_question_switch_input, context_attention, \
                 question_attention, self.rnn_state = rnn_decoder_outputs
         else:
@@ -562,7 +538,8 @@ class MQANDecoderWrapper(object):
                             self.context_indices, self.question_indices, self.decoder_vocab)
 
         self.time += 1
-        return probs.squeeze(1)
+        # print('probs = ', probs)
+        return probs
 
     def expand_for_beam_search(self, t, batch_size, num_beams, dim=0):
         if isinstance(t, tuple):
