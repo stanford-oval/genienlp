@@ -133,6 +133,9 @@ def parse_argv(parser):
     
     parser.add_argument('--src_lang', type=str, default='en', help='source language used for translation task')
     parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
+    parser.add_argument('--return_attentions', action='store_true', help='return self and cross attention weights for seq2seq models')
+    parser.add_argument('--return_hidden_states', action='store_true', help='return all hidden states for seq2seq models')
+
     parser.add_argument('--att_pooling', type=str, default='max', help='pooling used to calculate decoder-encoder attention values across different heads')
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot decoder-encoder attention heatmaps')
     parser.add_argument('--replace_qp', action='store_true', help='replace parameter values after translation with source values')
@@ -187,9 +190,6 @@ def main(args):
 
 def run_multi_process_generation(args):
     config = PretrainedConfig.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
-    
-    # config.output_attentions = True
-    # config.output_hidden_states = True
     
     # get model type from saved config
     if hasattr(config, 'model_type'):
@@ -269,8 +269,8 @@ def run_multi_process_generation(args):
 def run_single_process_generation(args, config):
     model_class, tokenizer_class, special_tokens = MODEL_CLASSES[args.model_type]
     
-    return_attentions = True
-    return_hidden_states = False
+    return_attentions = args.return_attentions
+    return_hidden_states = args.return_hidden_states
     
     model = model_class.from_pretrained(args.model_name_or_path,
                                         output_attentions=return_attentions,
