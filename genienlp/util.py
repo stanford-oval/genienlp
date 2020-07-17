@@ -473,7 +473,7 @@ def load_config_json(args):
                     'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'train_encoder_embeddings',
                     'train_context_embeddings', 'train_question_embeddings', 'locale', 'use_pretrained_bert',
                     'train_context_embeddings_after', 'train_question_embeddings_after',
-                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize', 'num_beams',
+                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
                     'override_question', 'override_context']
 

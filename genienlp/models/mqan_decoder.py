@@ -144,7 +144,7 @@ class MQANDecoder(nn.Module):
             else:
                 current_token_id = current_token_id.cpu().apply_(self.map_to_full).to(current_token_id.device)
             # return (next_token_logits, past) where `past` includes all the states needed to continue generation
-            logits = decoder_wrapper.next_token_probs(current_token_id)
+            logits = torch.log(decoder_wrapper.next_token_probs(current_token_id))
             # print('logits', logits.shape)
             return logits, decoder_wrapper
 

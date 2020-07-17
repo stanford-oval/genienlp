@@ -63,7 +63,6 @@ class Seq2Seq(PreTrainedModel):
         # print('pretrained_model_name_or_path = ', pretrained_model_name_or_path)
         save_dict = torch.load(args.best_checkpoint, map_location=device)
         # print(save_dict)
-        # exit(0)
         model = Seq2Seq(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
         model_dict = save_dict['model_state_dict']
         model.load_state_dict(model_dict)
@@ -154,13 +153,19 @@ class Seq2Seq(PreTrainedModel):
         # exit(0)
         return {"batch": batch, "past": past, "current_token_id": input_ids[:,-1:]}
 
+    def _reorder_cache(self, past, beam_idx):
+        past.reorder(beam_idx)
+        return past
+
     def generate(self, batch, **kwargs):
         # print('batch = ', batch)
+        self.config.vocab_size = len(batch.decoder_vocab)
         batch_size = len(batch.example_id)
         input_ids = torch.full((batch_size, 1), self.decoder.init_idx, dtype=torch.long, device=batch.context.value.device)
 
+        # print('self.args.num_beams = ', self.args.num_beams)
         generated = super().generate(input_ids=input_ids, bos_token_id=self.decoder.init_idx, batch=batch, do_sample=False, temperature=1,
-                                    eos_token_id=batch.decoder_vocab.eos_idx, num_beams=1, 
+                                    eos_token_id=batch.decoder_vocab.eos_idx, num_beams=self.args.num_beams, max_length=self.args.max_output_length,
                                     top_k=0, top_p=1, pad_token_id=batch.decoder_vocab.pad_idx)
         generated = generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device) # remove bos and map to full vocabulary
         return generated
