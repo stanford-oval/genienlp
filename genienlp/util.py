@@ -478,7 +478,7 @@ def load_config_json(args):
                     'override_question', 'override_context']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
-        overwrite = ['val_batch_size', 'num_beams']
+        overwrite = ['val_batch_size', 'num_beams', 'num_outputs']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -519,6 +519,8 @@ def load_config_json(args):
             elif r == 'use_pretrained_bert':
                 setattr(args, r, True)
             elif r == 'num_beams':
+                setattr(args, r, 1)
+            elif r == 'num_outputs':
                 setattr(args, r, 1)
             elif r in ('append_question_to_context_too', 'almond_preprocess_context'):
                 setattr(args, r, False)

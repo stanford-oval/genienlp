@@ -185,7 +185,8 @@ class MQANDecoder(nn.Module):
         max_decoder_time = self.args.max_output_length
 
         decoder_wrapper = MQANDecoderWrapper(self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
-                                             decoder_vocab, rnn_state, batch_size, max_decoder_time, self, num_beams=self.args.num_beams)
+                                             decoder_vocab, rnn_state, batch_size, max_decoder_time,
+                                             self, num_beams=self.args.num_beams, num_return_sequences=self.args.num_outputs)
         
         return decoder_wrapper
 
@@ -435,9 +436,10 @@ class MQANDecoderWrapper(object):
     """
 
     def __init__(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
-               decoder_vocab, rnn_state, batch_size, max_decoder_time, mqan_decoder: MQANDecoder, num_beams:int):
+               decoder_vocab, rnn_state, batch_size, max_decoder_time, mqan_decoder: MQANDecoder, num_beams:int, num_return_sequences:int):
         # print('self_attended_context = ', self_attended_context)
         self.decoder_vocab = decoder_vocab
+        num_beams *= num_return_sequences
         # if num_beams > 1:
         self_attended_context = self.expand_for_beam_search(self_attended_context, batch_size, num_beams)
         context = self.expand_for_beam_search(context, batch_size, num_beams)

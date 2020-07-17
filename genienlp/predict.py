@@ -192,19 +192,19 @@ def run(args, device):
                     batch_prediction = model.generate(batch)
                     # print('batch_prediction = ', batch_prediction)
                     # exit(0)
-
+                    
                     batch_prediction = numericalizer.reverse(batch_prediction, detokenize=task.detokenize,
-                                                             field_name='answer')
-                    predictions += batch_prediction
+                                                            field_name='answer')
                     batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize,
-                                                         field_name='answer')
+                                                        field_name='answer')
                     answers += batch_answer
                     batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize,
-                                                         field_name='context')
+                                                        field_name='context')
                     contexts += batch_context
 
-                    for i, example_prediction in enumerate(batch_prediction):
-                        prediction_file.write(batch.example_id[i] + '\t' + example_prediction + '\n')
+                    for i, example_id in enumerate(batch.example_id):
+                        predictions.append(batch_prediction[i*args.num_outputs]) # only the first output is used to calculate metrics
+                        prediction_file.write(example_id + '\t' + '\t'.join(batch_prediction[i*args.num_outputs:(i+1)*args.num_outputs]) + '\n') # but write all outputs in the prediction file, separated by a tab
 
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
@@ -217,7 +217,7 @@ def run(args, device):
 
                 if not args.silent:
                     for i, (c, p, a) in enumerate(zip(contexts, predictions, answers)):
-                        logger.info(f'\nContext {i+1}: {c}\nPrediction {i + 1}: {p}\nAnswer {i + 1}: {a}\n')
+                        logger.info(f'\nContext {i+1}: {c}\nPrediction {i + 1} (1 out of {args.num_outputs} outputs): {p}\nAnswer {i + 1}: {a}\n')
                     logger.info(metrics)
                     
                 task_scores[task].append((len(answers), metrics[task.metrics[0]]))
@@ -275,6 +275,7 @@ def parse_argv(parser):
     parser.add_argument('--val_batch_size', nargs='+', default=None, type=int,
                         help='Batch size for validation corresponding to tasks in val tasks')
     parser.add_argument('--num_beams', type=int, default=None, help='number of beams to use for beam search')
+    parser.add_argument('--num_outputs', type=int, default=None, help='number of sequences to output per input')
 
 
 def adjust_multilingual_eval(args):
