@@ -438,7 +438,7 @@ def load_config_json(args):
                     'override_question', 'override_context']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
-        overwrite = ['val_batch_size', 'num_beams', 'num_outputs']
+        overwrite = ['val_batch_size', 'num_beams', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty', 'temperature', 'reduce_metrics']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -478,12 +478,24 @@ def load_config_json(args):
                 setattr(args, r, 'zero')
             elif r == 'use_pretrained_bert':
                 setattr(args, r, True)
-            elif r == 'num_beams':
-                setattr(args, r, 1)
-            elif r == 'num_outputs':
-                setattr(args, r, 1)
             elif r in ('append_question_to_context_too', 'almond_preprocess_context'):
                 setattr(args, r, False)
+            elif r == 'num_beams':
+                setattr(args, r, [1])
+            elif r == 'num_outputs':
+                setattr(args, r, [1])
+            elif r == 'no_repeat_ngram_size':
+                setattr(args, r, [0])
+            elif r == 'top_p':
+                setattr(args, r, [1.0])
+            elif r == 'top_k':
+                setattr(args, r, [0])
+            elif r == 'repetition_penalty':
+                setattr(args, r, [1.0])
+            elif r == 'temperature':
+                setattr(args, r, [0.0])
+            elif r == 'reduce_metrics':
+                setattr(args, 'max')
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0

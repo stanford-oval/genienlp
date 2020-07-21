@@ -158,16 +158,37 @@ class Seq2Seq(PreTrainedModel):
         past.reorder(beam_idx)
         return past
 
-    def generate(self, batch, **kwargs):
-        # print('batch = ', batch)
+    def generate(self,
+                 batch,
+                 max_output_length,
+                 num_outputs,
+                 temperature,
+                 repetition_penalty,
+                 top_k,
+                 top_p,
+                 num_beams,
+                 no_repeat_ngram_size,
+                 do_sample
+                 ):
         self.config.vocab_size = len(batch.decoder_vocab)
         batch_size = len(batch.example_id)
         input_ids = torch.full((batch_size, 1), self.decoder.init_idx, dtype=torch.long, device=batch.context.value.device)
 
-        # print('self.args.num_beams = ', self.args.num_beams)
-        generated = super().generate(input_ids=input_ids, bos_token_id=self.decoder.init_idx, batch=batch, do_sample=False, temperature=1,
-                                    eos_token_id=batch.decoder_vocab.eos_idx, num_beams=self.args.num_beams, max_length=self.args.max_output_length,
-                                    top_k=0, top_p=1, pad_token_id=batch.decoder_vocab.pad_idx, num_return_sequences=self.args.num_outputs)
+        generated = super().generate(input_ids=input_ids,
+                                     batch=batch,
+                                     max_length=max_output_length,
+                                     bos_token_id=self.decoder.init_idx,
+                                     pad_token_id=batch.decoder_vocab.pad_idx,
+                                     num_return_sequences=num_outputs,
+                                     repetition_penalty=repetition_penalty,
+                                     temperature=temperature,
+                                     eos_token_id=batch.decoder_vocab.eos_idx,
+                                     top_k=top_k,
+                                     top_p=top_p,
+                                     num_beams=num_beams,
+                                     no_repeat_ngram_size=no_repeat_ngram_size,
+                                     do_sample=do_sample
+                                    )
         generated = generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device) # remove bos token and map to full vocabulary
         return generated
         

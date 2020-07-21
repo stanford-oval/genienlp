@@ -188,24 +188,35 @@ def run(args, device):
             contexts = []
             with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
                 for batch_idx, batch in tqdm(enumerate(it), desc="Batches"):
-                    # _, batch_prediction = model(batch, iteration=1)
-                    batch_prediction = model.generate(batch)
-                    # print('batch_prediction = ', batch_prediction)
-                    # exit(0)
+                    batch_size = len(batch.example_id)
+                    print('batch_size = ', batch_size)
+                    batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
+                    for hyperparameter_idx in range(len(args.temperature)):
+                        partial_batch_prediction = model.generate(batch,
+                                                          max_output_length=args.max_output_length,
+                                                          num_outputs=args.num_outputs[hyperparameter_idx],
+                                                          temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
+                                                          repetition_penalty=args.repetition_penalty[hyperparameter_idx],
+                                                          top_k=args.top_k[hyperparameter_idx],
+                                                          top_p=args.top_p[hyperparameter_idx],
+                                                          num_beams=args.num_beams[hyperparameter_idx],
+                                                          no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
+                                                          do_sample=args.temperature[hyperparameter_idx]!=0  # if temperature==0, we do not sample
+                                                          )
+                        partial_batch_prediction = numericalizer.reverse(partial_batch_prediction, detokenize=task.detokenize, field_name='answer')
+                        for i in range(len(partial_batch_prediction)):
+                            batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
                     
-                    batch_prediction = numericalizer.reverse(batch_prediction, detokenize=task.detokenize,
-                                                            field_name='answer')
-                    batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize,
-                                                        field_name='answer')
+                    batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
                     answers += batch_answer
                     batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize,
                                                         field_name='context')
                     contexts += batch_context
 
                     for i, example_id in enumerate(batch.example_id):
-                        predictions.append(batch_prediction[i*args.num_outputs]) # only the first output is used to calculate metrics
-                        prediction_file.write(example_id + '\t' + '\t'.join(batch_prediction[i*args.num_outputs:(i+1)*args.num_outputs]) + '\n') # but write all outputs in the prediction file, separated by a tab
-
+                        predictions.append(batch_prediction)
+                        prediction_file.write(example_id + '\t' + '\t'.join(batch_prediction[i]) + '\n') # write all outputs in the prediction file, separated by \t
+                exit(0)
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
                 if args.main_metric_only:
@@ -274,8 +285,18 @@ def parse_argv(parser):
     # If not None, these values will override the values saved in the trained model's config file
     parser.add_argument('--val_batch_size', nargs='+', default=None, type=int,
                         help='Batch size for validation corresponding to tasks in val tasks')
-    parser.add_argument('--num_beams', type=int, default=None, help='number of beams to use for beam search')
-    parser.add_argument('--num_outputs', type=int, default=None, help='number of sequences to output per input')
+    parser.add_argument("--reduce_metrics", type=str, default='max', choices=['max'], help='How to calculate the metric when there are multiple outputs per input.')
+
+    # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
+    parser.add_argument("--num_outputs", type=int, nargs='+', default=[1], help='number of sequences to output per input')
+    parser.add_argument("--temperature", type=float, nargs='+', default=[0.0],
+                        help="temperature of 0 implies greedy sampling")
+    parser.add_argument("--repetition_penalty", type=float, nargs='+', default=[1.0],
+                        help="primarily useful for CTRL model; in that case, use 1.2")
+    parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
+    parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
+    parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
+    parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
 
 def adjust_multilingual_eval(args):
@@ -295,9 +316,27 @@ def adjust_multilingual_eval(args):
             logger.warning('prediction languages should be empty for single language tasks')
             args.pred_languages[i] = None
             
+            
+def check_and_update_generation_args(args):
+    """
+    checks all generation commandline arguments. Since these arguments are all lists and shorthand can be used, we expand them to match the expected length
+    for instance, [1.0] becomes [1.0 1.0] if all other generation arguments are of length 2
+    """
+    hyperparameters = ['num_outputs', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
+    max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])
+    valid_len = [1, max_hyperparameter_len]
+    for h in hyperparameters:
+        if (len(getattr(args, h)) not in valid_len):
+            logger.error('Hyperparameters should either have the same number of values as others or have exactly one value.')
+        # If only one value is provided, use the same value for all samples
+        setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
+
+    logger.info('Will output %d sequences for each input.', sum(args.num_outputs))
+    # logger.info('Effective batch size for each GPU is %d', args.batch_size * max(args.num_outputs))
 
 def main(args):
     load_config_json(args)
+    check_and_update_generation_args(args)
     adjust_multilingual_eval(args)
     set_seed(args)
     args.tasks = get_tasks(args.task_names, args)
