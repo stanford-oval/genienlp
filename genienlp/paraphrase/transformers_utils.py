@@ -1,4 +1,5 @@
 import copy
+import re
 
 from transformers.modeling_bart import LayerNorm, LearnedPositionalEmbedding, BartEncoder, SelfAttention, invert_mask, \
     SinusoidalPositionalEmbedding, BartModel, BartForConditionalGeneration
@@ -6,6 +7,8 @@ from transformers.modeling_bart import LayerNorm, LearnedPositionalEmbedding, Ba
 from transformers.modeling_t5 import T5ForConditionalGeneration, T5PreTrainedModel, T5LayerNorm, T5Block
 
 SPIECE_UNDERLINE = "▁"
+
+language_code_re = re.compile(">>.+<<")
 
 MARIAN_SUPPORTED_LANGUAGES = ['https://huggingface.co/Helsinki-NLP']
 
