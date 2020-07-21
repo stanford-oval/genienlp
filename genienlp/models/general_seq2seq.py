@@ -99,22 +99,22 @@ class Seq2Seq(PreTrainedModel):
         loss = torch.nn.functional.cross_entropy(context_logits, masked_labels, ignore_index=self.numericalizer.pad_id)
         return loss, predictions
 
-    def _normal_forward(self, batch, current_token_id, past=None, expansion_factor=1):
+    def _normal_forward(self, batch, current_token_id, past=None, expansion_factor=1, generation_dict=None):
         self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
             self.encoder(batch)
         encoder_loss = None
         if getattr(self.args, 'use_encoder_loss', None) and self.training:
             encoder_loss = self.get_encoder_loss(context_rnn_state)
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
-                            final_question, question_rnn_state, encoder_loss, current_token_id, decoder_wrapper=past, expansion_factor=expansion_factor)
+                            final_question, question_rnn_state, encoder_loss, current_token_id, decoder_wrapper=past,
+                            expansion_factor=expansion_factor, generation_dict=generation_dict)
 
     # TODO iteration is unused, remove it
-    def forward(self, batch, iteration=0, pretraining=False, current_token_id=None, past=None, expansion_factor=1):
-        # print('batch = ', batch)
+    def forward(self, batch, iteration=0, pretraining=False, current_token_id=None, past=None, expansion_factor=1, generation_dict=None):
         if pretraining:
             return self._pretrain_forward(batch)
         else:
-            return self._normal_forward(batch, current_token_id, past, expansion_factor)
+            return self._normal_forward(batch, current_token_id, past, expansion_factor, generation_dict)
         
         
     def get_encoder_loss(self, context_rnn_state):
@@ -148,11 +148,11 @@ class Seq2Seq(PreTrainedModel):
     def get_output_embeddings(self):
         return self.decoder.decoder_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, batch):
+    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, batch, generation_dict):
         # print('input_ids = ', input_ids)
         # exit(0)
         expansion_factor = input_ids.shape[0] // len(batch.example_id)
-        return {"batch": batch, "past": past, "current_token_id": input_ids[:,-1:], "expansion_factor": expansion_factor}
+        return {"batch": batch, "past": past, "current_token_id": input_ids[:,-1:], "expansion_factor": expansion_factor, "generation_dict": generation_dict}
 
     def _reorder_cache(self, past, beam_idx):
         past.reorder(beam_idx)
@@ -187,7 +187,8 @@ class Seq2Seq(PreTrainedModel):
                                      top_p=top_p,
                                      num_beams=num_beams,
                                      no_repeat_ngram_size=no_repeat_ngram_size,
-                                     do_sample=do_sample
+                                     do_sample=do_sample,
+                                     generation_dict={'max_output_length': max_output_length, 'num_beams': num_beams}
                                     )
         generated = generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device) # remove bos token and map to full vocabulary
         return generated

@@ -78,7 +78,7 @@ class MQANDecoder(nn.Module):
             self.decoder_embeddings.set_embeddings(embeddings)
 
     def forward(self, batch, self_attended_context, final_context, context_rnn_state, final_question,
-                question_rnn_state, encoder_loss, current_token_id=None, decoder_wrapper=None, expansion_factor=1):
+                question_rnn_state, encoder_loss, current_token_id=None, decoder_wrapper=None, expansion_factor=1, generation_dict=None):
 
         context, context_lengths, context_limited = batch.context.value, batch.context.length, batch.context.limited
         question, question_lengths, question_limited = batch.question.value, batch.question.length, batch.question.limited
@@ -87,7 +87,6 @@ class MQANDecoder(nn.Module):
         self.map_to_full = decoder_vocab.decode
         context_padding = context.data == self.pad_idx
         question_padding = question.data == self.pad_idx
-            
         if self.training:
             if self.args.rnn_layers > 0:
                 self.rnn_decoder.applyMasks(context_padding, question_padding)
@@ -139,7 +138,8 @@ class MQANDecoder(nn.Module):
         else:
             if decoder_wrapper is None:
                 decoder_wrapper = self.decoder_wrapper(self_attended_context, final_context, context_padding, final_question, question_padding,
-                                                    context_limited, question_limited, decoder_vocab, rnn_state=context_rnn_state, expansion_factor=expansion_factor)
+                                                    context_limited, question_limited, decoder_vocab, rnn_state=context_rnn_state,
+                                                    expansion_factor=expansion_factor, generation_dict=generation_dict)
             else:
                 current_token_id = current_token_id.cpu().apply_(self.map_to_full).to(current_token_id.device)
             # return (next_token_logits, past) where `past` includes all the states needed to continue generation
@@ -179,13 +179,13 @@ class MQANDecoder(nn.Module):
         return scaled_p_vocab
 
     def decoder_wrapper(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
-               decoder_vocab, rnn_state=None, expansion_factor=1):
+               decoder_vocab, rnn_state=None, expansion_factor=1, generation_dict=None):
         batch_size = context.size()[0]
-        max_decoder_time = self.args.max_output_length
+        max_decoder_time = generation_dict['max_output_length']
 
         decoder_wrapper = MQANDecoderWrapper(self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                                              decoder_vocab, rnn_state, batch_size, max_decoder_time,
-                                             self, num_beams=self.args.num_beams, expansion_factor=expansion_factor)
+                                             self, num_beams=generation_dict['num_beams'], expansion_factor=expansion_factor)
         
         return decoder_wrapper
 

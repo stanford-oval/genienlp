@@ -33,39 +33,69 @@ import torch
 
 from .metrics import compute_metrics
 from .util import pad
+from tqdm import tqdm
+from collections import OrderedDict
 
 
-def compute_validation_outputs(model, val_iter, numericalizer, iteration):
-    loss, predictions, answers, contexts, questions = [], [], [], [], []
-    for batch_idx, batch in enumerate(val_iter):
-        l, p = model(batch, iteration)
-        loss.append(l)
-        predictions.append(pad(p, 500, dim=-1, val=numericalizer.pad_id))
-        a = pad(batch.answer.value.data.cpu(), 500, dim=-1, val=numericalizer.pad_id)
-        answers.append(a)
-        c = pad(batch.context.value.data.cpu(), 500, dim=-1, val=numericalizer.pad_id)
-        contexts.append(c)
-        q = pad(batch.question.value.data.cpu(), 500, dim=-1, val=numericalizer.pad_id)
-        questions.append(q)
-
-    loss = torch.cat(loss, 0) if loss[0] is not None else None
-    predictions = torch.cat(predictions, 0)
-    answers = torch.cat(answers, 0)
-    contexts = torch.cat(contexts, 0)
-    questions = torch.cat(questions, 0)
+def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None):
+    """
+    """
+    if isinstance(model, torch.nn.DataParallel):
+        # get rid of the DataParallel wrapper
+        model = model.module
+    predictions = []
+    answers = []
+    contexts = []
+    questions = []
+    if prediction_file_name is not None:
+        prediction_file = open(prediction_file_name, 'w' + ('' if args.overwrite else 'x'))
+    for batch_idx, batch in tqdm(enumerate(data_iterator), desc="Batches"):
+        batch_size = len(batch.example_id)
+        batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
+        for hyperparameter_idx in range(len(args.temperature)):
+            partial_batch_prediction = model.generate(batch,
+                                                max_output_length=args.max_output_length,
+                                                num_outputs=args.num_outputs[hyperparameter_idx],
+                                                temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
+                                                repetition_penalty=args.repetition_penalty[hyperparameter_idx],
+                                                top_k=args.top_k[hyperparameter_idx],
+                                                top_p=args.top_p[hyperparameter_idx],
+                                                num_beams=args.num_beams[hyperparameter_idx],
+                                                no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
+                                                do_sample=args.temperature[hyperparameter_idx]!=0  # if temperature==0, we do not sample
+                                                )
+            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction, detokenize=task.detokenize, field_name='answer')
+            # print('partial_batch_prediction = ', partial_batch_prediction)
+            for i in range(len(partial_batch_prediction)):
+                batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
+        
+        batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
+        answers += batch_answer
+        batch_question = numericalizer.reverse(batch.question.value.data, detokenize=task.detokenize, field_name='question')
+        questions += batch_question
+        batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize, field_name='context')
+        contexts += batch_context
+        predictions += batch_prediction
+        if prediction_file_name is not None:
+            for i, example_id in enumerate(batch.example_id):
+                prediction_file.write(example_id + '\t' + '\t'.join(batch_prediction[i]) + '\n') # write all outputs in the prediction file, separated by \t
+    if prediction_file_name is not None:
+        prediction_file.close()
+    
+    # TODO calculate and return loss
+    loss = None
     return loss, predictions, answers, contexts, questions
 
-
-def gather_results(model, val_iter, numericalizer, task, iteration):
-    loss, predictions, answers, contexts, questions = \
-        compute_validation_outputs(model, val_iter, numericalizer, iteration)
-    answers = numericalizer.reverse(answers, detokenize=task.detokenize, field_name='answer')
-    predictions = numericalizer.reverse(predictions, detokenize=task.detokenize, field_name='answer')
-    contexts = numericalizer.reverse(contexts, detokenize=task.detokenize, field_name='context')
-    questions = numericalizer.reverse(questions, detokenize=task.detokenize, field_name='question')
-
-    return loss, predictions, answers, contexts, questions
-
+def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args):
+    metrics = OrderedDict()
+    for i in range(len(predictions[0])):
+        partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute)
+        for k, v in partial_metrics.items():
+            if args.reduce_metrics == 'max':
+                metrics[k] = max(metrics.get(k, 0), v)
+            else:
+                raise ValueError('Invalid reduce_metrics argument')
+    return metrics
 
 def print_results(keys, values, num_print=1):
     print()
@@ -80,15 +110,18 @@ def print_results(keys, values, num_print=1):
         print()
 
 
-def validate(task, val_iter, model, logger, numericalizer, iteration, num_print=10):
+def validate(task, val_iter, model, logger, numericalizer, iteration, args, num_print=10):
     with torch.no_grad():
         model.eval()
         names = ['beam search', 'answer', 'context', 'question']
-        loss, predictions, answers, contexts, questions = \
-            gather_results(model, val_iter, numericalizer, task, iteration)
-        predictions = [p.replace('UNK', 'OOV') for p in predictions]
+        loss, predictions, answers, contexts, questions = generate_with_model(model, val_iter, numericalizer, task, args, prediction_file_name=None)
 
-        metrics, answers = compute_metrics(predictions, answers, task.metrics)
+        # predictions is a list of lists
+        for i in range(len(predictions)):
+            for j in range(len(predictions[i])):
+                predictions[i][j] = predictions[i][j].replace('UNK', 'OOV')
+
+        metrics = calculate_and_reduce_metrics(predictions, answers, task.metrics, args)
         results = [predictions, answers, contexts, questions]
         print_results(names, results, num_print=num_print)
 
