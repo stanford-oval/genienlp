@@ -1,5 +1,6 @@
 import sys
 import re
+import random
 
 from tqdm import tqdm
 import torch
@@ -30,6 +31,29 @@ special_pattern_mapping = [
     SpecialTokenMap('GENERIC_ENTITY_uk.ac.cam.multiwoz.Restaurant:Restaurant_([0-9]+)', ["restaurant1", "restaurant2", "restaurant3"]) # TODO the only reason we can get away with this unnatural replacement is that actual backward is not going to be called for this
 ]
 
+
+def group_together(file_paths, num_samples):
+    """
+    """
+    for i in range(1, len(num_samples)):
+        num_samples[i] *= num_samples[i - 1]
+    all_lines = []
+    for file_path in file_paths:
+        lines = []
+        with open(file_path) as f:
+            for line in f:
+                lines.append(line.strip())
+        all_lines.append(lines)
+    
+    all_groups = []
+    for i, lines in enumerate(all_lines):
+        for group_idx in range(0, len(lines) // num_samples[i]):
+            g = lines[group_idx * num_samples[i]:(group_idx + 1) * num_samples[i]]
+            if len(all_groups) <= group_idx:
+                all_groups.append(g)
+            else:
+                all_groups[group_idx].extend(g)
+    return all_groups
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False, aux=False):
@@ -96,10 +120,21 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
     if num_added_tokens > 0:
         logger.info('Added %d special tokens', num_added_tokens)
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
+        
+        
+def fairseq_mask(input_sequence, tokenizer, mlm_probability):
+    input_tokens = input_sequence.split(' ')
+    input_length = len(input_tokens)
+    # don't mask first and last tokens
+    for i in range(1, input_length-1):
+        if random.random() < mlm_probability:
+            input_tokens[i] = getattr(tokenizer, 'mask_token', '<mask>')
+    return ' '.join(input_tokens)
+    
 
 
-def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, prompt_column, copy, thingtalk_column, sep_token_id,
-                                  skip_heuristics, is_cased, model_type):
+def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column, copy, sep_token_id,
+                                  skip_heuristics, is_cased, model_type, src_lang, subsample, task, model_input_prefix, masked_paraphrasing, fairseq_mask_prob):
     """
     Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
     Outputs:
@@ -107,11 +142,12 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
     """
     all_input_sequences = []
     all_input_sequence_lengths = []
-    all_context_tokens = []
+    all_example_ids = []
+    all_context_ids = []
     estimated_output_lengths = []
     all_golds = []
     reverse_maps = []
-    all_prompt_tokens = []
+    all_prompt_ids = []
 
     if file_path is not None:
         number_of_lines = get_number_of_lines(file_path)
@@ -122,11 +158,16 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         disable_tqdm = True
         input_file = sys.stdin
 
-
+    line_count = 0
     for line in tqdm(input_file, desc='Reading Input File', total=number_of_lines, disable=disable_tqdm):
         row = [r.strip() for r in line.split('\t')]
         input_sequence = row[input_column]
         gold = row[gold_column]
+        if id_column is not None:
+            id_ = row[id_column]
+        else:
+            id_ = line_count
+        all_example_ids.append(id_)
         if not skip_heuristics:
             gold, _ = input_heuristics(gold, None, is_cased, keep_special_tokens=True, keep_tokenized=True)
         all_golds.append(gold)
@@ -136,29 +177,51 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
             thingtalk = row[thingtalk_column] if thingtalk_column is not None else None
             input_sequence, reverse_map = input_heuristics(input_sequence, thingtalk, is_cased)
             reverse_maps.append(reverse_map)
-        input_sequence_tokens = tokenizer.encode(input_sequence, add_special_tokens=True)
+            
+        if masked_paraphrasing:
+            input_sequence = fairseq_mask(input_sequence, tokenizer, fairseq_mask_prob)
         
-        prompt_tokens = [] # includes the first few tokens of the output
+        # add model specific prefix
+        input_sequence = model_input_prefix + input_sequence
+        
+        if model_type == 'mbart':
+            # just make sure source language is used when tokenizing input sentence
+            # tokenizer takes care of adding language code at the end of the sentence
+            tokenizer.cur_lang_code = tokenizer.lang_code_to_id[src_lang]
+            
+        input_sequence_ids = tokenizer.encode(input_sequence, add_special_tokens=True)
+        
+        prompt_ids = [] # includes the first few tokens of the output
         if prompt_column is not None and len(row) > prompt_column:
             prompt = row[prompt_column]
             if not skip_heuristics:
                 prompt, _ = input_heuristics(prompt, thingtalk, is_cased)
-                # logger.info('prompt = %s', prompt)
-            prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
+            prompt_ids = tokenizer.encode(prompt, add_special_tokens=False)
         if copy > 0:
-            assert len(prompt_tokens) == 0
-            prompt_tokens = input_sequence_tokens[0 : min(copy, len(input_sequence_tokens)-1)]
-        all_prompt_tokens.append(prompt_tokens)
-        context_tokens = input_sequence_tokens + [sep_token_id] + prompt_tokens
+            assert len(prompt_ids) == 0
+            prompt_ids = input_sequence_ids[0 : min(copy, len(input_sequence_ids)-1)]
+        all_prompt_ids.append(prompt_ids)
+        
+        #TODO problemtaic for marian and bart models
+        if task != 'translate':
+            context_ids = input_sequence_ids + [sep_token_id] + prompt_ids
+        else:
+            context_ids = input_sequence_ids
+        
         all_input_sequences.append(input_sequence)
-        all_input_sequence_lengths.append(len(input_sequence_tokens))
-        all_context_tokens.append(context_tokens)
-        estimated_output_lengths.append(len(input_sequence_tokens)-len(prompt_tokens))
+        all_input_sequence_lengths.append(len(input_sequence_ids))
+        all_context_ids.append(context_ids)
+        estimated_output_lengths.append(len(input_sequence_ids)-len(prompt_ids))
+        
+        line_count += 1
+        if line_count >= subsample:
+            break
+    logger.info("Input has {} examples; and we subsampled {} examples".format(number_of_lines, line_count))
     
     if file_path is not None:
         input_file.close()
 
-    return all_input_sequences, all_input_sequence_lengths, all_context_tokens, estimated_output_lengths, all_golds, reverse_maps, all_prompt_tokens
+    return all_input_sequences, all_input_sequence_lengths, all_example_ids, all_context_ids, estimated_output_lengths, all_golds, reverse_maps, all_prompt_ids
 
 
 def is_question(sentence: str):
@@ -176,7 +239,6 @@ def input_heuristics(s: str, thingtalk=None, is_cased=False, keep_special_tokens
         s: the new string
         reverse_map: a list of special tokens. Can be used to recover the original special_tokens in the string
     """
-    reverse_map = []
     s = s.strip()
     s = tokenize(s)
 
@@ -215,11 +277,11 @@ def input_heuristics(s: str, thingtalk=None, is_cased=False, keep_special_tokens
     if not is_cased:
         s = lower_case(s)
 
-    # replace special tokens with natural-looking exmaples
+    # replace special tokens with natural-looking examples
     reverse_map = []
     if not keep_special_tokens:
         for spm in special_pattern_mapping:
-            s, r = spm.forwad(s)
+            s, r = spm.forward(s)
             reverse_map.extend(r)
 
     return s, reverse_map

@@ -182,7 +182,7 @@ def train(args, train_dataset, model, tokenizer):
             model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids}
             
             # prepare inputs for bart
-            if args.model_type == 'bart':
+            if args.model_type in ['bart', 'mbart']:
                 # this should have been handled internally by huggingfaces's BART code
                 # TODO remove this once they add it
                 decoder_input_ids = labels[:, :-1].contiguous()
@@ -396,7 +396,7 @@ def parse_argv(parser):
                         help="Optional pretrained config name or path if not the same as model_name_or_path")
     parser.add_argument("--tokenizer_name", default="", type=str,
                         help="Optional pretrained tokenizer name or path if not the same as model_name_or_path")
-    parser.add_argument("--cache_dir", default="", type=str,
+    parser.add_argument("--cache_dir", default=".embeddings", type=str,
                         help="Optional directory to store the pre-trained models downloaded from s3 (instread of the default one)")
     parser.add_argument("--block_size", default=-1, type=int,
                         help="Optional input sequence length after tokenization."

@@ -28,12 +28,12 @@ class TextDataset(Dataset):
             logger.info("Creating features from dataset file at %s", file_path)
 
             self.prompt_token_id = self.tokenizer.convert_tokens_to_ids(args.start_special_token)
-            self.end_token_id = self.tokenizer.convert_tokens_to_ids(args.end_special_token)
+            self.eos_token_id = self.tokenizer.convert_tokens_to_ids(args.end_special_token)
             self.segment1_id = 0
             self.segment2_id = 1
             if args.model_type == 'gpt2':
                 self.segment1_id = self.prompt_token_id
-                self.segment2_id = self.end_token_id
+                self.segment2_id = self.eos_token_id
             self.input_ids = []
             self.labels = []
             self.position_ids = []
@@ -81,7 +81,7 @@ class TextDataset(Dataset):
 
         input_ids = self.tokenizer.build_inputs_with_special_tokens(tokenized_text)
         # Remove duplicate end_token for models like BERT and RoBERTa that already add it
-        if input_ids[-2] == self.end_token_id:
+        if input_ids[-2] == self.eos_token_id:
             input_ids = input_ids[:-1]
         self.max_input_length = max(self.max_input_length, len(input_ids))
         try:

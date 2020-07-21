@@ -47,7 +47,7 @@ setuptools.setup(
     url="https://github.com/stanford-oval/genienlp",
 
     install_requires=[
-        'numpy',
+        'numpy>=1.14.5',
         'torch~=1.4',
         'revtok==0.0.3',
         'tqdm~=4.0',
@@ -55,7 +55,10 @@ setuptools.setup(
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
         'requests~=2.22',
-        'transformers==2.9',
-        'sentencepiece>=0.1.83,<0.2.0'
+        'transformers==2.11',
+        'sentencepiece>=0.1.83,<0.2.0',
+        'mosestokenizer~=1.1',
+        'matplotlib~=3.1',
+        'seaborn~=0.9'
     ]
 )
