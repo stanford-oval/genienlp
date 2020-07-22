@@ -149,8 +149,6 @@ class Seq2Seq(PreTrainedModel):
         return self.decoder.decoder_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, batch, generation_dict):
-        # print('input_ids = ', input_ids)
-        # exit(0)
         expansion_factor = input_ids.shape[0] // len(batch.example_id)
         return {"batch": batch, "past": past, "current_token_id": input_ids[:,-1:], "expansion_factor": expansion_factor, "generation_dict": generation_dict}
 
