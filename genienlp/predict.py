@@ -137,13 +137,13 @@ def run(args, device):
             for index, set_ in enumerate(val_set):
                 loader = make_data_loader(set_, numericalizer, bs, device,
                                           append_question_to_context_too=args.append_question_to_context_too,
-                                          override_question=args.override_question)
+                                          override_question=args.override_question, override_context=args.override_context)
                 task_iter.append((task, task_languages[index], loader))
         # single language task or no separate eval
         else:
            loader = make_data_loader(val_set[0], numericalizer, bs, device,
                                      append_question_to_context_too=args.append_question_to_context_too,
-                                     override_question=args.override_question)
+                                     override_question=args.override_question, override_context=args.override_context)
            task_iter.append((task, task_languages, loader))
 
         iters.extend(task_iter)

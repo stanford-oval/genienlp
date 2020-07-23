@@ -428,7 +428,7 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
-                     valid=False, append_question_to_context_too=False, override_question=None):
+                     valid=False, append_question_to_context_too=False, override_question=None, override_context=None):
     
     iterator = Iterator(dataset,
                         batch_size,
@@ -440,7 +440,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
     collate_function = lambda minibatch: Batch.from_examples(minibatch, numericalizer, device=device,
                                            paired=paired and train, max_pairs=max_pairs, groups=iterator.groups,
                                            append_question_to_context_too=append_question_to_context_too,
-                                                             override_question=override_question)
+                                           override_question=override_question, override_context=override_context)
         
     return torch.utils.data.DataLoader(iterator, batch_size=None, collate_fn=collate_function)
 
@@ -475,7 +475,7 @@ def load_config_json(args):
                     'train_context_embeddings_after', 'train_question_embeddings_after',
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize', 'num_beams',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
-                    'override_question']
+                    'override_question', 'override_context']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         overwrite = ['val_batch_size', 'num_beams']
