@@ -103,6 +103,14 @@ def scatter_kwargs(inputs, kwargs, target_gpus, dim=0):
         inputs.extend([() for _ in range(len(kwargs) - len(inputs))])
     elif len(kwargs) < len(inputs):
         kwargs.extend([{} for _ in range(len(inputs) - len(kwargs))])
+        
+    # handle cases where len(inputs) < len(num_gpus) and len(kwargs) > 0
+    num_empty = sum([int(len(input) == 0) for input in inputs])
+    num_full = len(inputs) - num_empty
+    if num_full > 0 and num_empty > 0:
+        kwargs = kwargs[:num_full]
+        inputs = inputs[:num_full]
+
     inputs = tuple(inputs)
     kwargs = tuple(kwargs)
     return inputs, kwargs
