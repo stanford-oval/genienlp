@@ -141,10 +141,9 @@ class MQANDecoder(nn.Module):
                                                     context_limited, question_limited, decoder_vocab, rnn_state=context_rnn_state,
                                                     expansion_factor=expansion_factor, generation_dict=generation_dict)
             else:
-                current_token_id = current_token_id.cpu().apply_(self.map_to_full).to(current_token_id.device)
-            # return (next_token_logits, past) where `past` includes all the states needed to continue generation
+                current_token_id = current_token_id.clone().cpu().apply_(self.map_to_full).to(current_token_id.device)
+            # (next_token_logits, past) where `past` includes all the states needed to continue generation
             logits = torch.log(decoder_wrapper.next_token_probs(current_token_id))
-            # print('logits', logits.shape)
             return logits, decoder_wrapper
 
     def probs(self, outputs, vocab_pointer_switches, context_question_switches,
@@ -217,8 +216,6 @@ class LSTMDecoder(nn.Module):
         for decoder_input in input.split(1, dim=1):
             context_output = self.dropout(context_output)
             if self.input_feed:
-                # print('decoder_input', decoder_input.shape)
-                # print('context_output', context_output.shape)
                 rnn_input = torch.cat([decoder_input, context_output], 2)
             else:
                 rnn_input = decoder_input
@@ -227,8 +224,6 @@ class LSTMDecoder(nn.Module):
             dec_state, hidden = self.rnn(rnn_input, hidden)
             dec_state = dec_state.unsqueeze(1)
 
-            # print('dec_state = ', dec_state.shape)
-            # print('context = ', context.shape)
             context_output, context_attention = self.context_attn(dec_state, context)
             question_output, question_attention = self.question_attn(dec_state, question)
             vocab_pointer_switch_inputs.append(torch.cat([dec_state, context_output, decoder_input], -1))
@@ -258,7 +253,6 @@ class MQANDecoderWrapper(object):
 
     def __init__(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                decoder_vocab, rnn_state, batch_size, max_decoder_time, mqan_decoder: MQANDecoder, num_beams:int, expansion_factor:int):
-        # print('self_attended_context = ', self_attended_context)
         self.decoder_vocab = decoder_vocab
         self_attended_context = self.expand_for_beam_search(self_attended_context, batch_size, expansion_factor)
         context = self.expand_for_beam_search(context, batch_size, expansion_factor)
@@ -315,7 +309,6 @@ class MQANDecoderWrapper(object):
 
 
     def next_token_probs(self, current_token_id):
-        # print('current_token_id = ', current_token_id, current_token_id.shape)
         embedding = self.mqan_decoder.decoder_embeddings(current_token_id).last_layer
 
         if self.mqan_decoder.args.transformer_layers > 0:
@@ -332,11 +325,6 @@ class MQANDecoderWrapper(object):
             self_attended_decoded = embedding
 
         if self.mqan_decoder.args.rnn_layers > 0:
-            # print(self_attended_decoded.shape)
-            # print(self.context.shape)
-            # print(self.question.shape)
-            # print(self.rnn_state[0].shape, self.rnn_state[1].shape)
-            # print(self.decoder_output)
             rnn_decoder_outputs = self.mqan_decoder.rnn_decoder(self_attended_decoded, self.context, self.question,
                                                                 hidden=self.rnn_state, output=self.decoder_output)
             self.decoder_output, vocab_pointer_switch_input, context_question_switch_input, context_attention, \
@@ -358,7 +346,6 @@ class MQANDecoderWrapper(object):
                             self.context_indices, self.question_indices, self.decoder_vocab)
 
         self.time += 1
-        # print('probs = ', probs)
         return probs
 
     def expand_for_beam_search(self, t, batch_size, num_beams, dim=0):
@@ -373,7 +360,6 @@ class MQANDecoderWrapper(object):
                 elements.append(self.expand_for_beam_search(e, batch_size, num_beams, dim))
             return elements
 
-        # print('before expansion: ', t.shape)
         original_size = list(t.shape)
         original_size[dim] *= num_beams
         t = t.unsqueeze(dim+1)
@@ -381,7 +367,6 @@ class MQANDecoderWrapper(object):
         expanded_size[dim+1] = num_beams
         t = t.expand(*expanded_size)
         t = t.contiguous().view(*original_size)  # (batch_size * num_beams, -1)
-        # print('after expansion: ', t.shape)
         return t
 
     def reorder_for_beam_search(self, t, new_order, dim=0):
@@ -396,13 +381,11 @@ class MQANDecoderWrapper(object):
                 elements.append(self.reorder_for_beam_search(e, new_order, dim))
             return elements
 
-        # print('before reordering t = ', t)
         p = [i for i in range(len(t.shape))]
         p[dim] = 0
         p[0] = dim
         t = t.permute(*p)
         t = t[new_order]
         t = t.permute(*p)
-        # print('after reordering t = ', t)
 
         return t

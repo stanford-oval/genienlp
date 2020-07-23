@@ -32,8 +32,7 @@ import json
 import logging
 import os
 from pprint import pformat
-from tqdm import tqdm
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 import copy
 import shutil
 
@@ -48,7 +47,6 @@ import torch
 
 from . import models
 from .data_utils.embeddings import load_embeddings
-from .metrics import compute_metrics
 from .tasks.registry import get_tasks
 from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
     have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
@@ -117,7 +115,8 @@ def run(args, device):
 
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model.from_pretrained(args.path, numericalizer=numericalizer,
+    model = Model.from_pretrained(args.path,
+                                  numericalizer=numericalizer,
                                   context_embeddings=context_embeddings,
                                   question_embeddings=question_embeddings,
                                   decoder_embeddings=decoder_embeddings,

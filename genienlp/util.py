@@ -38,7 +38,6 @@ import time
 import re
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 from .data_utils.example import Batch
 from .data_utils.iterator import Iterator

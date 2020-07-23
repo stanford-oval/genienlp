@@ -32,12 +32,11 @@
 import torch
 
 from .metrics import compute_metrics
-from .util import pad
 from tqdm import tqdm
 from collections import OrderedDict
 
 
-def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None):
+def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False):
     """
     """
     if isinstance(model, torch.nn.DataParallel):
@@ -65,16 +64,16 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
                                                 do_sample=args.temperature[hyperparameter_idx]!=0  # if temperature==0, we do not sample
                                                 )
             partial_batch_prediction = numericalizer.reverse(partial_batch_prediction, detokenize=task.detokenize, field_name='answer')
-            # print('partial_batch_prediction = ', partial_batch_prediction)
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
         
-        batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
-        answers += batch_answer
-        batch_question = numericalizer.reverse(batch.question.value.data, detokenize=task.detokenize, field_name='question')
-        questions += batch_question
-        batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize, field_name='context')
-        contexts += batch_context
+        if not output_predictions_only:
+            batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
+            answers += batch_answer
+            batch_question = numericalizer.reverse(batch.question.value.data, detokenize=task.detokenize, field_name='question')
+            questions += batch_question
+            batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize, field_name='context')
+            contexts += batch_context
         predictions += batch_prediction
         if prediction_file_name is not None:
             for i, example_id in enumerate(batch.example_id):
@@ -82,6 +81,8 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
     if prediction_file_name is not None:
         prediction_file.close()
     
+    if output_predictions_only:
+        return predictions
     # TODO calculate and return loss
     loss = None
     return loss, predictions, answers, contexts, questions
