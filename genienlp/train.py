@@ -77,7 +77,7 @@ def prepare_data(args, logger):
     for task in args.train_tasks:
         logger.info(f'Loading {task.name}')
         kwargs = {'test': None, 'validation': None}
-        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
+        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.train_languages,
                        'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question})
         if args.use_curriculum:
@@ -103,7 +103,7 @@ def prepare_data(args, logger):
         # choose best model based on this dev set
         if args.eval_set_name is not None:
             kwargs['validation'] = args.eval_set_name
-        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache,
+        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.eval_languages,
                         'almond_lang_as_question': args.almond_lang_as_question})
         
@@ -345,20 +345,20 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     train_iters = [(task,
                     make_data_loader(x, numericalizer, tok, main_device, paired=args.paired,max_pairs=args.max_pairs,
                                      train=True,  append_question_to_context_too=args.append_question_to_context_too,
-                                     override_question=args.override_question))
+                                     override_question=args.override_question, override_context=args.override_context))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_values)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
     val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False, valid=True,
                                          append_question_to_context_too=args.append_question_to_context_too,
-                                         override_question=args.override_question))
+                                         override_question=args.override_question, override_context=args.override_context))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     aux_iters = []
     if use_curriculum:
         aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True,
                                              append_question_to_context_too=args.append_question_to_context_too,
-                                             override_question=args.override_question))
+                                             override_question=args.override_question, override_context=args.override_context))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_values)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         

@@ -67,7 +67,8 @@ class Server:
         # batch of size 1
         return Batch.from_examples([ex], self.numericalizer, device=self.device,
                                    append_question_to_context_too=self.args.append_question_to_context_too,
-                                   override_question=self.args.override_question)
+                                   override_question=self.args.override_question,
+                                   override_context=self.args.override_context)
 
     def handle_request(self, line):
         request = json.loads(line)

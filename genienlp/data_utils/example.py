@@ -76,7 +76,7 @@ class Batch(NamedTuple):
     
     @staticmethod
     def from_examples(examples, numericalizer, device=None, paired=False, max_pairs=None, groups=None,
-                      append_question_to_context_too=False, override_question=None):
+                      append_question_to_context_too=False, override_question=None, override_context=None):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         decoder_vocab = numericalizer.decoder_vocab.clone()
         max_context_len, max_question_len, max_answer_len = -1, -1, -1
@@ -85,6 +85,11 @@ class Batch(NamedTuple):
         if override_question:
             override_question = override_question.split()
             override_question_mask = [True for _ in override_question]
+            
+        override_context_mask = None
+        if override_context:
+            override_context = override_context.split()
+            override_context_mask = [True for _ in override_context]
 
         if paired:
             example_pairs = []
@@ -109,17 +114,23 @@ class Batch(NamedTuple):
                 question_inputs = [((ex_a.question, ex_a.question_word_mask),
                                     (ex_b.question, ex_b.question_word_mask))
                                    for ex_a, ex_b in example_pairs]
-
+                
             if append_question_to_context_too:
                 context_inputs = [((ex_a.context_plus_question,
                                     ex_a.context_plus_question_word_mask),
                                     (ex_b.context_plus_question,
                                      ex_b.context_plus_question_word_mask))
                                   for ex_a, ex_b in example_pairs]
+            elif override_context:
+                context_inputs = [((override_context, override_context_mask),
+                                    (override_context, override_context_mask))
+                                   for _ in example_pairs]
             else:
                 context_inputs = [((ex_a.context, ex_a.context_word_mask),
-                                   (ex_b.context, ex_b.context_word_mask))
-                                  for ex_a, ex_b in example_pairs]
+                                    (ex_b.context, ex_b.context_word_mask))
+                                   for ex_a, ex_b in example_pairs]
+
+
             answer_inputs = [((ex_a.answer, ex_a.answer_word_mask), (ex_b.answer, ex_b.answer_word_mask))
                              for ex_a, ex_b in example_pairs]
 
@@ -141,8 +152,11 @@ class Batch(NamedTuple):
 
         if append_question_to_context_too:
             context_inputs = [(ex.context_plus_question, ex.context_plus_question_word_mask) for ex in examples]
+        elif override_context:
+            context_inputs = [(override_context, override_context_mask) for _ in examples]
         else:
             context_inputs = [(ex.context, ex.context_word_mask) for ex in examples]
+            
         answer_inputs = [(ex.answer, ex.answer_word_mask) for ex in examples]
         
         all_example_ids_single = example_ids

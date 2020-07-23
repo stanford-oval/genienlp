@@ -179,8 +179,8 @@ def parse_argv(parser):
     parser.add_argument('--append_question_to_context_too', action='store_true', default=False,
                         help='')
     parser.add_argument('--override_question', default=None, help='Override the question for all tasks')
-    parser.add_argument('--almond_preprocess_context', action='store_true', default=False,
-                        help='')
+    parser.add_argument('--override_context', default=None, help='Override the context for all tasks')
+    parser.add_argument('--almond_preprocess_context', action='store_true', default=False, help='')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
 
@@ -214,6 +214,8 @@ def parse_argv(parser):
 
     parser.add_argument('--skip_cache', action='store_true',
                         help='whether to use exisiting cached splits or generate new ones')
+    parser.add_argument('--cache_input_data', action='store_true',
+                        help='Cache examples from input data for faster subsequent trainings')
     parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')
     parser.add_argument('--aux_dataset', default='', type=str,
                         help='path to auxiliary dataset (ignored if curriculum is not used)')
@@ -252,6 +254,9 @@ def post_parse(args):
     
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1) :
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
+
+    if args.override_context and args.append_question_to_context_too:
+        raise ValueError('You cannot use append_question_to_context_too when overriding context')
     
     if args.paired and not args.sentence_batching:
         logger.warning('Paired training only works if sentence_batching is used as well.'
