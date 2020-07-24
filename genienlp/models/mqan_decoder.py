@@ -134,7 +134,7 @@ class MQANDecoder(nn.Module):
             loss = F.nll_loss(probs.log(), targets)
             if encoder_loss is not None:
                 loss += self.args.encoder_loss_weight * encoder_loss
-            return loss, None
+            return (loss, )
         else:
             if decoder_wrapper is None:
                 decoder_wrapper = self.decoder_wrapper(self_attended_context, final_context, context_padding, final_question, question_padding,

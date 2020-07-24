@@ -88,29 +88,29 @@ class Seq2Seq(PreTrainedModel):
         self_attended_context, _final_context, _context_rnn_state, _final_question, _question_rnn_state = \
             self.encoder(masked_batch)
         context_logits = self.context_pretrain_lm_head(self_attended_context[-1])
-        predictions = None
 
         context_logits = context_logits.view(-1, self.numericalizer.num_tokens)
         masked_labels = masked_labels.view(-1)
         loss = torch.nn.functional.cross_entropy(context_logits, masked_labels, ignore_index=self.numericalizer.pad_id)
-        return loss, predictions
+        return (loss, )
 
     def _normal_forward(self, batch, current_token_id, past=None, expansion_factor=1, generation_dict=None, encoder_output=None):
         if encoder_output is None:
-            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
-                self.encoder(batch)
+            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
         else:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = encoder_output
         encoder_loss = None
-        if getattr(self.args, 'use_encoder_loss', None) and self.training:
+        if self.training and getattr(self.args, 'use_encoder_loss', None):
             encoder_loss = self.get_encoder_loss(context_rnn_state)
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
                             final_question, question_rnn_state, encoder_loss, current_token_id, decoder_wrapper=past,
-                            expansion_factor=expansion_factor, generation_dict=generation_dict) # logits, past
+                            expansion_factor=expansion_factor, generation_dict=generation_dict)
 
-    # TODO iteration is unused, remove it
-    def forward(self, batch, iteration=0, pretraining=False, current_token_id=None, past=None,
+    def forward(self, batch, pretraining=False, current_token_id=None, past=None,
                 expansion_factor=1, generation_dict=None, encoder_output=None):
+        """
+        When training or pretraining, forward() always returns a tuple where the first element is `loss`
+        """
         if pretraining:
             return self._pretrain_forward(batch)
         else:
