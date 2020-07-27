@@ -163,7 +163,7 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
                                                iteration > train_question_embeddings_after)
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
-    loss, predictions = model(batch, iteration=iteration, pretraining=pretraining)
+    loss = model(batch, pretraining=pretraining)[0]
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
     if len(devices) > 1:
@@ -223,8 +223,7 @@ def do_validate(iteration, args, model, numericalizer, val_iters, *,
                 train_task, round_progress, task_progress, writer, logger):
     deca_score = 0
     for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-        val_loss, metric_dict = validate(val_task, val_iter, model, logger, numericalizer,
-                                         iteration, num_print=args.num_print)
+        val_loss, metric_dict = validate(val_task, val_iter, model, logger, numericalizer, iteration, args, num_print=args.num_print)
         if val_loss is not None:
             log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss{val_loss.item():.4f}:'
             writer.add_scalar(f'loss/{val_task.name}/val', val_loss.item(), iteration)

@@ -38,7 +38,6 @@ import time
 import re
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 from .data_utils.example import Batch
 from .data_utils.iterator import Iterator
@@ -289,46 +288,6 @@ def combine_files_on_disk(file_path_prefix, num_files, line_group_size, delete=F
             os.remove(file_path)
 
 
-def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float('Inf'), min_tokens_to_keep=1):
-    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
-        Args:
-            logits: logits distribution shape (batch size, vocabulary size)
-            if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
-            if top_k < 0: keeps all tokens but the ones with top |k| probability
-            if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
-                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-            Make sure we keep at least min_tokens_to_keep per batch example in the output
-        From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
-    """
-    sign = 1
-    if top_k < 0:
-        top_k = logits.size(-1) + top_k
-        sign = -1
-    top_k = min(top_k, logits.size(-1))  # Safety check
-    if top_k > 0:
-        # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_remove = sign*logits < torch.topk(sign*logits, top_k)[0][..., -1, None]
-        logits[indices_to_remove] = filter_value
-
-    if top_p < 1.0:
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-
-        # Remove tokens with cumulative probability above the threshold
-        sorted_indices_to_remove = cumulative_probs > top_p
-        if min_tokens_to_keep > 1:
-            # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
-            sorted_indices_to_remove[..., :min_tokens_to_keep] = 0
-        # Shift the indices to the right to keep also the first token above the threshold
-        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-        sorted_indices_to_remove[..., 0] = 0
-
-        # scatter sorted tensors to original indexing
-        indices_to_remove = sorted_indices_to_remove.scatter(dim=1, index=sorted_indices, src=sorted_indices_to_remove)
-        logits[indices_to_remove] = filter_value
-    return logits
-
-
 def map_filter(callable, iterable):
     output = []
     for element in iterable:
@@ -473,12 +432,15 @@ def load_config_json(args):
                     'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'train_encoder_embeddings',
                     'train_context_embeddings', 'train_question_embeddings', 'locale', 'use_pretrained_bert',
                     'train_context_embeddings_after', 'train_question_embeddings_after',
-                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize', 'num_beams',
+                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
                     'override_question', 'override_context']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
-        overwrite = ['val_batch_size', 'num_beams']
+        if 'num_beams' in config and not isinstance(config['num_beams'], list):
+            # num_beams used to be an integer in previous versions of the code
+            config['num_beams'] = [config['num_beams']]
+        overwrite = ['val_batch_size', 'num_beams', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty', 'temperature', 'reduce_metrics']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -518,10 +480,24 @@ def load_config_json(args):
                 setattr(args, r, 'zero')
             elif r == 'use_pretrained_bert':
                 setattr(args, r, True)
-            elif r == 'num_beams':
-                setattr(args, r, 1)
             elif r in ('append_question_to_context_too', 'almond_preprocess_context'):
                 setattr(args, r, False)
+            elif r == 'num_beams':
+                setattr(args, r, [1])
+            elif r == 'num_outputs':
+                setattr(args, r, [1])
+            elif r == 'no_repeat_ngram_size':
+                setattr(args, r, [0])
+            elif r == 'top_p':
+                setattr(args, r, [1.0])
+            elif r == 'top_k':
+                setattr(args, r, [0])
+            elif r == 'repetition_penalty':
+                setattr(args, r, [1.0])
+            elif r == 'temperature':
+                setattr(args, r, [0.0])
+            elif r == 'reduce_metrics':
+                setattr(args, r, 'max')
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0

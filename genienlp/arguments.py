@@ -126,7 +126,19 @@ def parse_argv(parser):
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument('--preserve_case', action='store_false', dest='lower',
                         help='whether to preserve casing for all text')
-    parser.add_argument('--num_beams', type=int, default=1, help='number of beams to use for beam search')
+    parser.add_argument("--reduce_metrics", type=str, default='max', choices=['max'], help='How to calculate the metric when there are multiple outputs per input.')
+
+    # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
+    parser.add_argument("--num_outputs", type=int, nargs='+', default=[1], help='number of sequences to output per input')
+    parser.add_argument("--temperature", type=float, nargs='+', default=[0.0],
+                        help="temperature of 0 implies greedy sampling")
+    parser.add_argument("--repetition_penalty", type=float, nargs='+', default=[1.0],
+                        help="primarily useful for CTRL model; in that case, use 1.2")
+    parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
+    parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
+    parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
+    parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
+
 
     parser.add_argument('--model', type=str, choices=['Seq2Seq'], default='Seq2Seq', help='which model to import')
     parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity', 'Coattention'],
@@ -183,7 +195,6 @@ def parse_argv(parser):
     parser.add_argument('--almond_preprocess_context', action='store_true', default=False, help='')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
-
 
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')

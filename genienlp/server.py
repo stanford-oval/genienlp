@@ -43,6 +43,7 @@ from .data_utils.example import Batch
 from .tasks.generic_dataset import Example
 from .tasks.registry import get_tasks
 from .util import set_seed, init_devices, load_config_json, log_model_size
+from .validate import generate_with_model
 
 logger = logging.getLogger(__name__)
 
@@ -92,10 +93,9 @@ class Server:
                               lower=self.args.lower)
 
         batch = self.numericalize_example(ex)
-        _, prediction_batch = self.model(batch, iteration=0)
-        predictions = self.numericalizer.reverse(prediction_batch, detokenize=task.detokenize, field_name='answer')
+        predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
 
-        response = json.dumps(dict(id=request['id'], answer=predictions[0]))
+        response = json.dumps(dict(id=request['id'], answer=predictions[0][0]))
         return response + '\n'
 
     async def handle_client(self, client_reader, client_writer):

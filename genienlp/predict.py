@@ -32,7 +32,6 @@ import json
 import logging
 import os
 from pprint import pformat
-from tqdm import tqdm
 from collections import defaultdict
 import copy
 import shutil
@@ -48,10 +47,10 @@ import torch
 
 from . import models
 from .data_utils.embeddings import load_embeddings
-from .metrics import compute_metrics
 from .tasks.registry import get_tasks
 from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
     have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
+from .validate import generate_with_model, calculate_and_reduce_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +106,6 @@ def prepare_data(args, numericalizer, embeddings):
 
 
 def run(args, device):
-    save_dict = torch.load(args.best_checkpoint, map_location=device)
-
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
         load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings, args.decoder_embeddings,
                         args.max_generative_vocab, logger)
@@ -118,9 +115,14 @@ def run(args, device):
 
     logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
-    model_dict = save_dict['model_state_dict']
-    model.load_state_dict(model_dict)
+    model = Model.from_pretrained(args.path,
+                                  numericalizer=numericalizer,
+                                  context_embeddings=context_embeddings,
+                                  question_embeddings=question_embeddings,
+                                  decoder_embeddings=decoder_embeddings,
+                                  args=args,
+                                  device=device
+                                  )
     val_sets = prepare_data(args, numericalizer, set(context_embeddings + question_embeddings + decoder_embeddings))
 
     logger.info(f'Preparing iterators')
@@ -181,38 +183,20 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            predictions = []
-            answers = []
-            contexts = []
-            with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
-                for batch_idx, batch in tqdm(enumerate(it), desc="Batches"):
-                    _, batch_prediction = model(batch, iteration=1)
-
-                    batch_prediction = numericalizer.reverse(batch_prediction, detokenize=task.detokenize,
-                                                             field_name='answer')
-                    predictions += batch_prediction
-                    batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize,
-                                                         field_name='answer')
-                    answers += batch_answer
-                    batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize,
-                                                         field_name='context')
-                    contexts += batch_context
-
-                    for i, example_prediction in enumerate(batch_prediction):
-                        prediction_file.write(batch.example_id[i] + '\t' + example_prediction + '\n')
-
+            _, predictions, answers, contexts, _ = generate_with_model(model, it, numericalizer, task, args, prediction_file_name)
+                
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
-                metrics, _ = compute_metrics(predictions, answers, metrics_to_compute)
+                metrics = calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args)
 
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')
 
                 if not args.silent:
                     for i, (c, p, a) in enumerate(zip(contexts, predictions, answers)):
-                        logger.info(f'\nContext {i+1}: {c}\nPrediction {i + 1}: {p}\nAnswer {i + 1}: {a}\n')
+                        logger.info(f'\nContext {i+1}: {c}\nPrediction {i + 1} ({sum(args.num_outputs)} outputs): {p}\nAnswer {i + 1}: {a}\n')
                     logger.info(metrics)
                     
                 task_scores[task].append((len(answers), metrics[task.metrics[0]]))
@@ -269,7 +253,18 @@ def parse_argv(parser):
     # If not None, these values will override the values saved in the trained model's config file
     parser.add_argument('--val_batch_size', nargs='+', default=None, type=int,
                         help='Batch size for validation corresponding to tasks in val tasks')
-    parser.add_argument('--num_beams', type=int, default=None, help='number of beams to use for beam search')
+    parser.add_argument("--reduce_metrics", type=str, default='max', choices=['max'], help='How to calculate the metric when there are multiple outputs per input.')
+
+    # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
+    parser.add_argument("--num_outputs", type=int, nargs='+', default=[1], help='number of sequences to output per input')
+    parser.add_argument("--temperature", type=float, nargs='+', default=[0.0],
+                        help="temperature of 0 implies greedy sampling")
+    parser.add_argument("--repetition_penalty", type=float, nargs='+', default=[1.0],
+                        help="primarily useful for CTRL model; in that case, use 1.2")
+    parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
+    parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
+    parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
+    parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
 
 def adjust_multilingual_eval(args):
@@ -289,9 +284,27 @@ def adjust_multilingual_eval(args):
             logger.warning('prediction languages should be empty for single language tasks')
             args.pred_languages[i] = None
             
+            
+def check_and_update_generation_args(args):
+    """
+    checks all generation commandline arguments. Since these arguments are all lists and shorthand can be used, we expand them to match the expected length
+    for instance, [1.0] becomes [1.0 1.0] if all other generation arguments are of length 2
+    """
+    hyperparameters = ['num_outputs', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
+    max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])
+    valid_len = [1, max_hyperparameter_len]
+    for h in hyperparameters:
+        if (len(getattr(args, h)) not in valid_len):
+            logger.error('Hyperparameters should either have the same number of values as others or have exactly one value.')
+        # If only one value is provided, use the same value for all samples
+        setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
+
+    logger.info('Will output %d sequences for each input.', sum(args.num_outputs))
+    # logger.info('Effective batch size for each GPU is %d', args.batch_size * max(args.num_outputs))
 
 def main(args):
     load_config_json(args)
+    check_and_update_generation_args(args)
     adjust_multilingual_eval(args)
     set_seed(args)
     args.tasks = get_tasks(args.task_names, args)
