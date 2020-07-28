@@ -32,7 +32,6 @@
 import torch
 
 from .metrics import compute_metrics
-from tqdm import tqdm
 from collections import OrderedDict
 
 
@@ -48,7 +47,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
     questions = []
     if prediction_file_name is not None:
         prediction_file = open(prediction_file_name, 'w' + ('' if args.overwrite else 'x'))
-    for batch_idx, batch in tqdm(enumerate(data_iterator), desc="Batches"):
+    for batch_idx, batch in enumerate(data_iterator):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
         for hyperparameter_idx in range(len(args.temperature)):
