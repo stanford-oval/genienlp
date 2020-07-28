@@ -84,7 +84,13 @@ def prepare_data(args, logger):
             kwargs['curriculum'] = True
 
         logger.info(f'Adding {task.name} to training datasets')
-        split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        from stanza.server import CoreNLPClient
+        if args.return_ner:
+            with CoreNLPClient(properties={'annotators': 'tokenize,ner', 'ner.model': args.ner_model},
+                               endpoint="http://localhost:9000") as client:
+                split = task.get_splits(args.data, lower=args.lower, client=client, **kwargs)
+        else:
+            split = task.get_splits(args.data, lower=args.lower, **kwargs)
         assert not split.eval and not split.test
         if args.use_curriculum:
             assert split.aux
@@ -108,7 +114,12 @@ def prepare_data(args, logger):
                         'almond_lang_as_question': args.almond_lang_as_question})
         
         logger.info(f'Adding {task.name} to validation datasets')
-        split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        if args.return_ner:
+            with CoreNLPClient(properties={'annotators': 'tokenize,ner', 'ner.model': args.ner_model},
+                               endpoint="http://localhost:9000") as client:
+                split = task.get_splits(args.data, lower=args.lower, client=client, **kwargs)
+        else:
+            split = task.get_splits(args.data, lower=args.lower, **kwargs)
         assert not split.train and not split.test and not split.aux
         logger.info(f'{task.name} has {len(split.eval)} validation examples')
         val_sets.append(split.eval)

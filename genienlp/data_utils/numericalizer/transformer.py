@@ -110,7 +110,7 @@ class TransformerNumericalizer(object):
 
         # apply word-piece tokenization to everything first
         wp_tokenized = []
-        for tokens, mask in minibatch:
+        for tokens, mask, ner in minibatch:
             wp_tokenized.append(self._tokenizer.tokenize(tokens, mask))
 
         if max_length > -1:

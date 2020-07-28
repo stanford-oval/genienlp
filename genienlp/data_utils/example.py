@@ -33,6 +33,10 @@ import random
 
 from .numericalizer.sequential_field import SequentialField
 
+import stanza
+from stanza.server import CoreNLPClient
+
+# stanza.download('en')
 
 class Example(NamedTuple):
     example_id: str
@@ -41,28 +45,35 @@ class Example(NamedTuple):
     # or it should be treated as an opaque symbol
     context: List[str]
     context_word_mask: List[bool]
+    context_ner: List[str]
     question: List[str]
     question_word_mask: List[bool]
+    question_ner: List[str]
     answer: List[str]
     answer_word_mask: List[bool]
+    answer_ner: List[str]
     context_plus_question: List[str]
     context_plus_question_word_mask: List[bool]
+    context_plus_question_ner: List[str]
 
     vocab_fields = ['context', 'question', 'answer']
 
     @staticmethod
-    def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, lower=False):
+    def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, client=None, lower=False):
         args = [example_id]
 
         for argname, arg in (('context', context), ('question', question), ('answer', answer),
                              ('context_question', context+' '+question)):
-            words, mask = tokenize(arg.rstrip('\n'), field_name=argname)
+            words, mask, ner = tokenize(arg.rstrip('\n'), field_name=argname, client=client)
             if mask is None:
                 mask = [True for _ in words]
             if lower:
                 words = [word.lower() for word in words]
             args.append(words)
             args.append(mask)
+            
+            # ner would be empty list for answer field
+            args.append(ner)
         
         return Example(*args)
 
@@ -80,16 +91,21 @@ class Batch(NamedTuple):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         decoder_vocab = numericalizer.decoder_vocab.clone()
         max_context_len, max_question_len, max_answer_len = -1, -1, -1
-
+        
         override_question_mask = None
         if override_question:
             override_question = override_question.split()
             override_question_mask = [True for _ in override_question]
+            # dummy values
+            override_question_ner = ['O' for _ in override_question]
             
         override_context_mask = None
+        override_context_ner = []
         if override_context:
             override_context = override_context.split()
             override_context_mask = [True for _ in override_context]
+            # dummy values
+            override_context_ner = ['O' for _ in override_context]
 
         if paired:
             example_pairs = []
@@ -146,18 +162,18 @@ class Batch(NamedTuple):
         # process single examples
         example_ids = [ex.example_id for ex in examples]
         if override_question:
-            question_inputs = [(override_question, override_question_mask) for _ in examples]
+            question_inputs = [(override_question, override_question_mask, override_question_ner) for _ in examples]
         else:
-            question_inputs = [(ex.question, ex.question_word_mask) for ex in examples]
+            question_inputs = [(ex.question, ex.question_word_mask, ex.question_ner) for ex in examples]
 
         if append_question_to_context_too:
-            context_inputs = [(ex.context_plus_question, ex.context_plus_question_word_mask) for ex in examples]
+            context_inputs = [(ex.context_plus_question, ex.context_plus_question_word_mask, ex.context_plus_question_ner) for ex in examples]
         elif override_context:
-            context_inputs = [(override_context, override_context_mask) for _ in examples]
+            context_inputs = [(override_context, override_context_mask, override_context_ner) for _ in examples]
         else:
-            context_inputs = [(ex.context, ex.context_word_mask) for ex in examples]
-            
-        answer_inputs = [(ex.answer, ex.answer_word_mask) for ex in examples]
+            context_inputs = [(ex.context, ex.context_word_mask, ex.context_ner) for ex in examples]
+
+        answer_inputs = [(ex.answer, ex.answer_word_mask, ex.answer_ner) for ex in examples]
         
         all_example_ids_single = example_ids
         all_context_inputs_single = numericalizer.encode_single(context_inputs, decoder_vocab,
@@ -177,6 +193,7 @@ class Batch(NamedTuple):
             all_context_inputs = all_context_inputs_single
             all_question_inputs = all_question_inputs_single
             all_answer_inputs = all_answer_inputs_single
+        
         return Batch(all_example_ids,
                      all_context_inputs,
                      all_question_inputs,

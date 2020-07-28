@@ -150,29 +150,41 @@ class BaseAlmondTask(BaseTask):
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
-    def tokenize(self, sentence, field_name=None):
+    def tokenize(self, sentence, field_name=None, client=None):
+    
+        # ner_tagger = stanza.Pipeline(lang='en', processors='tokenize,ner', tokenize_pretokenized=True)
+        # result = ner_tagger([question_input[0] for question_input in question_inputs])
+        
         if not sentence:
-            return [], []
+            return [], [], []
 
         if self.force_subword_tokenize:
-            return sentence.split(' '), None
-
-        tokens = [t for t in sentence.split(' ') if len(t) > 0]
-        if self._preprocess_context and field_name in ('context', 'context_question'):
-            preprocessed_context = []
-            for token in sentence.split(' '):
-                if token.startswith('@'):
-                    word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
-                    preprocessed_context += word.split('_')
-                elif token.startswith('param:'):
-                    word = token[len('param:'):]
-                    preprocessed_context += word.split('_')
-                elif token.startswith('enum:'):
-                    word = token[len('enum:'):]
-                    preprocessed_context += word.split('_')
-                else:
-                    preprocessed_context.append(token)
-            tokens = preprocessed_context
+            tokens = sentence.split(' ')
+        else:
+            tokens = [t for t in sentence.split(' ') if len(t) > 0]
+            if self._preprocess_context and field_name in ('context', 'context_question'):
+                preprocessed_context = []
+                for token in sentence.split(' '):
+                    if token.startswith('@'):
+                        word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
+                        preprocessed_context += word.split('_')
+                    elif token.startswith('param:'):
+                        word = token[len('param:'):]
+                        preprocessed_context += word.split('_')
+                    elif token.startswith('enum:'):
+                        word = token[len('enum:'):]
+                        preprocessed_context += word.split('_')
+                    else:
+                        preprocessed_context.append(token)
+                tokens = preprocessed_context
+            
+        tokens_ner = []
+        if client and field_name in ('question', 'context', 'context_question'):
+            doc = client.annotate(' '.join(tokens))
+            tokens_ner = [token.ner for sent in doc.sentence for token in sent.token]
+        
+        if self.force_subword_tokenize:
+            return tokens, None, tokens_ner
 
         if self._is_program_field(field_name):
             mask = []
@@ -185,11 +197,13 @@ class BaseAlmondTask(BaseTask):
                     mask.append(in_string)
 
             assert len(tokens) == len(mask)
-            return tokens, mask
+            if tokens_ner:
+                assert len(tokens) == len(tokens_ner)
+            return tokens, mask, tokens_ner
 
         else:
             mask = [not is_entity(token) and not is_device(token) for token in tokens]
-            return tokens, mask
+            return tokens, mask, tokens_ner
 
     def detokenize(self, tokenized, field_name=None):
         return ' '.join(tokenized)
@@ -211,7 +225,7 @@ class Almond(BaseAlmondTask):
         context = sentence
         answer = target_code
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                tokenize=self.tokenize, lower=False, client=kwargs.get('client', None))
 
 
 @register_task('contextual_almond')

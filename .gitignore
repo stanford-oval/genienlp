@@ -12,6 +12,7 @@ multiprocess/__pycache__/
 results/
 tests/embeddings/*
 local_files
+corenlp_server-*
 
 .DS_Store
 .idea/

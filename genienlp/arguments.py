@@ -235,9 +235,17 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'],
                         help='growth strategy for curriculum')
+    
+    parser.add_argument('--corenlp_home', default='', type=str, help='location of the CORENLP root folder')
+    parser.add_argument('--return_ner', action='store_true', help='Run NER on context inputs')
+    parser.add_argument('--ner_model', default='edu/stanford/nlp/models/ner/english.muc.7class.caseless.distsim.crf.ser.gz',
+                        type=str, help='NER model to use')
 
 
 def post_parse(args):
+    
+    os.environ['CORENLP_HOME'] = args.corenlp_home
+    
     if args.val_task_names is None:
         args.val_task_names = []
         for t in args.train_task_names:
