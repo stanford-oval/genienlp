@@ -73,6 +73,11 @@ class Seq2Seq(PreTrainedModel):
 
         if self.args.pretrain_context > 0:
             self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, numericalizer.num_tokens)
+        
+        if self.args.num_db_types > 0:
+            # one-hot embeddings
+            self.type_embeddings = torch.nn.Embedding.from_pretrained(torch.eye(self.args.num_db_types), freeze=True)
+            self.type_projection = torch.nn.Linear(self.args.rnn_dimension + self.args.num_db_types, self.args.rnn_dimension)
 
     def set_train_context_embeddings(self, trainable):
         self.encoder.set_train_context_embeddings(trainable)
@@ -95,10 +100,19 @@ class Seq2Seq(PreTrainedModel):
         return (loss, )
 
     def _normal_forward(self, batch, current_token_id, past=None, expansion_factor=1, generation_dict=None, encoder_output=None):
+
         if encoder_output is None:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
         else:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = encoder_output
+
+        if self.args.num_db_types > 0:
+            context_type_embedded = self.type_embeddings(batch.context.type)
+            question_type_embedded = self.type_embeddings(batch.question.type)
+
+        final_context = self.type_projection(torch.cat((final_context, context_type_embedded), dim=-1))
+        final_question = self.type_projection(torch.cat((final_question, question_type_embedded), dim=-1))
+
         encoder_loss = None
         if self.training and getattr(self.args, 'use_encoder_loss', None):
             encoder_loss = self.get_encoder_loss(context_rnn_state)
@@ -197,16 +211,3 @@ class Seq2Seq(PreTrainedModel):
         generated = torch.cat((generated[:, 0:1], generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)), dim=1) # map everything to full vocabulary except BOS which already is in full vocabulary
 
         return generated
-        
-
-    
-            
-        
-    
-    
-    
-    
-    
-    
-    
-    

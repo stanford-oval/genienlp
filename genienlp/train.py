@@ -552,6 +552,7 @@ def main(args):
     if args.load is not None:
         logger.info(f'Loading vocab from {os.path.join(args.save, args.load)}')
         save_dict = torch.load(os.path.join(args.save, args.load))
+        
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets = \
         prepare_data(args, logger)
     if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):

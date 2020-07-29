@@ -31,6 +31,7 @@ import os
 import torch
 import logging
 import re
+import json
 from tqdm import tqdm
 from collections import defaultdict
 
@@ -136,7 +137,13 @@ class BaseAlmondTask(BaseTask):
     def __init__(self, name, args):
         super().__init__(name, args)
         self._preprocess_context = args.almond_preprocess_context
-
+        if args.database:
+            with open(args.database, 'r') as fin:
+                self.database = json.load(fin)
+            self.type2id = dict()
+            self.type2id['unk'] = 0
+            self.type2id.update({type: i+1 for i, type in enumerate(set(self.database.values()))})
+            
     @property
     def metrics(self):
         return ['em', 'bleu']
@@ -177,14 +184,19 @@ class BaseAlmondTask(BaseTask):
                     else:
                         preprocessed_context.append(token)
                 tokens = preprocessed_context
-            
-        tokens_ner = []
+        
+        tokens_types = []
         if client and field_name in ('question', 'context', 'context_question'):
             doc = client.annotate(' '.join(tokens))
             tokens_ner = [token.ner for sent in doc.sentence for token in sent.token]
-        
+            for token, ner in zip(tokens, tokens_ner):
+                if ner != 'O' and token in self.database:
+                    tokens_types.append(self.type2id[self.database[token]])
+                else:
+                    tokens_types.append(self.type2id['unk'])
+
         if self.force_subword_tokenize:
-            return tokens, None, tokens_ner
+            return tokens, None, tokens_types
 
         if self._is_program_field(field_name):
             mask = []
@@ -197,13 +209,13 @@ class BaseAlmondTask(BaseTask):
                     mask.append(in_string)
 
             assert len(tokens) == len(mask)
-            if tokens_ner:
-                assert len(tokens) == len(tokens_ner)
-            return tokens, mask, tokens_ner
+            if tokens_types:
+                assert len(tokens) == len(tokens_types)
+            return tokens, mask, tokens_types
 
         else:
             mask = [not is_entity(token) and not is_device(token) for token in tokens]
-            return tokens, mask, tokens_ner
+            return tokens, mask, tokens_types
 
     def detokenize(self, tokenized, field_name=None):
         return ' '.join(tokenized)

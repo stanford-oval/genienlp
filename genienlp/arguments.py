@@ -237,9 +237,10 @@ def parse_argv(parser):
                         help='growth strategy for curriculum')
     
     parser.add_argument('--corenlp_home', default='', type=str, help='location of the CORENLP root folder')
-    parser.add_argument('--return_ner', action='store_true', help='Run NER on context inputs')
+    parser.add_argument('--return_ner', action='store_true', help='Run NER on input sentences')
     parser.add_argument('--ner_model', default='edu/stanford/nlp/models/ner/english.muc.7class.caseless.distsim.crf.ser.gz',
-                        type=str, help='NER model to use')
+                        type=str, help='CoreNLP NER model to use')
+    parser.add_argument('--database', default='', type=str, help='Database to retrieve entities from')
 
 
 def post_parse(args):
@@ -334,6 +335,14 @@ def post_parse(args):
     for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
     save_args(args)
+    
+    # process database
+    args.num_db_types = 0
+    if args.database:
+        with open(args.database, 'r') as fin:
+            database = json.load(fin)
+        # +1 for unknown entities
+        args.num_db_types = len(database) + 1
 
     # create the task objects after we saved the configuration to the JSON file, because
     # tasks are not JSON serializable
