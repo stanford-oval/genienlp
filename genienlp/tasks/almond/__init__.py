@@ -215,6 +215,33 @@ class Almond(BaseAlmondTask):
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 tokenize=self.tokenize, lower=False)
 
+@register_task('natural_seq2seq')
+class NaturalSeq2Seq(BaseAlmondTask):
+    """The Almond seqeunce to sequence task where both sequences are natural language
+    i.e. no ThingTalk program. Paraphrasing and translation are examples of this task"""
+
+    def _is_program_field(self, field_name):
+        return False
+
+    def _make_example(self, parts, dir_name=None, **kwargs):
+        # the question is irrelevant
+        _id, input_sequence, target_sequence = parts
+        print('parts = ', parts)
+        question = 'translate from input to output'
+        context = input_sequence
+        answer = target_sequence
+        return Example.from_raw(self.name + '/' + _id, context, question, answer,
+                                tokenize=self.tokenize, lower=False)
+
+    def get_splits(self, root, **kwargs):
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/natural_seq2seq'), make_example=self._make_example, **kwargs)
+
+    def tokenize(self, sentence, field_name=None):
+        if not sentence:
+            return [], []
+
+        tokens = [t for t in sentence.split(' ') if len(t) > 0]
+        return tokens, None # no mask since it will be ignored
 
 @register_task('contextual_almond')
 class ContextualAlmond(BaseAlmondTask):

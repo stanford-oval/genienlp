@@ -85,6 +85,7 @@ def prepare_data(args, logger):
 
         logger.info(f'Adding {task.name} to training datasets')
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        print('split = ', split)
         assert not split.eval and not split.test
         if args.use_curriculum:
             assert split.aux
@@ -122,6 +123,7 @@ def prepare_data(args, logger):
                         args.decoder_embeddings,
                         args.max_generative_vocab,
                         logger)
+    # exit(0)
     if args.load is not None:
         numericalizer.load(args.save)
     else:
