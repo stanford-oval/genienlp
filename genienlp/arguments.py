@@ -218,7 +218,8 @@ def parse_argv(parser):
     parser.add_argument('--devices', default=[0], nargs='+', type=int,
                         help='a list of devices that can be used for training')
 
-    parser.add_argument('--no_commit', action='store_false', dest='commit',
+    parser.add_argument('--no_commit'
+                        '', action='store_false', dest='commit',
                         help='do not track the git commit associated with this training run')
     parser.add_argument('--exist_ok', action='store_true',
                         help='Ok if the save directory already exists, i.e. overwrite is ok')
@@ -235,18 +236,14 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'],
                         help='growth strategy for curriculum')
-    
-    parser.add_argument('--corenlp_home', default='', type=str, help='location of the CORENLP root folder')
-    parser.add_argument('--return_ner', action='store_true', help='Run NER on input sentences')
-    parser.add_argument('--ner_model', default='edu/stanford/nlp/models/ner/english.all.3class.caseless.distsim.crf.ser.gz',
-                        type=str, help='CoreNLP NER model to use')
+
+    parser.add_argument('--do_entity_linking', action='store_true', help='Collect and use entity features during semantic parsing')
     parser.add_argument('--database', default='', type=str, help='Database to retrieve entities from')
-    parser.add_argument('--search_type', choices=['all', 'ne'], type=str, help='which tokens should be checked against database')
+    parser.add_argument('--search_type', choices=['all', 'ne'], type=str, help='criteria for chossing tokens that should be searched in the database')
+    parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
 
 
 def post_parse(args):
-    
-    os.environ['CORENLP_HOME'] = args.corenlp_home
     
     if args.val_task_names is None:
         args.val_task_names = []
@@ -339,7 +336,7 @@ def post_parse(args):
     
     # process database
     args.num_db_types = 0
-    if args.database:
+    if args.database and args.do_entity_linking:
         with open(args.database, 'r') as fin:
             database = json.load(fin)
         # +1 for unknown entities

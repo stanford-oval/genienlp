@@ -38,7 +38,7 @@ import nltk
 from nltk.corpus import stopwords
 STOP_WORDS = stopwords.words('english')
 
-banned_words = ['music', 'name', 'want', 'album']
+banned_words = STOP_WORDS + ['music', 'name', 'want', 'album', 'please', 'who', 'show me']
 
 from pytrie import SortedStringTrie as Trie
 
@@ -136,6 +136,11 @@ def process_id(ex):
         id_ = id_[1:]
     return id_
 
+def is_special_case(i, tokens, key_tokenized):
+    if ' '.join(key_tokenized) in banned_words:
+        return True
+    
+    return False
 
 class BaseAlmondTask(BaseTask):
     """Base class for the Almond semantic parsing task
@@ -165,11 +170,8 @@ class BaseAlmondTask(BaseTask):
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
-    def tokenize(self, sentence, field_name=None, client=None):
-    
-        # ner_tagger = stanza.Pipeline(lang='en', processors='tokenize,ner', tokenize_pretokenized=True)
-        # result = ner_tagger([question_input[0] for question_input in question_inputs])
-        
+    def tokenize(self, sentence, field_name=None):
+
         if not sentence:
             return [], [], []
 
@@ -194,50 +196,45 @@ class BaseAlmondTask(BaseTask):
                 tokens = preprocessed_context
         
         tokens_types = []
-        if client and field_name in ('question', 'context', 'context_question'):
-            doc = client.annotate(' '.join(tokens))
-            tokens_ner = [token.ner for sent in doc.sentence for token in sent.token]
-            if field_name == 'context':
-                print()
-                print(*[f'entity: {token.value}\ttype: {token.ner}' for sent in doc.sentence for token in sent.token], sep='\n')
+        if self.args.do_entity_linking and field_name in ('question', 'context', 'context_question'):
             
             i = 0
             while i < len(tokens):
                 token = tokens[i]
-                ner = tokens_ner[i]
-                if (self.args.search_type == 'ne' and ner == 'O') or token in banned_words:
+                
+                # sort by number of tokens so longer keys get matched first
+                matched_items = sorted(self.database.items(prefix=token), key=lambda item: len(item[0]), reverse=True)
+                found = False
+                for key, type in matched_items:
+                    key_tokenized = key.split()
+                    cur = i
+                    j = 0
+                    while cur < len(tokens) and j < len(key_tokenized):
+                        if tokens[cur] != key_tokenized[j]:
+                            break
+                        j += 1
+                        cur += 1
+                    
+                    if j == len(key_tokenized):
+                        # if token is banned and match is single token ignore the match
+                        if is_special_case(i, tokens, key_tokenized):
+                            continue
+    
+                        # match found
+                        found = True
+                        tokens_types.extend([self.type2id[type] for _ in range(i, cur)])
+                        
+                        # move i to current unprocessed position
+                        i = cur
+                        break
+                        
+                if not found:
                     tokens_types.append(self.type2id['unk'])
                     i += 1
-                    continue
-                else:
-                    matched_items = self.database.items(prefix=token)
-                    found = False
-                    for key, type in matched_items:
-                        key_tokenized = key.split()
-                        cur = i
-                        j = 0
-                        while cur < len(tokens) and j < len(key_tokenized):
-                            if tokens[cur] != key_tokenized[j]:
-                                break
-                            j += 1
-                            cur += 1
                         
-                        if j == len(key_tokenized):
-                            # match found
-                            found = True
-                            tokens_types.extend([self.type2id[type] for _ in range(i, cur)])
-                            
-                            # move i to current unprocessed position
-                            i = cur
-                            break
-                            
-                    if not found:
-                        tokens_types.append(self.type2id['unk'])
-                        i += 1
-                        
-        if field_name == 'context' and tokens_types:
-            print()
-            print(*[f'entity: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_types)], sep='\n')
+        if self.args.verbose and self.args.do_entity_linking and field_name == 'context':
+                print()
+                print(*[f'entity: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_types)], sep='\n')
 
         if self.force_subword_tokenize:
             return tokens, None, tokens_types
@@ -281,7 +278,7 @@ class Almond(BaseAlmondTask):
         context = sentence
         answer = target_code
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False, client=kwargs.get('client', None))
+                                tokenize=self.tokenize, lower=False)
 
 
 @register_task('contextual_almond')

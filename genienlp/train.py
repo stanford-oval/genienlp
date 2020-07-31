@@ -42,8 +42,6 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 
-from stanza.server import CoreNLPClient
-
 from . import arguments
 from . import models
 from .data_utils.embeddings import load_embeddings
@@ -86,12 +84,7 @@ def prepare_data(args, logger):
             kwargs['curriculum'] = True
 
         logger.info(f'Adding {task.name} to training datasets')
-        if args.return_ner:
-            with CoreNLPClient(properties={'annotators': 'tokenize,ner', 'ner.model': args.ner_model, 'ner.buildEntityMentions': True},
-                               endpoint="http://localhost:9000") as client:
-                split = task.get_splits(args.data, lower=args.lower, client=client, **kwargs)
-        else:
-            split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        split = task.get_splits(args.data, lower=args.lower, **kwargs)
         assert not split.eval and not split.test
         if args.use_curriculum:
             assert split.aux
@@ -115,12 +108,7 @@ def prepare_data(args, logger):
                         'almond_lang_as_question': args.almond_lang_as_question})
         
         logger.info(f'Adding {task.name} to validation datasets')
-        if args.return_ner:
-            with CoreNLPClient(properties={'annotators': 'tokenize,ner', 'ner.model': args.ner_model, 'ner.buildEntityMentions': True},
-                               endpoint="http://localhost:9000") as client:
-                split = task.get_splits(args.data, lower=args.lower, client=client, **kwargs)
-        else:
-            split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        split = task.get_splits(args.data, lower=args.lower, **kwargs)
         assert not split.train and not split.test and not split.aux
         logger.info(f'{task.name} has {len(split.eval)} validation examples')
         val_sets.append(split.eval)

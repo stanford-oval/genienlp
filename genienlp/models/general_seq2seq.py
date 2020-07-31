@@ -109,9 +109,8 @@ class Seq2Seq(PreTrainedModel):
         if self.args.num_db_types > 0:
             context_type_embedded = self.type_embeddings(batch.context.type)
             question_type_embedded = self.type_embeddings(batch.question.type)
-
-        final_context = self.type_projection(torch.cat((final_context, context_type_embedded), dim=-1))
-        final_question = self.type_projection(torch.cat((final_question, question_type_embedded), dim=-1))
+            final_context = self.type_projection(torch.cat((final_context, context_type_embedded), dim=-1))
+            final_question = self.type_projection(torch.cat((final_question, question_type_embedded), dim=-1))
 
         encoder_loss = None
         if self.training and getattr(self.args, 'use_encoder_loss', None):
