@@ -168,16 +168,24 @@ class Database(object):
                 
         self.data = Trie(new_items_processed)
 
-    def lookup(self, tokens, subset=None):
-        
+    def lookup(self, tokens, subset=None, retrieve_method='database'):
         tokens_types = []
         i = 0
+
+        lookup_dict = self.data
         
-        if subset:
-            lookup_dict = Trie(subset)
-        else:
-            lookup_dict = self.data
-        
+        if retrieve_method != 'database' and subset is not None:
+            if retrieve_method == 'thingtalk':
+                # types are retrieved from the program
+                lookup_dict = Trie(subset)
+            elif retrieve_method == 'answer':
+                # prune db (types are retrieved from the database)
+                new_lookup_dict = dict()
+                for token, type in lookup_dict.items():
+                    if token in subset:
+                        new_lookup_dict[token] = type
+                lookup_dict = new_lookup_dict
+
         while i < len(tokens):
             token = tokens[i]
             # sort by number of tokens so longer keys get matched first
@@ -282,8 +290,11 @@ class BaseAlmondTask(BaseTask):
                 for ent in answer_entities:
                     # this is thingtalk specific (assuming form param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " )
                     # this needs to be changed if annotations changes
-                    idx = answer.index(ent)
-                    schema_entity_type = answer[:idx].split()[-3]
+                    idx = answer.index('" ' + ent + ' "')
+                    try:
+                        schema_entity_type = answer[:idx].split()[-2]
+                    except:
+                        print('here')
                     schema_type = schema_entity_type.rsplit(':', 1)[1].strip('()')
                     if schema_type not in self.TTtype2DBtype.keys():
                         schema_type = self.db.unk_type
@@ -291,11 +302,11 @@ class BaseAlmondTask(BaseTask):
                         schema_type = self.TTtype2DBtype[schema_type]
                     entity2type[ent] = schema_type
                     
-                tokens_types = self.db.lookup(tokens, subset=entity2type)
+                tokens_types = self.db.lookup(tokens, subset=entity2type, retrieve_method=self.args.retrieve_method)
             
         if self.args.verbose and self.args.do_entity_linking and field_name == 'context':
-                print()
-                print(*[f'entity: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_types)], sep='\n')
+            print()
+            print(*[f'entity: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_types)], sep='\n')
 
         if self.force_subword_tokenize:
             return tokens, None, tokens_types

@@ -126,9 +126,11 @@ def parse_argv(parser):
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument('--preserve_case', action='store_false', dest='lower',
                         help='whether to preserve casing for all text')
-    parser.add_argument("--reduce_metrics", type=str, default='max', choices=['max'], help='How to calculate the metric when there are multiple outputs per input.')
+    parser.add_argument("--reduce_metrics", type=str, default='max', choices=['max'],
+                        help='How to calculate the metric when there are multiple outputs per input.')
 
-    # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
+    # These are generation hyperparameters.
+    # Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
     parser.add_argument("--num_outputs", type=int, nargs='+', default=[1], help='number of sequences to output per input')
     parser.add_argument("--temperature", type=float, nargs='+', default=[0.0],
                         help="temperature of 0 implies greedy sampling")
@@ -137,7 +139,8 @@ def parse_argv(parser):
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
-    parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
+    parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0],
+                        help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
 
     parser.add_argument('--model', type=str, choices=['Seq2Seq'], default='Seq2Seq', help='which model to import')
@@ -156,7 +159,8 @@ def parse_argv(parser):
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
 
     parser.add_argument('--encoder_embeddings', default='glove+char',
-                        help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
+                        help='which word embedding to use on the encoder side; use a bert-* pretrained model'
+                             ' for BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
                              'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
     parser.add_argument('--context_embeddings', default=None,
                         help='which word embedding to use for the context; use a bert-* pretrained model for BERT; '
@@ -239,7 +243,8 @@ def parse_argv(parser):
 
     parser.add_argument('--do_entity_linking', action='store_true', help='Collect and use entity features during semantic parsing')
     parser.add_argument('--database', default='', type=str, help='Database to retrieve entities from')
-    parser.add_argument('--search_type', choices=['all', 'ne'], type=str, help='criteria for chossing tokens that should be searched in the database')
+    parser.add_argument('--retrieve_method', default='thingtalk', choices=['database', 'answer', 'thingtalk'], type=str,
+                        help='prune items in database for faster lookup (only during train and evaluation)')
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', help='Domains used for almond dataset; e.g. music, books, ...')
 
