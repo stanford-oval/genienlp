@@ -72,83 +72,6 @@ def initialize_logger(args):
     return logger
 
 
-def prepare_data(args, logger):
-    train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
-    for task in args.train_tasks:
-        logger.info(f'Loading {task.name}')
-        kwargs = {'test': None, 'validation': None}
-        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
-                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.train_languages,
-                       'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question})
-        if args.use_curriculum:
-            kwargs['curriculum'] = True
-
-        logger.info(f'Adding {task.name} to training datasets')
-        split = task.get_splits(args.data, lower=args.lower, **kwargs)
-        print('split = ', split)
-        assert not split.eval and not split.test
-        if args.use_curriculum:
-            assert split.aux
-            aux_sets.append(split.aux)
-            logger.info(f'{task.name} has {len(split.aux)} auxiliary examples')
-        else:
-            assert split.train
-        train_sets.append(split.train)
-        logger.info(f'{task.name} has {len(split.train)} training examples')
-        if args.vocab_tasks is not None and task.name in args.vocab_tasks:
-            vocab_sets.extend(split)
-
-    for task in args.val_tasks:
-        logger.info(f'Loading {task.name}')
-        kwargs = {'train': None, 'test': None}
-        # choose best model based on this dev set
-        if args.eval_set_name is not None:
-            kwargs['validation'] = args.eval_set_name
-        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
-                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.eval_languages,
-                        'almond_lang_as_question': args.almond_lang_as_question})
-        
-        logger.info(f'Adding {task.name} to validation datasets')
-        split = task.get_splits(args.data, lower=args.lower, **kwargs)
-        assert not split.train and not split.test and not split.aux
-        logger.info(f'{task.name} has {len(split.eval)} validation examples')
-        val_sets.append(split.eval)
-        if args.vocab_tasks is not None and task.name in args.vocab_tasks:
-            vocab_sets.extend(split)
-
-    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
-        load_embeddings(args.embeddings,
-                        args.context_embeddings,
-                        args.question_embeddings,
-                        args.decoder_embeddings,
-                        args.max_generative_vocab,
-                        logger)
-    # exit(0)
-    if args.load is not None:
-        numericalizer.load(args.save)
-    else:
-        vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
-        logger.info(f'Building vocabulary')
-        numericalizer.build_vocab(Example.vocab_fields, vocab_sets)
-        numericalizer.save(args.save)
-
-    logger.info(f'Initializing encoder and decoder embeddings')
-    for vec in set(context_embeddings + question_embeddings + decoder_embeddings):
-        vec.init_for_vocab(numericalizer.vocab)
-
-    logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens')
-    logger.debug(f'The first 200 tokens:')
-    logger.debug(numericalizer.vocab.itos[:200])
-
-    if args.use_curriculum:
-        logger.info('Preprocessing auxiliary data for curriculum')
-        preprocess_examples(args, args.train_tasks, aux_sets, logger, train=True)
-    logger.info('Preprocessing training data')
-    preprocess_examples(args, args.train_tasks, train_sets, logger, train=True)
-    logger.info('Preprocessing validation data')
-    preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
-
-    return numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
 accumulated_batch_lengths = 0
 
@@ -468,26 +391,6 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     logger.info(f'{log_prefix} is done after {epoch} epochs')
 
 
-def init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings, devices, logger,
-               save_dict):
-    model_name = args.model
-    logger.info(f'Initializing {model_name}')
-    Model = getattr(models, model_name)
-    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
-    params = get_trainable_params(model)
-    log_model_size(logger, model, model_name)
-
-    if save_dict is not None:
-        logger.info(f'Loading model from {os.path.join(args.save, args.load)}')
-        save_dict = torch.load(os.path.join(args.save, args.load))
-        model.load_state_dict(save_dict['model_state_dict'])
-
-    model.to(devices[0])
-    model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
-    model.params = params
-
-    return model
-
 
 def get_transformer_learning_rate(i, *, dimension, warmup):
     i += 1
@@ -543,16 +446,116 @@ def main(args):
     if args.load is not None:
         logger.info(f'Loading vocab from {os.path.join(args.save, args.load)}')
         save_dict = torch.load(os.path.join(args.save, args.load))
-    numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets = \
-        prepare_data(args, logger)
+
+
+
+    ########## prepare_data()
+    train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
+    for task in args.train_tasks:
+        logger.info(f'Loading {task.name}')
+        kwargs = {'test': None, 'validation': None}
+        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
+                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.train_languages,
+                       'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question})
+        if args.use_curriculum:
+            kwargs['curriculum'] = True
+
+        logger.info(f'Adding {task.name} to training datasets')
+        split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        print('split = ', split)
+        assert not split.eval and not split.test
+        if args.use_curriculum:
+            assert split.aux
+            aux_sets.append(split.aux)
+            logger.info(f'{task.name} has {len(split.aux)} auxiliary examples')
+        else:
+            assert split.train
+        train_sets.append(split.train)
+        logger.info(f'{task.name} has {len(split.train)} training examples')
+        if args.vocab_tasks is not None and task.name in args.vocab_tasks:
+            vocab_sets.extend(split)
+
+    for task in args.val_tasks:
+        logger.info(f'Loading {task.name}')
+        kwargs = {'train': None, 'test': None}
+        # choose best model based on this dev set
+        if args.eval_set_name is not None:
+            kwargs['validation'] = args.eval_set_name
+        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
+                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.eval_languages,
+                        'almond_lang_as_question': args.almond_lang_as_question})
+        
+        logger.info(f'Adding {task.name} to validation datasets')
+        split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        assert not split.train and not split.test and not split.aux
+        logger.info(f'{task.name} has {len(split.eval)} validation examples')
+        val_sets.append(split.eval)
+        if args.vocab_tasks is not None and task.name in args.vocab_tasks:
+            vocab_sets.extend(split)
+
+    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
+    load_embeddings(args.embeddings,
+                    args.context_embeddings,
+                    args.question_embeddings,
+                    args.decoder_embeddings,
+                    args.max_generative_vocab,
+                    logger)
+
+    if args.load is not None:
+        numericalizer.load(args.save)
+    else:
+        vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
+        logger.info(f'Building vocabulary')
+        numericalizer.build_vocab(Example.vocab_fields, vocab_sets)
+        numericalizer.save(args.save)
+
+    logger.info(f'Initializing encoder and decoder embeddings')
+    for vec in set(context_embeddings + question_embeddings + decoder_embeddings):
+        vec.init_for_vocab(numericalizer.vocab)
+
+    logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens')
+    logger.debug(f'The first 200 tokens:')
+    logger.debug(numericalizer.vocab.itos[:200])
+
+    if args.use_curriculum:
+        logger.info('Preprocessing auxiliary data for curriculum')
+        preprocess_examples(args, args.train_tasks, aux_sets, logger, train=True)
+    logger.info('Preprocessing training data')
+    preprocess_examples(args, args.train_tasks, train_sets, logger, train=True)
+    logger.info('Preprocessing validation data')
+    preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
+    ###########
+
+
+
     if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):
         logging.error('sth unpleasant is happening with curriculum')
 
     logger.info(f'Processing')
     logger.start = time.time()
 
-    model = init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings,
-                       devices, logger, save_dict)
+
+    
+    ########## init_model()
+    model_name = args.model
+    logger.info(f'Initializing {model_name}')
+    Model = getattr(models, model_name)
+    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
+    params = get_trainable_params(model)
+    log_model_size(logger, model, model_name)
+
+    if save_dict is not None:
+        logger.info(f'Loading model from {os.path.join(args.save, args.load)}')
+        save_dict = torch.load(os.path.join(args.save, args.load))
+        model.load_state_dict(save_dict['model_state_dict'])
+
+    model.to(devices[0])
+    model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
+    model.params = params
+    ##########
+
+    
+
     opt, lr_scheduler = init_opt(args, model, logger)
     start_iteration = 1
 
