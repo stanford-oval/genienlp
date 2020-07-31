@@ -34,11 +34,12 @@ import re
 import json
 from tqdm import tqdm
 from collections import defaultdict
-import nltk
-from nltk.corpus import stopwords
-STOP_WORDS = stopwords.words('english')
 
-banned_words = STOP_WORDS + ['music', 'name', 'want', 'album', 'please', 'who', 'show me']
+import nltk
+nltk.download('stopwords')
+from nltk.corpus import stopwords
+
+banned_words = stopwords.words('english') + ['music', 'name', 'want', 'album', 'please', 'who', 'show me']
 
 from pytrie import SortedStringTrie as Trie
 
