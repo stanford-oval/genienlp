@@ -81,7 +81,8 @@ def main():
         reader = csv.reader(input, delimiter='\t')
         with open(args.output, 'w') as output:
             for row in reader:
-                assert row[0].startswith('RS')
+                if not row[0].startswith('RS'):
+                    continue
                 print(row[0])
                 slash = row[0].index('/')
                 dash = row[0].index('-')
