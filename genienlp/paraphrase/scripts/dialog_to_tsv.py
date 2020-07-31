@@ -83,7 +83,6 @@ def main():
             for row in reader:
                 if not row[0].startswith('RS'):
                     continue
-                print(row[0])
                 slash = row[0].index('/')
                 dash = row[0].index('-')
                 dialog_index = row[0][2:slash]
