@@ -238,9 +238,10 @@ def parse_argv(parser):
     
     parser.add_argument('--corenlp_home', default='', type=str, help='location of the CORENLP root folder')
     parser.add_argument('--return_ner', action='store_true', help='Run NER on input sentences')
-    parser.add_argument('--ner_model', default='edu/stanford/nlp/models/ner/english.muc.7class.caseless.distsim.crf.ser.gz',
+    parser.add_argument('--ner_model', default='edu/stanford/nlp/models/ner/english.all.3class.caseless.distsim.crf.ser.gz',
                         type=str, help='CoreNLP NER model to use')
     parser.add_argument('--database', default='', type=str, help='Database to retrieve entities from')
+    parser.add_argument('--search_type', choices=['all', 'ne'], type=str, help='which tokens should be checked against database')
 
 
 def post_parse(args):

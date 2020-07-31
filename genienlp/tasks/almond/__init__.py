@@ -34,6 +34,13 @@ import re
 import json
 from tqdm import tqdm
 from collections import defaultdict
+import nltk
+from nltk.corpus import stopwords
+STOP_WORDS = stopwords.words('english')
+
+banned_words = ['music', 'name', 'want', 'album']
+
+from pytrie import SortedStringTrie as Trie
 
 from ..base_task import BaseTask
 from ..registry import register_task
@@ -136,10 +143,11 @@ class BaseAlmondTask(BaseTask):
 
     def __init__(self, name, args):
         super().__init__(name, args)
+        self.args = args
         self._preprocess_context = args.almond_preprocess_context
         if args.database:
             with open(args.database, 'r') as fin:
-                self.database = json.load(fin)
+                self.database = Trie(json.load(fin))
             self.type2id = dict()
             self.type2id['unk'] = 0
             self.type2id.update({type: i+1 for i, type in enumerate(set(self.database.values()))})
@@ -189,11 +197,47 @@ class BaseAlmondTask(BaseTask):
         if client and field_name in ('question', 'context', 'context_question'):
             doc = client.annotate(' '.join(tokens))
             tokens_ner = [token.ner for sent in doc.sentence for token in sent.token]
-            for token, ner in zip(tokens, tokens_ner):
-                if ner != 'O' and token in self.database:
-                    tokens_types.append(self.type2id[self.database[token]])
-                else:
+            if field_name == 'context':
+                print()
+                print(*[f'entity: {token.value}\ttype: {token.ner}' for sent in doc.sentence for token in sent.token], sep='\n')
+            
+            i = 0
+            while i < len(tokens):
+                token = tokens[i]
+                ner = tokens_ner[i]
+                if (self.args.search_type == 'ne' and ner == 'O') or token in banned_words:
                     tokens_types.append(self.type2id['unk'])
+                    i += 1
+                    continue
+                else:
+                    matched_items = self.database.items(prefix=token)
+                    found = False
+                    for key, type in matched_items:
+                        key_tokenized = key.split()
+                        cur = i
+                        j = 0
+                        while cur < len(tokens) and j < len(key_tokenized):
+                            if tokens[cur] != key_tokenized[j]:
+                                break
+                            j += 1
+                            cur += 1
+                        
+                        if j == len(key_tokenized):
+                            # match found
+                            found = True
+                            tokens_types.extend([self.type2id[type] for _ in range(i, cur)])
+                            
+                            # move i to current unprocessed position
+                            i = cur
+                            break
+                            
+                    if not found:
+                        tokens_types.append(self.type2id['unk'])
+                        i += 1
+                        
+        if field_name == 'context' and tokens_types:
+            print()
+            print(*[f'entity: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_types)], sep='\n')
 
         if self.force_subword_tokenize:
             return tokens, None, tokens_types

@@ -42,6 +42,8 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 
+from stanza.server import CoreNLPClient
+
 from . import arguments
 from . import models
 from .data_utils.embeddings import load_embeddings
@@ -84,9 +86,8 @@ def prepare_data(args, logger):
             kwargs['curriculum'] = True
 
         logger.info(f'Adding {task.name} to training datasets')
-        from stanza.server import CoreNLPClient
         if args.return_ner:
-            with CoreNLPClient(properties={'annotators': 'tokenize,ner', 'ner.model': args.ner_model},
+            with CoreNLPClient(properties={'annotators': 'tokenize,ner', 'ner.model': args.ner_model, 'ner.buildEntityMentions': True},
                                endpoint="http://localhost:9000") as client:
                 split = task.get_splits(args.data, lower=args.lower, client=client, **kwargs)
         else:
@@ -115,7 +116,7 @@ def prepare_data(args, logger):
         
         logger.info(f'Adding {task.name} to validation datasets')
         if args.return_ner:
-            with CoreNLPClient(properties={'annotators': 'tokenize,ner', 'ner.model': args.ner_model},
+            with CoreNLPClient(properties={'annotators': 'tokenize,ner', 'ner.model': args.ner_model, 'ner.buildEntityMentions': True},
                                endpoint="http://localhost:9000") as client:
                 split = task.get_splits(args.data, lower=args.lower, client=client, **kwargs)
         else:
