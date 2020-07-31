@@ -450,7 +450,7 @@ def main(args):
 
 
     ########## prepare_data()
-    train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
+    train_sets, val_sets, aux_sets = [], [], []
     for task in args.train_tasks:
         logger.info(f'Loading {task.name}')
         kwargs = {'test': None, 'validation': None}
@@ -472,8 +472,6 @@ def main(args):
             assert split.train
         train_sets.append(split.train)
         logger.info(f'{task.name} has {len(split.train)} training examples')
-        if args.vocab_tasks is not None and task.name in args.vocab_tasks:
-            vocab_sets.extend(split)
 
     for task in args.val_tasks:
         logger.info(f'Loading {task.name}')
@@ -490,8 +488,6 @@ def main(args):
         assert not split.train and not split.test and not split.aux
         logger.info(f'{task.name} has {len(split.eval)} validation examples')
         val_sets.append(split.eval)
-        if args.vocab_tasks is not None and task.name in args.vocab_tasks:
-            vocab_sets.extend(split)
 
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
     load_embeddings(args.embeddings,
@@ -504,9 +500,8 @@ def main(args):
     if args.load is not None:
         numericalizer.load(args.save)
     else:
-        vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
         logger.info(f'Building vocabulary')
-        numericalizer.build_vocab(Example.vocab_fields, vocab_sets)
+        numericalizer.build_vocab(Example.vocab_fields, train_sets + val_sets)
         numericalizer.save(args.save)
 
     logger.info(f'Initializing encoder and decoder embeddings')
@@ -554,7 +549,7 @@ def main(args):
     model.params = params
     ##########
 
-    
+
 
     opt, lr_scheduler = init_opt(args, model, logger)
     start_iteration = 1
