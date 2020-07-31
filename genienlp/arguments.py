@@ -241,6 +241,7 @@ def parse_argv(parser):
     parser.add_argument('--database', default='', type=str, help='Database to retrieve entities from')
     parser.add_argument('--search_type', choices=['all', 'ne'], type=str, help='criteria for chossing tokens that should be searched in the database')
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
+    parser.add_argument('--almond_domains', nargs='+', help='Domains used for almond dataset; e.g. music, books, ...')
 
 
 def post_parse(args):

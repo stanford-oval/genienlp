@@ -42,6 +42,8 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 
+import time
+
 from . import arguments
 from . import models
 from .data_utils.embeddings import load_embeddings
@@ -84,7 +86,10 @@ def prepare_data(args, logger):
             kwargs['curriculum'] = True
 
         logger.info(f'Adding {task.name} to training datasets')
+        t0 = time.time()
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        t1 = time.time()
+        print('It took {} to process train set'.format(t1-t0))
         assert not split.eval and not split.test
         if args.use_curriculum:
             assert split.aux

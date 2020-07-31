@@ -64,7 +64,9 @@ class AlmondDataset(CQA):
 
     base_url = None
 
-    def __init__(self, path, *, make_example, subsample=None, cached_path=None, skip_cache=False, cache_input_data=False, **kwargs):
+    def __init__(self, path, *, make_example, subsample=None,
+                 cached_path=None, skip_cache=False, cache_input_data=False,
+                 split=None, **kwargs):
         
         #TODO fix cache_path for multilingual task
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
@@ -83,7 +85,7 @@ class AlmondDataset(CQA):
             max_examples = min(n, subsample) if subsample is not None else n
             for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
                 parts = line.strip().split('\t')
-                examples.append(make_example(parts, dir_name, **kwargs))
+                examples.append(make_example(parts, dir_name, split, **kwargs))
                 if len(examples) >= max_examples:
                     break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -107,9 +109,9 @@ class AlmondDataset(CQA):
                 Dataset.
         """
         
-        train_data = None if train is None else cls(os.path.join(path, train + '.tsv'), **kwargs)
-        validation_data = None if validation is None else cls(os.path.join(path, validation + '.tsv'), **kwargs)
-        test_data = None if test is None else cls(os.path.join(path, test + '.tsv'), **kwargs)
+        train_data = None if train is None else cls(os.path.join(path, train + '.tsv'), split='train', **kwargs)
+        validation_data = None if validation is None else cls(os.path.join(path, validation + '.tsv'), split='validation', **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, test + '.tsv'), split='test', **kwargs)
 
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
@@ -143,6 +145,75 @@ def is_special_case(i, tokens, key_tokenized):
     
     return False
 
+
+
+class Database(object):
+    def __init__(self, items):
+        self.data = Trie(items)
+        self.unk_type = 'unk'
+        self.type2id = {self.unk_type:  0}
+        self.type2id.update({type: i + 1 for i, type in enumerate(set(self.data.values()))})
+        
+    def update_items(self, new_items, allow_new_types=False):
+        new_items_processed = dict()
+        for token, type in new_items.items():
+            if type in self.type2id.keys():
+                new_items_processed[token] = type
+            elif allow_new_types:
+                new_items_processed[token] = type
+                self.type2id[type] = len(self.type2id)
+            else:
+                # type is unknown
+                new_items_processed[token] = 'unk'
+                
+        self.data = Trie(new_items_processed)
+
+    def lookup(self, tokens, subset=None):
+        
+        tokens_types = []
+        i = 0
+        
+        if subset:
+            lookup_dict = Trie(subset)
+        else:
+            lookup_dict = self.data
+        
+        while i < len(tokens):
+            token = tokens[i]
+            # sort by number of tokens so longer keys get matched first
+            matched_items = sorted(lookup_dict.items(prefix=token), key=lambda item: len(item[0]), reverse=True)
+            found = False
+            for key, type in matched_items:
+                key_tokenized = key.split()
+                cur = i
+                j = 0
+                while cur < len(tokens) and j < len(key_tokenized):
+                    if tokens[cur] != key_tokenized[j]:
+                        break
+                    j += 1
+                    cur += 1
+            
+                if j == len(key_tokenized):
+                    if is_special_case(i, tokens, key_tokenized):
+                        continue
+                
+                    # match found
+                    found = True
+                    tokens_types.extend([self.type2id[type] for _ in range(i, cur)])
+                
+                    # move i to current unprocessed position
+                    i = cur
+                    break
+        
+            if not found:
+                tokens_types.append(self.type2id['unk'])
+                i += 1
+        return tokens_types
+
+
+domain_type_mapping = dict()
+domain_type_mapping['music'] = {'Person': 'song_artist', 'MusicRecording': 'song_name', 'MusicAlbum': 'song_album'}
+
 class BaseAlmondTask(BaseTask):
     """Base class for the Almond semantic parsing task
         i.e. natural language to formal language (ThingTalk) mapping"""
@@ -153,10 +224,11 @@ class BaseAlmondTask(BaseTask):
         self._preprocess_context = args.almond_preprocess_context
         if args.database:
             with open(args.database, 'r') as fin:
-                self.database = Trie(json.load(fin))
-            self.type2id = dict()
-            self.type2id['unk'] = 0
-            self.type2id.update({type: i+1 for i, type in enumerate(set(self.database.values()))})
+                self.db = Database(json.load(fin))
+
+            self.TTtype2DBtype = dict()
+            for domain in args.almond_domains:
+                self.TTtype2DBtype.update(domain_type_mapping[domain])
             
     @property
     def metrics(self):
@@ -171,7 +243,7 @@ class BaseAlmondTask(BaseTask):
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
-    def tokenize(self, sentence, field_name=None):
+    def tokenize(self, sentence, split=None, field_name=None, answer=None):
 
         if not sentence:
             return [], [], []
@@ -199,40 +271,28 @@ class BaseAlmondTask(BaseTask):
         tokens_types = []
         if self.args.do_entity_linking and field_name in ('question', 'context', 'context_question'):
             
-            i = 0
-            while i < len(tokens):
-                token = tokens[i]
-                
-                # sort by number of tokens so longer keys get matched first
-                matched_items = sorted(self.database.items(prefix=token), key=lambda item: len(item[0]), reverse=True)
-                found = False
-                for key, type in matched_items:
-                    key_tokenized = key.split()
-                    cur = i
-                    j = 0
-                    while cur < len(tokens) and j < len(key_tokenized):
-                        if tokens[cur] != key_tokenized[j]:
-                            break
-                        j += 1
-                        cur += 1
+            # we only need to do lookup for test split as entity types can be retrieved for train and eval sets from the program
+            # this will speed up the process significantly
+            if split in ['test']:
+                tokens_types = self.db.lookup(tokens)
+            else:
+                quoted_pattern_with_space = re.compile(r'\"\s([^"]*?)\s\"')
+                answer_entities = quoted_pattern_with_space.findall(answer)
+                entity2type = dict()
+                for ent in answer_entities:
+                    # this is thingtalk specific (assuming form param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " )
+                    # this needs to be changed if annotations changes
+                    idx = answer.index(ent)
+                    schema_entity_type = answer[:idx].split()[-3]
+                    schema_type = schema_entity_type.rsplit(':', 1)[1].strip('()')
+                    if schema_type not in self.TTtype2DBtype.keys():
+                        schema_type = self.db.unk_type
+                    else:
+                        schema_type = self.TTtype2DBtype[schema_type]
+                    entity2type[ent] = schema_type
                     
-                    if j == len(key_tokenized):
-                        # if token is banned and match is single token ignore the match
-                        if is_special_case(i, tokens, key_tokenized):
-                            continue
-    
-                        # match found
-                        found = True
-                        tokens_types.extend([self.type2id[type] for _ in range(i, cur)])
-                        
-                        # move i to current unprocessed position
-                        i = cur
-                        break
-                        
-                if not found:
-                    tokens_types.append(self.type2id['unk'])
-                    i += 1
-                        
+                tokens_types = self.db.lookup(tokens, subset=entity2type)
+            
         if self.args.verbose and self.args.do_entity_linking and field_name == 'context':
                 print()
                 print(*[f'entity: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_types)], sep='\n')
@@ -271,15 +331,16 @@ class Almond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name == 'answer'
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
         _id, sentence, target_code = parts
         question = 'translate from english to thingtalk'
         context = sentence
         answer = target_code
+
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                tokenize=self.tokenize, split=split, lower=False)
 
 
 @register_task('contextual_almond')

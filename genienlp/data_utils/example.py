@@ -55,12 +55,12 @@ class Example(NamedTuple):
     vocab_fields = ['context', 'question', 'answer']
 
     @staticmethod
-    def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, lower=False):
+    def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, split, lower=False):
         args = [example_id]
 
         for argname, arg in (('context', context), ('question', question), ('answer', answer),
                              ('context_question', context+' '+question)):
-            words, mask, type = tokenize(arg.rstrip('\n'), field_name=argname)
+            words, mask, type = tokenize(arg.rstrip('\n'), split, field_name=argname, answer=answer)
             if mask is None:
                 mask = [True for _ in words]
             if lower:
