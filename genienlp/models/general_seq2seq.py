@@ -57,17 +57,14 @@ logger = logging.getLogger(__name__)
 class Seq2Seq(PreTrainedModel):
 
     @classmethod
-    def from_pretrained(cls, save_directory, model_checkpoint_file, vocab_sets, *model_args, **kwargs):
+    def from_pretrained(cls, save_directory, model_checkpoint_file, **kwargs):
         """
         """
         full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
         logger.info(f'Loading the model from {full_checkpoint_path}')
         args = kwargs.pop("args", None)
         device = kwargs.pop("device", None)
-        numericalizer = kwargs.pop("numericalizer", None)
-        context_embeddings = kwargs.pop("context_embeddings", None)
-        question_embeddings = kwargs.pop("question_embeddings", None)
-        decoder_embeddings = kwargs.pop("decoder_embeddings", None)
+        vocab_sets = kwargs.pop("vocab_sets", None)
 
         model = Seq2Seq(args, vocab_sets, is_loading=True, save_directory=save_directory)
         save_dict = torch.load(full_checkpoint_path, map_location=device)
@@ -82,30 +79,40 @@ class Seq2Seq(PreTrainedModel):
             save_directory: The directory where numericalizer can be loaded from. Should be provided whenever `is_loading` is True
         """
         super().__init__(PretrainedConfig()) # dummy PretrainedConfig
-        numericalizer, context_embeddings, question_embeddings, decoder_embeddings = self._init_embeddings_from_data(args, vocab_sets, is_loading)
+        self.numericalizer, self.context_embeddings, self.question_embeddings, self.decoder_embeddings = \
+            self._init_embeddings_from_data(args, vocab_sets, is_loading)
         self.args = args
-        self.numericalizer = numericalizer
 
         if is_loading:
             logger.info(f'Loading the accompanying numericalizer from {save_directory}')
             self.numericalizer.load(save_directory)
 
         logger.info(f'Initializing encoder and decoder embeddings')
-        for vec in set(context_embeddings + question_embeddings + decoder_embeddings):
-            vec.init_for_vocab(numericalizer.vocab)
+        for vec in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
+            vec.init_for_vocab(self.numericalizer.vocab)
         
-        logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens')
+        logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens')
         logger.debug(f'The first 200 tokens:')
-        logger.debug(numericalizer.vocab.itos[:200])
+        logger.debug(self.numericalizer.vocab.itos[:200])
 
-        self.encoder = ENCODERS[args.seq2seq_encoder](numericalizer, args, context_embeddings, question_embeddings)
-        self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings)
+        self.encoder = ENCODERS[args.seq2seq_encoder](self.numericalizer, args, self.context_embeddings, self.question_embeddings)
+        self.decoder = DECODERS[args.seq2seq_decoder](self.numericalizer, args, self.decoder_embeddings)
 
         if self.args.pretrain_context > 0:
             self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, numericalizer.num_tokens)
 
     def set_train_context_embeddings(self, trainable):
         self.encoder.set_train_context_embeddings(trainable)
+
+    def add_new_vocab_from_data(self, splits):
+        logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens from training')
+        new_words = []
+        for task_splits in splits:
+            for split in task_splits:
+                new_words += self.numericalizer.grow_vocab(split)
+                logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
+        for emb in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
+            emb.grow_for_vocab(self.numericalizer.vocab, new_words)
 
     def _init_embeddings_from_data(self, args, vocab_sets, is_loading):
         numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
@@ -246,7 +253,7 @@ class Seq2Seq(PreTrainedModel):
         
 
            
-class BartSeq2Seq(BartForConditionalGeneration):
+class Bart(BartForConditionalGeneration):
 
     def __init__(self, numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings):
         super().__init__()

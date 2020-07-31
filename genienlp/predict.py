@@ -89,43 +89,8 @@ def get_all_splits(args):
         splits.append(task_split_processed)
     return splits
 
-
-def prepare_data(args, numericalizer, embeddings):
-    splits = get_all_splits(args)
-    logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens from training')
-    new_words = []
-    for task_splits in splits:
-        for split in task_splits:
-            new_words += numericalizer.grow_vocab(split)
-            logger.info(f'Vocabulary has expanded to {numericalizer.num_tokens} tokens')
-
-    for emb in embeddings:
-        emb.grow_for_vocab(numericalizer.vocab, new_words)
-
-    return splits
-
-
-def run(args, device):
-    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
-        load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings, args.decoder_embeddings,
-                        args.max_generative_vocab, logger)
-    numericalizer.load(args.path)
-    for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
-        emb.init_for_vocab(numericalizer.vocab)
-
-    logger.info(f'Initializing Model')
-    Model = getattr(models, args.model)
-    model = Model.from_pretrained(args.path,
-                                  numericalizer=numericalizer,
-                                  context_embeddings=context_embeddings,
-                                  question_embeddings=question_embeddings,
-                                  decoder_embeddings=decoder_embeddings,
-                                  args=args,
-                                  device=device
-                                  )
-    val_sets = prepare_data(args, numericalizer, set(context_embeddings + question_embeddings + decoder_embeddings))
-
-    logger.info(f'Preparing iterators')
+def prepare_data_iterators(args, val_sets, numericalizer, device):
+    logger.info(f'Preparing data iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
     iters = []
@@ -150,6 +115,21 @@ def run(args, device):
 
         iters.extend(task_iter)
         task_index += 1
+        
+    return iters
+
+def run(args, device):
+    Model = getattr(models, args.model)
+    model, _ = Model.from_pretrained(save_directory=args.path,
+                                  model_checkpoint_file=args.checkpoint_name,
+                                  args=args,
+                                  device=device
+                                  )
+
+    val_sets = get_all_splits(args)
+    model.add_new_vocab_from_data(val_sets)
+
+    iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
 
     log_model_size(logger, model, args.model)
     model.to(device)
@@ -183,8 +163,8 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            _, predictions, answers, contexts, _ = generate_with_model(model, it, numericalizer, task, args, prediction_file_name)
-            
+            _, predictions, answers, contexts, _ = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name)
+                
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
                 if args.main_metric_only:

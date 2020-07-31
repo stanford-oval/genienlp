@@ -139,7 +139,7 @@ def parse_argv(parser):
 
     parser.add_argument("--almond_has_multiple_programs", action='store_true', help='Indicate if almond dataset has multiple programs for each sentence')
 
-    parser.add_argument('--model', type=str, choices=['MQAN', 'Bart'], default='MQAN', help='which model to import')
+    parser.add_argument('--model', type=str, choices=['Seq2Seq', 'Bart'], default='Seq2Seq', help='which model to import')
     parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity', 'Coattention'],
                         default='MQANEncoder', help='which encoder to use for the Seq2Seq model')
     parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'], default='MQANDecoder',
