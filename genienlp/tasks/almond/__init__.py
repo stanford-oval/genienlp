@@ -361,12 +361,12 @@ class ContextualAlmond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                tokenize=self.tokenize, split=split, lower=False)
 
 
 @register_task('reverse_almond')
@@ -381,7 +381,7 @@ class ReverseAlmond(BaseTask):
     def _is_program_field(self, field_name):
         return field_name == 'context'
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
         _id, sentence, target_code = parts
@@ -389,7 +389,7 @@ class ReverseAlmond(BaseTask):
         context = target_code
         answer = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                tokenize=self.tokenize, split=None, lower=False)
 
 
 @register_task('almond_dialogue_nlu')
@@ -401,13 +401,13 @@ class AlmondDialogueNLU(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         _id, context, sentence, target_code = parts
 
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                tokenize=self.tokenize, split=split, lower=False)
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example, **kwargs)
@@ -423,12 +423,12 @@ class AlmondDialogueNLUAgent(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                tokenize=self.tokenize, split=split, lower=False)
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
@@ -447,14 +447,14 @@ class AlmondDialogueNLG(BaseAlmondTask):
     def metrics(self):
         return ['bleu']
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         # the question is irrelevant for this task
         _id, context, sentence, target_code = parts
         question = 'what should the agent say ?'
         context = context + ' ' + target_code
         answer = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                tokenize=self.tokenize, split=split, lower=False)
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
@@ -472,14 +472,14 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     def metrics(self):
         return ['em', 'bleu']
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
         _id, context, _sentence, target_code = parts
         question = 'what should the agent do ?'
         context = context
         answer = target_code
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                tokenize=self.tokenize, split=split, lower=False)
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
@@ -556,7 +556,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     def metrics(self):
         return ['em', 'bleu']
     
-    def _make_example(self, parts, dir_name, **kwargs):
+    def _make_example(self, parts, dir_name, split=None, **kwargs):
         _id, sentence, target_code = parts
         language = ISO_to_LANG.get(dir_name, 'English').lower()
         if kwargs.get('lang_as_question'):
@@ -566,7 +566,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
         context = sentence
         answer = target_code
         return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                tokenize=self.tokenize, split=split, lower=False)
 
 
 @register_task('almond_dialog_multilingual_nlu')
@@ -581,12 +581,12 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
     def metrics(self):
         return ['em', 'bleu']
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                tokenize=self.tokenize, split=split, lower=False)
 
 
 @register_task('almond_dialog_multilingual_nlg')
@@ -600,12 +600,12 @@ class AlmondDialogMultiLingualNLG(BaseAlmondTask):
     def metrics(self):
         return ['bleu']
 
-    def _make_example(self, parts, dir_name=None, **kwargs):
+    def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         # the question is irrelevant for this task
         _id, context, sentence, target_code = parts
         question = 'what should the agent say ?'
         context = context + ' ' + target_code
         answer = sentence
         return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                tokenize=self.tokenize, split=split, lower=False)
 

@@ -29,6 +29,7 @@ pytorch_model.bin
 tests/dataset-*
 tests/dataset/*
 tests/test_py.sh
+dataset/*
 
 
 # C extensions

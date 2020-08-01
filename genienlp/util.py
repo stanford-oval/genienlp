@@ -434,13 +434,15 @@ def load_config_json(args):
                     'train_context_embeddings_after', 'train_question_embeddings_after',
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
-                    'override_question', 'override_context']
+                    'override_question', 'override_context', 'do_entity_linking', 'almond_domains', 'num_db_types']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
             # num_beams used to be an integer in previous versions of the code
             config['num_beams'] = [config['num_beams']]
-        overwrite = ['val_batch_size', 'num_beams', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty', 'temperature', 'reduce_metrics']
+        overwrite = ['val_batch_size', 'num_beams', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k',
+                     'repetition_penalty', 'temperature', 'reduce_metrics',
+                     'do_entity_linking']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
