@@ -81,15 +81,17 @@ def main():
         reader = csv.reader(input, delimiter='\t')
         with open(args.output, 'w') as output:
             for row in reader:
-                assert row[0].startswith('RS')
-                print(row[0])
-                slash = row[0].index('/')
-                dash = row[0].index('-')
-                dialog_index = row[0][2:slash]
-                utterance_index = int(row[0][slash+1:dash])
-                # print(row[3])
-                # print('dialog_index = ', dialog_index, 'utterance_index = ', utterance_index)
-                last_agent_utterance, user_utterance = all_prompts[dialog_index][utterance_index]
+                if not row[0].startswith('RS'):
+                    # we will not find this in `--dialog_file`, so consider it to have an empty last_agent_utterance
+                    last_agent_utterance = ''
+                else: 
+                    slash = row[0].index('/')
+                    dash = row[0].index('-')
+                    dialog_index = row[0][2:slash]
+                    utterance_index = int(row[0][slash+1:dash])
+                    # print(row[3])
+                    # print('dialog_index = ', dialog_index, 'utterance_index = ', utterance_index)
+                    last_agent_utterance, user_utterance = all_prompts[dialog_index][utterance_index]
                 user_utterance = row[2]
                 output.write((last_agent_utterance+' '+user_utterance).strip()+'\t'+last_agent_utterance.strip()+'\t'+row[3]+'\t'+user_utterance+'\n')
 
