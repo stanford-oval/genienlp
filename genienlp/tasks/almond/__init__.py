@@ -161,6 +161,8 @@ class BaseAlmondTask(BaseTask):
         if self._preprocess_context and field_name in ('context', 'context_question'):
             preprocessed_context = []
             for token in sentence.split(' '):
+                if len(token) == 0:
+                    continue
                 if token.startswith('@'):
                     word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
                     preprocessed_context += word.split('_')
