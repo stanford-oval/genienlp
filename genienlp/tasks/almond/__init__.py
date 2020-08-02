@@ -35,22 +35,17 @@ import json
 from tqdm import tqdm
 from collections import defaultdict
 
-import nltk
-nltk.download('stopwords')
-from nltk.corpus import stopwords
-
-banned_words = stopwords.words('english') + ['music', 'name', 'want', 'album', 'please', 'who', 'show me']
-
-from pytrie import SortedStringTrie as Trie
-
 from ..base_task import BaseTask
 from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
+from ...data_utils.database import Database, DOMAIN_TYPE_MAPPING
 
 from ..base_dataset import Split
 
 logger = logging.getLogger(__name__)
+
+quoted_pattern_with_space = re.compile(r'\"\s([^"]*?)\s\"')
 
 ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Italian', 'zh': 'Chinese',
                'hr': 'Croatian', 'ja': 'Japanese', 'ko': 'Korean', 'ru': 'Russian', 'es': 'Spanish',
@@ -123,7 +118,6 @@ class AlmondDataset(CQA):
                      eval=None if validation is None else validation_data,
                      test=None if test is None else test_data,
                      aux=None if do_curriculum is None else aux_data)
-    
 
 def is_entity(token):
     return token[0].isupper()
@@ -139,88 +133,6 @@ def process_id(ex):
         id_ = id_[1:]
     return id_
 
-def is_special_case(i, tokens, key_tokenized):
-    if ' '.join(key_tokenized) in banned_words:
-        return True
-    
-    return False
-
-
-
-class Database(object):
-    def __init__(self, items):
-        self.data = Trie(items)
-        self.unk_type = 'unk'
-        self.type2id = {self.unk_type:  0}
-        self.type2id.update({type: i + 1 for i, type in enumerate(set(self.data.values()))})
-        
-    def update_items(self, new_items, allow_new_types=False):
-        new_items_processed = dict()
-        for token, type in new_items.items():
-            if type in self.type2id.keys():
-                new_items_processed[token] = type
-            elif allow_new_types:
-                new_items_processed[token] = type
-                self.type2id[type] = len(self.type2id)
-            else:
-                # type is unknown
-                new_items_processed[token] = 'unk'
-                
-        self.data = Trie(new_items_processed)
-
-    def lookup(self, tokens, subset=None, retrieve_method='database'):
-        tokens_types = []
-        i = 0
-
-        lookup_dict = self.data
-        
-        if retrieve_method != 'database' and subset is not None:
-            if retrieve_method == 'thingtalk':
-                # types are retrieved from the program
-                lookup_dict = Trie(subset)
-            elif retrieve_method == 'answer':
-                # prune db (types are retrieved from the database)
-                new_lookup_dict = dict()
-                for token, type in lookup_dict.items():
-                    if token in subset:
-                        new_lookup_dict[token] = type
-                lookup_dict = new_lookup_dict
-
-        while i < len(tokens):
-            token = tokens[i]
-            # sort by number of tokens so longer keys get matched first
-            matched_items = sorted(lookup_dict.items(prefix=token), key=lambda item: len(item[0]), reverse=True)
-            found = False
-            for key, type in matched_items:
-                key_tokenized = key.split()
-                cur = i
-                j = 0
-                while cur < len(tokens) and j < len(key_tokenized):
-                    if tokens[cur] != key_tokenized[j]:
-                        break
-                    j += 1
-                    cur += 1
-            
-                if j == len(key_tokenized):
-                    if is_special_case(i, tokens, key_tokenized):
-                        continue
-                
-                    # match found
-                    found = True
-                    tokens_types.extend([self.type2id[type] for _ in range(i, cur)])
-                
-                    # move i to current unprocessed position
-                    i = cur
-                    break
-        
-            if not found:
-                tokens_types.append(self.type2id['unk'])
-                i += 1
-        return tokens_types
-
-
-domain_type_mapping = dict()
-domain_type_mapping['music'] = {'Person': 'song_artist', 'MusicRecording': 'song_name', 'MusicAlbum': 'song_album'}
 
 class BaseAlmondTask(BaseTask):
     """Base class for the Almond semantic parsing task
@@ -230,13 +142,18 @@ class BaseAlmondTask(BaseTask):
         super().__init__(name, args)
         self.args = args
         self._preprocess_context = args.almond_preprocess_context
+        
+        # read and initialize the database
         if args.database:
             with open(args.database, 'r') as fin:
-                self.db = Database(json.load(fin))
+                db_data = json.load(fin)
+                # lowercase all keys
+                db_data_processed = {key.lower(): value for key, value in db_data.items()}
+                self.db = Database(db_data_processed)
 
             self.TTtype2DBtype = dict()
             for domain in args.almond_domains:
-                self.TTtype2DBtype.update(domain_type_mapping[domain])
+                self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
             
     @property
     def metrics(self):
@@ -284,12 +201,11 @@ class BaseAlmondTask(BaseTask):
             if split in ['test']:
                 tokens_types = self.db.lookup(tokens)
             else:
-                quoted_pattern_with_space = re.compile(r'\"\s([^"]*?)\s\"')
                 answer_entities = quoted_pattern_with_space.findall(answer)
                 entity2type = dict()
                 for ent in answer_entities:
-                    # this is thingtalk specific (assuming form param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " )
-                    # this needs to be changed if annotations changes
+                    # this is thingtalk specific (with syntax: param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " )
+                    # this needs to be changed if annotations convention changes
                     idx = answer.index('" ' + ent + ' "')
                     schema_entity_type = answer[:idx].split()[-2]
                     schema_type = schema_entity_type.rsplit(':', 1)[1].strip('()')
@@ -301,7 +217,9 @@ class BaseAlmondTask(BaseTask):
                     
                 tokens_types = self.db.lookup(tokens, subset=entity2type, retrieve_method=self.args.retrieve_method)
             
-        if self.args.verbose and self.args.do_entity_linking and field_name == 'context':
+        if self.args.verbose and self.args.do_entity_linking and \
+                ((('dialog' in self.name or 'contextual' in self.name) and field_name == 'question') or
+                     (('dialog' not in self.name and 'contextual' not in self.name) and field_name == 'context')):
             print()
             print(*[f'entity: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_types)], sep='\n')
 
