@@ -338,15 +338,16 @@ def post_parse(args):
     
     for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
-    save_args(args)
-    
+        
     # process database
     args.num_db_types = 0
     if args.database and args.do_entity_linking:
         with open(args.database, 'r') as fin:
             database = json.load(fin)
         # +1 for unknown entities
-        args.num_db_types = len(database) + 1
+        args.num_db_types = len(set(database.values())) + 1
+        
+    save_args(args)
 
     # create the task objects after we saved the configuration to the JSON file, because
     # tasks are not JSON serializable
