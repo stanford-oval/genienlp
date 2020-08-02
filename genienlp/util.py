@@ -434,7 +434,8 @@ def load_config_json(args):
                     'train_context_embeddings_after', 'train_question_embeddings_after',
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
-                    'override_question', 'override_context', 'do_entity_linking', 'almond_domains', 'num_db_types']
+                    'override_question', 'override_context',
+                     'database', 'do_entity_linking', 'retrieve_method', 'almond_domains', 'num_db_types', 'verbose']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
@@ -442,7 +443,7 @@ def load_config_json(args):
             config['num_beams'] = [config['num_beams']]
         overwrite = ['val_batch_size', 'num_beams', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k',
                      'repetition_penalty', 'temperature', 'reduce_metrics',
-                     'do_entity_linking']
+                     'database']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -451,6 +452,14 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
+            elif r == 'almond_domains':
+                setattr(args, r, ['music'])
+            elif r == 'num_db_types':
+                setattr(args, r, 0)
+            elif r == 'do_entity_linking':
+                setattr(args, r, False)
+            elif r == 'do_entity_linking':
+                setattr(args, r, False)
             elif r == 'almond_lang_as_question':
                 setattr(args, r, False)
             elif r == 'locale':

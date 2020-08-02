@@ -88,9 +88,14 @@ class Server:
         if not question:
             question = task.default_question
         answer = ''
+        
+        if self.args.evaluate == 'valid':
+            split = 'validation'
+        else:
+            split = 'test'
 
         ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize,
-                              lower=self.args.lower)
+                              split=split, lower=self.args.lower)
 
         batch = self.numericalize_example(ex)
         predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
@@ -151,6 +156,8 @@ def parse_argv(parser):
     parser.add_argument('--devices', default=[0], nargs='+', type=int,
                         help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
+    parser.add_argument('--evaluate', type=str, default='valid', choices=['valid', 'test'],
+                        help='Which dataset to do predictions for (test or dev)')
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--checkpoint_name', default='best.pth',
                         help='Checkpoint file to use (relative to --path, defaults to best.pth)')

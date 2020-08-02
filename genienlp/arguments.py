@@ -243,7 +243,7 @@ def parse_argv(parser):
 
     parser.add_argument('--do_entity_linking', action='store_true', help='Collect and use entity features during semantic parsing')
     parser.add_argument('--database', default='', type=str, help='Database to retrieve entities from')
-    parser.add_argument('--retrieve_method', default='thingtalk', choices=['database', 'answer', 'thingtalk'], type=str,
+    parser.add_argument('--retrieve_method', choices=['database', 'answer', 'thingtalk'], type=str,
                         help='prune items in database for faster lookup (only during train and evaluation)')
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', help='Domains used for almond dataset; e.g. music, books, ...')

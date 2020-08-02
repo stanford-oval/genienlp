@@ -266,8 +266,7 @@ def parse_argv(parser):
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
     
-    parser.add_argument('--do_entity_linking', action='store_true', help='Collect and use entity features for prediction during semantic parsing')
-
+    parser.add_argument('--database', default='', type=str, help='Database to retrieve entities from')
 
 def adjust_multilingual_eval(args):
     if (have_multilingual(args.task_names) and args.pred_languages is None) or (

@@ -291,10 +291,7 @@ class BaseAlmondTask(BaseTask):
                     # this is thingtalk specific (assuming form param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " )
                     # this needs to be changed if annotations changes
                     idx = answer.index('" ' + ent + ' "')
-                    try:
-                        schema_entity_type = answer[:idx].split()[-2]
-                    except:
-                        print('here')
+                    schema_entity_type = answer[:idx].split()[-2]
                     schema_type = schema_entity_type.rsplit(':', 1)[1].strip('()')
                     if schema_type not in self.TTtype2DBtype.keys():
                         schema_type = self.db.unk_type

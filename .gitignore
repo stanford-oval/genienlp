@@ -30,6 +30,7 @@ tests/dataset-*
 tests/dataset/*
 tests/test_py.sh
 dataset/*
+eval_dir/*
 
 
 # C extensions
