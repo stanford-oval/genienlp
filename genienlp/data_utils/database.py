@@ -32,13 +32,14 @@ from pytrie import SortedStringTrie as Trie
 
 DOMAIN_TYPE_MAPPING = dict()
 DOMAIN_TYPE_MAPPING['music'] = {'Person': 'song_artist', 'MusicRecording': 'song_name', 'MusicAlbum': 'song_album'}
-DOMAIN_TYPE_MAPPING['spotify'] = {'id': 'song_name', 'artist': 'song_artist', 'artists': 'song_artist', 'album': 'song_album'}
+DOMAIN_TYPE_MAPPING['spotify'] = {'id': 'song_name', 'song': 'song_name', 'artist': 'song_artist', 'artists': 'song_artist', 'album': 'song_album', 'genres': 'song_genre'}
 
 import nltk
 nltk.download('stopwords')
 from nltk.corpus import stopwords
 
-BANNED_WORDS = stopwords.words('english') + ['music', 'name', 'want', 'album', 'please', 'who', 'show me']
+BANNED_WORDS = stopwords.words('english') + ['music', 'name', 'want', 'album', 'please', 'who', 'show me', 'play', 'track', 'song', 'record', 'album', 'something', 'resume',
+                                             'find me', 'the', 'search for me', 'search', 'yes', 'yeah']
 
 def is_special_case(i, tokens, key_tokenized):
     if ' '.join(key_tokenized) in BANNED_WORDS:
@@ -71,7 +72,6 @@ class Database(object):
         tokens_types = []
         i = 0
         
-        lookup_dict = self.data
         
         if retrieve_method != 'database' and subset is not None:
             if retrieve_method == 'thingtalk':
@@ -84,6 +84,8 @@ class Database(object):
                     if token in subset:
                         new_lookup_dict[token] = type
                 lookup_dict = new_lookup_dict
+        else:
+            lookup_dict = self.data
         
         while i < len(tokens):
             token = tokens[i]
