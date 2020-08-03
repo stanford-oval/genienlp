@@ -32,6 +32,7 @@ from pytrie import SortedStringTrie as Trie
 
 DOMAIN_TYPE_MAPPING = dict()
 DOMAIN_TYPE_MAPPING['music'] = {'Person': 'song_artist', 'MusicRecording': 'song_name', 'MusicAlbum': 'song_album'}
+DOMAIN_TYPE_MAPPING['spotify'] = {'id': 'song_name', 'artist': 'song_artist', 'artists': 'song_artist', 'album': 'song_album'}
 
 import nltk
 nltk.download('stopwords')

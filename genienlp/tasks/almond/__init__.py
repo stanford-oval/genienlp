@@ -83,8 +83,9 @@ class AlmondDataset(CQA):
                 examples.append(make_example(parts, dir_name, split, **kwargs))
                 if len(examples) >= max_examples:
                     break
-            os.makedirs(os.path.dirname(cache_name), exist_ok=True)
+            
             if cache_input_data:
+                os.makedirs(os.path.dirname(cache_name), exist_ok=True)
                 logger.info(f'Caching data to {cache_name}')
                 torch.save(examples, cache_name)
 
@@ -161,13 +162,75 @@ class BaseAlmondTask(BaseTask):
 
     def _is_program_field(self, field_name):
         raise NotImplementedError()
+    
+    def is_contextual(self):
+        raise NotImplementedError()
 
     def _make_example(self, parts, dir_name, **kwargs):
         raise NotImplementedError()
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
-
+    
+    def preprocess_context(self, sentence):
+        preprocessed_context = []
+        for token in sentence.split(' '):
+            if token.startswith('@'):
+                word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
+                preprocessed_context += word.split('_')
+            elif token.startswith('param:'):
+                word = token[len('param:'):]
+                preprocessed_context += word.split('_')
+            elif token.startswith('enum:'):
+                word = token[len('enum:'):]
+                preprocessed_context += word.split('_')
+            else:
+                preprocessed_context.append(token)
+        return preprocessed_context
+    
+    def find_types(self, tokens, split, answer):
+        # we only need to do lookup for test split as entity types can be retrieved for train and eval sets from the program
+        # this will speed up the process significantly
+        if split in ['test']:
+            tokens_types = self.db.lookup(tokens)
+        else:
+            entity2type = dict()
+            answer_entities = quoted_pattern_with_space.findall(answer)
+            for ent in answer_entities:
+                # this is thingtalk specific and also domain specific
+                # (music with syntax: ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ... )
+                # (spotify with syntax: ... param:artists contains " XXX " ^^com.spotify:artist and param:id =~ " XXX " ...)
+                # this needs to be changed if annotations convention changes
+            
+                # assume first syntax
+                idx = answer.index('" ' + ent + ' "')
+                schema_entity_type = answer[:idx].split()[-2]
+            
+                if schema_entity_type.startswith('param:'):
+                    schema_entity_type = schema_entity_type.strip('()').rsplit(':', 1)[1]
+                else:
+                    # check for ^^ syntax
+                    schema_entity_type = answer[idx + len('" ' + ent + ' "'):].split()
+                    if len(schema_entity_type) == 1:
+                        schema_entity_type = 'id'
+                    else:
+                        schema_entity_type = schema_entity_type[0]
+                    if schema_entity_type.startswith('^^'):
+                        schema_entity_type = schema_entity_type.rsplit(':', 1)[1]
+                    else:
+                        schema_entity_type = self.db.unk_type
+                
+                if schema_entity_type not in self.TTtype2DBtype.keys():
+                    schema_type = self.db.unk_type
+                else:
+                    schema_type = self.TTtype2DBtype[schema_entity_type]
+            
+                entity2type[ent] = schema_type
+        
+            tokens_types = self.db.lookup(tokens, subset=entity2type, retrieve_method=self.args.retrieve_method)
+            
+        return tokens_types
+    
     def tokenize(self, sentence, split=None, field_name=None, answer=None):
 
         if not sentence:
@@ -178,48 +241,14 @@ class BaseAlmondTask(BaseTask):
         else:
             tokens = [t for t in sentence.split(' ') if len(t) > 0]
             if self._preprocess_context and field_name in ('context', 'context_question'):
-                preprocessed_context = []
-                for token in sentence.split(' '):
-                    if token.startswith('@'):
-                        word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
-                        preprocessed_context += word.split('_')
-                    elif token.startswith('param:'):
-                        word = token[len('param:'):]
-                        preprocessed_context += word.split('_')
-                    elif token.startswith('enum:'):
-                        word = token[len('enum:'):]
-                        preprocessed_context += word.split('_')
-                    else:
-                        preprocessed_context.append(token)
-                tokens = preprocessed_context
-        
+                tokens = self.preprocess_context(sentence)
+                
         tokens_types = []
         if self.args.do_entity_linking and field_name in ('question', 'context', 'context_question'):
-            
-            # we only need to do lookup for test split as entity types can be retrieved for train and eval sets from the program
-            # this will speed up the process significantly
-            if split in ['test']:
-                tokens_types = self.db.lookup(tokens)
-            else:
-                answer_entities = quoted_pattern_with_space.findall(answer)
-                entity2type = dict()
-                for ent in answer_entities:
-                    # this is thingtalk specific (with syntax: param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " )
-                    # this needs to be changed if annotations convention changes
-                    idx = answer.index('" ' + ent + ' "')
-                    schema_entity_type = answer[:idx].split()[-2]
-                    schema_type = schema_entity_type.rsplit(':', 1)[1].strip('()')
-                    if schema_type not in self.TTtype2DBtype.keys():
-                        schema_type = self.db.unk_type
-                    else:
-                        schema_type = self.TTtype2DBtype[schema_type]
-                    entity2type[ent] = schema_type
-                    
-                tokens_types = self.db.lookup(tokens, subset=entity2type, retrieve_method=self.args.retrieve_method)
-            
+            tokens_types = self.find_types(tokens, split, answer)
+        
         if self.args.verbose and self.args.do_entity_linking and \
-                ((('dialog' in self.name or 'contextual' in self.name) and field_name == 'question') or
-                     (('dialog' not in self.name and 'contextual' not in self.name) and field_name == 'context')):
+                ((self.is_contextual() and field_name == 'question') or (not self.is_contextual() and field_name == 'context')):
             print()
             print(*[f'entity: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_types)], sep='\n')
 
@@ -257,6 +286,9 @@ class Almond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name == 'answer'
 
+    def is_contextual(self):
+        return False
+
     def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
@@ -276,6 +308,9 @@ class ContextualAlmond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    def is_contextual(self):
+        return True
+    
     def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         _id, context, sentence, target_code = parts
         answer = target_code
@@ -293,6 +328,9 @@ class ReverseAlmond(BaseTask):
     def metrics(self):
         return ['bleu', 'em']
 
+    def is_contextual(self):
+        return False
+    
     def _is_program_field(self, field_name):
         return field_name == 'context'
 
@@ -316,6 +354,9 @@ class AlmondDialogueNLU(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    def is_contextual(self):
+        return True
+    
     def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         _id, context, sentence, target_code = parts
 
@@ -338,6 +379,9 @@ class AlmondDialogueNLUAgent(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    def is_contextual(self):
+        return True
+    
     def _make_example(self, parts, dir_name=None, split=None, **kwargs):
         _id, context, sentence, target_code = parts
         answer = target_code
@@ -358,6 +402,9 @@ class AlmondDialogueNLG(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name == 'context'
 
+    def is_contextual(self):
+        return True
+    
     @property
     def metrics(self):
         return ['bleu']
@@ -383,6 +430,9 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    def is_contextual(self):
+        return True
+    
     @property
     def metrics(self):
         return ['em', 'bleu']
@@ -466,7 +516,10 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     
     def _is_program_field(self, field_name):
         return field_name == 'answer'
-    
+
+    def is_contextual(self):
+        return False
+
     @property
     def metrics(self):
         return ['em', 'bleu']
@@ -491,7 +544,10 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
 
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
-
+    
+    def is_contextual(self):
+        return True
+    
     @property
     def metrics(self):
         return ['em', 'bleu']
@@ -510,6 +566,9 @@ class AlmondDialogMultiLingualNLG(BaseAlmondTask):
     """
     def _is_program_field(self, field_name):
         return field_name == 'context'
+    
+    def is_contextual(self):
+        return True
 
     @property
     def metrics(self):
