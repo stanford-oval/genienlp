@@ -72,18 +72,16 @@ class Database(object):
         tokens_types = []
         i = 0
         
-        
         if retrieve_method != 'database' and subset is not None:
             if retrieve_method == 'thingtalk':
                 # types are retrieved from the program
                 lookup_dict = Trie(subset)
             elif retrieve_method == 'answer':
                 # prune db (types are retrieved from the database)
-                new_lookup_dict = dict()
-                for token, type in lookup_dict.items():
+                lookup_dict = dict()
+                for token, type in self.data.items():
                     if token in subset:
-                        new_lookup_dict[token] = type
-                lookup_dict = new_lookup_dict
+                        lookup_dict[token] = type
         else:
             lookup_dict = self.data
         
