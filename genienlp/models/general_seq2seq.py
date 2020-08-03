@@ -100,17 +100,23 @@ class Seq2Seq(PreTrainedModel):
         return (loss, )
 
     def _normal_forward(self, batch, current_token_id, past=None, expansion_factor=1, generation_dict=None, encoder_output=None):
-
+    
         if encoder_output is None:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
         else:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = encoder_output
 
         if self.args.num_db_types > 0:
-            context_type_embedded = self.type_embeddings(batch.context.type)
-            question_type_embedded = self.type_embeddings(batch.question.type)
-            final_context = self.type_projection(torch.cat((final_context, context_type_embedded), dim=-1))
-            final_question = self.type_projection(torch.cat((final_question, question_type_embedded), dim=-1))
+            context_feature_embedded = self.type_embeddings(batch.context.feature[:, :, 0].long())
+            question_feature_embedded = self.type_embeddings(batch.question.feature[:, :, 0].long())
+            
+            if self.args.num_features > 1:
+                # scale with token freq
+                context_feature_embedded = context_feature_embedded * batch.context.feature[:, :, 1].unsqueeze(-1)
+                question_feature_embedded = question_feature_embedded * batch.question.feature[:, :, 1].unsqueeze(-1)
+            
+            final_context = self.type_projection(torch.cat((final_context, context_feature_embedded), dim=-1))
+            final_question = self.type_projection(torch.cat((final_question, question_feature_embedded), dim=-1))
 
         encoder_loss = None
         if self.training and getattr(self.args, 'use_encoder_loss', None):

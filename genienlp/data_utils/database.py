@@ -69,7 +69,7 @@ class Database(object):
         self.data = Trie(new_items_processed)
     
     def lookup(self, tokens, subset=None, retrieve_method='database'):
-        tokens_types = []
+        tokens_type_ids = []
         i = 0
         
         if retrieve_method != 'database' and subset is not None:
@@ -106,13 +106,13 @@ class Database(object):
                     
                     # match found
                     found = True
-                    tokens_types.extend([self.type2id[type] for _ in range(i, cur)])
+                    tokens_type_ids.extend([self.type2id[type] for _ in range(i, cur)])
                     
                     # move i to current unprocessed position
                     i = cur
                     break
             
             if not found:
-                tokens_types.append(self.type2id['unk'])
+                tokens_type_ids.append(self.type2id['unk'])
                 i += 1
-        return tokens_types
+        return tokens_type_ids

@@ -387,7 +387,7 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
-                     valid=False, append_question_to_context_too=False, override_question=None, override_context=None):
+                     valid=False, append_question_to_context_too=False, override_question=None, override_context=None, num_features=0):
     
     iterator = Iterator(dataset,
                         batch_size,
@@ -399,7 +399,8 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
     collate_function = lambda minibatch: Batch.from_examples(minibatch, numericalizer, device=device,
                                            paired=paired and train, max_pairs=max_pairs, groups=iterator.groups,
                                            append_question_to_context_too=append_question_to_context_too,
-                                           override_question=override_question, override_context=override_context)
+                                           override_question=override_question, override_context=override_context,
+                                           num_features=num_features)
         
     return torch.utils.data.DataLoader(iterator, batch_size=None, collate_fn=collate_function)
 

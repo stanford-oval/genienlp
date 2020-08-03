@@ -35,7 +35,7 @@ class SequentialField(NamedTuple):
     value: torch.tensor
     length: torch.tensor
     limited: torch.tensor
-    type: torch.tensor
+    feature: torch.tensor
     
     @staticmethod
     def from_tensors(tensor_list):
@@ -43,6 +43,6 @@ class SequentialField(NamedTuple):
         value = torch.cat([data.value for data in tensor_list], dim=0)
         length = torch.cat([data.length for data in tensor_list], dim=0)
         limited = torch.cat([data.limited for data in tensor_list], dim=0)
-        type = torch.cat([data.type for data in tensor_list], dim=0)
+        feature = torch.cat([data.feature for data in tensor_list], dim=0)
         
-        return SequentialField(value, length, limited, type)
+        return SequentialField(value, length, limited, feature)

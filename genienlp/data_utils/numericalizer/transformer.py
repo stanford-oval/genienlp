@@ -110,24 +110,26 @@ class TransformerNumericalizer(object):
 
         # apply word-piece tokenization to everything first
         all_wp_tokenized = []
-        all_wp_types = []
-        for tokens, mask, types in minibatch:
+        all_wp_features = []
+        for tokens, mask, features in minibatch:
             wps = self._tokenizer.tokenize(tokens, mask)
             all_wp_tokenized.append(wps)
             # answer field has empty type
-            if types:
+            if features:
+                # TODO: bert specific
+                # move and adapt encode_single for each subclass
                 is_wp = [bool(wp.startswith('##')) for wp in wps]
-                wp_types = []
+                wp_features = []
                 j = -1
                 assert is_wp[0] == 0
                 for i, wp in enumerate(wps):
                     if not is_wp[i]:
                         j += 1
-                    wp_types.append(types[j])
-                assert len(wps) == len(wp_types)
-                all_wp_types.append(wp_types)
+                    wp_features.append(features[j])
+                assert len(wps) == len(wp_features)
+                all_wp_features.append(wp_features)
             else:
-                all_wp_types.append([])
+                all_wp_features.append([])
 
         if max_length > -1:
             max_len = max_length
@@ -135,34 +137,40 @@ class TransformerNumericalizer(object):
             max_len = max(len(x) for x in all_wp_tokenized)
         else:
             max_len = self.fix_length
-
+        
         padded = []
-        padded_types = []
+        all_padded_features = []
         lengths = []
         numerical = []
         decoder_numerical = []
-        for wp_tokens, wp_types in zip(all_wp_tokenized, all_wp_types):
+        for wp_tokens, wp_features in zip(all_wp_tokenized, all_wp_features):
+            padded_features = []
+            wp_features_view = list(zip(*wp_features))
             if self.pad_first:
                 padded_example = [self.pad_token] * max(0, max_len - len(wp_tokens)) + \
                                  [self.init_token] + \
                                  list(wp_tokens[:max_len]) + \
                                  [self.eos_token]
-                padded_types_example = [0] * max(0, max_len - len(wp_types)) + \
-                                 [0] + \
-                                 list(wp_types[:max_len]) + \
-                                 [0]
+                for wp_feature in wp_features_view:
+                    padded_features_example = [0] * max(0, max_len - len(wp_feature)) + \
+                                     [0] + \
+                                     list(wp_feature[:max_len]) + \
+                                     [0]
+                    padded_features.append(padded_features_example)
             else:
                 padded_example = [self.init_token] + \
                                  list(wp_tokens[:max_len]) + \
                                  [self.eos_token] + \
                                  [self.pad_token] * max(0, max_len - len(wp_tokens))
-                padded_types_example = [0] + \
-                                 list(wp_types[:max_len]) + \
-                                 [0] + \
-                                 [0] * max(0, max_len - len(wp_types))
+                for wp_feature in wp_features_view:
+                    padded_features_example = [0] + \
+                                     list(wp_feature[:max_len]) + \
+                                     [0] + \
+                                     [0] * max(0, max_len - len(wp_feature))
+                    padded_features.append(padded_features_example)
 
             padded.append(padded_example)
-            padded_types.append(padded_types_example)
+            all_padded_features.append(padded_features)
             lengths.append(len(padded_example) - max(0, max_len - len(wp_tokens)))
 
             numerical.append(self._tokenizer.convert_tokens_to_ids(padded_example))
@@ -171,9 +179,12 @@ class TransformerNumericalizer(object):
         length = torch.tensor(lengths, dtype=torch.int32, device=device)
         numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
         decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-        type = torch.tensor(padded_types, dtype=torch.long, device=device)
+        feature = torch.tensor(all_padded_features, dtype=torch.float32, device=device)
+        if feature.ndim < 3:
+            feature = feature.unsqueeze(-1)  # (batch, length, num_features)
+        feature = feature.transpose(1, 2)
 
-        return SequentialField(length=length, value=numerical, limited=decoder_numerical, type=type)
+        return SequentialField(length=length, value=numerical, limited=decoder_numerical, feature=feature)
 
     def decode(self, tensor):
         return self._tokenizer.convert_ids_to_tokens(tensor)

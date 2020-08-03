@@ -231,20 +231,25 @@ class BaseAlmondTask(BaseTask):
         # we only need to do lookup for test split as entity types can be retrieved for train and eval sets from the program
         # this will speed up the process significantly
         if split in ['test']:
-            tokens_types = self.db.lookup(tokens)
+            tokens_type_ids = self.db.lookup(tokens)
         else:
             if self.args.retrieve_method == 'database':
-                tokens_types = self.db.lookup(tokens)
+                tokens_type_ids = self.db.lookup(tokens)
             else:
                 entity2type = self.collect_answer_entity_types(answer)
-                tokens_types = self.db.lookup(tokens, subset=entity2type, retrieve_method=self.args.retrieve_method)
+                tokens_type_ids = self.db.lookup(tokens, subset=entity2type, retrieve_method=self.args.retrieve_method)
             
-        return tokens_types
+        return tokens_type_ids
     
-    def find_freqs(self, tokens):
-        import wordfreq
-        return None
-    
+    def find_freqs(self, tokens, tokens_type_ids):
+        from wordfreq import zipf_frequency
+        token_freqs = []
+        for token, token_type_id in zip(tokens, tokens_type_ids):
+            if token_type_id == self.db.type2id[self.db.unk_type]:
+                token_freqs.append(1.0)
+            else:
+                token_freqs.append(1.0 / (zipf_frequency(token, 'en') + 1e-3))
+        return token_freqs
         
     def tokenize(self, sentence, split=None, field_name=None, answer=None):
 
@@ -258,19 +263,30 @@ class BaseAlmondTask(BaseTask):
             if self._preprocess_context and field_name in ('context', 'context_question'):
                 tokens = self.preprocess_context(sentence)
                 
-        tokens_types = []
+        tokens_type_ids = []
+        token_freqs = []
         if self.args.do_entity_linking and field_name in ('question', 'context', 'context_question'):
-            tokens_types = self.find_types(tokens, split, answer)
-            token_freqs = self.find_freqs(tokens)
+            if 'type' in self.args.features:
+                tokens_type_ids = self.find_types(tokens, split, answer)
+            if 'freq' in self.args.features:
+                token_freqs = self.find_freqs(tokens, tokens_type_ids)
         
         if self.args.verbose and self.args.do_entity_linking and \
                 ((self.is_contextual() and field_name == 'question') or (not self.is_contextual() and field_name == 'context')) and \
                 split == 'validation':
             print()
-            print(*[f'entity: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_types)], sep='\n')
+            print(*[f'entity: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_type_ids)], sep='\n')
+
+        zip_list = []
+        if tokens_type_ids:
+            assert len(tokens) == len(tokens_type_ids)
+            zip_list.append(tokens_type_ids)
+        if token_freqs:
+            assert len(tokens) == len(token_freqs)
+            zip_list.append(token_freqs)
 
         if self.force_subword_tokenize:
-            return tokens, None, tokens_types
+            return tokens, None, list(zip(*zip_list))
 
         if self._is_program_field(field_name):
             mask = []
@@ -283,13 +299,12 @@ class BaseAlmondTask(BaseTask):
                     mask.append(in_string)
 
             assert len(tokens) == len(mask)
-            if tokens_types:
-                assert len(tokens) == len(tokens_types)
-            return tokens, mask, tokens_types
+
+            return tokens, mask, tokens_type_ids
 
         else:
             mask = [not is_entity(token) and not is_device(token) for token in tokens]
-            return tokens, mask, tokens_types
+            return tokens, mask, list(zip(*zip_list))
 
     def detokenize(self, tokenized, field_name=None):
         return ' '.join(tokenized)

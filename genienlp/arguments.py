@@ -247,6 +247,8 @@ def parse_argv(parser):
                         help='prune items in database for faster lookup (only during train and evaluation)')
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', help='Domains used for almond dataset; e.g. music, books, ...')
+    parser.add_argument('--features', nargs='+', default=['type'], help='Features that will be extracted for each entity: [type, freq] for now.'
+                                                                        ' Order is important')
 
 
 def post_parse(args):
@@ -346,6 +348,8 @@ def post_parse(args):
             database = json.load(fin)
         # +1 for unknown entities
         args.num_db_types = len(set(database.values())) + 1
+        
+    args.num_features = len(args.features)
         
     save_args(args)
 
