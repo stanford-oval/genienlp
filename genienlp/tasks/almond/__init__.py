@@ -191,49 +191,61 @@ class BaseAlmondTask(BaseTask):
                 preprocessed_context.append(token)
         return preprocessed_context
     
+    def collect_answer_entity_types(self, answer):
+        entity2type = dict()
+        answer_entities = quoted_pattern_with_space.findall(answer)
+        for ent in answer_entities:
+            # this is thingtalk specific and also domain specific
+            # (music with syntax: ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ... )
+            # (spotify with syntax: ... param:artists contains " XXX " ^^com.spotify:artist and param:id =~ " XXX " ...)
+            # this needs to be changed if annotations convention changes
+        
+            # assume first syntax
+            idx = answer.index('" ' + ent + ' "')
+            schema_entity_type = answer[:idx].split()[-2]
+        
+            if schema_entity_type.startswith('param:'):
+                schema_entity_type = schema_entity_type.strip('()').rsplit(':', 1)[1]
+            else:
+                # check for ^^ syntax
+                schema_entity_type = answer[idx + len('" ' + ent + ' "'):].split()
+                if len(schema_entity_type) == 1:
+                    schema_entity_type = 'id'
+                else:
+                    schema_entity_type = schema_entity_type[0]
+                if schema_entity_type.startswith('^^'):
+                    schema_entity_type = schema_entity_type.rsplit(':', 1)[1]
+                else:
+                    schema_entity_type = self.db.unk_type
+        
+            if schema_entity_type not in self.TTtype2DBtype.keys():
+                schema_type = self.db.unk_type
+            else:
+                schema_type = self.TTtype2DBtype[schema_entity_type]
+        
+            entity2type[ent] = schema_type
+            
+        return entity2type
+
     def find_types(self, tokens, split, answer):
         # we only need to do lookup for test split as entity types can be retrieved for train and eval sets from the program
         # this will speed up the process significantly
         if split in ['test']:
             tokens_types = self.db.lookup(tokens)
         else:
-            entity2type = dict()
-            answer_entities = quoted_pattern_with_space.findall(answer)
-            for ent in answer_entities:
-                # this is thingtalk specific and also domain specific
-                # (music with syntax: ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ... )
-                # (spotify with syntax: ... param:artists contains " XXX " ^^com.spotify:artist and param:id =~ " XXX " ...)
-                # this needs to be changed if annotations convention changes
-            
-                # assume first syntax
-                idx = answer.index('" ' + ent + ' "')
-                schema_entity_type = answer[:idx].split()[-2]
-            
-                if schema_entity_type.startswith('param:'):
-                    schema_entity_type = schema_entity_type.strip('()').rsplit(':', 1)[1]
-                else:
-                    # check for ^^ syntax
-                    schema_entity_type = answer[idx + len('" ' + ent + ' "'):].split()
-                    if len(schema_entity_type) == 1:
-                        schema_entity_type = 'id'
-                    else:
-                        schema_entity_type = schema_entity_type[0]
-                    if schema_entity_type.startswith('^^'):
-                        schema_entity_type = schema_entity_type.rsplit(':', 1)[1]
-                    else:
-                        schema_entity_type = self.db.unk_type
-                
-                if schema_entity_type not in self.TTtype2DBtype.keys():
-                    schema_type = self.db.unk_type
-                else:
-                    schema_type = self.TTtype2DBtype[schema_entity_type]
-            
-                entity2type[ent] = schema_type
-        
-            tokens_types = self.db.lookup(tokens, subset=entity2type, retrieve_method=self.args.retrieve_method)
+            if self.args.retrieve_method == 'database':
+                tokens_types = self.db.lookup(tokens)
+            else:
+                entity2type = self.collect_answer_entity_types(answer)
+                tokens_types = self.db.lookup(tokens, subset=entity2type, retrieve_method=self.args.retrieve_method)
             
         return tokens_types
     
+    def find_freqs(self, tokens):
+        import wordfreq
+        return None
+    
+        
     def tokenize(self, sentence, split=None, field_name=None, answer=None):
 
         if not sentence:
@@ -249,9 +261,11 @@ class BaseAlmondTask(BaseTask):
         tokens_types = []
         if self.args.do_entity_linking and field_name in ('question', 'context', 'context_question'):
             tokens_types = self.find_types(tokens, split, answer)
+            token_freqs = self.find_freqs(tokens)
         
         if self.args.verbose and self.args.do_entity_linking and \
-                ((self.is_contextual() and field_name == 'question') or (not self.is_contextual() and field_name == 'context')):
+                ((self.is_contextual() and field_name == 'question') or (not self.is_contextual() and field_name == 'context')) and \
+                split == 'validation':
             print()
             print(*[f'entity: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_types)], sep='\n')
 
