@@ -93,7 +93,7 @@ class Batch(NamedTuple):
             override_question = override_question.split()
             override_question_mask = [True for _ in override_question]
             # dummy values
-            override_question_type = ['O' for _ in override_question]
+            override_question_type = [0 for _ in override_question]
             
         override_context_mask = None
         override_context_type = []
@@ -101,7 +101,7 @@ class Batch(NamedTuple):
             override_context = override_context.split()
             override_context_mask = [True for _ in override_context]
             # dummy values
-            override_context_type = ['O' for _ in override_context]
+            override_context_type = [0 for _ in override_context]
 
         if paired:
             example_pairs = []
