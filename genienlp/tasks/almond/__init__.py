@@ -146,16 +146,19 @@ class BaseAlmondTask(BaseTask):
         
         # read and initialize the database
         if args.database:
-            with open(args.database, 'r') as fin:
-                db_data = json.load(fin)
-                # lowercase all keys
-                db_data_processed = {key.lower(): value for key, value in db_data.items()}
-                self.db = Database(db_data_processed)
+            self._init_db()
 
-            self.TTtype2DBtype = dict()
-            for domain in args.almond_domains:
-                self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
-            
+    def _init_db(self):
+        with open(self.args.database, 'r') as fin:
+            db_data = json.load(fin)
+            # lowercase all keys
+            db_data_processed = {key.lower(): value for key, value in db_data.items()}
+            self.db = Database(db_data_processed)
+    
+        self.TTtype2DBtype = dict()
+        for domain in self.args.almond_domains:
+            self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
+    
     @property
     def metrics(self):
         return ['em', 'bleu']
