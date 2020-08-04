@@ -44,6 +44,11 @@ class MQANDecoder(nn.Module):
         self.pad_idx = numericalizer.pad_id
         self.init_idx = numericalizer.init_id
         self.args = args
+        
+        if self.args.type_projection:
+            self.extra_decoder_dimension = 0
+        else:
+            self.extra_decoder_dimension = self.args.num_db_types
 
         self.decoder_embeddings = CombinedEmbedding(numericalizer, decoder_embeddings, args.dimension,
                                                     trained_dimension=args.trainable_decoder_embeddings,
@@ -59,9 +64,9 @@ class MQANDecoder(nn.Module):
             self.self_attentive_decoder = None
 
         if args.rnn_layers > 0:
-            self.rnn_decoder = LSTMDecoder(args.dimension, args.rnn_dimension,
+            self.rnn_decoder = LSTMDecoder(args.dimension + self.extra_decoder_dimension, args.rnn_dimension + self.extra_decoder_dimension,
                                            dropout=args.dropout_ratio, num_layers=args.rnn_layers)
-            switch_input_len = 2 * args.rnn_dimension + args.dimension
+            switch_input_len = 2 * (args.rnn_dimension + self.extra_decoder_dimension) + (args.dimension + self.extra_decoder_dimension)
         else:
             self.context_attn = LSTMDecoderAttention(args.dimension, dot=True)
             self.question_attn = LSTMDecoderAttention(args.dimension, dot=True)
@@ -71,7 +76,7 @@ class MQANDecoder(nn.Module):
         self.context_question_switch = nn.Sequential(Feedforward(switch_input_len, 1), nn.Sigmoid())
 
         self.generative_vocab_size = numericalizer.generative_vocab_size
-        self.out = nn.Linear(args.rnn_dimension if args.rnn_layers > 0 else args.dimension, self.generative_vocab_size)
+        self.out = nn.Linear(args.rnn_dimension + self.extra_decoder_dimension if args.rnn_layers > 0 else args.dimension + self.extra_decoder_dimension, self.generative_vocab_size)
 
     def set_embeddings(self, embeddings):
         if self.decoder_embeddings is not None:
@@ -95,9 +100,8 @@ class MQANDecoder(nn.Module):
                 self.question_attn.applyMasks(question_padding)
 
             answer_padding = (answer.data == self.pad_idx)[:, :-1]
-
             answer_embedded = self.decoder_embeddings(answer[:, :-1], padding=answer_padding).last_layer
-
+            
             if self.args.transformer_layers > 0:
                 self_attended_decoded = self.self_attentive_decoder(answer_embedded,
                                                                     self_attended_context,
@@ -106,6 +110,10 @@ class MQANDecoder(nn.Module):
                                                                     positional_encodings=True)
             else:
                 self_attended_decoded = answer_embedded
+                
+            if not self.args.type_projection:
+                self_attended_decoded = torch.cat((self_attended_decoded, torch.zeros([self_attended_decoded.size(0), self_attended_decoded.size(1), self.args.num_db_types], device=self_attended_decoded.device)), dim=-1)
+
 
             if self.args.rnn_layers > 0:
                 rnn_decoder_outputs = self.rnn_decoder(self_attended_decoded, final_context, final_question,
@@ -182,7 +190,7 @@ class MQANDecoder(nn.Module):
         batch_size = context.size()[0]
         max_decoder_time = generation_dict['max_output_length']
 
-        decoder_wrapper = MQANDecoderWrapper(self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
+        decoder_wrapper = MQANDecoderWrapper(self.args, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                                              decoder_vocab, rnn_state, batch_size, max_decoder_time,
                                              self, num_beams=generation_dict['num_beams'], expansion_factor=expansion_factor)
         
@@ -251,8 +259,9 @@ class MQANDecoderWrapper(object):
     A wrapper for MQANDecoder that wraps around its recurrent neural network, so that we can decode it like a Transformer
     """
 
-    def __init__(self, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
+    def __init__(self, args, self_attended_context, context, context_padding, question, question_padding, context_indices, question_indices,
                decoder_vocab, rnn_state, batch_size, max_decoder_time, mqan_decoder: MQANDecoder, num_beams:int, expansion_factor:int):
+        self.args = args
         self.decoder_vocab = decoder_vocab
         self_attended_context = self.expand_for_beam_search(self_attended_context, batch_size, expansion_factor)
         context = self.expand_for_beam_search(context, batch_size, expansion_factor)
@@ -287,7 +296,7 @@ class MQANDecoderWrapper(object):
         if self.mqan_decoder.args.transformer_layers > 0:
             self.hiddens = [self.self_attended_context[0].new_zeros((self.batch_size*expansion_factor, self.max_decoder_time, self.mqan_decoder.args.dimension))
                     for l in range(len(self.mqan_decoder.self_attentive_decoder.layers) + 1)]
-            self.hiddens[0] =  self.hiddens[0] + positional_encodings_like(self.hiddens[0])
+            self.hiddens[0] = self.hiddens[0] + positional_encodings_like(self.hiddens[0])
 
     
     def reorder(self, new_order):
@@ -323,6 +332,9 @@ class MQANDecoderWrapper(object):
             self_attended_decoded = self.hiddens[-1][:, self.time].unsqueeze(1)
         else:
             self_attended_decoded = embedding
+
+        if not self.args.type_projection:
+            self_attended_decoded = torch.cat((self_attended_decoded, torch.zeros([self_attended_decoded.size(0), self_attended_decoded.size(1), self.args.num_db_types], device=self_attended_decoded.device)), dim=-1)
 
         if self.mqan_decoder.args.rnn_layers > 0:
             rnn_decoder_outputs = self.mqan_decoder.rnn_decoder(self_attended_decoded, self.context, self.question,

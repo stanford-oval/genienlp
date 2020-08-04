@@ -249,6 +249,8 @@ def parse_argv(parser):
     parser.add_argument('--almond_domains', nargs='+', help='Domains used for almond dataset; e.g. music, books, ...')
     parser.add_argument('--features', nargs='+', default=['type'], help='Features that will be extracted for each entity: [type, freq] for now.'
                                                                         ' Order is important')
+    parser.add_argument('--type_projection', action='store_true', help='Whether to apply projection after concating type and contxtual embeddings')
+
 
 
 def post_parse(args):

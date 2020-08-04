@@ -303,7 +303,7 @@ class BaseAlmondTask(BaseTask):
             return tokens, mask, tokens_type_ids
 
         else:
-            mask = [not is_entity(token) and not is_device(token) for token in tokens]
+            mask = [not self.is_entity(token) and not self.is_device(token) for token in tokens]
             return tokens, mask, list(zip(*zip_list))
 
     def detokenize(self, tokenized, field_name=None):

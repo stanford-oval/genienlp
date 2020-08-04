@@ -436,7 +436,7 @@ def load_config_json(args):
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
                     'override_question', 'override_context',
-                     'database', 'do_entity_linking', 'retrieve_method', 'almond_domains', 'num_db_types', 'verbose']
+                     'database', 'do_entity_linking', 'retrieve_method', 'almond_domains', 'num_db_types', 'verbose', 'type_projection']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
@@ -453,6 +453,8 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
+            elif r == 'type_projection':
+                setattr(args, r, False)
             elif r == 'almond_domains':
                 setattr(args, r, ['music'])
             elif r == 'num_db_types':
