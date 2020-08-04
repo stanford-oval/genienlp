@@ -119,21 +119,7 @@ class AlmondDataset(CQA):
                      eval=None if validation is None else validation_data,
                      test=None if test is None else test_data,
                      aux=None if do_curriculum is None else aux_data)
-
-def is_entity(token):
-    return token[0].isupper()
-
-def is_device(token):
-    return token[0] == '@'
-
-def process_id(ex):
-    id_ = ex.example_id.rsplit('/', 1)
-    id_ = id_[0] if len(id_) == 1 else id_[1]
-    # translated
-    if id_[0] == 'T':
-        id_ = id_[1:]
-    return id_
-
+    
 
 class BaseAlmondTask(BaseTask):
     """Base class for the Almond semantic parsing task
@@ -147,6 +133,20 @@ class BaseAlmondTask(BaseTask):
         # read and initialize the database
         if args.database:
             self._init_db()
+
+    def is_entity(self, token):
+        return token[0].isupper()
+
+    def is_device(self, token):
+        return token[0] == '@'
+
+    def process_id(self, ex):
+        id_ = ex.example_id.rsplit('/', 1)
+        id_ = id_[0] if len(id_) == 1 else id_[1]
+        # translated
+        if id_[0] == 'T':
+            id_ = id_[1:]
+        return id_
 
     def _init_db(self):
         with open(self.args.database, 'r') as fin:
@@ -488,7 +488,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
     def get_train_processed_ids(self, split):
         all_ids = []
         for ex in split.examples:
-            all_ids.append(process_id(ex))
+            all_ids.append(self.process_id(ex))
         return all_ids
 
     def combine_datasets(self, datasets, sort_key_fn, batch_size_fn, used_fields, groups):
@@ -529,7 +529,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
                 for id_set in ids_sets:
                     assert set(id_set) == id_set_base, 'When using sentence batching your datasets should have matching ids'
             
-            sort_key_fn = process_id
+            sort_key_fn = self.process_id
             batch_size_fn = default_batch_fn
         else:
             sort_key_fn = context_answer_len
