@@ -43,6 +43,8 @@ from ...data_utils.database import Database, DOMAIN_TYPE_MAPPING
 
 from ..base_dataset import Split
 
+from wordfreq import zipf_frequency
+
 logger = logging.getLogger(__name__)
 
 quoted_pattern_with_space = re.compile(r'\"\s([^"]*?)\s\"')
@@ -130,8 +132,8 @@ class BaseAlmondTask(BaseTask):
         self.args = args
         self._preprocess_context = args.almond_preprocess_context
         
-        # read and initialize the database
-        if args.database:
+        # initialize the database
+        if args.database and args.do_entity_linking:
             self._init_db()
 
     def is_entity(self, token):
@@ -224,7 +226,7 @@ class BaseAlmondTask(BaseTask):
                 schema_type = self.TTtype2DBtype[schema_entity_type]
         
             entity2type[ent] = schema_type
-            
+        
         return entity2type
 
     def find_types(self, tokens, split, answer):
@@ -242,7 +244,6 @@ class BaseAlmondTask(BaseTask):
         return tokens_type_ids
     
     def find_freqs(self, tokens, tokens_type_ids):
-        from wordfreq import zipf_frequency
         token_freqs = []
         for token, token_type_id in zip(tokens, tokens_type_ids):
             if token_type_id == self.db.type2id[self.db.unk_type]:

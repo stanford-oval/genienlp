@@ -242,14 +242,14 @@ def parse_argv(parser):
                         help='growth strategy for curriculum')
 
     parser.add_argument('--do_entity_linking', action='store_true', help='Collect and use entity features during semantic parsing')
-    parser.add_argument('--database', default='', type=str, help='Database to retrieve entities from')
+    parser.add_argument('--database', type=str, help='Database to retrieve entities from')
     parser.add_argument('--retrieve_method', choices=['database', 'answer', 'thingtalk'], type=str,
                         help='prune items in database for faster lookup (only during train and evaluation)')
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', help='Domains used for almond dataset; e.g. music, books, ...')
     parser.add_argument('--features', nargs='+', default=['type'], help='Features that will be extracted for each entity: [type, freq] for now.'
                                                                         ' Order is important')
-    parser.add_argument('--type_projection', action='store_true', help='Whether to apply projection after concating type and contxtual embeddings')
+    parser.add_argument('--no_type_projection', action='store_true', help='Do not apply linear projection after concating type and contxtual embeddings')
 
 
 

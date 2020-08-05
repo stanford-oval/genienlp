@@ -34,11 +34,14 @@ DOMAIN_TYPE_MAPPING = dict()
 DOMAIN_TYPE_MAPPING['music'] = {'Person': 'song_artist', 'MusicRecording': 'song_name', 'MusicAlbum': 'song_album'}
 DOMAIN_TYPE_MAPPING['spotify'] = {'id': 'song_name', 'song': 'song_name', 'artist': 'song_artist', 'artists': 'song_artist', 'album': 'song_album', 'genres': 'song_genre'}
 
+TYPES = ('song_name', 'song_artist', 'song_album', 'song_genre')
+
 import nltk
 nltk.download('stopwords')
 from nltk.corpus import stopwords
 
-BANNED_WORDS = stopwords.words('english') + ['music', 'name', 'want', 'album', 'please', 'who', 'show me', 'play', 'track', 'song', 'record', 'album', 'something', 'resume',
+BANNED_WORDS = stopwords.words('english') + ['music', 'name', 'want', 'album', 'please', 'who', 'show me',
+                                             'play', 'track', 'song', 'record', 'album', 'something', 'resume',
                                              'find me', 'the', 'search for me', 'search', 'yes', 'yeah']
 
 def is_special_case(i, tokens, key_tokenized):
@@ -52,7 +55,7 @@ class Database(object):
         self.data = Trie(items)
         self.unk_type = 'unk'
         self.type2id = {self.unk_type:  0}
-        self.type2id.update({type: i + 1 for i, type in enumerate(set(self.data.values()))})
+        self.type2id.update({type: i + 1 for i, type in enumerate(TYPES)})
     
     def update_items(self, new_items, allow_new_types=False):
         new_items_processed = dict()

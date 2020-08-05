@@ -45,11 +45,11 @@ class MQANDecoder(nn.Module):
         self.init_idx = numericalizer.init_id
         self.args = args
         
-        if self.args.type_projection:
-            self.extra_decoder_dimension = 0
-        else:
+        if self.args.no_type_projection:
             self.extra_decoder_dimension = self.args.num_db_types
-
+        else:
+            self.extra_decoder_dimension = 0
+            
         self.decoder_embeddings = CombinedEmbedding(numericalizer, decoder_embeddings, args.dimension,
                                                     trained_dimension=args.trainable_decoder_embeddings,
                                                     project=True,
@@ -111,9 +111,8 @@ class MQANDecoder(nn.Module):
             else:
                 self_attended_decoded = answer_embedded
                 
-            if not self.args.type_projection:
+            if self.args.no_type_projection:
                 self_attended_decoded = torch.cat((self_attended_decoded, torch.zeros([self_attended_decoded.size(0), self_attended_decoded.size(1), self.args.num_db_types], device=self_attended_decoded.device)), dim=-1)
-
 
             if self.args.rnn_layers > 0:
                 rnn_decoder_outputs = self.rnn_decoder(self_attended_decoded, final_context, final_question,
@@ -333,7 +332,7 @@ class MQANDecoderWrapper(object):
         else:
             self_attended_decoded = embedding
 
-        if not self.args.type_projection:
+        if self.args.no_type_projection:
             self_attended_decoded = torch.cat((self_attended_decoded, torch.zeros([self_attended_decoded.size(0), self_attended_decoded.size(1), self.args.num_db_types], device=self_attended_decoded.device)), dim=-1)
 
         if self.mqan_decoder.args.rnn_layers > 0:
