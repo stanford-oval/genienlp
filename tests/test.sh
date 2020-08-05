@@ -54,7 +54,7 @@ do
 
     if [ $i == 0 ] ; then
       echo "Testing the server mode"
-      echo '{"id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | pipenv run python3 -m genienlp server --path $workdir/model_$i --stdin
+      echo '{"id": "dummy_example_1", "task": "almond", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | pipenv run python3 -m genienlp server --path $workdir/model_$i --stdin
     fi
 
     rm -rf $workdir/model_$i

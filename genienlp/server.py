@@ -69,33 +69,38 @@ class Server:
         return Batch.from_examples([ex], self.numericalizer, device=self.device,
                                    append_question_to_context_too=self.args.append_question_to_context_too,
                                    override_question=self.args.override_question,
-                                   override_context=self.args.override_context)
+                                   override_context=self.args.override_context,
+                                   num_features=self.args.num_features)
 
     def handle_request(self, line):
         request = json.loads(line)
 
         task_name = request['task'] if 'task' in request else 'generic'
+        
         if task_name in self._cached_tasks:
             task = self._cached_tasks[task_name]
         else:
             task = get_tasks([task_name], self.args)[0]
             self._cached_tasks[task_name] = task
-
+        
         context = request['context']
         if not context:
             context = task.default_context
         question = request['question']
         if not question:
             question = task.default_question
-        answer = ''
-        
+            
+        if 'answer' in request.keys():
+            answer = request['answer']
+        else:
+            answer = ''
+
         if self.args.evaluate == 'valid':
             split = 'validation'
         else:
             split = 'test'
-
-        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize,
-                              split=split, lower=self.args.lower)
+    
+        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, split=split, lower=self.args.lower)
 
         batch = self.numericalize_example(ex)
         predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
@@ -139,17 +144,25 @@ class Server:
         except KeyboardInterrupt:
             pass
 
+    def _run_file(self, input_file):
+        with open(input_file, 'r') as fin:
+            data = json.load(fin)
+        for line in data.values():
+            sys.stdout.write(self.handle_request(json.dumps(line)))
+            sys.stdout.flush()
+
     def run(self):
         log_model_size(logger, self.model, self.args.model)
         self.model.to(self.device)
 
         self.model.eval()
         with torch.no_grad():
-            if self.args.stdin:
+            if self.args.read_from == 'stdin':
                 self._run_stdin()
-            else:
+            elif self.args.read_from == 'tcp':
                 self._run_tcp()
-
+            else:
+                self._run_file(self.args.input_file)
 
 def parse_argv(parser):
     parser.add_argument('--path', required=True)
@@ -159,14 +172,22 @@ def parse_argv(parser):
     parser.add_argument('--evaluate', type=str, default='valid', choices=['valid', 'test'],
                         help='Which dataset to do predictions for (test or dev)')
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--database', type=str, help='Database to retrieve entities from')
     parser.add_argument('--checkpoint_name', default='best.pth',
                         help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
-    parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
+    # parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
+    parser.add_argument('--read_from', default='tcp', choices=['stdin', 'tcp', 'file'], help='Where to read input data from')
+    parser.add_argument('--input_file', type=str, help='Input file is required when reading from a file')
+    parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
 
 
 def main(args):
     load_config_json(args)
+    
+    # no printing for serve side predictions
+    args.verbose = False
+    
     set_seed(args)
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
