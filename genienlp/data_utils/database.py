@@ -34,6 +34,7 @@ DOMAIN_TYPE_MAPPING = dict()
 DOMAIN_TYPE_MAPPING['music'] = {'Person': 'song_artist', 'MusicRecording': 'song_name', 'MusicAlbum': 'song_album'}
 DOMAIN_TYPE_MAPPING['spotify'] = {'id': 'song_name', 'song': 'song_name', 'artist': 'song_artist', 'artists': 'song_artist', 'album': 'song_album', 'genres': 'song_genre'}
 
+# Order of types should not be changed (new types can be appended)
 TYPES = ('song_name', 'song_artist', 'song_album', 'song_genre')
 
 import nltk
