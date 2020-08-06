@@ -76,7 +76,7 @@ class Seq2Seq(PreTrainedModel):
         self.encoder = ENCODERS[args.seq2seq_encoder](numericalizer, args, context_embeddings, question_embeddings)
         self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings)
         
-        if self.args.num_db_types > 0:
+        if self.args.num_db_types > 0 and self.args.type_embedding_where == 'top':
             # one-hot embeddings
             if args.type_embedding_method == 'onehot':
                 self.type_embeddings = torch.nn.Embedding.from_pretrained(torch.eye(self.args.num_db_types), freeze=True)
@@ -114,7 +114,7 @@ class Seq2Seq(PreTrainedModel):
         else:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = encoder_output
 
-        if self.args.num_db_types > 0:
+        if self.args.num_db_types > 0 and self.args.type_embedding_where == 'top':
             context_feature_embedded = self.type_embeddings(batch.context.feature[:, :, 0].long())
             question_feature_embedded = self.type_embeddings(batch.question.feature[:, :, 0].long())
             

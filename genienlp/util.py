@@ -437,7 +437,8 @@ def load_config_json(args):
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
                     'override_question', 'override_context',
                     'do_entity_linking', 'retrieve_method', 'almond_domains', 'num_db_types',
-                    'no_type_projection', 'features', 'num_features']
+                    'no_type_projection', 'features', 'num_features', 'type_embedding_method', 'type_embedding_where',
+                    'entity_embedding_dropout_ratio']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
@@ -454,6 +455,12 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
+            elif r == 'entity_embedding_dropout_ratio':
+                setattr(args, r, 0.0)
+            elif r == 'type_embedding_where':
+                setattr(args, r, 'bottom')
+            elif r == 'type_embedding_method':
+                setattr(args, r, 'onehot')
             elif r == 'features':
                 setattr(args, r, ['type'])
             elif r == 'num_features':

@@ -198,7 +198,7 @@ def main(args):
 
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
         load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings,
-                        args.decoder_embeddings, args.max_generative_vocab)
+                        args.decoder_embeddings, args.type_embedding_where, args.max_generative_vocab)
     numericalizer.load(args.path)
     for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
         emb.init_for_vocab(numericalizer.vocab)

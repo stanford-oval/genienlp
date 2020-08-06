@@ -126,6 +126,8 @@ def prepare_data(args, logger):
                         args.question_embeddings,
                         args.decoder_embeddings,
                         args.max_generative_vocab,
+                        args.type_embedding_where,
+                        args.num_db_types,
                         logger)
     if args.load is not None:
         numericalizer.load(args.save)

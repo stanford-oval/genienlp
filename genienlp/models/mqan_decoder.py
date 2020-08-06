@@ -45,7 +45,7 @@ class MQANDecoder(nn.Module):
         self.init_idx = numericalizer.init_id
         self.args = args
         
-        if self.args.no_type_projection and self.args.type_embedding_method == 'onehot':
+        if self.args.no_type_projection and self.args.type_embedding_method == 'onehot' and self.args.type_embedding_where == 'top':
             self.extra_decoder_dimension = self.args.num_db_types
         else:
             self.extra_decoder_dimension = 0
@@ -111,7 +111,7 @@ class MQANDecoder(nn.Module):
             else:
                 self_attended_decoded = answer_embedded
                 
-            if self.args.no_type_projection and self.args.type_embedding_method == 'onehot':
+            if self.args.no_type_projection and self.args.type_embedding_method == 'onehot' and self.args.type_embedding_where == 'top':
                 self_attended_decoded = torch.cat((self_attended_decoded, torch.ones([self_attended_decoded.size(0), self_attended_decoded.size(1), self.args.num_db_types], device=self_attended_decoded.device)), dim=-1)
 
             if self.args.rnn_layers > 0:
@@ -332,7 +332,7 @@ class MQANDecoderWrapper(object):
         else:
             self_attended_decoded = embedding
 
-        if self.args.no_type_projection and self.args.type_embedding_method == 'onehot':
+        if self.args.no_type_projection and self.args.type_embedding_method == 'onehot' and self.args.type_embedding_where == 'top':
             self_attended_decoded = torch.cat((self_attended_decoded, torch.ones([self_attended_decoded.size(0), self_attended_decoded.size(1), self.args.num_db_types], device=self_attended_decoded.device)), dim=-1)
 
         if self.mqan_decoder.args.rnn_layers > 0:

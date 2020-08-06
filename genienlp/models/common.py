@@ -424,10 +424,10 @@ class CombinedEmbedding(nn.Module):
             last_layer = self.projection(last_layer)
         return EmbeddingOutput(all_layers=all_layers, last_layer=last_layer)
 
-    def forward(self, x, padding=None):
+    def forward(self, x, entity_ids=None, padding=None):
         embedded: List[EmbeddingOutput] = []
         if self.pretrained_embeddings is not None:
-            embedded += [emb(x, padding=padding) for emb in self.pretrained_embeddings]
+            embedded += [emb(x, entity_ids, padding) for emb in self.pretrained_embeddings]
 
         if self.trained_embeddings is not None:
             trained_vocabulary_size = self.trained_embeddings.weight.size()[0]

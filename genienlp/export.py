@@ -58,6 +58,7 @@ def main(args):
                                              args.question_embeddings,
                                              args.decoder_embeddings,
                                              args.max_generative_vocab,
+                                             args.type_embedding_where,
                                              logger)
 
     # load the numericalizer from the model training directory, and immediately save it in the export directory
