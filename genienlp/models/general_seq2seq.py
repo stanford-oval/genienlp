@@ -29,6 +29,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import torch
+import random
 
 from .coatt_encoder import CoattentionEncoder
 from .lstm_encoder import BiLSTMEncoder
@@ -116,6 +117,14 @@ class Seq2Seq(PreTrainedModel):
                 # scale with token freq
                 context_feature_embedded = context_feature_embedded * batch.context.feature[:, :, 1].unsqueeze(-1)
                 question_feature_embedded = question_feature_embedded * batch.question.feature[:, :, 1].unsqueeze(-1)
+                
+            if self.args.entity_embedding_dropout_ratio > 0.0:
+                if self.args.entity_embedding_dropout_ratio > random.random():
+                    # mask entity contextual embeddings
+                    context_non_entity_ids = (batch.context.feature[:, :, 0] == 0).int()
+                    question_non_entity_ids = (batch.question.feature[:, :, 0] == 0).int()
+                    final_context = final_context * context_non_entity_ids.unsqueeze(-1)
+                    final_question = final_question * question_non_entity_ids.unsqueeze(-1)
 
             final_context = torch.cat((final_context, context_feature_embedded), dim=-1)
             final_question = torch.cat((final_question, question_feature_embedded), dim=-1)

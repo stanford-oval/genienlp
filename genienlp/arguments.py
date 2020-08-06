@@ -213,7 +213,6 @@ def parse_argv(parser):
     parser.add_argument('--lr_rate', default=0.001, type=float, help='fixed learning rate (if not using warmup)')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
     parser.add_argument('--gradient_accumulation_steps', default=1, type=int, help='Number of accumulation steps. Useful to effectively get larger batch sizes.')
-    
 
     parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside args.save')
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')
@@ -250,7 +249,9 @@ def parse_argv(parser):
     parser.add_argument('--features', nargs='+', default=['type'], help='Features that will be extracted for each entity: [type, freq] for now.'
                                                                         ' Order is important')
     parser.add_argument('--no_type_projection', action='store_true', help='Do not apply linear projection after concating type and contxtual embeddings')
-
+    parser.add_argument('--entity_embedding_dropout_ratio', default=0.0, type=float,
+                        help='Dropout contextual embedding of entities at this ratio'
+                             'Only applied if entity-linking is used')
 
 
 def post_parse(args):
