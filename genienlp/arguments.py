@@ -253,6 +253,11 @@ def parse_argv(parser):
                         help='Dropout contextual embedding of entities at this ratio'
                              'Only applied if entity-linking is used')
 
+    parser.add_argument('--type_embedding_method', type=str, choices=['onehot', 'trainable'],
+                        help='Use entity type embedding layer similar to position and segment embedding in transformer models')
+    
+    # parser.add_argument('--type_embedding_where', type=str, default='top', choices=['top', 'bottom'],
+    #                     help='where to add entity type embedding layer')
 
 def post_parse(args):
     

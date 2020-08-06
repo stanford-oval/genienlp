@@ -78,9 +78,14 @@ class Seq2Seq(PreTrainedModel):
         
         if self.args.num_db_types > 0:
             # one-hot embeddings
-            self.type_embeddings = torch.nn.Embedding.from_pretrained(torch.eye(self.args.num_db_types), freeze=True)
-        if not self.args.no_type_projection:
-            self.type_projection = torch.nn.Linear(self.args.rnn_dimension + self.args.num_db_types, self.args.rnn_dimension)
+            if args.type_embedding_method == 'onehot':
+                self.type_embeddings = torch.nn.Embedding.from_pretrained(torch.eye(self.args.num_db_types), freeze=True)
+                if not self.args.no_type_projection:
+                    self.type_projection = torch.nn.Linear(self.args.rnn_dimension + self.args.num_db_types,
+                                                           self.args.rnn_dimension)
+            else:
+                self.type_embeddings = torch.nn.Embedding(self.args.num_db_types, self.args.dimension, padding_idx=0)
+
 
     def set_train_context_embeddings(self, trainable):
         self.encoder.set_train_context_embeddings(trainable)
@@ -125,27 +130,33 @@ class Seq2Seq(PreTrainedModel):
                     question_non_entity_ids = (batch.question.feature[:, :, 0] == 0).int()
                     final_context = final_context * context_non_entity_ids.unsqueeze(-1)
                     final_question = final_question * question_non_entity_ids.unsqueeze(-1)
-
-            final_context = torch.cat((final_context, context_feature_embedded), dim=-1)
-            final_question = torch.cat((final_question, question_feature_embedded), dim=-1)
             
-            if self.args.no_type_projection:
-                # expand rnn states by adding dummy tensors
-                context_rnn_state = tuple(torch.cat((value,
-                                                     torch.zeros([value.size(0), value.size(1), self.args.num_db_types],
-                                                                 device=batch.context.value.device)), dim=-1) for value
-                                          in context_rnn_state)
-                if question_rnn_state:
-                    question_rnn_state = tuple(torch.cat((value, torch.zeros(
-                        [value.size(0), value.size(1), self.args.num_db_types], device=batch.question.value.device)),
-                                                         dim=-1) for value in question_rnn_state)
-                self_attended_context = tuple(torch.cat((value, torch.zeros(
-                    [value.size(0), value.size(1), self.args.num_db_types], device=batch.context.value.device)), dim=-1)
-                                              for value in self_attended_context)
+            if self.args.type_embedding_method == 'onehot':
+                final_context = torch.cat((final_context, context_feature_embedded), dim=-1)
+                final_question = torch.cat((final_question, question_feature_embedded), dim=-1)
+                if self.args.no_type_projection:
+                    # expand rnn states by adding dummy tensors
+                    context_rnn_state = tuple(torch.cat((value,
+                                                         torch.zeros(
+                                                             [value.size(0), value.size(1), self.args.num_db_types],
+                                                             device=batch.context.value.device)), dim=-1) for value
+                                              in context_rnn_state)
+                    if question_rnn_state:
+                        question_rnn_state = tuple(torch.cat((value, torch.zeros(
+                            [value.size(0), value.size(1), self.args.num_db_types],
+                            device=batch.question.value.device)),
+                                                             dim=-1) for value in question_rnn_state)
+                    self_attended_context = tuple(torch.cat((value, torch.zeros(
+                        [value.size(0), value.size(1), self.args.num_db_types], device=batch.context.value.device)),
+                                                            dim=-1)
+                                                  for value in self_attended_context)
+                else:
+                    final_context = self.type_projection(final_context)
+                    final_question = self.type_projection(final_question)
             else:
-                final_context = self.type_projection(final_context)
-                final_question = self.type_projection(final_question)
-                
+                final_context = final_context + context_feature_embedded
+                final_question = final_question + question_feature_embedded
+            
         encoder_loss = None
         if self.training and getattr(self.args, 'use_encoder_loss', None):
             encoder_loss = self.get_encoder_loss(context_rnn_state)
