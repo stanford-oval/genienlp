@@ -115,16 +115,16 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
 
         iters.extend(task_iter)
         task_index += 1
-        
+
     return iters
 
 def run(args, device):
     Model = getattr(models, args.model)
-    model, _ = Model.from_pretrained(save_directory=args.path,
-                                  model_checkpoint_file=args.checkpoint_name,
-                                  args=args,
-                                  device=device
-                                  )
+    model, _ = Model.from_pretrained(args.path,
+                                     model_checkpoint_file=args.checkpoint_name,
+                                     args=args,
+                                     device=device
+                                    )
 
     val_sets = get_all_splits(args)
     model.add_new_vocab_from_data(val_sets)

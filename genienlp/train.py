@@ -505,10 +505,14 @@ def main(args):
     ########## initialize model
     best_decascore = None
     if args.load is not None:
-        model, best_decascore = model_class.from_pretrained(args=args, save_directory=args.save, model_checkpoint_file=args.load, vocab_sets=train_sets+val_sets, device=devices[0])
+        model, best_decascore = model_class.from_pretrained(args.save,
+                                                            args=args,
+                                                            model_checkpoint_file=args.load,
+                                                            vocab_sets=train_sets+val_sets,
+                                                            device=devices[0])
     else:
         logger.info(f'Initializing a new {model_name}')
-        model = model_class(args, vocab_sets=train_sets+val_sets)
+        model = model_class(args=args, vocab_sets=train_sets+val_sets)
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
 

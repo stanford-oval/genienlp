@@ -142,7 +142,7 @@ def parse_argv(parser):
     parser.add_argument('--model', type=str, choices=['Seq2Seq', 'Bart'], default='Seq2Seq', help='which model to import')
     parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity', 'Coattention'],
                         default='MQANEncoder', help='which encoder to use for the Seq2Seq model')
-    parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'], default='MQANDecoder',
+    parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder', 'facebook/bart-large'], default='MQANDecoder',
                         help='which decoder to use for the Seq2Seq model')
     parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers')
