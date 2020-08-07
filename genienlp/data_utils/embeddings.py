@@ -114,6 +114,13 @@ class TransformerEmbedding(torch.nn.Module):
 
     def grow_for_vocab(self, vocab, new_words):
         self.model.resize_token_embeddings(len(vocab))
+        
+    def get_positional_embedding(self, input):
+        position_ids = torch.arange(input.size()[1], dtype=torch.long, device=input.device)
+        position_ids = position_ids.unsqueeze(0).expand(*input.size())
+        position_embeddings = self.model.embeddings.position_embeddings(position_ids)
+        
+        return position_embeddings
 
     def forward(self, input: torch.Tensor, entity_ids=None, padding=None):
         inputs = {'input_ids': input, 'attention_mask': (~padding).to(dtype=torch.float)}

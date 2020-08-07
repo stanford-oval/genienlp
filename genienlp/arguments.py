@@ -258,6 +258,9 @@ def parse_argv(parser):
     
     parser.add_argument('--type_embedding_where', type=str, default='top', choices=['top', 'bottom'],
                         help='where to add entity type embedding layer')
+    
+    parser.add_argument('--top_level_pos_embedding_type', default='none', choices=['none', 'pretrained', 'sinusoid'],
+                        help='add positional embedding to transformer\'s output contextual embeddings')
 
 def post_parse(args):
     

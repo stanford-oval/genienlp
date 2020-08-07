@@ -30,10 +30,10 @@
 
 import math
 from typing import NamedTuple, List
+from torch import Tensor
 
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 from torch.jit import Final
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pack_padded_sequence as pack
@@ -93,7 +93,7 @@ def positional_encodings_like(x, t=None):
         else:
             encodings[:, channel] = torch.cos(
                 positions / 10000 ** ((channel - 1) / x.size(2)))
-    return Variable(encodings)
+    return encodings
 
 
 # torch.matmul can't do (4, 3, 2) @ (4, 2) -> (4, 3)
@@ -423,6 +423,16 @@ class CombinedEmbedding(nn.Module):
         if self.project:
             last_layer = self.projection(last_layer)
         return EmbeddingOutput(all_layers=all_layers, last_layer=last_layer)
+    
+    def positional_embedding(self, x):
+        embedded = []
+        if self.pretrained_embeddings is not None:
+            embedded += [emb.get_positional_embedding(x) for emb in self.pretrained_embeddings]
+        if self.trained_embeddings is not None:
+            # positional embedding is only returned for pretrained embeddings
+            pass
+
+        return torch.cat(embedded, dim=-1)
 
     def forward(self, x, entity_ids=None, padding=None):
         embedded: List[EmbeddingOutput] = []

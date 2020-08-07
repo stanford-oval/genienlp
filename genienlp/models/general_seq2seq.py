@@ -36,7 +36,7 @@ from .lstm_encoder import BiLSTMEncoder
 from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
-from .common import mask_tokens
+from .common import mask_tokens, positional_encodings_like
 from transformers import PreTrainedModel, PretrainedConfig
 
 ENCODERS = {
@@ -113,6 +113,13 @@ class Seq2Seq(PreTrainedModel):
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
         else:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = encoder_output
+            
+        if self.args.top_level_pos_embedding_type == 'pretrained':
+            final_context += self.encoder.encoder_embeddings.positional_embedding(batch.context.value)
+            final_question += self.encoder.encoder_embeddings.positional_embedding(batch.question.value)
+        elif self.args.top_level_pos_embedding_type == 'sinusoid':
+            final_context += positional_encodings_like(final_context)
+            final_question += positional_encodings_like(final_question)
 
         if self.args.num_db_types > 0 and self.args.type_embedding_where == 'top':
             context_feature_embedded = self.type_embeddings(batch.context.feature[:, :, 0].long())
@@ -156,6 +163,7 @@ class Seq2Seq(PreTrainedModel):
             else:
                 final_context = final_context + context_feature_embedded
                 final_question = final_question + question_feature_embedded
+            
             
         encoder_loss = None
         if self.training and getattr(self.args, 'use_encoder_loss', None):
