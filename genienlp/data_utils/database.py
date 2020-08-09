@@ -41,9 +41,10 @@ import nltk
 nltk.download('stopwords')
 from nltk.corpus import stopwords
 
-BANNED_WORDS = stopwords.words('english') + ['music', 'name', 'want', 'album', 'please', 'who', 'show me',
-                                             'play', 'track', 'song', 'record', 'album', 'something', 'resume',
-                                             'find me', 'the', 'search for me', 'search', 'yes', 'yeah']
+
+BANNED_WORDS = stopwords.words('english') + ['music', 'musics', 'name', 'names', 'want', 'wants', 'album', 'albums', 'please', 'who', 'show me',
+                                             'play', 'plays', 'track', 'tracks', 'song', 'songs', 'record', 'records', 'album', 'something', 'resume', 'resumes',
+                                             'find me', 'the', 'search for me', 'search', 'searches', 'yes', 'yeah']
 
 def is_special_case(i, tokens, key_tokenized):
     if ' '.join(key_tokenized) in BANNED_WORDS:

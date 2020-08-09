@@ -236,8 +236,9 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
                 context_vectors.append(
                     TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
             else:
-                transfo_model = BertModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
-                transfo_model._reset_embeddings(num_db_types)
+                if emb_type in BERT_PRETRAINED_MODEL_ARCHIVE_LIST:
+                    transfo_model = BertModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
+                    transfo_model._reset_embeddings(num_db_types)
                 context_vectors.append(
                     TransformerEmbedding(transfo_model))
             
@@ -276,8 +277,10 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
                 question_vectors.append(
                     TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
             else:
-                transfo_model = BertModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
-                transfo_model._reset_embeddings(num_db_types)
+                if emb_type in BERT_PRETRAINED_MODEL_ARCHIVE_LIST:
+                    transfo_model = BertModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
+                    transfo_model._reset_embeddings(num_db_types)
+                    
                 question_vectors.append(
                     TransformerEmbedding(transfo_model))
         else:

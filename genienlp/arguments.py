@@ -261,6 +261,9 @@ def parse_argv(parser):
     
     parser.add_argument('--top_level_pos_embedding_type', default='none', choices=['none', 'pretrained', 'sinusoid'],
                         help='add positional embedding to transformer\'s output contextual embeddings')
+    
+    parser.add_argument('--no_oracle', action='store_true',
+                        help='do not use oracle for train/dev splits')
 
 def post_parse(args):
     

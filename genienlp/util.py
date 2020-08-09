@@ -438,7 +438,7 @@ def load_config_json(args):
                     'override_question', 'override_context',
                     'do_entity_linking', 'retrieve_method', 'almond_domains', 'num_db_types',
                     'no_type_projection', 'features', 'num_features', 'type_embedding_method', 'type_embedding_where',
-                    'entity_embedding_dropout_ratio']
+                    'entity_embedding_dropout_ratio', 'top_level_pos_embedding_type', 'no_oracle']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
@@ -455,6 +455,10 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
+            elif r == 'no_oracle':
+                setattr(args, r, False)
+            elif r == 'top_level_pos_embedding_type':
+                setattr(args, r, 'none')
             elif r == 'entity_embedding_dropout_ratio':
                 setattr(args, r, 0.0)
             elif r == 'type_embedding_where':

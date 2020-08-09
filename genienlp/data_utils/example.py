@@ -55,12 +55,12 @@ class Example(NamedTuple):
     vocab_fields = ['context', 'question', 'answer']
 
     @staticmethod
-    def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, split, lower=False):
+    def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, split, no_oracle=False, lower=False):
         args = [example_id]
 
         for argname, arg in (('context', context), ('question', question), ('answer', answer),
                              ('context_question', context+' '+question)):
-            words, mask, feature = tokenize(arg.rstrip('\n'), split, field_name=argname, answer=answer)
+            words, mask, feature = tokenize(arg.rstrip('\n'), split, field_name=argname, answer=answer, no_oracle=no_oracle)
             if mask is None:
                 mask = [True for _ in words]
             if lower:
@@ -183,6 +183,7 @@ class Batch(NamedTuple):
         answer_inputs = [(ex.answer, ex.answer_word_mask, ex.answer_feature) for ex in examples]
         
         all_example_ids_single = example_ids
+
         all_context_inputs_single = numericalizer.encode_single(context_inputs, decoder_vocab,
                                                                 device=device, max_length=max_context_len-2)
         all_question_inputs_single = numericalizer.encode_single(question_inputs, decoder_vocab,

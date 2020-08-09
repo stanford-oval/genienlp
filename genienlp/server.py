@@ -100,7 +100,7 @@ class Server:
         else:
             split = 'test'
     
-        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, split=split, lower=self.args.lower)
+        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, split=split, no_oracle=self.args.no_oracle, lower=self.args.lower)
 
         batch = self.numericalize_example(ex)
         predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
@@ -198,7 +198,7 @@ def main(args):
 
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
         load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings,
-                        args.decoder_embeddings, args.type_embedding_where, args.max_generative_vocab)
+                        args.decoder_embeddings, args.max_generative_vocab, args.type_embedding_where, args.num_db_types)
     numericalizer.load(args.path)
     for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
         emb.init_for_vocab(numericalizer.vocab)

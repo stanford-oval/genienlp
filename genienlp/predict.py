@@ -74,7 +74,7 @@ def get_all_splits(args):
         
         kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages,
-                       'almond_lang_as_question': args.almond_lang_as_question})
+                       'almond_lang_as_question': args.almond_lang_as_question, 'no_oracle': args.no_oracle})
         
         kwargs['separate_eval'] = args.separate_eval
         task_splits = task.get_splits(root=args.data, lower=args.lower, **kwargs)
@@ -108,7 +108,7 @@ def prepare_data(args, numericalizer, embeddings):
 def run(args, device):
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
         load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings, args.decoder_embeddings,
-                        args.max_generative_vocab, args.type_embedding_where, logger)
+                        args.max_generative_vocab, args.type_embedding_where, args.num_db_types, logger)
     numericalizer.load(args.path)
     for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
         emb.init_for_vocab(numericalizer.vocab)
