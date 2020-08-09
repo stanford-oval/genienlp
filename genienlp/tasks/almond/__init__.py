@@ -230,8 +230,9 @@ class BaseAlmondTask(BaseTask):
         return entity2type
 
     def find_types(self, tokens, split, answer, no_oracle=False):
-        # we only need to do lookup for test split as entity types can be retrieved for train and eval sets from the program
+        # Oracle: Entity types can be retrieved for train and eval sets from the program
         # this will speed up the process significantly
+        
         if no_oracle or split in ['test']:
             tokens_type_ids = self.db.lookup(tokens)
         else:

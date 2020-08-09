@@ -104,6 +104,7 @@ class TransformerNumericalizer(object):
 
         self.decoder_vocab = DecoderVocabulary(self._decoder_words, self._tokenizer,
                                                pad_token=self.pad_token, eos_token=self.eos_token)
+        
 
     def encode_single(self, minibatch, decoder_vocab, device=None, max_length=-1):
         assert isinstance(minibatch, list)
@@ -111,17 +112,22 @@ class TransformerNumericalizer(object):
         # apply word-piece tokenization to everything first
         all_wp_tokenized = []
         all_wp_features = []
+
+        is_piece_fn = None
+        if isinstance(self._tokenizer, MaskedBertTokenizer):
+            is_piece_fn = lambda wp: wp.startswith('##')
+        elif isinstance(self._tokenizer, MaskedXLMRobertaTokenizer):
+            is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
+
         for tokens, mask, features in minibatch:
             wps = self._tokenizer.tokenize(tokens, mask)
             all_wp_tokenized.append(wps)
             # answer field has empty type
             if features:
-                # TODO: bert specific
-                # move and adapt encode_single for each subclass
-                is_wp = [bool(wp.startswith('##')) for wp in wps]
+                # ignoring first token which is always not a piece
+                is_wp = [0] + [int(is_piece_fn(wp)) for wp in wps[1:]]
                 wp_features = []
                 j = -1
-                assert is_wp[0] == 0
                 for i, wp in enumerate(wps):
                     if not is_wp[i]:
                         j += 1

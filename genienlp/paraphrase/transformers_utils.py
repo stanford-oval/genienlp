@@ -1,15 +1,17 @@
 import copy
 import re
+import logging
 
-from transformers.file_utils import add_start_docstrings_to_callable
+from transformers import RobertaConfig, XLMRobertaConfig
 from transformers.modeling_bart import LayerNorm, LearnedPositionalEmbedding, BartEncoder, SelfAttention, invert_mask, \
     SinusoidalPositionalEmbedding, BartModel, BartForConditionalGeneration
-from transformers.modeling_bert import BertLayerNorm, BertPreTrainedModel, BertEncoder, BertPooler, \
-    BERT_INPUTS_DOCSTRING
+from transformers.modeling_bert import BertLayerNorm, BertPreTrainedModel, BertEncoder, BertPooler
 
 from transformers.modeling_t5 import T5ForConditionalGeneration, T5PreTrainedModel, T5LayerNorm, T5Block
 
 SPIECE_UNDERLINE = "▁"
+
+logger = logging.getLogger(__name__)
 
 language_code_re = re.compile(">>.+<<")
 
@@ -65,7 +67,8 @@ import torch.nn.functional as F
 
 from transformers.activations import ACT2FN
 from transformers.configuration_bart import BartConfig
-from transformers.modeling_utils import calc_banned_ngram_tokens, calc_banned_bad_words_ids, top_k_top_p_filtering
+from transformers.modeling_utils import calc_banned_ngram_tokens, calc_banned_bad_words_ids, top_k_top_p_filtering, \
+    create_position_ids_from_input_ids
 
 
 class DecoderLayer(nn.Module):
@@ -1028,19 +1031,7 @@ class BertEmbeddings(nn.Module):
 
 class BertModel(BertPreTrainedModel):
     """
-
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is all you need`_ by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the
-    :obj:`is_decoder` argument of the configuration set to :obj:`True`; an
-    :obj:`encoder_hidden_states` is expected as an input to the forward pass.
-
-    .. _`Attention is all you need`:
-        https://arxiv.org/abs/1706.03762
-
+    Subcalss of BertPretrained model with an additional entity type embedding layer at the bottom
     """
 
     def __init__(self, config):
@@ -1083,46 +1074,6 @@ class BertModel(BertPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
     ):
-        r"""
-    Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (:obj:`torch.FloatTensor`: of shape :obj:`(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
-            layer weights are trained from the next sentence prediction (classification)
-            objective during pre-training.
-
-            This output is usually *not* a good summary
-            of the semantic content of the input, you're often better with averaging or pooling
-            the sequence of hidden-states for the whole input sequence.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-
-    Examples::
-
-        from transformers import BertModel, BertTokenizer
-        import torch
-
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertModel.from_pretrained('bert-base-uncased')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
-        """
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1180,3 +1131,80 @@ class BertModel(BertPreTrainedModel):
             1:
         ]  # add hidden_states and attentions if they are here
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
+
+
+class RobertaEmbeddings(BertEmbeddings):
+    """
+    Same as BertEmbeddings with a tiny tweak for positional embeddings indexing and adding entity_types.
+    """
+    
+    def __init__(self, config, num_db_types=0):
+        super().__init__(config, num_db_types)
+        self.padding_idx = config.pad_token_id
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx)
+
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, entity_ids=None,  inputs_embeds=None):
+        if position_ids is None:
+            if input_ids is not None:
+                # Create the position ids from the input token ids. Any padded tokens remain padded.
+                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx).to(input_ids.device)
+            else:
+                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+
+        return super().forward(
+            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, entity_ids=entity_ids, inputs_embeds=inputs_embeds
+        )
+
+    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+        """ We are provided embeddings directly. We cannot infer which are padded so just generate
+        sequential position ids.
+
+        :param torch.Tensor inputs_embeds:
+        :return torch.Tensor:
+        """
+        input_shape = inputs_embeds.size()[:-1]
+        sequence_length = input_shape[1]
+
+        position_ids = torch.arange(
+            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+        )
+        return position_ids.unsqueeze(0).expand(input_shape)
+
+
+class RobertaModel(BertModel):
+    """
+    Subcalss of RobertaModel model with an additional entity type embedding layer at the bottom
+    """
+
+    config_class = RobertaConfig
+    base_model_prefix = "roberta"
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.embeddings = RobertaEmbeddings(config)
+        self.init_weights()
+        
+    def _reset_embeddings(self, num_db_types):
+        self.embeddings = RobertaEmbeddings(self.config, num_db_types)
+        self.num_db_types = num_db_types
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
+
+class XLMRobertaModel(RobertaModel):
+    """
+    This class overrides :class:`~transformers.RobertaModel`.
+    """
+
+    config_class = XLMRobertaConfig
+
+
+
+
+
