@@ -1,3 +1,13 @@
+0.4.0a1
+=======
+
+* The paraphrase generation code was extended and can now use BART instead of GPT2. It also now
+  has the ability to run as a translation task as well (using the Marian models) [#26, #27, #29, #31].
+* Added the ability to override the context and the question used as input to the model [#23].
+* MultiGPU training was tested and fixed [#25].
+* Completed support for beam search, including the ability to return multiple results for a given input [#30].
+* Misc bug fixes [#32].
+
 0.3.0
 =====
 
