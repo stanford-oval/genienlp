@@ -42,7 +42,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import BertTokenizer, XLMRobertaTokenizer
+from transformers import BertTokenizer, XLMRobertaTokenizer, BasicTokenizer
 from collections import OrderedDict
 
 
@@ -129,6 +129,22 @@ class MaskedBertWordPieceTokenizer(object):
                 output_tokens.extend(sub_tokens)
         return output_tokens
 
+class MaskedBertBasicTokenizer(BasicTokenizer):
+    def __init__(self, do_lower_case=False, never_split=None, tokenize_chinese_chars=True):
+        super().__init__(do_lower_case, never_split, tokenize_chinese_chars)
+
+    def tokenize(self, tokens, mask=None):
+        output_tokens = []
+        output_mask = []
+        for i in range(len(tokens)):
+            token = tokens[i]
+            if self.tokenize_chinese_chars:
+                token = self._tokenize_chinese_chars(token)
+            new_tokens = token.strip().split()
+            for tok in new_tokens:
+                output_tokens.append(self._run_strip_accents(tok))
+            output_mask.extend([mask[i]]*len(new_tokens))
+        return output_tokens, output_mask
 
 
 class MaskedXLMRobertaTokenizer(XLMRobertaTokenizer):
@@ -175,6 +191,9 @@ class MaskedBertTokenizer(BertTokenizer):
     def __init__(self, *args, do_lower_case=False, do_basic_tokenize=False, **kwargs):
         # override do_lower_case and do_basic_tokenize unconditionally
         super().__init__(*args, do_lower_case=False, do_basic_tokenize=False, **kwargs)
+        
+        # replace the basic tokenizer with ours (tokenize cjk chars + strip accents)
+        self.basic_tokenizer = MaskedBertBasicTokenizer(do_lower_case)
 
         # replace the word piece tokenizer with ours
         self.wordpiece_tokenizer = MaskedBertWordPieceTokenizer(vocab=self.vocab,
@@ -186,6 +205,7 @@ class MaskedBertTokenizer(BertTokenizer):
         self._stoi = SToIWrapper(self.vocab, self.added_tokens_encoder)
 
     def tokenize(self, tokens, mask=None):
+        tokens, mask = self.basic_tokenizer.tokenize(tokens, mask)
         return self.wordpiece_tokenizer.tokenize(tokens, mask)
 
     # provide an interface similar to Vocab

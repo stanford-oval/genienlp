@@ -30,7 +30,6 @@
 import os
 import torch
 import logging
-import re
 from tqdm import tqdm
 from collections import defaultdict
 
@@ -38,6 +37,7 @@ from ..base_task import BaseTask
 from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
+from transformers.tokenization_bert import BasicTokenizer as BertBasicTokenizer
 
 from ..base_dataset import Split
 
@@ -149,6 +149,20 @@ class BaseAlmondTask(BaseTask):
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
+    
+    def _detokenize_cjk_chars(self, sentence):
+        output = []
+        i = 0
+        while i < len(sentence):
+            output.append(sentence[i])
+            # skip space after cjk chars only if followed by another cjk char
+            if BertBasicTokenizer()._is_chinese_char(ord(sentence[i])) \
+                    and i+1 < len(sentence) and sentence[i+1] == ' ' \
+                    and i+2 < len(sentence) and BertBasicTokenizer()._is_chinese_char(ord(sentence[i+2])):
+                        i += 2
+            else:
+                i += 1
+        return "".join(output)
 
     def tokenize(self, sentence, field_name=None):
         if not sentence:
@@ -156,7 +170,9 @@ class BaseAlmondTask(BaseTask):
 
         if self.force_subword_tokenize:
             return sentence.split(' '), None
-
+        
+        sentence = self._detokenize_cjk_chars(sentence)
+        
         tokens = [t for t in sentence.split(' ') if len(t) > 0]
         if self._preprocess_context and field_name in ('context', 'context_question'):
             preprocessed_context = []
