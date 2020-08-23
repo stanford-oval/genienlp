@@ -69,28 +69,33 @@ class Server:
         return Batch.from_examples([ex], self.numericalizer, device=self.device,
                                    append_question_to_context_too=self.args.append_question_to_context_too,
                                    override_question=self.args.override_question,
-                                   override_context=self.args.override_context)
+                                   override_context=self.args.override_context,
+                                   num_features=self.args.num_features)
 
     def handle_request(self, line):
         request = json.loads(line)
 
         task_name = request['task'] if 'task' in request else 'generic'
+        
         if task_name in self._cached_tasks:
             task = self._cached_tasks[task_name]
         else:
             task = get_tasks([task_name], self.args)[0]
             self._cached_tasks[task_name] = task
-
+        
         context = request['context']
         if not context:
             context = task.default_context
         question = request['question']
         if not question:
             question = task.default_question
-        answer = ''
+            
+        if 'answer' in request.keys():
+            answer = request['answer']
+        else:
+            answer = ''
 
-        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize,
-                              lower=self.args.lower)
+        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
 
         batch = self.numericalize_example(ex)
         predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
@@ -145,18 +150,17 @@ class Server:
             else:
                 self._run_tcp()
 
-
 def parse_argv(parser):
     parser.add_argument('--path', required=True)
     parser.add_argument('--devices', default=[0], nargs='+', type=int,
                         help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--database', type=str, help='Database to retrieve entities from')
     parser.add_argument('--checkpoint_name', default='best.pth',
                         help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
-
 
 def main(args):
     load_config_json(args)
@@ -170,7 +174,7 @@ def main(args):
 
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
         load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings,
-                        args.decoder_embeddings, args.max_generative_vocab)
+                        args.decoder_embeddings, args.max_generative_vocab, args.entity_type_embed_pos, args.num_db_types)
     numericalizer.load(args.path)
     for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
         emb.init_for_vocab(numericalizer.vocab)
