@@ -108,7 +108,7 @@ def prepare_data(args, numericalizer, embeddings):
 def run(args, device):
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
         load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings, args.decoder_embeddings,
-                        args.max_generative_vocab, logger)
+                        args.max_generative_vocab, args.entity_type_embed_pos, args.num_db_types, logger)
     numericalizer.load(args.path)
     for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
         emb.init_for_vocab(numericalizer.vocab)
@@ -139,13 +139,15 @@ def run(args, device):
             for index, set_ in enumerate(val_set):
                 loader = make_data_loader(set_, numericalizer, bs, device,
                                           append_question_to_context_too=args.append_question_to_context_too,
-                                          override_question=args.override_question, override_context=args.override_context)
+                                          override_question=args.override_question, override_context=args.override_context,
+                                          num_features=args.num_features)
                 task_iter.append((task, task_languages[index], loader))
         # single language task or no separate eval
         else:
            loader = make_data_loader(val_set[0], numericalizer, bs, device,
                                      append_question_to_context_too=args.append_question_to_context_too,
-                                     override_question=args.override_question, override_context=args.override_context)
+                                     override_question=args.override_question, override_context=args.override_context,
+                                     num_features=args.num_features)
            task_iter.append((task, task_languages, loader))
 
         iters.extend(task_iter)
@@ -265,7 +267,9 @@ def parse_argv(parser):
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
-
+    
+    parser.add_argument('--database', type=str, help='Database to retrieve entities from')
+    parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
 
 def adjust_multilingual_eval(args):
     if (have_multilingual(args.task_names) and args.pred_languages is None) or (

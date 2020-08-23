@@ -387,7 +387,7 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
-                     valid=False, append_question_to_context_too=False, override_question=None, override_context=None):
+                     valid=False, append_question_to_context_too=False, override_question=None, override_context=None, num_features=0):
     
     iterator = Iterator(dataset,
                         batch_size,
@@ -399,7 +399,8 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
     collate_function = lambda minibatch: Batch.from_examples(minibatch, numericalizer, device=device,
                                            paired=paired and train, max_pairs=max_pairs, groups=iterator.groups,
                                            append_question_to_context_too=append_question_to_context_too,
-                                           override_question=override_question, override_context=override_context)
+                                           override_question=override_question, override_context=override_context,
+                                           num_features=num_features)
         
     return torch.utils.data.DataLoader(iterator, batch_size=None, collate_fn=collate_function)
 
@@ -434,13 +435,17 @@ def load_config_json(args):
                     'train_context_embeddings_after', 'train_question_embeddings_after',
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
-                    'override_question', 'override_context']
+                    'override_question', 'override_context',
+                    'do_entity_linking', 'retrieve_method', 'almond_domains', 'num_db_types',
+                    'features', 'num_features', 'entity_type_embed_pos']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
             # num_beams used to be an integer in previous versions of the code
             config['num_beams'] = [config['num_beams']]
-        overwrite = ['val_batch_size', 'num_beams', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty', 'temperature', 'reduce_metrics']
+        overwrite = ['val_batch_size', 'num_beams', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k',
+                     'repetition_penalty', 'temperature', 'reduce_metrics',
+                     'database', 'verbose']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -449,6 +454,20 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
+            elif r == 'entity_type_embed_pos':
+                setattr(args, r, 'bottom')
+            elif r == 'features':
+                setattr(args, r, ['type'])
+            elif r == 'num_features':
+                setattr(args, r, 1)
+            elif r == 'almond_domains':
+                setattr(args, r, ['music'])
+            elif r == 'num_db_types':
+                setattr(args, r, 0)
+            elif r == 'do_entity_linking':
+                setattr(args, r, False)
+            elif r == 'do_entity_linking':
+                setattr(args, r, False)
             elif r == 'almond_lang_as_question':
                 setattr(args, r, False)
             elif r == 'locale':
