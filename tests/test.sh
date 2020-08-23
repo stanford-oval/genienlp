@@ -90,6 +90,9 @@ do
 done
 
 
+# END tests
+pipenv run python3 -m genienlp train --train_tasks almond_multilingual --train_languages en --eval_languages en --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save workdir/model_end --data $SRCDIR/dataset/ --exist_ok --skip_cache --embeddings $embedding_dir --encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --train_batch_size 4 --val_batch_size 4 --transformer_layers 0 --database ./tests/database/music/sample.json --do_entity_linking --almond_domains music --retrieve_method oracle --entity_type_embed_pos bottom
+
 # paraphrasing tests
 cp -r $SRCDIR/dataset/paraphrasing/ $workdir/paraphrasing/
 for model in  "gpt2" "sshleifer/bart-tiny-random" ; do
