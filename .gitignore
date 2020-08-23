@@ -11,7 +11,10 @@ models/__pycache__/
 multiprocess/__pycache__/
 results/
 tests/embeddings/*
+tests/database/*.json
+tests/music
 local_files
+corenlp_server-*
 
 .DS_Store
 .idea/
@@ -28,6 +31,8 @@ pytorch_model.bin
 tests/dataset-*
 tests/dataset/*
 tests/test_py.sh
+dataset/*
+eval_dir/*
 
 
 # C extensions

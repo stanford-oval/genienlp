@@ -60,6 +60,9 @@ setuptools.setup(
         'sentencepiece>=0.1.83,<0.2.0',
         'mosestokenizer~=1.1',
         'matplotlib~=3.1',
-        'seaborn~=0.9'
+        'seaborn~=0.9',
+        'nltk~=3.4',
+        'pytrie==0.3.1',
+        'wordfreq==2.3.2'
     ]
 )
