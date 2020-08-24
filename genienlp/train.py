@@ -42,6 +42,8 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 
+import time
+
 from . import arguments
 from . import models
 from .data_utils.embeddings import load_embeddings
@@ -84,7 +86,10 @@ def prepare_data(args, logger):
             kwargs['curriculum'] = True
 
         logger.info(f'Adding {task.name} to training datasets')
+        t0 = time.time()
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        t1 = time.time()
+        print('It took {} to process train set'.format(t1-t0))
         assert not split.eval and not split.test
         if args.use_curriculum:
             assert split.aux
@@ -121,6 +126,8 @@ def prepare_data(args, logger):
                         args.question_embeddings,
                         args.decoder_embeddings,
                         args.max_generative_vocab,
+                        args.entity_type_embed_pos,
+                        args.num_db_types,
                         logger)
     if args.load is not None:
         numericalizer.load(args.save)
@@ -342,22 +349,25 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     logger.info(f'Preparing iterators')
     main_device = devices[0]
     train_iters = [(task,
-                    make_data_loader(x, numericalizer, tok, main_device, paired=args.paired,max_pairs=args.max_pairs,
+                    make_data_loader(x, numericalizer, tok, main_device, paired=args.paired, max_pairs=args.max_pairs,
                                      train=True,  append_question_to_context_too=args.append_question_to_context_too,
-                                     override_question=args.override_question, override_context=args.override_context))
+                                     override_question=args.override_question, override_context=args.override_context,
+                                     num_features=args.num_features))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_values)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
     val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False, valid=True,
                                          append_question_to_context_too=args.append_question_to_context_too,
-                                         override_question=args.override_question, override_context=args.override_context))
+                                         override_question=args.override_question, override_context=args.override_context,
+                                         num_features=args.num_features))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     aux_iters = []
     if use_curriculum:
         aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True,
                                              append_question_to_context_too=args.append_question_to_context_too,
-                                             override_question=args.override_question, override_context=args.override_context))
+                                             override_question=args.override_question, override_context=args.override_context,
+                                             num_features=args.num_features))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_values)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         
@@ -541,6 +551,7 @@ def main(args):
     if args.load is not None:
         logger.info(f'Loading vocab from {os.path.join(args.save, args.load)}')
         save_dict = torch.load(os.path.join(args.save, args.load))
+        
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets = \
         prepare_data(args, logger)
     if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):

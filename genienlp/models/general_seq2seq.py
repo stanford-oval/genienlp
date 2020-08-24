@@ -29,13 +29,14 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import torch
+import random
 
 from .coatt_encoder import CoattentionEncoder
 from .lstm_encoder import BiLSTMEncoder
 from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
-from .common import mask_tokens
+from .common import mask_tokens, positional_encodings_like
 from transformers import PreTrainedModel, PretrainedConfig
 
 ENCODERS = {
@@ -68,11 +69,16 @@ class Seq2Seq(PreTrainedModel):
         super().__init__(PretrainedConfig()) # dummy PretrainedConfig
         self.args = args
         self.numericalizer = numericalizer
-        self.encoder = ENCODERS[args.seq2seq_encoder](numericalizer, args, context_embeddings, question_embeddings)
-        self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings)
 
         if self.args.pretrain_context > 0:
             self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, numericalizer.num_tokens)
+            
+        self.encoder = ENCODERS[args.seq2seq_encoder](numericalizer, args, context_embeddings, question_embeddings)
+        self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings)
+        
+        if self.args.num_db_types > 0 and self.args.entity_type_embed_pos == 'top':
+            self.type_embeddings = torch.nn.Embedding(self.args.num_db_types, self.args.dimension, padding_idx=0)
+
 
     def set_train_context_embeddings(self, trainable):
         self.encoder.set_train_context_embeddings(trainable)
@@ -95,13 +101,29 @@ class Seq2Seq(PreTrainedModel):
         return (loss, )
 
     def _normal_forward(self, batch, current_token_id, past=None, expansion_factor=1, generation_dict=None, encoder_output=None):
+    
         if encoder_output is None:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
         else:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = encoder_output
+
+        if self.args.num_db_types > 0 and self.args.entity_type_embed_pos == 'top':
+            context_feature_embedded = self.type_embeddings(batch.context.feature[:, :, 0].long())
+            question_feature_embedded = self.type_embeddings(batch.question.feature[:, :, 0].long())
+            
+            if self.args.num_features > 1:
+                # scale with token freq
+                context_feature_embedded = context_feature_embedded * batch.context.feature[:, :, 1].unsqueeze(-1)
+                question_feature_embedded = question_feature_embedded * batch.question.feature[:, :, 1].unsqueeze(-1)
+
+            final_context = final_context + context_feature_embedded
+            final_question = final_question + question_feature_embedded
+            
+            
         encoder_loss = None
         if self.training and getattr(self.args, 'use_encoder_loss', None):
             encoder_loss = self.get_encoder_loss(context_rnn_state)
+            
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
                             final_question, question_rnn_state, encoder_loss, current_token_id, decoder_wrapper=past,
                             expansion_factor=expansion_factor, generation_dict=generation_dict)
@@ -197,16 +219,3 @@ class Seq2Seq(PreTrainedModel):
         generated = torch.cat((generated[:, 0:1], generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)), dim=1) # map everything to full vocabulary except BOS which already is in full vocabulary
 
         return generated
-        
-
-    
-            
-        
-    
-    
-    
-    
-    
-    
-    
-    

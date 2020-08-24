@@ -126,9 +126,11 @@ def parse_argv(parser):
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument('--preserve_case', action='store_false', dest='lower',
                         help='whether to preserve casing for all text')
-    parser.add_argument("--reduce_metrics", type=str, default='max', choices=['max'], help='How to calculate the metric when there are multiple outputs per input.')
+    parser.add_argument("--reduce_metrics", type=str, default='max', choices=['max'],
+                        help='How to calculate the metric when there are multiple outputs per input.')
 
-    # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
+    # These are generation hyperparameters.
+    # Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
     parser.add_argument("--num_outputs", type=int, nargs='+', default=[1], help='number of sequences to output per input')
     parser.add_argument("--temperature", type=float, nargs='+', default=[0.0],
                         help="temperature of 0 implies greedy sampling")
@@ -137,7 +139,8 @@ def parse_argv(parser):
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
-    parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
+    parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0],
+                        help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
 
     parser.add_argument('--model', type=str, choices=['Seq2Seq'], default='Seq2Seq', help='which model to import')
@@ -156,7 +159,8 @@ def parse_argv(parser):
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
 
     parser.add_argument('--encoder_embeddings', default='glove+char',
-                        help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
+                        help='which word embedding to use on the encoder side; use a bert-* pretrained model'
+                             ' for BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
                              'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
     parser.add_argument('--context_embeddings', default=None,
                         help='which word embedding to use for the context; use a bert-* pretrained model for BERT; '
@@ -209,7 +213,6 @@ def parse_argv(parser):
     parser.add_argument('--lr_rate', default=0.001, type=float, help='fixed learning rate (if not using warmup)')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
     parser.add_argument('--gradient_accumulation_steps', default=1, type=int, help='Number of accumulation steps. Useful to effectively get larger batch sizes.')
-    
 
     parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside args.save')
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')
@@ -218,7 +221,8 @@ def parse_argv(parser):
     parser.add_argument('--devices', default=[0], nargs='+', type=int,
                         help='a list of devices that can be used for training')
 
-    parser.add_argument('--no_commit', action='store_false', dest='commit',
+    parser.add_argument('--no_commit'
+                        '', action='store_false', dest='commit',
                         help='do not track the git commit associated with this training run')
     parser.add_argument('--exist_ok', action='store_true',
                         help='Ok if the save directory already exists, i.e. overwrite is ok')
@@ -236,8 +240,27 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'],
                         help='growth strategy for curriculum')
 
+    parser.add_argument('--do_entity_linking', action='store_true', help='Collect and use entity features during semantic parsing')
+    parser.add_argument('--database_type', default='json', choices=['json', 'elastic'],
+                        help='database to interact with for NER')
+    parser.add_argument('--database', type=str, help='Database to retrieve entities from')
+    parser.add_argument('--retrieve_method', choices=['lookup', 'oracle', 'bootleg'], type=str,
+                        help='prune items in database for faster lookup (only during train and evaluation)'
+                             'bootleg option is wip')
+    parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
+    parser.add_argument('--almond_domains', nargs='+', help='Domains used for almond dataset; e.g. music, books, ...')
+    parser.add_argument('--features', nargs='+', default=['type'], help='Features that will be extracted for each entity: [type, freq] for now.'
+                                                                        ' Order is important')
+
+    parser.add_argument('--entity_type_embed_pos', type=str, default='bottom', choices=['top', 'bottom'],
+                        help='where to add entity type embedding layer')
+    
+    parser.add_argument('--lookup_method', default='longer_first', choices=['smaller_first', 'longer_first'],
+                        help='smaller_first: start from one token and grow into longer spans until a match is found,'
+                             'longer_first: start from the longest span and shrink until a match is found')
 
 def post_parse(args):
+    
     if args.val_task_names is None:
         args.val_task_names = []
         for t in args.train_task_names:
@@ -325,6 +348,17 @@ def post_parse(args):
     
     for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
+        
+    # process database
+    args.num_db_types = 0
+    if args.database and args.do_entity_linking:
+        with open(args.database, 'r') as fin:
+            database = json.load(fin)
+        # +1 for unknown entities
+        args.num_db_types = len(set(database.values())) + 1
+        
+    args.num_features = len(args.features)
+        
     save_args(args)
 
     # create the task objects after we saved the configuration to the JSON file, because

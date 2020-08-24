@@ -124,7 +124,7 @@ class SimpleNumericalizer(object):
         lengths = []
         numerical = []
         decoder_numerical = []
-        for tokens, _mask in minibatch:
+        for tokens, _mask, type in minibatch:
             if self.pad_first:
                 padded_example = [self.pad_token] * max(0, max_len - len(tokens)) + \
                                  [self.init_token] + \

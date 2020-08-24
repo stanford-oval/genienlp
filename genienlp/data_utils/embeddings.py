@@ -42,6 +42,8 @@ from . import word_vectors
 from .almond_embeddings import AlmondEmbeddings
 from .pretrained_lstm_lm import PretrainedLTSMLM
 
+from ..paraphrase.transformers_utils import BertModel, XLMRobertaModel
+
 _logger = logging.getLogger(__name__)
 
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP = dict()
@@ -112,9 +114,19 @@ class TransformerEmbedding(torch.nn.Module):
 
     def grow_for_vocab(self, vocab, new_words):
         self.model.resize_token_embeddings(len(vocab))
+        
+    def get_positional_embedding(self, input):
+        position_ids = torch.arange(input.size()[1], dtype=torch.long, device=input.device)
+        position_ids = position_ids.unsqueeze(0).expand(*input.size())
+        position_embeddings = self.model.embeddings.position_embeddings(position_ids)
+        
+        return position_embeddings
 
-    def forward(self, input: torch.Tensor, padding=None):
-        last_hidden_state, _pooled, hidden_states = self.model(input, attention_mask=(~padding).to(dtype=torch.float))
+    def forward(self, input: torch.Tensor, entity_ids=None, padding=None):
+        inputs = {'input_ids': input, 'attention_mask': (~padding).to(dtype=torch.float)}
+        if entity_ids is not None:
+            inputs['entity_ids'] = entity_ids
+        last_hidden_state, _pooled, hidden_states = self.model(**inputs)
 
         return EmbeddingOutput(all_layers=hidden_states, last_layer=last_hidden_state)
 
@@ -183,7 +195,7 @@ def get_embedding_type(emb_name):
     
 
 def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb_names,
-                    max_generative_vocab=50000, logger=_logger, cache_only=False):
+                    max_generative_vocab=50000, entity_type_embed_pos='top', num_db_types=0, logger=_logger, cache_only=False):
     logger.info(f'Getting pretrained word vectors and pretrained models')
 
     context_emb_names = context_emb_names.split('+')
@@ -220,8 +232,17 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             # load the tokenizer once to ensure all files are downloaded
             AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
 
-            context_vectors.append(
-                TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
+            if entity_type_embed_pos == 'top':
+                context_vectors.append(
+                    TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
+            else:
+                if emb_type in BERT_PRETRAINED_MODEL_ARCHIVE_LIST:
+                    transformer_model = BertModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
+                elif emb_type in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST:
+                    transformer_model = XLMRobertaModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
+                transformer_model._reset_embeddings(num_db_types)
+                context_vectors.append(TransformerEmbedding(transformer_model))
+            
         else:
             if numericalizer is not None:
                 logger.warning('Combining Transformer embeddings with other pretrained embeddings is unlikely to work')
@@ -253,8 +274,17 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             # load the tokenizer once to ensure all files are downloaded
             AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
 
-            question_vectors.append(
-                TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
+            if entity_type_embed_pos == 'top':
+                question_vectors.append(
+                    TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
+            else:
+                if emb_type in BERT_PRETRAINED_MODEL_ARCHIVE_LIST:
+                    transformer_model = BertModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
+                elif emb_type in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST:
+                    transformer_model = XLMRobertaModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
+                transformer_model._reset_embeddings(num_db_types)
+                question_vectors.append(TransformerEmbedding(transformer_model))
+
         else:
             if numericalizer is not None:
                 logger.warning('Combining Transformer embeddings with other pretrained embeddings is unlikely to work')
