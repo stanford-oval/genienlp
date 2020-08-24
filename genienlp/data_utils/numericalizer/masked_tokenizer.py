@@ -72,6 +72,12 @@ class MaskedXLMRobertaWordPieceTokenizer(object):
                 continue
 
             sub_tokens = self.spm.EncodeAsPieces(token)
+            # include sub_tokens not present in spm vocab
+            for sub_token in sub_tokens:
+                if sub_token not in self.vocab and sub_token not in self.added_tokens_encoder:
+                    token_id = len(self.vocab) + len(self.added_tokens_encoder)
+                    self.added_tokens_encoder[sub_token] = token_id
+                    self.added_tokens_decoder[token_id] = sub_token
             output_tokens.extend(sub_tokens)
 
         return output_tokens
