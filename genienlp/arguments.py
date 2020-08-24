@@ -243,6 +243,7 @@ def parse_argv(parser):
     parser.add_argument('--do_entity_linking', action='store_true', help='Collect and use entity features during semantic parsing')
     parser.add_argument('--database_type', default='json', choices=['json', 'elastic'],
                         help='database to interact with for NER')
+    parser.add_argument('--allow_fuzzy', action='store_true', help='Allow fuzzy matching when looking up strings in database')
     parser.add_argument('--database', type=str, help='Database to retrieve entities from')
     parser.add_argument('--retrieve_method', choices=['lookup', 'oracle', 'bootleg'], type=str,
                         help='prune items in database for faster lookup (only during train and evaluation)'

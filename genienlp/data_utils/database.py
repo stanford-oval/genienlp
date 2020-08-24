@@ -35,6 +35,8 @@ from elasticsearch import Elasticsearch
 tracer = logging.getLogger('elasticsearch')
 tracer.setLevel(logging.CRITICAL)
 
+logger = logging.getLogger(__name__)
+
 # import pygtrie
 
 DOMAIN_TYPE_MAPPING = dict()
@@ -144,7 +146,12 @@ class Database(object):
 
         return tokens_type_ids
 
-    def lookup(self, tokens, subset=None, retrieve_method='lookup', lookup_method='longer_first'):
+    def lookup(self, tokens, **kwargs):
+        
+        retrieve_method = kwargs.get('retrieve_method', 'lookup')
+        subset = kwargs.get('subset', None)
+        lookup_method = kwargs.get('lookup_method', 'longer_first')
+
         tokens_type_ids = []
         
         if retrieve_method == 'oracle' and subset is not None:
@@ -164,6 +171,34 @@ class Database(object):
 class ElasticDatabase(object):
     def __init__(self, items):
         self.es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
+        if self.es.ping():
+            logger.info('Successfully connected to Elastic Search Database')
+        else:
+            logger.error('Was not able to connect to Elastic Search Database')
+        
+        # create db schema
+        schema = {
+            "settings": {
+                "number_of_shards": 1,
+                "number_of_replicas": 0
+            },
+            "mappings": {
+                "members": {
+                    "properties": {
+                        "name": {
+                            "type": "text"
+                        },
+                        "value": {
+                            "type": "text"
+                        },
+                    }
+                }
+            }
+        }
+        
+        self.es.indices.create(index='db', ignore=400, body=schema)
+        
+        # add items
         id = 0
         for key, value in items.items():
             self.es.index(index='db', doc_type='music', id=id, body={
@@ -177,7 +212,9 @@ class ElasticDatabase(object):
         self.type2id.update({type: i + 1 for i, type in enumerate(TYPES)})
 
 
-    def lookup(self, tokens, subset=None, retrieve_method='lookup', lookup_method='longer_first'):
+    def lookup(self, tokens, **kwargs):
+        allow_fuzzy = kwargs.get('allow_fuzzy', False)
+        
         i = 0
         tokens_type_ids = []
         length = len(tokens)
@@ -186,19 +223,28 @@ class ElasticDatabase(object):
             end = length
             while end > i:
                 tokens_str = ' '.join(tokens[i:end])
-                result = self.es.search(index="db", body={"query": {"prefix": {"name": tokens_str}}})
+                
+                if allow_fuzzy:
+                    result = self.es.search(index="db", body={
+                        "query": {"match": {"name.keyword": {"query": tokens_str, "fuzziness": "AUTO"}}}})
+                else:
+                    result = self.es.search(index="db", body={"query": {"term": {"name.keyword": tokens_str}}})
+                
                 matches = result['hits']['hits']
                 
                 if matches:
                     matches = sorted(matches, key=lambda item: item['_score'], reverse=True)
-                    # choose the highest score satisfying constraints
+                    if not allow_fuzzy:
+                        # prune matches to only contain highest score (i.e. no fuzzy match)
+                        matches = [matches[0]]
                     for k in range(len(matches)):
                         match = matches[k]
-                        if not is_special_case(match):
+                        if not is_special_case(match) and tokens_str == match['_source']['name']:
                             # match found
                             found = True
                             break
                     if not found:
+                        end -= 1
                         continue
                     tokens_type_ids.extend([self.type2id[match['_source']['value']] for _ in range(i, end)])
                     # move i to current unprocessed position

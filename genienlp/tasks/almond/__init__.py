@@ -235,15 +235,17 @@ class BaseAlmondTask(BaseTask):
         return entity2type
 
     def find_types(self, tokens, answer):
-        
-        if self.args.retrieve_method == 'lookup':
-            tokens_type_ids = self.db.lookup(tokens, lookup_method=self.args.lookup_method)
-        elif self.args.retrieve_method == 'oracle':
-            entity2type = self.collect_answer_entity_types(answer)
-            tokens_type_ids = self.db.lookup(tokens, subset=entity2type,
-                                             retrieve_method='oracle', lookup_method=self.args.lookup_method)
-        elif self.args.retrieve_method == 'bootleg':
-            EnvironmentError('bootleg is wip and not supported yet.')
+        if self.args.database_type == 'json':
+            if self.args.retrieve_method == 'lookup':
+                tokens_type_ids = self.db.lookup(tokens, lookup_method=self.args.lookup_method)
+            elif self.args.retrieve_method == 'oracle':
+                entity2type = self.collect_answer_entity_types(answer)
+                tokens_type_ids = self.db.lookup(tokens, subset=entity2type,
+                                                 retrieve_method='oracle', lookup_method=self.args.lookup_method)
+            elif self.args.retrieve_method == 'bootleg':
+                EnvironmentError('bootleg is wip and not supported yet.')
+        else:
+            tokens_type_ids = self.db.lookup(tokens, allow_fuzzy=self.args.allow_fuzzy)
     
         return tokens_type_ids
     
