@@ -28,9 +28,12 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+import json
+import requests
 
 from pytrie import SortedStringTrie as Trie
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, RequestsHttpConnection
+
 
 tracer = logging.getLogger('elasticsearch')
 tracer.setLevel(logging.CRITICAL)
@@ -166,16 +169,103 @@ class Database(object):
             tokens_type_ids = self.lookup_longer(tokens, lookup_dict)
  
         return tokens_type_ids
-    
+
 
 class ElasticDatabase(object):
+    def __init__(self):
+        self.unk_type = 'unk'
+        self.type2id = {self.unk_type: 0}
+        self.index = None
+        self.es = None
+
+    def find_matches(self, tokens_str, allow_fuzzy):
+    
+        if allow_fuzzy:
+            result = self.es.search(index=self.index, body={
+                "query": {"multi_match": {"query": tokens_str, "fields": ["canonical^8", "aliases^3", "description"], "fuzziness": "AUTO"}}})
+        else:
+            result = self.es.search(index=self.index, body={
+                "query": {"multi_match": {"query": tokens_str, "fields": ["canonical^8", "aliases^3", "description"]}}})
+        
+        matches = result['hits']['hits']
+        return matches
+
+    def lookup(self, tokens, **kwargs):
+        allow_fuzzy = kwargs.get('allow_fuzzy', False)
+    
+        i = 0
+        tokens_type_ids = []
+        length = len(tokens)
+        found = False
+        while i < length:
+            end = length
+            while end > i:
+                tokens_str = ' '.join(tokens[i:end])
+                matches = self.find_matches(tokens_str, allow_fuzzy)
+                
+                if matches:
+                    matches = sorted(matches, key=lambda item: item['_score'], reverse=True)
+                    if not allow_fuzzy:
+                        # prune matches to only contain highest score (i.e. no fuzzy match)
+                        matches = [matches[0]]
+                    for k in range(len(matches)):
+                        match = matches[k]
+                        if not is_special_case(match) and match.lower() == tokens_str:
+                            # match found
+                            found = True
+                            break
+                    if not found:
+                        end -= 1
+                        continue
+                    tokens_type_ids.extend([self.type2id[match['_source']['type']] for _ in range(i, end)])
+                    # move i to current unprocessed position
+                    i = end
+                    break
+                else:
+                    end -= 1
+            if not found:
+                tokens_type_ids.append(self.type2id['unk'])
+                i += 1
+            found = False
+    
+        return tokens_type_ids
+
+
+class RemoteElasticDatabase(ElasticDatabase):
+    
+    def __init__(self, config, type2id):
+        super().__init__()
+        self.type2id = type2id
+        self._init_db(config)
+    
+    def _init_db(self, config):
+        self.auth = (config['username'], config['password'])
+        self.index = config['index']
+        self.host = config['host']
+        self.es = Elasticsearch(
+            hosts=[{'host': self.host, 'port': 443}],
+            http_auth=self.auth,
+            use_ssl=True,
+            verify_certs=True,
+            connection_class=RequestsHttpConnection
+        )
+
+
+class LocalElasticDatabase(ElasticDatabase):
     def __init__(self, items):
+        super().__init__()
+        self.type2id.update({type: i + 1 for i, type in enumerate(TYPES)})
+        self._init_db(items)
+
+
+    def _init_db(self, items):
         self.es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
+        self.index = 'ner'
         if self.es.ping():
             logger.info('Successfully connected to Elastic Search Database')
         else:
             logger.error('Was not able to connect to Elastic Search Database')
-        
+    
         # create db schema
         schema = {
             "settings": {
@@ -188,73 +278,18 @@ class ElasticDatabase(object):
                         "name": {
                             "type": "text"
                         },
-                        "value": {
+                        "type": {
                             "type": "text"
                         },
                     }
                 }
             }
         }
-        
+    
         self.es.indices.create(index='db', ignore=400, body=schema)
-        
+    
         # add items
         id = 0
         for key, value in items.items():
-            self.es.index(index='db', doc_type='music', id=id, body={
-                "name": key,
-                "value": value
-            })
+            self.es.index(index='db', doc_type='music', id=id, body={"name": key, "type": value})
             id += 1
-        
-        self.unk_type = 'unk'
-        self.type2id = {self.unk_type: 0}
-        self.type2id.update({type: i + 1 for i, type in enumerate(TYPES)})
-
-
-    def lookup(self, tokens, **kwargs):
-        allow_fuzzy = kwargs.get('allow_fuzzy', False)
-        
-        i = 0
-        tokens_type_ids = []
-        length = len(tokens)
-        found = False
-        while i < length:
-            end = length
-            while end > i:
-                tokens_str = ' '.join(tokens[i:end])
-                
-                if allow_fuzzy:
-                    result = self.es.search(index="db", body={
-                        "query": {"match": {"name.keyword": {"query": tokens_str, "fuzziness": "AUTO"}}}})
-                else:
-                    result = self.es.search(index="db", body={"query": {"term": {"name.keyword": tokens_str}}})
-                
-                matches = result['hits']['hits']
-                
-                if matches:
-                    matches = sorted(matches, key=lambda item: item['_score'], reverse=True)
-                    if not allow_fuzzy:
-                        # prune matches to only contain highest score (i.e. no fuzzy match)
-                        matches = [matches[0]]
-                    for k in range(len(matches)):
-                        match = matches[k]
-                        if not is_special_case(match) and tokens_str == match['_source']['name']:
-                            # match found
-                            found = True
-                            break
-                    if not found:
-                        end -= 1
-                        continue
-                    tokens_type_ids.extend([self.type2id[match['_source']['value']] for _ in range(i, end)])
-                    # move i to current unprocessed position
-                    i = end
-                    break
-                else:
-                    end -= 1
-            if not found:
-                tokens_type_ids.append(self.type2id['unk'])
-                i += 1
-            found = False
-
-        return tokens_type_ids

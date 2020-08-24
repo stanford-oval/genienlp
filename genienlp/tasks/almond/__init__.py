@@ -39,7 +39,8 @@ from ..base_task import BaseTask
 from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
-from ...data_utils.database import Database, ElasticDatabase, DOMAIN_TYPE_MAPPING
+from ...data_utils.database import Database, LocalElasticDatabase, RemoteElasticDatabase, DOMAIN_TYPE_MAPPING
+from ...util import es_dump_type2id
 from transformers.tokenization_bert import BasicTokenizer as BertBasicTokenizer
 
 from ..base_dataset import Split
@@ -133,7 +134,7 @@ class BaseAlmondTask(BaseTask):
         self._preprocess_context = args.almond_preprocess_context
         
         # initialize the database
-        if args.database and args.do_entity_linking:
+        if args.do_entity_linking:
             self._init_db()
 
     def is_entity(self, token):
@@ -151,16 +152,27 @@ class BaseAlmondTask(BaseTask):
         return id_
 
     def _init_db(self):
-        with open(self.args.database, 'r') as fin:
-            db_data = json.load(fin)
-            # lowercase all keys
-            db_data_processed = {key.lower(): value for key, value in db_data.items()}
-            
-            if self.args.database_type == 'json':
-                self.db = Database(db_data_processed)
-            elif self.args.database_type == 'elastic':
-                self.db = ElasticDatabase(db_data_processed)
-        
+        if self.args.database_type in ['json', 'local-elastic']:
+            with open(self.args.database, 'r') as fin:
+                db_data = json.load(fin)
+                # lowercase all keys
+                db_data_processed = {key.lower(): value for key, value in db_data.items()}
+        elif self.args.database_type == 'remote-elastic':
+            with open(self.args.elastic_config, 'r') as fin:
+                es_config = json.load(fin)
+            type2id = dict()
+            if self.args.type2id_dict:
+                with open(self.args.type2id_dict, 'r') as fin:
+                    type2id = json.load(fin)
+    
+        if self.args.database_type == 'json':
+            self.db = Database(db_data_processed)
+        elif self.args.database_type == 'local-elastic':
+            self.db = LocalElasticDatabase(db_data_processed)
+        elif self.args.database_type == 'remote-elastic':
+            self.db = RemoteElasticDatabase(es_config, type2id)
+            if self.args.create_type_mapping:
+                es_dump_type2id(self.db)
     
         self.TTtype2DBtype = dict()
         for domain in self.args.almond_domains:

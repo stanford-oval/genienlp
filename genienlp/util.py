@@ -189,7 +189,7 @@ def split_file_on_disk(file_path, num_splits, output_paths=None):
             output_path = output_paths[part_idx]
         all_output_paths.append(output_path)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        all_output_files.append(open(output_path, 'w'))
+        all_output_fildb.es.append(open(output_path, 'w'))
 
     with open(file_path, 'r') as input_file:
         output_file_idx = 0
@@ -372,6 +372,40 @@ def get_trainable_params(model, name=False):
 def log_model_size(logger, model, model_name):
     num_param = sum([p.nelement() for p in model.parameters() if p.requires_grad])
     logger.info(f'{model_name} has {num_param:,} parameters')
+
+
+def es_dump_type2id(db):
+    import time
+    begin = time.time()
+    
+    body = {"size": 10000, "query": {"match_all": {}}}
+    result = db.es.search(index=db.index, body=body, scroll='3m')
+    print("total docs:", len(result["hits"]["hits"]))
+    for match in result["hits"]["hits"]:
+        if match['_source']['type'] not in db.type2id:
+            db.type2id[match['_source']['type']] = len(db.type2id)
+
+    scroll_id = result['_scroll_id']
+    i = 0
+    total_values = 0
+    while True:
+        try:
+            result = db.es.scroll(scroll_id=scroll_id, scroll='3m')
+            total_values += len(result["hits"]["hits"])
+            if len(result["hits"]["hits"]) < 10:
+                break
+            print("total docs:", total_values)
+            for match in result["hits"]["hits"]:
+                if match['_source']['type'] not in db.type2id:
+                    db.type2id[match['_source']['type']] = len(db.type2id)
+            scroll_id = result['_scroll_id']
+            print('processed: {}, time elapsed: {}'.format(i, time.time() - begin))
+            i += 1
+        except:
+            break
+    
+    with open('dataset/type2id.json', 'w') as fout:
+        json.dump(db.type2id, fout)
 
 
 def elapsed_time(log):

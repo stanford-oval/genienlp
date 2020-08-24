@@ -241,9 +241,13 @@ def parse_argv(parser):
                         help='growth strategy for curriculum')
 
     parser.add_argument('--do_entity_linking', action='store_true', help='Collect and use entity features during semantic parsing')
-    parser.add_argument('--database_type', default='json', choices=['json', 'elastic'],
+    parser.add_argument('--database_type', default='json', choices=['json', 'local-elastic', 'remote-elastic'],
                         help='database to interact with for NER')
-    parser.add_argument('--allow_fuzzy', action='store_true', help='Allow fuzzy matching when looking up strings in database')
+    parser.add_argument('--elastic_config', type=str, help='Path to json file containing ES configs (used for remote-elastic only)')
+    parser.add_argument('--type2id_dict', type=str, help='Path to json file containing mapping between wikidata types to their ids')
+    parser.add_argument('--create_type_mapping', action='store_true', help='This will create the "type to id" mapping for ALL entities available in the database')
+    
+    parser.add_argument('--allow_fuzzy', action='store_true', help='Allow fuzzy matching when looking up strings in the database')
     parser.add_argument('--database', type=str, help='Database to retrieve entities from')
     parser.add_argument('--retrieve_method', choices=['lookup', 'oracle', 'bootleg'], type=str,
                         help='prune items in database for faster lookup (only during train and evaluation)'
@@ -252,7 +256,7 @@ def parse_argv(parser):
     parser.add_argument('--almond_domains', nargs='+', help='Domains used for almond dataset; e.g. music, books, ...')
     parser.add_argument('--features', nargs='+', default=['type'], help='Features that will be extracted for each entity: [type, freq] for now.'
                                                                         ' Order is important')
-
+    
     parser.add_argument('--entity_type_embed_pos', type=str, default='bottom', choices=['top', 'bottom'],
                         help='where to add entity type embedding layer')
     
