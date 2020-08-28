@@ -42,7 +42,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import BertTokenizer, XLMRobertaTokenizer
+import unicodedata
+from transformers import BertTokenizer, XLMRobertaTokenizer, BasicTokenizer
 from collections import OrderedDict
 
 
@@ -55,14 +56,17 @@ class MaskedXLMRobertaWordPieceTokenizer(object):
         self.added_tokens_encoder = added_tokens_encoder
         self.added_tokens_decoder = added_tokens_decoder
 
+    def update_extended_vocab(self, token):
+        if token not in self.vocab and token not in self.added_tokens_encoder:
+            token_id = len(self.vocab) + len(self.added_tokens_encoder)
+            self.added_tokens_encoder[token] = token_id
+            self.added_tokens_decoder[token_id] = token
+
     def tokenize(self, tokens, mask):
         output_tokens = []
         for token, should_word_split in zip(tokens, mask):
             if not should_word_split:
-                if token not in self.vocab and token not in self.added_tokens_encoder:
-                    token_id = len(self.vocab) + len(self.added_tokens_encoder)
-                    self.added_tokens_encoder[token] = token_id
-                    self.added_tokens_decoder[token_id] = token
+                self.update_extended_vocab(token)
                 output_tokens.append(token)
                 continue
 
@@ -72,6 +76,9 @@ class MaskedXLMRobertaWordPieceTokenizer(object):
                 continue
 
             sub_tokens = self.spm.EncodeAsPieces(token)
+            # include sub_tokens not present in spm vocab
+            for sub_token in sub_tokens:
+                self.update_extended_vocab(sub_token)
             output_tokens.extend(sub_tokens)
 
         return output_tokens
@@ -84,17 +91,18 @@ class MaskedBertWordPieceTokenizer(object):
         self.max_input_chars_per_word = max_input_chars_per_word
         self.added_tokens_encoder = added_tokens_encoder
         self.added_tokens_decoder = added_tokens_decoder
-
+        
+    def update_extended_vocab(self, token):
+        if token not in self.vocab and token not in self.added_tokens_encoder:
+            token_id = len(self.vocab) + len(self.added_tokens_encoder)
+            self.added_tokens_encoder[token] = token_id
+            self.added_tokens_decoder[token_id] = token
+            
     def tokenize(self, tokens, mask):
         output_tokens = []
         for token, should_word_split in zip(tokens, mask):
-            # if token.startswith('@'):
-            #     token = token.lower()
             if not should_word_split:
-                if token not in self.vocab and token not in self.added_tokens_encoder:
-                    token_id = len(self.vocab) + len(self.added_tokens_encoder)
-                    self.added_tokens_encoder[token] = token_id
-                    self.added_tokens_decoder[token_id] = token
+                self.update_extended_vocab(token)
                 output_tokens.append(token)
                 continue
 
@@ -111,6 +119,18 @@ class MaskedBertWordPieceTokenizer(object):
                 cur_substr = None
                 while start < end:
                     substr = "".join(chars[start:end])
+                    # if substr starts with an accent
+                    # 1) add the accent word-piece to the extended vocab
+                    # 2) remove it from the beginning of substr
+                    while len(substr) and unicodedata.category(substr[0]) == "Mn":
+                        if start > 0:
+                            accent_wp = '##' + substr[0]
+                        else:
+                            accent_wp = substr[0]
+                        self.update_extended_vocab(accent_wp)
+                        sub_tokens.append(accent_wp)
+                        substr = substr[1:]
+                        
                     if start > 0:
                         substr = "##" + substr
                     if substr in self.vocab:
@@ -124,11 +144,30 @@ class MaskedBertWordPieceTokenizer(object):
                 start = end
 
             if is_bad:
-                output_tokens.append(self.unk_token)
+                # token is not recognized by bert vocab, thus add to extended vocab
+                self.update_extended_vocab(token)
+                output_tokens.append(token)
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
 
+class MaskedBertBasicTokenizer(BasicTokenizer):
+    def __init__(self, do_lower_case=False, never_split=None, tokenize_chinese_chars=True):
+        super().__init__(do_lower_case, never_split, tokenize_chinese_chars)
+
+    def tokenize(self, tokens, mask=None):
+        output_tokens = []
+        output_mask = []
+        for i in range(len(tokens)):
+            token = tokens[i]
+            # unicode normalization
+            token = unicodedata.normalize("NFD", token)
+            if self.tokenize_chinese_chars:
+                token = self._tokenize_chinese_chars(token)
+            new_tokens = token.strip().split()
+            output_mask.extend([mask[i]]*len(new_tokens))
+            output_tokens.extend(new_tokens)
+        return output_tokens, output_mask
 
 
 class MaskedXLMRobertaTokenizer(XLMRobertaTokenizer):
@@ -175,6 +214,9 @@ class MaskedBertTokenizer(BertTokenizer):
     def __init__(self, *args, do_lower_case=False, do_basic_tokenize=False, **kwargs):
         # override do_lower_case and do_basic_tokenize unconditionally
         super().__init__(*args, do_lower_case=False, do_basic_tokenize=False, **kwargs)
+        
+        # replace the basic tokenizer with ours (tokenize cjk chars)
+        self.basic_tokenizer = MaskedBertBasicTokenizer(do_lower_case=do_lower_case)
 
         # replace the word piece tokenizer with ours
         self.wordpiece_tokenizer = MaskedBertWordPieceTokenizer(vocab=self.vocab,
@@ -186,6 +228,7 @@ class MaskedBertTokenizer(BertTokenizer):
         self._stoi = SToIWrapper(self.vocab, self.added_tokens_encoder)
 
     def tokenize(self, tokens, mask=None):
+        tokens, mask = self.basic_tokenizer.tokenize(tokens, mask)
         return self.wordpiece_tokenizer.tokenize(tokens, mask)
 
     # provide an interface similar to Vocab
