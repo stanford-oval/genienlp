@@ -1,3 +1,8 @@
+0.4.0b1
+=======
+
+* Fixed handling of CJK characters and combining characters in BERT and XLM tokenizers [#34].
+
 0.4.0a1
 =======
 
