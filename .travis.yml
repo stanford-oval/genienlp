@@ -4,11 +4,19 @@ branches:
 language: python
 python: 3.6
 install:
-    - pip install flake8  # pytest  # add another testing frameworks later
-    - pip install pipenv
-    - pipenv install --dev
+- pip install flake8
+- pip install pipenv
+- pipenv install --dev
 script:
-    - flake8 . --count --select=E901,E999,F821,F822,F823 --show-source --statistics
-    - flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - "./tests/test.sh"
-    # pytest --capture=sys  # add other tests here
+- flake8 . --count --select=E901,E999,F821,F822,F823 --show-source --statistics
+- flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+- "./tests/test.sh"
+deploy:
+  provider: pypi
+  username: __token__
+  password:
+    secure: wmUc0koTAKIbmw2jZTUujZFdMlUYDH+1Hb8F6eGEy9uYQfq3lVK4vQmpdasiuWP0kvonxIscwLCxlu0RBKchheuIrZPsAN+aXGmWLsVfZwGSD7IARPtahoR2ce60Ap5Lv3WUhGxRFEAkccr8wfHU/pajTZH/OC9omS3hJnq2FwbxFlZ0v35PzbTSdxY5gOoWFmzfGsihJJLD8u2Bce5pGChJT4Azccav8oyPgxXZKqsWfbfkSr5rORYFZSzNGXX1QVbrq3QGLig2NuK5L43X8NIUGiGmaVJUEJBroGd7TIKhZpSXPJS5VZefdaG+efd9FtdBHbaC8f72VpcB1Kmb8tIIATcU29Qj1JNgPnxwXz3PFUDkXSmuo8YQb6HWU83Ay7vNMK1wIXlf7A+whJvskpFGNysGstzws/B49+P7PFLZGr4reMWXCnSsaOHpGsCoA0iPOW+nX7OtfwyWlgmBM6npx+MeGCOelUZ9jiTc5w0AblakXCNigRdffc2X7ScGywfPaU7OaHviOk/QGgHRkKqFGllMQFy4BXQCUWvLNqGAuocaGBjff6bxVr2xm8kdvrDNay07uGLndngeAIR+a9cYHlTlyRbILLwsQ16td+MvAe4KPNO9HdNKyl/wYRW8E617XEnSEZM6t/v30a+2raNcwGix7ZsHWRjx2m0Hn2U=
+  on:
+    tags: true
+    repo: stanford-oval/genienlp
+  distributions: sdist bdist_wheel
