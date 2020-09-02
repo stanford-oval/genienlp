@@ -35,6 +35,22 @@ from .numericalizer.sequential_field import SequentialField
 
 
 class Example(NamedTuple):
+    # all_example_ids: List[str]
+    # # for each field in the example, we store 1) the tokenized sentence, 2_ a boolean mask
+    # # indicating whether the token is a real word (subject to word-piece tokenization)
+    # # or it should be treated as an opaque symbol, 3) and features such as entity type, word freq, etc.
+    # all_contexts: List[List[str]]
+    # all_context_word_masks: List[List[bool]]
+    # all_context_features: List[List[Tuple[float]]]
+    # all_questions: List[List[str]]
+    # all_question_word_masks: List[List[bool]]
+    # all_question_features: List[List[Tuple[float]]]
+    # all_answers: List[List[str]]
+    # all_answer_word_masks: List[List[bool]]
+    # all_answer_features: List[List[Tuple[float]]]
+    # all_context_plus_questions: List[List[str]]
+    # all_context_plus_question_word_masks: List[List[bool]]
+    # all_context_plus_question_features: List[List[Tuple[float]]]
     example_id: str
     # for each field in the example, we store the tokenized sentence, and a boolean mask
     # indicating whether the token is a real word (subject to word-piece tokenization)
@@ -55,23 +71,28 @@ class Example(NamedTuple):
     vocab_fields = ['context', 'question', 'answer']
 
     @staticmethod
-    def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, lower=False):
-        args = [example_id]
-
-        for argname, arg in (('context', context), ('question', question), ('answer', answer),
-                             ('context_question', context+' '+question)):
-            words, mask, feature = tokenize(arg.rstrip('\n'), field_name=argname, answer=answer)
-            if mask is None:
-                mask = [True for _ in words]
+    def from_raw(all_example_ids: List[str], all_contexts: List[str], all_questions: List[str], all_answers: List[str], tokenize, lower=False):
+        args = []
+        args.append(all_example_ids)
+        
+        for argname, arg in (('context', all_contexts), ('question', all_questions), ('answer', all_answers),
+                             ('context_question', [context + ' ' + question for context, question in zip(all_contexts, all_questions)])):
+            all_words, all_masks, all_features = tokenize(arg, field_name=argname, answer_list=all_answers)
+            for i, mask in enumerate(all_masks):
+                if mask is None:
+                    all_masks[i] = [True for _ in all_words[i]]
             if lower:
-                words = [word.lower() for word in words]
-            args.append(words)
-            args.append(mask)
+                for i, words in all_words:
+                    all_words[i] = [word.lower() for word in words]
+            args.append(all_words)
+            args.append(all_masks)
             
             # type would be empty list for answer field
-            args.append(feature)
+            args.append(all_features)
         
-        return Example(*args)
+        # return list of Example
+        
+        return [Example(*arg) for arg in list(zip(*args))]
 
 
 class Batch(NamedTuple):

@@ -95,7 +95,7 @@ class Server:
         else:
             answer = ''
 
-        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
+        ex = Example.from_raw([str(request['id'])], [context], [question], [answer], tokenize=task.tokenize, lower=self.args.lower)[0]
 
         batch = self.numericalize_example(ex)
         predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)

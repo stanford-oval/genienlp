@@ -40,7 +40,6 @@ tracer.setLevel(logging.CRITICAL)
 
 logger = logging.getLogger(__name__)
 
-# import pygtrie
 
 DOMAIN_TYPE_MAPPING = dict()
 DOMAIN_TYPE_MAPPING['music'] = {'Person': 'song_artist', 'MusicRecording': 'song_name', 'MusicAlbum': 'song_album'}
@@ -54,11 +53,13 @@ nltk.download('stopwords')
 from nltk.corpus import stopwords
 
 
-BANNED_WORDS = stopwords.words('english') + \
-               ['music', 'musics', 'name', 'names', 'want', 'wants', 'album', 'albums', 'please', 'who', 'show me',
-                'play', 'plays', 'track', 'tracks', 'song', 'songs', 'record', 'records', 'album', 'something',
+BANNED_WORDS = set(
+                stopwords.words('english') + \
+                ['music', 'musics', 'name', 'names', 'want', 'wants', 'album', 'albums', 'please', 'who', 'show me',
+                'play', 'play me', 'plays', 'track', 'tracks', 'song', 'songs', 'record', 'records', 'recordings', 'album', 'something',
                 'resume', 'resumes', 'find me', 'the', 'search for me', 'search', 'searches', 'yes', 'yeah', 'popular',
-                'release', 'released', 'dance', 'dancing']
+                'release', 'released', 'dance', 'dancing', 'i need', 'i would', ' i will', 'find', 'the list']
+                   )
 
 def is_special_case(key):
     if key in BANNED_WORDS:
@@ -178,18 +179,89 @@ class ElasticDatabase(object):
         self.index = None
         self.es = None
 
-    def find_matches(self, tokens_str, allow_fuzzy):
-    
-        if allow_fuzzy:
-            result = self.es.search(index=self.index, body={
-                "query": {"multi_match": {"query": tokens_str, "fields": ["canonical^8", "aliases^3", "description"], "fuzziness": "AUTO"}}})
-        else:
-            result = self.es.search(index=self.index, body={
-                "query": {"multi_match": {"query": tokens_str, "fields": ["canonical^8", "aliases^3", "description"]}}})
+    def batch_find_matches(self, tokens_str, allow_fuzzy, size):
         
-        matches = result['hits']['hits']
+        queries = []
+        for tokens in tokens_str:
+            if allow_fuzzy:
+                queries.append({"size": size,
+                        "query": {"multi_match": {"query": tokens, "fields": ["canonical^8", "aliases^3"], "fuzziness": "AUTO"}}})
+            else:
+                queries.append({"size": size,
+                        "query": {"multi_match": {"query": tokens, "fields": ["canonical^8", "aliases^3"]}}})
+
+        search_header = json.dumps({'index': self.index})
+        request = ''
+        for q in queries:
+            request += '{}\n{}\n'.format(search_header, json.dumps(q))
+            
+        result = self.es.msearch(index=self.index, body=request)
+
+        matches = [res['hits']['hits'] for res in result['responses']]
         return matches
 
+    def find_matches(self, tokens_str, allow_fuzzy, size):
+    
+        if allow_fuzzy:
+            result = self.es.search(index=self.index, body={"size": size,
+                "query": {"multi_match": {"query": tokens_str, "fields": ["canonical^8", "aliases^3"], "fuzziness": "AUTO"}}})
+        else:
+            result = self.es.search(index=self.index, body={"size": size,
+                "query": {"multi_match": {"query": tokens_str, "fields": ["canonical^8", "aliases^3"]}}})
+                
+        matches = result['hits']['hits']
+        return matches
+    
+    def batch_lookup(self, tokens_list, **kwargs):
+        allow_fuzzy = kwargs.get('allow_fuzzy', False)
+        length = len(tokens_list)
+
+        all_currs = [0] * length
+        all_lengths = [len(tokens) for tokens in tokens_list]
+        all_ends = [len(tokens) for tokens in tokens_list]
+        all_tokens_type_ids = [[] for _ in range(length)]
+        all_done = [False] * length
+        
+        while not all(all_done):
+            batch_to_lookup = [' '.join(tokens[all_currs[i]:all_ends[i]]) for i, tokens in enumerate(tokens_list)]
+            all_matches = self.batch_find_matches(batch_to_lookup, allow_fuzzy, size=1)
+            
+            for i in range(length):
+                if all_done[i]:
+                    continue
+
+                match = all_matches[i]
+                assert len(match) in [0, 1]
+                
+                # sometimes we have tokens like '.' or ',' which recieves no match
+                if len(match) == 0:
+                    all_ends[i] -= 1
+                    continue
+            
+                match = match[0]
+                canonical = match['_source']['canonical']
+                type = match['_source']['type']
+                if not is_special_case(canonical) and canonical == batch_to_lookup[i]:
+                    all_tokens_type_ids[i].extend([self.type2id[type] for _ in range(all_currs[i], all_ends[i])])
+                    all_currs[i] = all_ends[i]
+                else:
+                    all_ends[i] -= 1
+                    
+            for j in range(length):
+                # no matches were found for the span starting from current index
+                if all_currs[j] == all_ends[j] and not all_currs[j] >= all_lengths[j]:
+                    all_tokens_type_ids[j].append(self.type2id['unk'])
+                    all_currs[j] += 1
+                    all_ends[j] = all_lengths[j]
+
+            for j in range(length):
+                # reached end of sentence
+                if all_currs[j] >= all_lengths[j]:
+                    all_done[j] = True
+
+        return all_tokens_type_ids
+        
+    
     def lookup(self, tokens, **kwargs):
         allow_fuzzy = kwargs.get('allow_fuzzy', False)
     
@@ -201,23 +273,27 @@ class ElasticDatabase(object):
             end = length
             while end > i:
                 tokens_str = ' '.join(tokens[i:end])
-                matches = self.find_matches(tokens_str, allow_fuzzy)
+                
+                # only return the best match
+                # ES matches are sorted by score when returned
+                matches = self.find_matches(tokens_str, allow_fuzzy, size=1)
                 
                 if matches:
-                    matches = sorted(matches, key=lambda item: item['_score'], reverse=True)
-                    if not allow_fuzzy:
-                        # prune matches to only contain highest score (i.e. no fuzzy match)
-                        matches = [matches[0]]
                     for k in range(len(matches)):
                         match = matches[k]
-                        if not is_special_case(match) and match.lower() == tokens_str:
+                        canonical = match['_source']['canonical']
+                        type = match['_source']['type']
+                        if not is_special_case(canonical) and canonical == tokens_str:
                             # match found
                             found = True
                             break
                     if not found:
                         end -= 1
                         continue
-                    tokens_type_ids.extend([self.type2id[match['_source']['type']] for _ in range(i, end)])
+                    try:
+                        tokens_type_ids.extend([self.type2id[type] for _ in range(i, end)])
+                    except:
+                        print('here')
                     # move i to current unprocessed position
                     i = end
                     break

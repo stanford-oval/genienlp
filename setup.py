@@ -63,6 +63,7 @@ setuptools.setup(
         'seaborn~=0.9',
         'nltk~=3.4',
         'pytrie==0.3.1',
-        'wordfreq==2.3.2'
+        'wordfreq==2.3.2',
+        'elasticsearch==7.9.1'
     ]
 )

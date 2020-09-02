@@ -105,6 +105,8 @@ def parse_argv(parser):
                         help='Batch same sentences together (used for multilingual tasks)')
     parser.add_argument('--train_batch_size', type=int, default=0,
                         help='Number of samples to use in each batch; will be used instead of train_batch_tokens when sentence_batching is on')
+    parser.add_argument('--example_batch_size', type=int, default=1,
+                        help='Number of examples included in each batch when processing raw data')
     parser.add_argument('--use_encoder_loss', action='store_true', help='Force encoded values for sentences in different languages to be the same')
     parser.add_argument('--encoder_loss_type', type=str, default='mean', choices=['mean', 'sum'],
                         help='Function to calculate encoder_loss_type from the context rnn hidden states')
@@ -253,7 +255,7 @@ def parse_argv(parser):
                         help='prune items in database for faster lookup (only during train and evaluation)'
                              'bootleg option is wip')
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
-    parser.add_argument('--almond_domains', nargs='+', help='Domains used for almond dataset; e.g. music, books, ...')
+    parser.add_argument('--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
     parser.add_argument('--features', nargs='+', default=['type'], help='Features that will be extracted for each entity: [type, freq] for now.'
                                                                         ' Order is important')
     
@@ -356,11 +358,16 @@ def post_parse(args):
         
     # process database
     args.num_db_types = 0
-    if args.database and args.do_entity_linking:
-        with open(args.database, 'r') as fin:
-            database = json.load(fin)
-        # +1 for unknown entities
-        args.num_db_types = len(set(database.values())) + 1
+    if args.do_entity_linking:
+        if args.database_type in ['json', 'local-elastic']:
+            with open(args.database, 'r') as fin:
+                database = json.load(fin)
+            # +1 for unknown entities
+            args.num_db_types = len(set(database.values())) + 1
+        elif args.database_type == 'remote-elastic':
+            with open(args.type2id_dict, 'r') as fin:
+                database = json.load(fin)
+            args.num_db_types = len(set(database.keys()))
         
     args.num_features = len(args.features)
         
