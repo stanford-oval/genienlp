@@ -29,10 +29,11 @@
 
 import logging
 import json
-import requests
+import time
 
 from pytrie import SortedStringTrie as Trie
 from elasticsearch import Elasticsearch, RequestsHttpConnection
+from elasticsearch import exceptions
 
 
 tracer = logging.getLogger('elasticsearch')
@@ -47,6 +48,8 @@ DOMAIN_TYPE_MAPPING['spotify'] = {'id': 'song_name', 'song': 'song_name', 'artis
 
 # Order of types should not be changed (new types can be appended)
 TYPES = ('song_name', 'song_artist', 'song_album', 'song_genre')
+
+ES_RETRY_ATTEMPTS = 5
 
 import nltk
 nltk.download('stopwords')
@@ -195,7 +198,20 @@ class ElasticDatabase(object):
         for q in queries:
             request += '{}\n{}\n'.format(search_header, json.dumps(q))
             
-        result = self.es.msearch(index=self.index, body=request)
+        retries = 0
+        result = None
+        while retries < ES_RETRY_ATTEMPTS:
+            try:
+                result = self.es.msearch(index=self.index, body=request)
+                break
+            except (exceptions.ConnectionTimeout, exceptions.ConnectionError, exceptions.TransportError):
+                logger.warning('Connection Timed Out!')
+                time.sleep(1)
+                retries += 1
+        
+        if not result:
+            raise ConnectionError('Could not reconnect to ES database after {} tries...'.format(ES_RETRY_ATTEMPTS))
+        
 
         matches = [res['hits']['hits'] for res in result['responses']]
         return matches
