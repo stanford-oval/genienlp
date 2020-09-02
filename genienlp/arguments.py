@@ -256,10 +256,10 @@ def parse_argv(parser):
                              'bootleg option is wip')
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
-    parser.add_argument('--features', nargs='+', default=['type'], help='Features that will be extracted for each entity: [type, freq] for now.'
+    parser.add_argument('--features', nargs='+', default=[], help='Features that will be extracted for each entity: [type, freq] for now.'
                                                                         ' Order is important')
     
-    parser.add_argument('--entity_type_embed_pos', type=str, default='bottom', choices=['top', 'bottom'],
+    parser.add_argument('--entity_type_embed_pos', type=str, default='none', choices=['top', 'bottom', 'none'],
                         help='where to add entity type embedding layer')
     
     parser.add_argument('--lookup_method', default='longer_first', choices=['smaller_first', 'longer_first'],
