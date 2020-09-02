@@ -127,9 +127,15 @@ class TextDataset(Dataset):
 
     def collate_fn(self, batch):
         (inputs, labels, position_ids, segment_ids) = zip(*batch)
-        inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+        inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=self.tokenizer.mask_token_id)
         labels_pad = pad_sequence(labels, batch_first=True, padding_value=-100)
-        position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
-        segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
+        # continue position_id when padding
+        position_ids2 = []
+        for i, p in enumerate(position_ids):
+            pad = torch.tensor(list(range(p[-1]+1, p[-1]+len(labels_pad[0])-len(p)+1)), dtype=torch.long)
+            position_ids2.append(torch.cat([p, pad], dim=0))
+        position_ids = torch.stack(position_ids2, dim=0)
+        # position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
+        segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=1) # will be ignored in the loss function, so its value does not matter
     
         return inputs_pad, labels_pad, position_ids, segment_ids

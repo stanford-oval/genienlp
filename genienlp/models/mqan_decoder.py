@@ -144,6 +144,8 @@ class MQANDecoder(nn.Module):
                 current_token_id = current_token_id.clone().cpu().apply_(self.map_to_full).to(current_token_id.device)
             # (next_token_logits, past) where `past` includes all the states needed to continue generation
             logits = torch.log(decoder_wrapper.next_token_probs(current_token_id))
+            values, indices = torch.max(torch.softmax(logits, dim=2), dim=2)
+            print(values)
             return logits, decoder_wrapper
 
     def probs(self, outputs, vocab_pointer_switches, context_question_switches,
