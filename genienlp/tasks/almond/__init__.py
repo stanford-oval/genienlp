@@ -297,7 +297,6 @@ class BaseAlmondTask(BaseTask):
                 i += 1
         return "".join(output)
     
-    
     def tokenize(self, sentence_list, field_name=None, answer_list=None):
         all_tokens, all_masks, all_features = [], [], []
         for sentence, answer in zip(sentence_list, answer_list):
