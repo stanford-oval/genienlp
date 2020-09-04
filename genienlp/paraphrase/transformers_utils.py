@@ -31,10 +31,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-from transformers import RobertaConfig, XLMRobertaConfig
+from transformers import RobertaConfig, XLMRobertaConfig, XLMRobertaModel
 from transformers.modeling_bart import LayerNorm, LearnedPositionalEmbedding, BartEncoder, SelfAttention, invert_mask, \
     SinusoidalPositionalEmbedding, BartModel, BartForConditionalGeneration
-from transformers.modeling_bert import BertLayerNorm, BertPreTrainedModel, BertEncoder, BertPooler
+from transformers.modeling_bert import BertEncoder, BertPooler, BertModel, BertEmbeddings
 
 from transformers.modeling_t5 import T5ForConditionalGeneration, T5PreTrainedModel, T5LayerNorm, T5Block
 
@@ -44,8 +44,8 @@ from transformers.tokenization_xlm_roberta import XLMRobertaTokenizer
 
 from transformers.activations import ACT2FN
 from transformers.configuration_bart import BartConfig
-from transformers.modeling_utils import calc_banned_ngram_tokens, calc_banned_bad_words_ids, top_k_top_p_filtering, \
-    create_position_ids_from_input_ids
+from transformers.generation_utils import calc_banned_ngram_tokens, calc_banned_bad_words_ids, top_k_top_p_filtering
+from transformers.modeling_roberta import create_position_ids_from_input_ids
 
 
 SPIECE_UNDERLINE = "▁"
@@ -953,23 +953,15 @@ class T5ForConditionalGeneration(T5ForConditionalGeneration):
 
 
 
-class BertEmbeddings(nn.Module):
+class BertEmbeddingsV2(BertEmbeddings):
     """Construct the embeddings from word, position, token_type, and entity_type embeddings.
     """
 
     def __init__(self, config, num_db_types=0):
-        super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        super().__init__(config)
         self.num_db_types = num_db_types
         if num_db_types > 0:
             self.entity_type_embeddings = nn.Embedding(num_db_types, config.hidden_size, padding_idx=0)
-
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
-        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, entity_ids=None, inputs_embeds=None):
         if input_ids is not None:
@@ -1003,39 +995,21 @@ class BertEmbeddings(nn.Module):
         return embeddings
 
 
-class BertModel(BertPreTrainedModel):
+class BertModelV2(BertModel):
     """
-    Subcalss of BertPretrained model with an additional entity type embedding layer at the bottom
+    Subcalss of BertModel model with an additional entity type embedding layer at the bottom
     """
 
     def __init__(self, config):
         super().__init__(config)
-        self.config = config
         
-        self.embeddings = BertEmbeddings(config)
-        self.encoder = BertEncoder(config)
-        self.pooler = BertPooler(config)
-
+        self.embeddings = BertEmbeddingsV2(config)
         self.init_weights()
         
     def _reset_embeddings(self, num_db_types):
-        self.embeddings = BertEmbeddings(self.config, num_db_types)
+        self.embeddings = BertEmbeddingsV2(self.config, num_db_types)
         self.num_db_types = num_db_types
-
-    def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
+        
     def forward(
         self,
         input_ids=None,
@@ -1047,7 +1021,14 @@ class BertModel(BertPreTrainedModel):
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1064,7 +1045,6 @@ class BertModel(BertPreTrainedModel):
             attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-        
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -1097,6 +1077,8 @@ class BertModel(BertPreTrainedModel):
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
@@ -1107,7 +1089,7 @@ class BertModel(BertPreTrainedModel):
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
 
-class RobertaEmbeddings(BertEmbeddings):
+class RobertaEmbeddingsV2(BertEmbeddingsV2):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing and adding entity_types.
     """
@@ -1118,7 +1100,7 @@ class RobertaEmbeddings(BertEmbeddings):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx)
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, entity_ids=None,  inputs_embeds=None):
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, entity_ids=None, inputs_embeds=None):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
@@ -1145,40 +1127,22 @@ class RobertaEmbeddings(BertEmbeddings):
         )
         return position_ids.unsqueeze(0).expand(input_shape)
 
-
-class RobertaModel(BertModel):
+class XLMRobertaModelV2(BertModelV2):
     """
-    Subcalss of RobertaModel model with an additional entity type embedding layer at the bottom
+    Subcalss of XLMRobertaModel model with an additional entity type embedding layer at the bottom
     """
 
-    config_class = RobertaConfig
+    config_class = XLMRobertaConfig
     base_model_prefix = "roberta"
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.embeddings = RobertaEmbeddings(config)
+        self.embeddings = RobertaEmbeddingsV2(config)
         self.init_weights()
-        
-    def _reset_embeddings(self, num_db_types):
-        self.embeddings = RobertaEmbeddings(self.config, num_db_types)
-        self.num_db_types = num_db_types
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-
-
-class XLMRobertaModel(RobertaModel):
-    """
-    This class overrides :class:`~transformers.RobertaModel`.
-    """
-
-    config_class = XLMRobertaConfig
-
-
-
-
-

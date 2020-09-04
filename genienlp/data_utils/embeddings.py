@@ -42,7 +42,7 @@ from . import word_vectors
 from .almond_embeddings import AlmondEmbeddings
 from .pretrained_lstm_lm import PretrainedLTSMLM
 
-from ..paraphrase.transformers_utils import BertModel, XLMRobertaModel
+from ..paraphrase.transformers_utils import BertModelV2, XLMRobertaModelV2
 
 _logger = logging.getLogger(__name__)
 
@@ -234,9 +234,9 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
 
             if entity_type_embed_pos == 'bottom':
                 if emb_type in BERT_PRETRAINED_MODEL_ARCHIVE_LIST:
-                    transformer_model = BertModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
+                    transformer_model = BertModelV2(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
                 elif emb_type in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST:
-                    transformer_model = XLMRobertaModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
+                    transformer_model = XLMRobertaModelV2(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
                 transformer_model._reset_embeddings(num_db_types)
                 context_vectors.append(TransformerEmbedding(transformer_model))
             else:
@@ -275,9 +275,9 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
 
             if entity_type_embed_pos == 'bottom':
                 if emb_type in BERT_PRETRAINED_MODEL_ARCHIVE_LIST:
-                    transformer_model = BertModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
+                    transformer_model = BertModelV2(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
                 elif emb_type in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST:
-                    transformer_model = XLMRobertaModel(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
+                    transformer_model = XLMRobertaModelV2(config).from_pretrained(emb_type, cache_dir=cachedir, output_hidden_states=True)
                 transformer_model._reset_embeddings(num_db_types)
                 question_vectors.append(TransformerEmbedding(transformer_model))
             else:

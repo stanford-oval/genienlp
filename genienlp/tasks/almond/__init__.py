@@ -40,6 +40,7 @@ from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
 from ...data_utils.database import Database, LocalElasticDatabase, RemoteElasticDatabase, DOMAIN_TYPE_MAPPING
+from ...data_utils.bootleg import BootlegAnnotator
 from ...util import es_dump_type2id
 from transformers.tokenization_bert import BasicTokenizer as BertBasicTokenizer
 
@@ -149,6 +150,12 @@ class BaseAlmondTask(BaseTask):
         # initialize the database
         if args.do_entity_linking:
             self._init_db()
+            
+            if self.args.retrieve_method == 'bootleg':
+                self._init_bootleg(self.db)
+                
+            
+                
 
     def is_entity(self, token):
         return token[0].isupper()
@@ -163,6 +170,20 @@ class BaseAlmondTask(BaseTask):
         if id_[0] == 'T':
             id_ = id_[1:]
         return id_
+    
+    def _init_bootleg(self, db):
+        # bootleg database is stored on disk in json format
+        # TODO: integrate with ES
+        if not torch.cuda.is_available() or len(self.args.devices) == 0:
+            device = 'cpu'
+        else:
+            device = 'cuda'
+        from bootleg.utils.parser_utils import get_full_config
+        bootleg_dir = self.args.bootleg_input_dir
+        config_path = f'{bootleg_dir}/bootleg_wiki/bootleg_config.json'
+        config_args = get_full_config(config_path)
+        self.bootleg_annot = BootlegAnnotator(config_args, device=device, bootleg_dir=bootleg_dir)
+        self.bootleg_annot.bootleg_es = self.db
 
     def _init_db(self):
         if self.args.database_type in ['json', 'local-elastic']:
@@ -260,18 +281,22 @@ class BaseAlmondTask(BaseTask):
         return entity2type
 
     def batch_find_types(self, tokens_list, answer_list):
-        if self.args.database_type == 'json':
-            if self.args.retrieve_method == 'lookup':
-                all_tokens_type_ids = self.db.batch_lookup(tokens_list, lookup_method=self.args.lookup_method)
-            elif self.args.retrieve_method == 'oracle':
-                entity2type = self.collect_answer_entity_types(answer_list)
-                all_tokens_type_ids = self.db.batch_lookup(tokens_list, subset=entity2type,
-                                                 retrieve_method='oracle', lookup_method=self.args.lookup_method)
-            elif self.args.retrieve_method == 'bootleg':
-                EnvironmentError('bootleg is wip and not supported yet.')
-        else:
-            all_tokens_type_ids = self.db.batch_lookup(tokens_list, allow_fuzzy=self.args.allow_fuzzy)
     
+        all_tokens_type_ids = []
+        if self.args.retrieve_method == 'bootleg':
+            for i, token in enumerate(tokens_list):
+                all_tokens_type_ids.append(self.bootleg_annot.return_type_ids(token))
+        else:
+            if self.args.database_type == 'json':
+                if self.args.retrieve_method == 'lookup':
+                    all_tokens_type_ids = self.db.batch_lookup(tokens_list, lookup_method=self.args.lookup_method)
+                elif self.args.retrieve_method == 'oracle':
+                    entity2type = self.collect_answer_entity_types(answer_list)
+                    all_tokens_type_ids = self.db.batch_lookup(tokens_list, subset=entity2type,
+                                                     retrieve_method='oracle', lookup_method=self.args.lookup_method)
+            else:
+                all_tokens_type_ids = self.db.batch_lookup(tokens_list, allow_fuzzy=self.args.allow_fuzzy)
+        
         return all_tokens_type_ids
     
     def find_freqs(self, tokens, tokens_type_ids):

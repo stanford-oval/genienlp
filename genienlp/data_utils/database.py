@@ -182,16 +182,11 @@ class ElasticDatabase(object):
         self.index = None
         self.es = None
 
-    def batch_find_matches(self, tokens_str, allow_fuzzy, size):
+    def batch_find_matches(self, tokens_list, query_temp):
         
         queries = []
-        for tokens in tokens_str:
-            if allow_fuzzy:
-                queries.append({"size": size,
-                        "query": {"multi_match": {"query": tokens, "fields": ["canonical^8", "aliases^3"], "fuzziness": "AUTO"}}})
-            else:
-                queries.append({"size": size,
-                        "query": {"multi_match": {"query": tokens, "fields": ["canonical^8", "aliases^3"]}}})
+        for tokens in tokens_list:
+            queries.append(json.loads(query_temp.replace('"{}"', '"' + tokens + '"')))
 
         search_header = json.dumps({'index': self.index})
         request = ''
@@ -216,18 +211,7 @@ class ElasticDatabase(object):
         matches = [res['hits']['hits'] for res in result['responses']]
         return matches
 
-    def find_matches(self, tokens_str, allow_fuzzy, size):
-    
-        if allow_fuzzy:
-            result = self.es.search(index=self.index, body={"size": size,
-                "query": {"multi_match": {"query": tokens_str, "fields": ["canonical^8", "aliases^3"], "fuzziness": "AUTO"}}})
-        else:
-            result = self.es.search(index=self.index, body={"size": size,
-                "query": {"multi_match": {"query": tokens_str, "fields": ["canonical^8", "aliases^3"]}}})
-                
-        matches = result['hits']['hits']
-        return matches
-    
+
     def batch_lookup(self, tokens_list, **kwargs):
         allow_fuzzy = kwargs.get('allow_fuzzy', False)
         length = len(tokens_list)
@@ -240,7 +224,13 @@ class ElasticDatabase(object):
         
         while not all(all_done):
             batch_to_lookup = [' '.join(tokens[all_currs[i]:all_ends[i]]) for i, tokens in enumerate(tokens_list)]
-            all_matches = self.batch_find_matches(batch_to_lookup, allow_fuzzy, size=1)
+            
+            if allow_fuzzy:
+                query_temp = json.dumps({"size": 1, "query": {"multi_match": {"query": "{}", "fields": ["canonical^8", "aliases^3"], "fuzziness": "AUTO"}}})
+            else:
+                query_temp = json.dumps({"size": 1, "query": {"multi_match": {"query": "{}", "fields": ["canonical^8", "aliases^3"]}}})
+            
+            all_matches = self.batch_find_matches(batch_to_lookup, query_temp)
             
             for i in range(length):
                 if all_done[i]:
@@ -277,50 +267,6 @@ class ElasticDatabase(object):
 
         return all_tokens_type_ids
         
-    
-    def lookup(self, tokens, **kwargs):
-        allow_fuzzy = kwargs.get('allow_fuzzy', False)
-    
-        i = 0
-        tokens_type_ids = []
-        length = len(tokens)
-        found = False
-        while i < length:
-            end = length
-            while end > i:
-                tokens_str = ' '.join(tokens[i:end])
-                
-                # only return the best match
-                # ES matches are sorted by score when returned
-                matches = self.find_matches(tokens_str, allow_fuzzy, size=1)
-                
-                if matches:
-                    for k in range(len(matches)):
-                        match = matches[k]
-                        canonical = match['_source']['canonical']
-                        type = match['_source']['type']
-                        if not is_special_case(canonical) and canonical == tokens_str:
-                            # match found
-                            found = True
-                            break
-                    if not found:
-                        end -= 1
-                        continue
-                    try:
-                        tokens_type_ids.extend([self.type2id[type] for _ in range(i, end)])
-                    except:
-                        print('here')
-                    # move i to current unprocessed position
-                    i = end
-                    break
-                else:
-                    end -= 1
-            if not found:
-                tokens_type_ids.append(self.type2id['unk'])
-                i += 1
-            found = False
-    
-        return tokens_type_ids
 
 
 class RemoteElasticDatabase(ElasticDatabase):
@@ -353,10 +299,6 @@ class LocalElasticDatabase(ElasticDatabase):
     def _init_db(self, items):
         self.es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
         self.index = 'ner'
-        if self.es.ping():
-            logger.info('Successfully connected to Elastic Search Database')
-        else:
-            logger.error('Was not able to connect to Elastic Search Database')
     
         # create db schema
         schema = {
