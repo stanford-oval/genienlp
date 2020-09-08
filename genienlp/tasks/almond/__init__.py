@@ -174,15 +174,18 @@ class BaseAlmondTask(BaseTask):
     def _init_bootleg(self, db):
         # bootleg database is stored on disk in json format
         # TODO: integrate with ES
-        if not torch.cuda.is_available() or len(self.args.devices) == 0:
-            device = 'cpu'
+        if self.args.bootleg_device is not None:
+            bootleg_device = self.args.bootleg_device
         else:
-            device = 'cuda'
+            if not torch.cuda.is_available() or len(self.args.devices) == 0:
+                bootleg_device = 'cpu'
+            else:
+                bootleg_device = 'cuda'
         from bootleg.utils.parser_utils import get_full_config
         bootleg_dir = self.args.bootleg_input_dir
         config_path = f'{bootleg_dir}/bootleg_wiki/bootleg_config.json'
         config_args = get_full_config(config_path)
-        self.bootleg_annot = BootlegAnnotator(config_args, device=device, bootleg_dir=bootleg_dir)
+        self.bootleg_annot = BootlegAnnotator(config_args, device=bootleg_device, bootleg_dir=bootleg_dir)
         self.bootleg_annot.bootleg_es = self.db
 
     def _init_db(self):
