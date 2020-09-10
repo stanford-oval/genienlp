@@ -71,6 +71,10 @@ class BootlegAnnotator(Annotator):
         matches = self.bootleg_es.batch_find_matches(pred_cands, query_temp)
         
         for span, match in zip(spans, matches):
+            
+            # we don't have that Qid in ES
+            if len(match) == 0:
+                continue
             # size is 1 (e.g. highest score)
             match = match[0]
             type = match['_source']['type']
