@@ -54,6 +54,8 @@ from .validate import generate_with_model, calculate_and_reduce_metrics
 
 logger = logging.getLogger(__name__)
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 
 def get_all_splits(args):
     splits = []

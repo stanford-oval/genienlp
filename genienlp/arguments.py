@@ -94,6 +94,9 @@ def parse_argv(parser):
                         help='whether to allow filtering on the validation sets')
     parser.add_argument('--val_batch_size', nargs='+', default=[256], type=int,
                         help='Batch size for validation corresponding to tasks in val tasks')
+    
+    parser.add_argument('--share_train_val_tasks', action='store_true', help='if true will override val_tasks so that'
+                                                                             ' train and val share the exact same task object')
 
     parser.add_argument('--paired', action='store_true',
                         help='Pair related examples before numericalizing the input (e.g. training with synthetic and paraphrase '
@@ -378,6 +381,9 @@ def post_parse(args):
     # create the task objects after we saved the configuration to the JSON file, because
     # tasks are not JSON serializable
     args.train_tasks = get_tasks(args.train_task_names, args)
-    args.val_tasks = get_tasks(args.val_task_names, args)
+    if args.share_train_val_tasks:
+        args.val_tasks = args.train_tasks
+    else:
+        args.val_tasks = get_tasks(args.val_task_names, args)
 
     return args

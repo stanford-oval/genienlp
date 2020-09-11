@@ -42,8 +42,6 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 
-import time
-
 from . import arguments
 from . import models
 from .data_utils.embeddings import load_embeddings
@@ -53,6 +51,8 @@ from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_par
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
 from .validate import validate
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 def initialize_logger(args):
