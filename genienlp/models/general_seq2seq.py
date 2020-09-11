@@ -42,6 +42,7 @@ from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
 from .common import mask_tokens
 from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration, BartConfig, BartTokenizer
+from torch import nn
 
 ENCODERS = {
     'MQANEncoder': MQANEncoder,
@@ -75,7 +76,7 @@ class Seq2Seq(PreTrainedModel):
 
         # obtain function arguments from **kwargs
         save_directory = pretrained_model_name_or_path
-        model_checkpoint_file = model_checkpoint_file.pop("args", None)
+        model_checkpoint_file = kwargs.pop("model_checkpoint_file", None)
         args = kwargs.pop("args", None)
         device = kwargs.pop("device", None)
         vocab_sets = kwargs.pop("vocab_sets", None)
@@ -85,7 +86,6 @@ class Seq2Seq(PreTrainedModel):
         model = Seq2Seq(args=args, vocab_sets=vocab_sets, is_loading=True, save_directory=save_directory)
         save_dict = torch.load(full_checkpoint_path, map_location=device)
         model.load_state_dict(save_dict['model_state_dict'])
-
 
         return model, save_dict.get('best_decascore')
 
@@ -279,32 +279,52 @@ class Seq2Seq(PreTrainedModel):
         
 
            
-class Bart(BartForConditionalGeneration):
+class Bart(nn.Module):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        model = super().from_pretrained()
-        model.numericalizer = BartNumericalizer(pretrained_model_name_or_path)
-        return model, 0 #TODO return best_decascore
+        save_directory = pretrained_model_name_or_path
+        model_checkpoint_file = kwargs.pop("model_checkpoint_file", None)
+        args = kwargs.pop("args", None)
+        device = kwargs.pop("device", None)
+        # vocab_sets = kwargs.pop("vocab_sets", None)
+
+        full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
+        logger.info(f'Loading the model from {full_checkpoint_path}')
+        model = Bart(args=args)
+        save_dict = torch.load(full_checkpoint_path, map_location=device)
+        model.load_state_dict(save_dict['model_state_dict'])
+
+        return model, save_dict.get('best_decascore')
+
 
     def __init__(self, config=None, *inputs, **kwargs):
         self.args = kwargs.pop("args", None)
-        config = BartConfig.from_pretrained(self.args.seq2seq_decoder)
-        # print('config = ', config)
-        super().__init__(config)
+        super().__init__()
+        self.bart = BartForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder)
         self.numericalizer = BartNumericalizer(self.args.seq2seq_decoder)
 
     def forward(self, *input, **kwargs):
         #TODO pretraining
-        # print('kwargs = ', kwargs)
+        # print('kwargs = ', kwargs.keys())
+        # print('input_ids = ', kwargs['input_ids'])
         if self.training:
             batch = input[0]
             pretraining = kwargs.pop("pretraining", None)
+
+            pad = self.numericalizer._tokenizer.pad_token_id
+            source_ids, source_mask, y = batch.context.value, batch.context.value!=pad, batch.answer.value
+            y_ids = y[:, :-1].contiguous()
+            lm_labels = y[:, 1:].clone()
+            lm_labels[y[:, 1:] == pad] = -100
+            # print({'source_ids':source_ids, 'attention_mask': source_mask, 'decoder_input_ids':y_ids, 'lm_labels':lm_labels})
+            return self.bart.forward(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels)
+
             # print('input_ids = ', batch.context.value)
             # print('lm_labels = ', batch.answer.value)
-            return super().forward(input_ids=batch.context.value, decoder_input_ids=batch.answer.value, lm_labels=batch.answer.value)
+            # return super().forward(input_ids=batch.context.value, decoder_input_ids=batch.answer.value, lm_labels=batch.answer.value)
         else:
-            return super().forward(**kwargs)
+            return self.bart.forward(**kwargs)
         
     def set_train_context_embeddings(self, trainable):
         #TODO
@@ -312,6 +332,9 @@ class Bart(BartForConditionalGeneration):
 
     def set_train_question_embeddings(self, trainable):
         #TODO
+        pass
+
+    def add_new_vocab_from_data(self, splits):
         pass
 
     def generate(self,
@@ -328,8 +351,9 @@ class Bart(BartForConditionalGeneration):
                  ):
 
         input_ids = batch.context.value
+        # print('input_ids = ', input_ids)
         # TODO attention_mask
-        generated = super().generate(input_ids=input_ids,
+        generated = self.bart.generate(input_ids=input_ids,
                                      max_length=max_output_length,
                                      min_length=2, # generate at least one token after BOS
                                      bos_token_id=self.numericalizer._tokenizer.bos_token_id,
@@ -346,6 +370,8 @@ class Bart(BartForConditionalGeneration):
                                      do_sample=do_sample,
                                     )
 
+        # print('generated = ', generated)
+        
         return generated
     
     

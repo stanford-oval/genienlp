@@ -261,6 +261,8 @@ def post_parse(args):
     if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
         raise ValueError('Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
     
+    if args.warmup < 1:
+        raise ValueError('Warmup should be a positive integer.')
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1) :
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
 

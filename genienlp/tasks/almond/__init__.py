@@ -225,8 +225,12 @@ class NaturalSeq2Seq(BaseAlmondTask):
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant
-        _id, input_sequence, target_sequence = parts
-        print('parts = ', parts)
+        if len(parts) == 2:
+            input_sequence, target_sequence = parts
+            _id = "id-null"
+        else:
+            _id, input_sequence, target_sequence = parts
+        # print('parts = ', parts)
         question = 'translate from input to output'
         context = input_sequence
         answer = target_sequence
