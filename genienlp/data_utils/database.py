@@ -182,11 +182,11 @@ class ElasticDatabase(object):
         self.index = None
         self.es = None
 
-    def batch_find_matches(self, tokens_list, query_temp):
+    def batch_find_matches(self, keys_list, query_temp):
         
         queries = []
-        for tokens in tokens_list:
-            queries.append(json.loads(query_temp.replace('"{}"', '"' + tokens + '"')))
+        for key in keys_list:
+            queries.append(json.loads(query_temp.replace('"{}"', '"' + key + '"')))
 
         search_header = json.dumps({'index': self.index})
         request = ''
@@ -206,7 +206,6 @@ class ElasticDatabase(object):
         
         if not result:
             raise ConnectionError('Could not reconnect to ES database after {} tries...'.format(ES_RETRY_ATTEMPTS))
-        
 
         matches = [res['hits']['hits'] for res in result['responses']]
         return matches

@@ -34,6 +34,7 @@ import re
 import json
 from tqdm import tqdm
 from collections import defaultdict
+import time
 
 from ..base_task import BaseTask
 from ..registry import register_task
@@ -87,6 +88,7 @@ class AlmondDataset(CQA):
 
             batch = []
             last_batch = False
+            begin_time = time.time()
             for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
                 parts = line.strip().split('\t')
                 batch.append(parts)
@@ -98,6 +100,8 @@ class AlmondDataset(CQA):
                     continue
                 examples.extend(make_example(batch, dir_name, **kwargs))
                 batch = []
+                if len(examples) % 2 == 0:
+                    logger.info('{} examples have been processed so far. time elapsed: {}'.format(len(examples), time.time() - begin_time))
                 if len(examples) >= max_examples:
                     break
             
@@ -152,10 +156,7 @@ class BaseAlmondTask(BaseTask):
             self._init_db()
             
             if self.args.retrieve_method == 'bootleg':
-                self._init_bootleg(self.db)
-                
-            
-                
+                self._init_bootleg()
 
     def is_entity(self, token):
         return token[0].isupper()
@@ -171,7 +172,7 @@ class BaseAlmondTask(BaseTask):
             id_ = id_[1:]
         return id_
     
-    def _init_bootleg(self, db):
+    def _init_bootleg(self):
         # bootleg database is stored on disk in json format
         # TODO: integrate with ES
         if self.args.bootleg_device is not None:
@@ -287,8 +288,9 @@ class BaseAlmondTask(BaseTask):
     
         all_tokens_type_ids = []
         if self.args.retrieve_method == 'bootleg':
-            for i, token in enumerate(tokens_list):
-                all_tokens_type_ids.append(self.bootleg_annot.return_type_ids(token))
+            # for i, token in enumerate(tokens_list):
+            #     all_tokens_type_ids.append(self.bootleg_annot.return_type_ids(token))
+            all_tokens_type_ids = self.bootleg_annot.batch_return_type_ids(tokens_list)
         else:
             if self.args.database_type == 'json':
                 if self.args.retrieve_method == 'lookup':

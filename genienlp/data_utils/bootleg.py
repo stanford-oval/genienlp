@@ -1,12 +1,16 @@
-from bootleg.annotator import Annotator
-from bootleg.utils.parser_utils import get_full_config
-from bootleg import run
 import logging
-import sys
 import json
-from elasticsearch import exceptions
-from .database import ES_RETRY_ATTEMPTS
-import time
+
+from bootleg.annotator import Annotator
+from bootleg import run
+
+from bootleg.trainer import Trainer
+from bootleg.symbols.entity_symbols import EntitySymbols
+from bootleg.symbols.constants import *
+from bootleg.utils import utils, logging_utils, data_utils, train_utils, eval_utils
+from bootleg.utils.parser_utils import get_full_config
+from bootleg.utils.classes.dataset_collection import DatasetCollection
+from bootleg.utils.classes.status_reporter import StatusReporter
 
 logger = logging.getLogger(__name__)
 
@@ -44,41 +48,63 @@ class BootlegAnnotator(Annotator):
         
         return config_args
     
-    def return_type_ids(self, tokens):
-        ## Read from a file containing output of self.label_mentions(.)
-        # import re
-        # results = []
-        # re_pattern = re.compile('\[.*?\]')
-        # with open('dataset/bootleg/almond/multilingual/en/result.txt', 'r', encoding='utf-8') as fin:
-        #     for line in fin:
-        #         line = line.strip('\n').strip()
-        #         parts = re.findall(re_pattern, line)
-        #         results.append(parts)
-        #
-        # result = list(map(lambda part: eval(part), results[i]))
-
-        result = self.label_mentions(' '.join(tokens))
+    
+    def label_file(self, mode, is_writer, logger, world_size=1, rank=0):
+        train_utils.setup_train_heads_and_eval_slices(self.args)
+        train_utils.setup_run_folders(self.args, mode)
+    
+    def label_sentence(self, sent):
+        result = self.label_mentions(sent)
+        return result
         
-        tokens_type_id = [self.bootleg_es.type2id[self.bootleg_es.unk_type]] * len(tokens)
+
+    def batch_return_type_ids(self, tokens_list):
         
-        # no mentions found or no labels passed the threshold for the mentions
-        if not result:
-            return tokens_type_id
-
-        pred_cands, pred_probs, titles, spans, source_aliases = result
-
+        all_num_mentions = []
+        all_tokens_type_id = []
+        all_pred_cands = []
+        all_spans = []
         query_temp = json.dumps({"size": 1, "query": {"match": {"value": "{}"}}})
-        matches = self.bootleg_es.batch_find_matches(pred_cands, query_temp)
         
-        for span, match in zip(spans, matches):
+        for tokens in tokens_list:
+            result = self.label_sentence(' '.join(tokens))
             
-            # we don't have that Qid in ES
-            if len(match) == 0:
-                continue
-            # size is 1 (e.g. highest score)
-            match = match[0]
-            type = match['_source']['type']
-            span = span.split(':')
-            tokens_type_id[int(span[0]): int(span[1])] = [self.bootleg_es.type2id[type]] * (int(span[1]) - int(span[0]))
+            # no mentions found or no labels passed the threshold for the mentions
+            if not result:
+                result = ([], [], [], [], [])
+
+            pred_cands, pred_probs, titles, spans, source_aliases = result
             
-        return tokens_type_id
+            all_spans.append(spans)
+            
+            # so we know which matches correspond to which sentence
+            all_num_mentions.append(len(pred_cands))
+
+            all_pred_cands.extend(pred_cands)
+    
+            tokens_type_id = [self.bootleg_es.type2id[self.bootleg_es.unk_type]] * len(tokens)
+            all_tokens_type_id.append(tokens_type_id)
+    
+        if len(all_pred_cands) == 0:
+            return all_tokens_type_id
+        
+        all_matches = self.bootleg_es.batch_find_matches(all_pred_cands, query_temp)
+        
+        curr = 0
+        for i in range(len(tokens_list)):
+            matches = all_matches[curr:curr+all_num_mentions[i]]
+            curr += all_num_mentions[i]
+            spans = all_spans[i]
+            assert len(spans) == len(matches)
+            for span, match in zip(spans, matches):
+    
+                # we don't have that Qid in ES
+                if len(match) == 0:
+                    continue
+                # size is 1 (e.g. highest score)
+                match = match[0]
+                type = match['_source']['type']
+                span = span.split(':')
+                all_tokens_type_id[i][int(span[0]): int(span[1])] = [self.bootleg_es.type2id[type]] * (int(span[1]) - int(span[0]))
+
+        return all_tokens_type_id
