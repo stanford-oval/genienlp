@@ -28,9 +28,6 @@ import copy
 import os
 import numpy as np
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
@@ -442,6 +439,8 @@ def run_single_process_generation(args, config):
                     sample_layer_attention_pooled = compute_attention(sample_layer_attention, args.att_pooling)
                     
                     if args.plot_heatmaps:
+                        import matplotlib.pyplot as plt
+                        import seaborn as sns
                         sns.heatmap(torch.log(sample_layer_attention_pooled), xticklabels=src_tokens,
                                     yticklabels=tgt_tokens, annot=True)
                         if args.output_file is not None:
