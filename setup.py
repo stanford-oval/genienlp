@@ -63,6 +63,7 @@ setuptools.setup(
         'nltk~=3.4',
         'pytrie==0.3.1',
         'wordfreq==2.3.2',
-        'elasticsearch==7.9.1'
+        'elasticsearch==7.9.1',
+        'pathos==0.2.6'
     ]
 )

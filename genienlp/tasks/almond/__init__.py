@@ -35,7 +35,8 @@ import json
 import math
 from tqdm import tqdm
 from collections import defaultdict
-import multiprocessing as mp
+# import multiprocessing as mp
+import pathos.multiprocessing as mp
 
 
 from ..base_task import BaseTask
