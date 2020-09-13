@@ -31,6 +31,8 @@ import logging
 import json
 import time
 
+from elasticsearch.client import XPackClient
+from elasticsearch.client.utils import NamespacedClient
 from pytrie import SortedStringTrie as Trie
 from elasticsearch import Elasticsearch, RequestsHttpConnection
 from elasticsearch import exceptions
@@ -266,6 +268,9 @@ class ElasticDatabase(object):
 
         return all_tokens_type_ids
         
+class XPackClientMPCompatible(XPackClient):
+    def __getattr__(self, attr_name):
+        return NamespacedClient.__getattribute__(self, attr_name)
 
 
 class RemoteElasticDatabase(ElasticDatabase):
@@ -274,6 +279,7 @@ class RemoteElasticDatabase(ElasticDatabase):
         super().__init__()
         self.type2id = type2id
         self._init_db(config)
+        
     
     def _init_db(self, config):
         self.auth = (config['username'], config['password'])
@@ -284,8 +290,10 @@ class RemoteElasticDatabase(ElasticDatabase):
             http_auth=self.auth,
             use_ssl=True,
             verify_certs=True,
-            connection_class=RequestsHttpConnection
+            connection_class=RequestsHttpConnection,
+            maxsize=8
         )
+        self.es.xpack = XPackClientMPCompatible(self.es)
 
 
 class LocalElasticDatabase(ElasticDatabase):

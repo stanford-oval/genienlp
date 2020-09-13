@@ -251,7 +251,8 @@ def parse_argv(parser):
     parser.add_argument('--elastic_config', type=str, help='Path to json file containing ES configs (used for remote-elastic only)')
     parser.add_argument('--type2id_dict', type=str, help='Path to json file containing mapping between wikidata types to their ids')
     parser.add_argument('--create_type_mapping', action='store_true', help='This will create the "type to id" mapping for ALL entities available in the database')
-    
+    parser.add_argument('--num_workers', type=int, default=1, help='Number of workers for multiprocessing')
+
     parser.add_argument('--allow_fuzzy', action='store_true', help='Allow fuzzy matching when looking up strings in the database')
     parser.add_argument('--database', type=str, help='Database to retrieve entities from')
     parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')

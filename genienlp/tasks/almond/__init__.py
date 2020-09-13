@@ -32,9 +32,11 @@ import torch
 import logging
 import re
 import json
+import math
 from tqdm import tqdm
 from collections import defaultdict
-import time
+import multiprocessing as mp
+
 
 from ..base_task import BaseTask
 from ..registry import register_task
@@ -42,8 +44,7 @@ from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_b
 from ...data_utils.example import Example
 from ...data_utils.database import Database, LocalElasticDatabase, RemoteElasticDatabase, DOMAIN_TYPE_MAPPING
 from ...data_utils.bootleg import BootlegAnnotator
-from ...util import es_dump_type2id
-from transformers.tokenization_bert import BasicTokenizer as BertBasicTokenizer
+from ...util import es_dump_type2id, is_chinese_char
 
 from ..base_dataset import Split
 
@@ -60,6 +61,7 @@ ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Ital
                'el': 'Greek', 'he': 'Hebrew', 'si': 'Sinhala', 'ta': 'Tamil', 'fi': 'Finnish', 'cs': 'Czech',
                'no': 'Norwegian', 'tl': 'Filipino', 'da': 'Danish'}
 
+
 class AlmondDataset(CQA):
     """Obtaining dataset for Almond semantic parsing task"""
 
@@ -67,18 +69,18 @@ class AlmondDataset(CQA):
 
     def __init__(self, path, *, make_example, subsample=None,
                  cached_path=None, skip_cache=False, cache_input_data=False, **kwargs):
-        
+    
         #TODO fix cache_path for multilingual task
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         dir_name = os.path.basename(os.path.dirname(path))
         
-        example_batch_size = kwargs.get('example_batch_size', 3)
+        example_batch_size = kwargs.get('example_batch_size', 1)
+        num_processes = kwargs.get('num_workers', int(mp.cpu_count()))
 
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
-            examples = []
             n = 0
             with open(path, 'r', encoding='utf-8') as fp:
                 for line in fp:
@@ -86,32 +88,78 @@ class AlmondDataset(CQA):
 
             max_examples = min(n, subsample) if subsample is not None else n
 
-            batch = []
-            last_batch = False
-            begin_time = time.time()
-            for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
-                parts = line.strip().split('\t')
-                batch.append(parts)
-                if len(examples) + example_batch_size > max_examples:
-                    # trim batch
-                    batch = batch[:max_examples - len(examples)]
-                    last_batch = True
-                if len(batch) % example_batch_size != 0 and not last_batch:
-                    continue
-                examples.extend(make_example(batch, dir_name, **kwargs))
-                batch = []
-                if len(examples) % 2 == 0:
-                    logger.info('{} examples have been processed so far. time elapsed: {}'.format(len(examples), time.time() - begin_time))
-                if len(examples) >= max_examples:
-                    break
+            logger.info(f'Using {num_processes} workers...')
+            chunk_size = int(math.ceil(max_examples / num_processes))
+            num_chunks = int(math.ceil(max_examples / chunk_size))
             
+            base_path, extension = path.rsplit('.', 1)
+            
+            chunk_file_paths = [f'{base_path}_{chunk_id}.tsv' for chunk_id in range(num_chunks)]
+            self.chunk_file(path, chunk_file_paths, chunk_size, num_chunks)
+            num_processes = min(num_processes, num_chunks)
+            
+            with mp.Pool(processes=num_processes) as pool:
+                process_args = [{'in_file': chunk_file_paths[i], 'chunk_size': chunk_size, 'dir_name': dir_name,
+                                'example_batch_size': example_batch_size, 'make_process_example': make_example,
+                                'kwargs': kwargs} for i in range(num_chunks)]
+                results = pool.map(self.process, process_args)
+            
+            # merge all results
+            examples = [item for sublist in results for item in sublist]
+            
+            for file in chunk_file_paths:
+                os.remove(file)
+
             if cache_input_data:
                 os.makedirs(os.path.dirname(cache_name), exist_ok=True)
                 logger.info(f'Caching data to {cache_name}')
                 torch.save(examples, cache_name)
 
         super().__init__(examples, **kwargs)
-        
+
+    def process(self, args):
+        path = args['in_file']
+        chunk_size = args['chunk_size']
+        dir_name = args['dir_name']
+        example_batch_size = args['example_batch_size']
+        make_process_example = args['make_process_example']
+        kwargs = args['kwargs']
+    
+        chunk_examples = []
+    
+        batch = []
+        last_batch = False
+        for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=chunk_size):
+            parts = line.strip().split('\t')
+            batch.append(parts)
+            if len(chunk_examples) + example_batch_size > chunk_size:
+                # trim batch
+                batch = batch[:chunk_size - len(chunk_examples)]
+                last_batch = True
+            if len(batch) % example_batch_size != 0 and not last_batch:
+                continue
+            chunk_examples.extend(make_process_example(batch, dir_name, **kwargs))
+            batch = []
+    
+        return chunk_examples
+    
+    def chunk_file(self, input_src, chunk_files, chunk_size, num_chunks):
+        chunk_id = 0
+        num_lines_in_chunk = 0
+        all_out_files = [open(chunk_files[chunk_id], 'w') for chunk_id in range(num_chunks)]
+        with open(input_src, 'r', encoding='utf-8') as in_file:
+            for line in in_file:
+                all_out_files[chunk_id].write(line)
+                num_lines_in_chunk += 1
+                if num_lines_in_chunk == chunk_size:
+                    chunk_id += 1
+                    num_lines_in_chunk = 0
+                    if chunk_id == num_chunks:
+                        break
+
+        for file in all_out_files:
+            file.close()
+
 
     @classmethod
     def return_splits(cls, path, train='train', validation='eval', test='test', **kwargs):
@@ -319,10 +367,10 @@ class BaseAlmondTask(BaseTask):
         while i < len(sentence):
             output.append(sentence[i])
             # skip space after cjk chars only if followed by another cjk char
-            if BertBasicTokenizer()._is_chinese_char(ord(sentence[i])) \
-                    and i+1 < len(sentence) and sentence[i+1] == ' ' \
-                    and i+2 < len(sentence) and BertBasicTokenizer()._is_chinese_char(ord(sentence[i+2])):
-                        i += 2
+            if is_chinese_char(ord(sentence[i])) \
+                and i+1 < len(sentence) and sentence[i+1] == ' ' \
+                and i+2 < len(sentence) and is_chinese_char(ord(sentence[i+2])):
+                    i += 2
             else:
                 i += 1
         return "".join(output)
@@ -418,7 +466,7 @@ class Almond(BaseAlmondTask):
     def is_contextual(self):
         return False
 
-    def _make_example(self, parts_list, dir_name=None, split=None, **kwargs):
+    def _make_example(self, parts_list, dir_name=None, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
         all_ids, all_contexts, all_questions, all_answers = [], [], [], []
@@ -445,7 +493,7 @@ class ContextualAlmond(BaseAlmondTask):
     def is_contextual(self):
         return True
     
-    def _make_example(self, parts_list, dir_name=None, split=None, **kwargs):
+    def _make_example(self, parts_list, dir_name=None, **kwargs):
         all_ids, all_contexts, all_questions, all_answers = [], [], [], []
         for parts in parts_list:
             _id, context, sentence, target_code = parts
@@ -476,7 +524,7 @@ class ReverseAlmond(BaseTask):
     def _is_program_field(self, field_name):
         return field_name == 'context'
 
-    def _make_example(self, parts_list, dir_name=None, split=None, **kwargs):
+    def _make_example(self, parts_list, dir_name=None, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
         all_ids, all_contexts, all_questions, all_answers = [], [], [], []
@@ -505,7 +553,7 @@ class AlmondDialogueNLU(BaseAlmondTask):
     def is_contextual(self):
         return True
     
-    def _make_example(self, parts_list, dir_name=None, split=None, **kwargs):
+    def _make_example(self, parts_list, dir_name=None, **kwargs):
         all_ids, all_contexts, all_questions, all_answers = [], [], [], []
         for parts in parts_list:
             _id, context, sentence, target_code = parts
@@ -535,7 +583,7 @@ class AlmondDialogueNLUAgent(BaseAlmondTask):
     def is_contextual(self):
         return True
     
-    def _make_example(self, parts_list, dir_name=None, split=None, **kwargs):
+    def _make_example(self, parts_list, dir_name=None, **kwargs):
         all_ids, all_contexts, all_questions, all_answers = [], [], [], []
         for parts in parts_list:
             _id, context, sentence, target_code = parts
@@ -568,7 +616,7 @@ class AlmondDialogueNLG(BaseAlmondTask):
     def metrics(self):
         return ['bleu']
 
-    def _make_example(self, parts_list, dir_name=None, split=None, **kwargs):
+    def _make_example(self, parts_list, dir_name=None, **kwargs):
         # the question is irrelevant for this task
         all_ids, all_contexts, all_questions, all_answers = [], [], [], []
         for parts in parts_list:
@@ -603,7 +651,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     def metrics(self):
         return ['em', 'bleu']
 
-    def _make_example(self, parts_list, dir_name=None, split=None, **kwargs):
+    def _make_example(self, parts_list, dir_name=None, **kwargs):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
         all_ids, all_contexts, all_questions, all_answers = [], [], [], []
         for parts in parts_list:
@@ -695,7 +743,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     def metrics(self):
         return ['em', 'bleu']
     
-    def _make_example(self, parts_list, dir_name, split=None, **kwargs):
+    def _make_example(self, parts_list, dir_name, **kwargs):
         all_ids, all_contexts, all_questions, all_answers = [], [], [], []
         for parts in parts_list:
             _id, sentence, target_code = parts
@@ -714,7 +762,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
                                 tokenize=self.tokenize, lower=False)
 
 
-@register_task('almond_dialog_multilingual_nlu')
+@register_task('almond_dialogue_multilingual_nlu')
 class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
     """Multi-turn NLU task (user and agent) for MultiLingual Almond dialogues
     """
@@ -729,7 +777,7 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
     def metrics(self):
         return ['em', 'bleu']
 
-    def _make_example(self, parts_list, dir_name=None, split=None, **kwargs):
+    def _make_example(self, parts_list, dir_name=None, **kwargs):
         all_ids, all_contexts, all_questions, all_answers = [], [], [], []
         for parts in parts_list:
             _id, context, sentence, target_code = parts
@@ -743,7 +791,7 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
                                 tokenize=self.tokenize, lower=False)
 
 
-@register_task('almond_dialog_multilingual_nlg')
+@register_task('almond_dialogue_multilingual_nlg')
 class AlmondDialogMultiLingualNLG(BaseAlmondTask):
     """Multi-turn NLG task (agent) for MultiLingual Almond dialogues
     """
@@ -757,7 +805,7 @@ class AlmondDialogMultiLingualNLG(BaseAlmondTask):
     def metrics(self):
         return ['bleu']
 
-    def _make_example(self, parts_list, dir_name=None, split=None, **kwargs):
+    def _make_example(self, parts_list, dir_name=None, **kwargs):
         # the question is irrelevant for this task
         all_ids, all_contexts, all_questions, all_answers = [], [], [], []
         for parts in parts_list:

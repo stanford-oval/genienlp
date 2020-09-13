@@ -132,7 +132,6 @@ def fairseq_mask(input_sequence, tokenizer, mlm_probability):
     return ' '.join(input_tokens)
     
 
-
 def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column, copy, sep_token_id,
                                   skip_heuristics, is_cased, model_type, src_lang, subsample, task, model_input_prefix, masked_paraphrasing, fairseq_mask_prob):
     """

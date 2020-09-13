@@ -27,8 +27,7 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-
+import json
 import logging
 import logging.handlers
 import math
@@ -44,10 +43,12 @@ from tensorboardX import SummaryWriter
 
 from . import arguments
 from . import models
+from .data_utils.bootleg import BootlegAnnotator
+from .data_utils.database import Database, LocalElasticDatabase, RemoteElasticDatabase, DOMAIN_TYPE_MAPPING
 from .data_utils.embeddings import load_embeddings
 from .data_utils.example import Example
-from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader,\
-    log_model_size, init_devices
+from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader, \
+    log_model_size, init_devices, es_dump_type2id
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
 from .validate import validate
@@ -76,18 +77,22 @@ def initialize_logger(args):
 
 def prepare_data(args, logger):
     train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
+
     for task in args.train_tasks:
         logger.info(f'Loading {task.name}')
         kwargs = {'test': None, 'validation': None}
         kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.train_languages,
                        'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question,
-                       'example_batch_size': args.example_batch_size})
+                       'example_batch_size': args.example_batch_size, 'num_workers': args.num_workers})
         if args.use_curriculum:
             kwargs['curriculum'] = True
 
         logger.info(f'Adding {task.name} to training datasets')
+        t0 = time.time()
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        t1 = time.time()
+        logger.info('it took {} to process train set'.format(t1-t0))
         assert not split.eval and not split.test
         if args.use_curriculum:
             assert split.aux
@@ -108,7 +113,7 @@ def prepare_data(args, logger):
             kwargs['validation'] = args.eval_set_name
         kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.eval_languages,
-                        'almond_lang_as_question': args.almond_lang_as_question, 'example_batch_size': args.example_batch_size})
+                        'almond_lang_as_question': args.almond_lang_as_question, 'example_batch_size': args.example_batch_size, 'num_workers': args.num_workers})
         
         logger.info(f'Adding {task.name} to validation datasets')
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
