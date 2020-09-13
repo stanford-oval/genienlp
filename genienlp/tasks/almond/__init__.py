@@ -63,6 +63,50 @@ ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Ital
                'no': 'Norwegian', 'tl': 'Filipino', 'da': 'Danish'}
 
 
+def process(args):
+    path = args['in_file']
+    chunk_size = args['chunk_size']
+    dir_name = args['dir_name']
+    example_batch_size = args['example_batch_size']
+    make_process_example = args['make_process_example']
+    kwargs = args['kwargs']
+    
+    chunk_examples = []
+    
+    batch = []
+    last_batch = False
+    for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=chunk_size):
+        parts = line.strip().split('\t')
+        batch.append(parts)
+        if len(chunk_examples) + example_batch_size > chunk_size:
+            # trim batch
+            batch = batch[:chunk_size - len(chunk_examples)]
+            last_batch = True
+        if len(batch) % example_batch_size != 0 and not last_batch:
+            continue
+        chunk_examples.extend(make_process_example(batch, dir_name, **kwargs))
+        batch = []
+    
+    return chunk_examples
+
+def chunk_file(input_src, chunk_files, chunk_size, num_chunks):
+    chunk_id = 0
+    num_lines_in_chunk = 0
+    all_out_files = [open(chunk_files[chunk_id], 'w') for chunk_id in range(num_chunks)]
+    with open(input_src, 'r', encoding='utf-8') as in_file:
+        for line in in_file:
+            all_out_files[chunk_id].write(line)
+            num_lines_in_chunk += 1
+            if num_lines_in_chunk == chunk_size:
+                chunk_id += 1
+                num_lines_in_chunk = 0
+                if chunk_id == num_chunks:
+                    break
+
+    for file in all_out_files:
+        file.close()
+
+
 class AlmondDataset(CQA):
     """Obtaining dataset for Almond semantic parsing task"""
 
@@ -96,14 +140,14 @@ class AlmondDataset(CQA):
             base_path, extension = path.rsplit('.', 1)
             
             chunk_file_paths = [f'{base_path}_{chunk_id}.tsv' for chunk_id in range(num_chunks)]
-            self.chunk_file(path, chunk_file_paths, chunk_size, num_chunks)
+            chunk_file(path, chunk_file_paths, chunk_size, num_chunks)
             num_processes = min(num_processes, num_chunks)
             
             with mp.Pool(processes=num_processes) as pool:
                 process_args = [{'in_file': chunk_file_paths[i], 'chunk_size': chunk_size, 'dir_name': dir_name,
                                 'example_batch_size': example_batch_size, 'make_process_example': make_example,
                                 'kwargs': kwargs} for i in range(num_chunks)]
-                results = pool.map(self.process, process_args)
+                results = pool.map(process, process_args)
             
             # merge all results
             examples = [item for sublist in results for item in sublist]
@@ -117,50 +161,6 @@ class AlmondDataset(CQA):
                 torch.save(examples, cache_name)
 
         super().__init__(examples, **kwargs)
-
-    def process(self, args):
-        path = args['in_file']
-        chunk_size = args['chunk_size']
-        dir_name = args['dir_name']
-        example_batch_size = args['example_batch_size']
-        make_process_example = args['make_process_example']
-        kwargs = args['kwargs']
-    
-        chunk_examples = []
-    
-        batch = []
-        last_batch = False
-        for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=chunk_size):
-            parts = line.strip().split('\t')
-            batch.append(parts)
-            if len(chunk_examples) + example_batch_size > chunk_size:
-                # trim batch
-                batch = batch[:chunk_size - len(chunk_examples)]
-                last_batch = True
-            if len(batch) % example_batch_size != 0 and not last_batch:
-                continue
-            chunk_examples.extend(make_process_example(batch, dir_name, **kwargs))
-            batch = []
-    
-        return chunk_examples
-    
-    def chunk_file(self, input_src, chunk_files, chunk_size, num_chunks):
-        chunk_id = 0
-        num_lines_in_chunk = 0
-        all_out_files = [open(chunk_files[chunk_id], 'w') for chunk_id in range(num_chunks)]
-        with open(input_src, 'r', encoding='utf-8') as in_file:
-            for line in in_file:
-                all_out_files[chunk_id].write(line)
-                num_lines_in_chunk += 1
-                if num_lines_in_chunk == chunk_size:
-                    chunk_id += 1
-                    num_lines_in_chunk = 0
-                    if chunk_id == num_chunks:
-                        break
-
-        for file in all_out_files:
-            file.close()
-
 
     @classmethod
     def return_splits(cls, path, train='train', validation='eval', test='test', **kwargs):
