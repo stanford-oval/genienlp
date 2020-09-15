@@ -31,9 +31,11 @@ class BootlegAnnotator(Annotator):
             with open(qid2types_file, 'r') as fin:
                 self.qid2types = json.load(fin)
             self.unk_type_id = max([max(values) for values in self.qid2types.values() if len(values)]) + 1
+            logger.info('types are computed using local bootleg database')
         else:
             self.qid2types = {}
             self.unk_type_id = self.bootleg_es.type2id[self.bootleg_es.unk_type]
+            logger.info('types are computed by calling ES')
 
         super().__init__(config_args, device, max_alias_len, cand_map, threshold)
         
@@ -105,14 +107,15 @@ class BootlegAnnotator(Annotator):
 
     def batch_return_type_ids(self, tokens_list):
     
-        result = {'all_pred_cands': [], 'all_pred_probs': [], 'all_titles': [], 'all_spans': [], 'all_source_aliases': []}
-        for tokens in tokens_list:
-            res = self.label_sentence(' '.join(tokens))
-            if res is None:
-                res = {'all_pred_cands': [], 'all_pred_probs': [], 'all_titles': [], 'all_spans': [], 'all_source_aliases': []}
-            for k, v in res.items():
-                result[k].append(v)
-        # result = self.batch_label_sentences([' '.join(tokens) for tokens in tokens_list])
+        # result = {'all_pred_cands': [], 'all_pred_probs': [], 'all_titles': [], 'all_spans': [], 'all_source_aliases': []}
+        # for tokens in tokens_list:
+        #     res = self.label_sentence(' '.join(tokens))
+        #     if res is None:
+        #         res = {'all_pred_cands': [], 'all_pred_probs': [], 'all_titles': [], 'all_spans': [], 'all_source_aliases': []}
+        #     for k, v in res.items():
+        #         result[k].append(v)
+        
+        result = self.batch_label_sentences([' '.join(tokens) for tokens in tokens_list])
 
         all_tokens_type_id = [[self.unk_type_id] * len(tokens) for tokens in tokens_list]
 
@@ -124,6 +127,7 @@ class BootlegAnnotator(Annotator):
         all_pred_cands_flat = [cand for sublist in all_pred_cands for cand in sublist]
 
         if len(self.qid2types) == 0:
+            logger.info('Calling ES to query types')
             query_temp = json.dumps({"size": 1, "query": {"match": {"value": "{}"}}})
             # query ES
             if len(all_pred_cands) == 0:
