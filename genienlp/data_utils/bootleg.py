@@ -114,10 +114,13 @@ class BootlegAnnotator(Annotator):
         #         res = {'all_pred_cands': [], 'all_pred_probs': [], 'all_titles': [], 'all_spans': [], 'all_source_aliases': []}
         #     for k, v in res.items():
         #         result[k].append(v)
-        
-        result = self.batch_label_sentences([' '.join(tokens) for tokens in tokens_list])
 
         all_tokens_type_id = [[self.unk_type_id] * len(tokens) for tokens in tokens_list]
+        
+        result, is_ok_sample = self.batch_label_sentences([' '.join(tokens) for tokens in tokens_list])
+        
+        if result is None:
+            return all_tokens_type_id
 
         all_pred_cands, all_pred_probs, all_titles, all_spans, all_source_aliases = \
             result['all_pred_cands'], result['all_pred_probs'], result['all_titles'], result['all_spans'], result['all_source_aliases']
@@ -134,10 +137,14 @@ class BootlegAnnotator(Annotator):
                 return all_tokens_type_id
             all_matches = self.bootleg_es.batch_find_matches(all_pred_cands_flat, query_temp)
             curr = 0
+            j = 0
             for i in range(len(tokens_list)):
-                matches = all_matches[curr:curr + all_num_mentions[i]]
-                curr += all_num_mentions[i]
-                spans = all_spans[i]
+                if is_ok_sample[i] == False:
+                    continue
+                else:
+                    matches = all_matches[curr:curr + all_num_mentions[j]]
+                curr += all_num_mentions[j]
+                spans = all_spans[j]
                 assert len(spans) == len(matches)
                 for span, match in zip(spans, matches):
         
@@ -150,17 +157,24 @@ class BootlegAnnotator(Annotator):
                     span = span.split(':')
                     all_tokens_type_id[i][int(span[0]): int(span[1])] = [self.bootleg_es.type2id[type]] * \
                                                                         (int(span[1]) - int(span[0]))
+                j += 1
             
         else:
             all_type_indices = self.batch_find_type_ids(all_pred_cands_flat)
             curr = 0
+            j = 0
             for i in range(len(tokens_list)):
-                type_indices = all_type_indices[curr:curr + all_num_mentions[i]]
-                curr += all_num_mentions[i]
-                spans = all_spans[i]
+                if is_ok_sample[i] == False:
+                    continue
+                else:
+                    type_indices = all_type_indices[curr:curr + all_num_mentions[j]]
+                curr += all_num_mentions[j]
+                spans = all_spans[j]
                 assert len(spans) == len(type_indices)
                 for span, type_id in zip(spans, type_indices):
                     span = span.split(':')
                     all_tokens_type_id[i][int(span[0]): int(span[1])] = [type_id] * (int(span[1]) - int(span[0]))
+                
+                j += 1
 
         return all_tokens_type_id
