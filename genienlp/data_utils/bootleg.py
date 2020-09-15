@@ -104,9 +104,15 @@ class BootlegAnnotator(Annotator):
     
 
     def batch_return_type_ids(self, tokens_list):
-        
-
-        result = self.batch_label_sentences([' '.join(tokens) for tokens in tokens_list])
+    
+        result = {'all_pred_cands': [], 'all_pred_probs': [], 'all_titles': [], 'all_spans': [], 'all_source_aliases': []}
+        for tokens in tokens_list:
+            res = self.label_sentence(' '.join(tokens))
+            if res is None:
+                res = {'all_pred_cands': [], 'all_pred_probs': [], 'all_titles': [], 'all_spans': [], 'all_source_aliases': []}
+            for k, v in res.items():
+                result[k].append(v)
+        # result = self.batch_label_sentences([' '.join(tokens) for tokens in tokens_list])
 
         all_tokens_type_id = [[self.unk_type_id] * len(tokens) for tokens in tokens_list]
 
