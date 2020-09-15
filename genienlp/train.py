@@ -104,6 +104,19 @@ def prepare_data(args, logger):
         logger.info(f'{task.name} has {len(split.train)} training examples')
         if args.vocab_tasks is not None and task.name in args.vocab_tasks:
             vocab_sets.extend(split)
+        
+        if task.name.startswith('almond'):
+            if hasattr(task, 'bootleg_annot'):
+                if len(task.bootleg_annot.qid2types):
+                    args.num_db_types = task.bootleg_annot.unk_type_id + 1
+                    args.type_unk_id = task.bootleg_annot.unk_type_id
+            elif hasattr(task, 'db'):
+                args.num_db_types = len(task.db.type2id)
+                args.type_unk_id = 0
+            else:
+                args.num_db_types = 0
+                args.type_unk_id = 0
+
 
     for task in args.val_tasks:
         logger.info(f'Loading {task.name}')
@@ -131,6 +144,7 @@ def prepare_data(args, logger):
                         args.max_generative_vocab,
                         args.entity_type_embed_pos,
                         args.num_db_types,
+                        args.type_unk_id,
                         logger)
     if args.load is not None:
         numericalizer.load(args.save)

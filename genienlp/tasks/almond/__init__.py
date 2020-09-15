@@ -240,9 +240,13 @@ class BaseAlmondTask(BaseTask):
                 bootleg_device = 'cuda'
         from bootleg.utils.parser_utils import get_full_config
         bootleg_dir = self.args.bootleg_input_dir
-        config_path = f'{bootleg_dir}/bootleg_wiki/bootleg_config.json'
+        if self.args.bootleg_debug:
+            config_path = f'{bootleg_dir}/test/run_args/test_model_training_2.json'
+        else:
+            config_path = f'{bootleg_dir}/bootleg_wiki/bootleg_config.json'
+        
         config_args = get_full_config(config_path)
-        self.bootleg_annot = BootlegAnnotator(config_args, device=bootleg_device, bootleg_dir=bootleg_dir)
+        self.bootleg_annot = BootlegAnnotator(config_args, device=bootleg_device, bootleg_dir=bootleg_dir, debug=self.args.bootleg_debug)
         self.bootleg_annot.bootleg_es = self.db
 
     def _init_db(self):

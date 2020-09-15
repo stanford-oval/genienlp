@@ -257,6 +257,7 @@ def parse_argv(parser):
     parser.add_argument('--database', type=str, help='Database to retrieve entities from')
     parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
     parser.add_argument('--bootleg_device', type=str, choices=['cpu', 'cuda'], help='Device that bootleg model will reside one')
+    parser.add_argument('--bootleg_debug', action='store_true', help='Use a smaller bootleg model for debugging')
     parser.add_argument('--retrieve_method', choices=['lookup', 'oracle', 'bootleg'], type=str,
                         help='prune items in database for faster lookup (only during train and evaluation)'
                              'bootleg option is wip')
@@ -361,19 +362,6 @@ def post_parse(args):
     
     for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
-        
-    # process database
-    args.num_db_types = 0
-    if args.do_entity_linking:
-        if args.database_type in ['json', 'local-elastic']:
-            with open(args.database, 'r') as fin:
-                database = json.load(fin)
-            # +1 for unknown entities
-            args.num_db_types = len(set(database.values())) + 1
-        elif args.database_type == 'remote-elastic':
-            with open(args.type2id_dict, 'r') as fin:
-                database = json.load(fin)
-            args.num_db_types = len(set(database.keys()))
         
     args.num_features = len(args.features)
         

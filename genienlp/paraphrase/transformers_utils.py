@@ -957,11 +957,11 @@ class BertEmbeddingsV2(BertEmbeddings):
     """Construct the embeddings from word, position, token_type, and entity_type embeddings.
     """
 
-    def __init__(self, config, num_db_types=0):
+    def __init__(self, config, num_db_types=0, type_unk_id=0):
         super().__init__(config)
         self.num_db_types = num_db_types
         if num_db_types > 0:
-            self.entity_type_embeddings = nn.Embedding(num_db_types, config.hidden_size, padding_idx=0)
+            self.entity_type_embeddings = nn.Embedding(num_db_types, config.hidden_size, padding_idx=type_unk_id)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, entity_ids=None, inputs_embeds=None):
         if input_ids is not None:
@@ -1006,8 +1006,8 @@ class BertModelV2(BertModel):
         self.embeddings = BertEmbeddingsV2(config)
         self.init_weights()
         
-    def _reset_embeddings(self, num_db_types):
-        self.embeddings = BertEmbeddingsV2(self.config, num_db_types)
+    def _reset_embeddings(self, num_db_types, type_unk_id):
+        self.embeddings = BertEmbeddingsV2(self.config, num_db_types, type_unk_id)
         self.num_db_types = num_db_types
         
     def forward(
@@ -1094,8 +1094,8 @@ class RobertaEmbeddingsV2(BertEmbeddingsV2):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing and adding entity_types.
     """
     
-    def __init__(self, config, num_db_types=0):
-        super().__init__(config, num_db_types)
+    def __init__(self, config, num_db_types=0, type_unk_id=0):
+        super().__init__(config, num_db_types, type_unk_id)
         self.padding_idx = config.pad_token_id
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx)
