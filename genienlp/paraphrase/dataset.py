@@ -77,7 +77,10 @@ class TextDataset(Dataset):
             output_token_ids = self.tokenizer.encode(output_sequence, add_special_tokens=False) + [self.tokenizer.convert_tokens_to_ids(args.end_special_token)]
         tokenized_text = input_token_ids + output_token_ids
         
-        tokenized_text = tokenized_text[0:self.block_size] # truncate longer sequences
+        # do not use exampels that are too long for the model (for supervised tasks, this is better than truncating examples)
+        if len(tokenized_text) > self.block_size:
+            logger.warning('Skipping example with length %d which was longer than block size (%d)', len(tokenized_text), self.block_size)
+            return
 
         input_ids = self.tokenizer.build_inputs_with_special_tokens(tokenized_text)
         # Remove duplicate end_token for models like BERT and RoBERTa that already add it

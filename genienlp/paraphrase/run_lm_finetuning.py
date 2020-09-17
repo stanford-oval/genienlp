@@ -400,7 +400,7 @@ def parse_argv(parser):
                         help="Optional directory to store the pre-trained models downloaded from s3 (instread of the default one)")
     parser.add_argument("--block_size", default=-1, type=int,
                         help="Optional input sequence length after tokenization."
-                             "The training dataset will be truncated in block of this size for training."
+                             "The training examples that are longerthan this size will not be used for training or evaluation."
                              "Default to the model max input length for single sentence inputs (take into account special tokens).")
     parser.add_argument("--do_train", action='store_true',
                         help="Whether to run training.")
