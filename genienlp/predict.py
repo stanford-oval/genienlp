@@ -307,7 +307,7 @@ def main(args):
     check_and_update_generation_args(args)
     adjust_multilingual_eval(args)
     set_seed(args)
-    args.tasks = get_tasks(args.task_names, args)
+    args.tasks = list(get_tasks(args.task_names, args).values())
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')

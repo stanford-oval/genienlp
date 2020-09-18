@@ -54,8 +54,7 @@ class Example(NamedTuple):
     def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, lower=False):
         args = [example_id]
 
-        for argname, arg in (('context', context), ('question', question), ('answer', answer),
-                             ('context_question', context+' '+question)):
+        for argname, arg in (('context', context), ('question', question), ('answer', answer)):
             words, mask = tokenize(arg.rstrip('\n'), field_name=argname)
             if mask is None:
                 mask = [True for _ in words]
@@ -63,6 +62,10 @@ class Example(NamedTuple):
                 words = [word.lower() for word in words]
             args.append(words)
             args.append(mask)
+        
+        # create context_plus_question field by appending context and question words and words_masks
+        args.append(args[1] + args[3])
+        args.append(args[2] + args[4])
         
         return Example(*args)
 
