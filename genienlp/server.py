@@ -78,7 +78,7 @@ class Server:
         if task_name in self._cached_tasks:
             task = self._cached_tasks[task_name]
         else:
-            task = get_tasks([task_name], self.args)[0]
+            task = list(get_tasks([task_name], self.args).values())[0]
             self._cached_tasks[task_name] = task
 
         context = request['context']

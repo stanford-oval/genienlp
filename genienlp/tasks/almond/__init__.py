@@ -37,7 +37,7 @@ from ..base_task import BaseTask
 from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
-from transformers.tokenization_bert import BasicTokenizer as BertBasicTokenizer
+from ...util import is_chinese_char
 
 from ..base_dataset import Split
 
@@ -156,10 +156,10 @@ class BaseAlmondTask(BaseTask):
         while i < len(sentence):
             output.append(sentence[i])
             # skip space after cjk chars only if followed by another cjk char
-            if BertBasicTokenizer()._is_chinese_char(ord(sentence[i])) \
-                    and i+1 < len(sentence) and sentence[i+1] == ' ' \
-                    and i+2 < len(sentence) and BertBasicTokenizer()._is_chinese_char(ord(sentence[i+2])):
-                        i += 2
+            if is_chinese_char(ord(sentence[i])) and \
+                    i+1 < len(sentence) and sentence[i+1] == ' ' and \
+                    i+2 < len(sentence) and is_chinese_char(ord(sentence[i+2])):
+                i += 2
             else:
                 i += 1
         return "".join(output)
@@ -174,7 +174,7 @@ class BaseAlmondTask(BaseTask):
         sentence = self._detokenize_cjk_chars(sentence)
         
         tokens = [t for t in sentence.split(' ') if len(t) > 0]
-        if self._preprocess_context and field_name in ('context', 'context_question'):
+        if self._preprocess_context and field_name in ('context'):
             preprocessed_context = []
             for token in sentence.split(' '):
                 if len(token) == 0:
@@ -447,7 +447,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
                                 tokenize=self.tokenize, lower=False)
 
 
-@register_task('almond_dialog_multilingual_nlu')
+@register_task('almond_dialogue_multilingual_nlu')
 class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
     """Multi-turn NLU task (user and agent) for MultiLingual Almond dialogues
     """
@@ -467,7 +467,7 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
                                 tokenize=self.tokenize, lower=False)
 
 
-@register_task('almond_dialog_multilingual_nlg')
+@register_task('almond_dialogue_multilingual_nlg')
 class AlmondDialogMultiLingualNLG(BaseAlmondTask):
     """Multi-turn NLG task (agent) for MultiLingual Almond dialogues
     """
