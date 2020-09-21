@@ -45,10 +45,12 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
 
 from genienlp.util import set_seed
 from genienlp.paraphrase.data_utils import mask_tokens, add_special_tokens, load_and_cache_examples
+from genienlp.paraphrase.dataset import LengthSortedSampler
 from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints
 
 
 logger = logging.getLogger(__name__)
+
 
 
 MODEL_CLASSES = {
@@ -69,7 +71,10 @@ def train(args, train_dataset, model, tokenizer):
         tb_writer = SummaryWriter(logdir=args.tensorboard_dir)
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
-    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    if args.sort_by_length:
+        train_sampler = LengthSortedSampler(train_dataset, batch_size=args.train_batch_size*args.gradient_accumulation_steps, shuffle=True)
+    else:
+        train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=train_dataset.collate_fn)
 
     if args.max_steps > 0:
@@ -296,7 +301,10 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(eval_dataset)
+    if args.sort_by_length:
+        eval_sampler = LengthSortedSampler(eval_dataset, batch_size=args.eval_batch_size, shuffle=False)
+    else:
+        eval_sampler = SequentialSampler(eval_dataset)
     eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size, collate_fn=eval_dataset.collate_fn)
 
     # multi-gpu evaluate
@@ -400,8 +408,10 @@ def parse_argv(parser):
                         help="Optional directory to store the pre-trained models downloaded from s3 (instread of the default one)")
     parser.add_argument("--block_size", default=-1, type=int,
                         help="Optional input sequence length after tokenization."
-                             "The training dataset will be truncated in block of this size for training."
+                             "The training examples that are longer than this size (input length + output_length) will not be used for training or evaluation."
                              "Default to the model max input length for single sentence inputs (take into account special tokens).")
+    parser.add_argument('--sort_by_length', action='store_true',
+                        help='Sorts the training set by example length (input length + output_length) to reduce padding and speed up training. Has no effect on accuracy.')
     parser.add_argument("--do_train", action='store_true',
                         help="Whether to run training.")
     parser.add_argument("--do_eval", action='store_true',

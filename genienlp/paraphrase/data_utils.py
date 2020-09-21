@@ -18,7 +18,7 @@ special_pattern_mapping = [
     SpecialTokenMap('PHONE_NUMBER_([0-9]+)', ['888-8888', '777-8888']),
     SpecialTokenMap('NUMBER_([0-9]+)', ['2', '3'], [['2', 'two'], ['3', 'three']]),
     SpecialTokenMap('PATH_NAME_([0-9]+)', ['my1folder', 'my2folder']),
-    SpecialTokenMap('TIME_([0-9]+)', ['1p.m.', '2p.m.'], [['1 pm', '1pm', '1:00 pm', '1:00pm', '1p.m.', '1 p.m.', '1:00 p.m.', '1:00', 'one o\'clock', 'one'],
+    SpecialTokenMap('TIME_([0-9]+)', ['5p.m.', '2p.m.'], [['5 pm', '5pm', '5:00 pm', '5:00pm', '5p.m.', '5 p.m.', '5:00 p.m.', '5:00', 'five o\'clock', 'five'],
                                                             ['2 pm', '2pm', '2:00 pm', '2:00pm', '2p.m.', '2 p.m.', '2:00 p.m.', '2:00', 'two o\'clock', 'two']]),
     SpecialTokenMap('EMAIL_ADDRESS_([0-9]+)', ['e1@example.com', 'e2@example.com']),
     SpecialTokenMap('URL_([0-9]+)', ['my1site.com', 'my2site.com']),

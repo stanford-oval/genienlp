@@ -2,6 +2,7 @@ import os
 import torch
 import pickle
 import logging
+import random
 from tqdm import tqdm
 
 from torch.utils.data import Dataset
@@ -60,8 +61,8 @@ class TextDataset(Dataset):
                         self._add_bart_example(parts[0], parts[1], args)
                     else:
                         self._add_example(parts[0], parts[1], args)
-
-            
+            if args.sort_by_length:
+                _, self.input_ids, self.labels, self.position_ids, self.segment_ids = tuple(zip(*sorted(list(zip([len(x) for x in self.input_ids], self.input_ids, self.labels, self.position_ids, self.segment_ids)))))
             logger.info('Maximum input length: %d', self.max_input_length)
             logger.info("Saving features into cached file %s", cached_features_file)
             with open(cached_features_file, 'wb') as handle:
@@ -77,7 +78,10 @@ class TextDataset(Dataset):
             output_token_ids = self.tokenizer.encode(output_sequence, add_special_tokens=False) + [self.tokenizer.convert_tokens_to_ids(args.end_special_token)]
         tokenized_text = input_token_ids + output_token_ids
         
-        tokenized_text = tokenized_text[0:self.block_size] # truncate longer sequences
+        # do not use exampels that are too long for the model (for supervised tasks, this is better than truncating examples)
+        if len(tokenized_text) > self.block_size:
+            logger.warning('Skipping example with length %d which was longer than block size (%d)', len(tokenized_text), self.block_size)
+            return
 
         input_ids = self.tokenizer.build_inputs_with_special_tokens(tokenized_text)
         # Remove duplicate end_token for models like BERT and RoBERTa that already add it
@@ -133,3 +137,44 @@ class TextDataset(Dataset):
         segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
     
         return inputs_pad, labels_pad, position_ids, segment_ids
+
+
+class LengthSortedSampler(torch.utils.data.Sampler):
+
+    def __init__(self, data_source, batch_size, shuffle):
+        # print(data_source)
+        self.data_source = data_source
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.total_returned_items = 0
+        self.last_batch_start_index = 0
+        self.last_batch_start_index = self._get_next_batch_start_index()
+        self.last_batch_size = 0
+
+    def __len__(self):
+        return len(self.data_source)
+
+    def __iter__(self):
+        self.total_returned_items = 0
+        self.last_batch_start_index = 0
+        self.last_batch_start_index = self._get_next_batch_start_index()
+        self.last_batch_size = 0
+        return self
+
+    def __next__(self):
+        ret = (self.last_batch_start_index + self.last_batch_size) % len(self)
+        self.total_returned_items = self.total_returned_items + 1
+        if self.total_returned_items > len(self):
+            raise StopIteration
+        self.last_batch_size = self.last_batch_size + 1
+        if self.last_batch_size == self.batch_size:
+            self.last_batch_size = 0
+            self.last_batch_start_index = self._get_next_batch_start_index()
+
+        return ret
+
+    def _get_next_batch_start_index(self):
+        if self.shuffle:
+            return random.randint(0, len(self))
+        else:
+            return self.last_batch_start_index + self.batch_size
