@@ -65,6 +65,7 @@ class MaskedXLMRobertaWordPieceTokenizer(object):
     def tokenize(self, tokens, mask):
         output_tokens = []
         for token, should_word_split in zip(tokens, mask):
+            token = unicodedata.normalize("NFD", token)
             if not should_word_split:
                 self.update_extended_vocab(token)
                 output_tokens.append(token)
