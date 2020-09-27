@@ -215,7 +215,10 @@ def run_multi_process_generation(args):
             raise ValueError('For translation task using Marian model, if target language is a group of languages, '
                              'you have to specify the --tgt_lang flag.')
         elif args.tgt_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 1)[1]]:
-            raise ValueError('Target language is not in the model group languages, please specify the correct target language.')
+            if args.tgt_lang == 'pl':
+                args.tgt_lang = 'pol'
+            else:
+                raise ValueError('Target language is not in the model group languages, please specify the correct target language.')
         
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] in MARIAN_GROUP_MEMBERS:
         if not args.src_lang:
