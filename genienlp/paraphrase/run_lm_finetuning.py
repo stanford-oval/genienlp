@@ -190,11 +190,20 @@ def train(args, train_dataset, model, tokenizer):
             if args.model_type in ['bart', 'mbart']:
                 # this should have been handled internally by huggingfaces's BART code
                 # TODO remove this once they add it
-                decoder_input_ids = labels[:, :-1].contiguous()
-                decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
-                lm_labels = labels[:, 1:].clone()
+                if args.non_ar:
+                    decoder_input_ids = inputs.repeat(1, 4)[:, 0:labels.shape[1]-1]
+                    # print('labels ', labels.shape)
+                    # print('inputs ', inputs.shape)
+                    # print('decoder_input_ids ', decoder_input_ids.shape)
+                    # exit(0)
+                    # decoder_input_ids[:, 0] = labels[:, 0] # include the BOS <s> token
+                else:
+                    decoder_input_ids = labels[:, :-1].contiguous()
+                    decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
+                # print('decoder_input_ids = ', decoder_input_ids)
+                # exit(0)
                 model_inputs['decoder_input_ids'] = decoder_input_ids
-                model_inputs['lm_labels'] = lm_labels
+                model_inputs['lm_labels'] = labels[:, 1:].clone()
             
             # other models
             else:
@@ -256,6 +265,7 @@ def train(args, train_dataset, model, tokenizer):
                     # tb_writer.add_text('eval/generated_text', gen_text, global_step)
                     tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
                     tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
+                    logger.info('Training loss = %f', (tr_loss - logging_loss)/args.logging_steps)
                     logging_loss = tr_loss
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0 and args.save_total_limit > 0:
@@ -333,12 +343,28 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
                 outputs = model(inputs, masked_lm_labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
             else:
                 if args.model_type == 'bart':
-                    decoder_input_ids = labels[:, :-1].contiguous()
-                    decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
+                    if args.non_ar:
+                        decoder_input_ids = inputs.repeat(1, 3)[:, 0:labels.shape[1]-1]
+                        # print('labels ', labels.shape)
+                        # print('inputs ', inputs.shape)
+                        # print('decoder_input_ids ', decoder_input_ids.shape)
+                        # decoder_input_ids[:, 0] = labels[:, 0] # include the BOS <s> token
+                    else:
+                        decoder_input_ids = labels[:, :-1].contiguous()
+                        decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
                     lm_labels = labels[:, 1:].clone()
                     outputs = model(inputs, labels=labels, lm_labels=lm_labels, decoder_input_ids=decoder_input_ids, position_ids=position_ids, token_type_ids=segment_ids)
+                    # if args.non_ar:
+                    values, indices = torch.max(torch.softmax(outputs[1], dim=2), dim=2)
+                    indices = indices.tolist()
+                    # print('values = ', values)
+                    # for e in indices:
+                        # decoded = tokenizer.decode(e, skip_special_tokens=False)
+                        # print('decoded = ', decoded[:])
+                        # print('full output = ', tokenizer.convert_ids_to_tokens(e))
                 else:
                     outputs = model(inputs, labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
+                    
             lm_loss = outputs[0]
             eval_loss += lm_loss.mean().item()
         nb_eval_steps += 1
@@ -382,6 +408,7 @@ def parse_argv(parser):
                         help='If True, the model will be trained on input and output sequences, as opposed to only tokens of the output sequence')
     parser.add_argument("--reverse_position_ids", action='store_true',
                         help='If we assume we know the length of the output sequence beforehand, we can do a better job at generation.')
+    parser.add_argument('--non_ar', action='store_true', help='If True, the model training will be done in a non-autoregressive fashion.')
 
     parser.add_argument("--eval_data_file", default=None, type=str,
                         help="An optional input evaluation data file to evaluate the perplexity on (a text file).")
@@ -448,7 +475,7 @@ def parse_argv(parser):
                         help="Log every X updates steps.")
     parser.add_argument('--save_steps', type=int, default=50,
                         help="Save checkpoint every X updates steps.")
-    parser.add_argument('--save_total_limit', type=int, default=None,
+    parser.add_argument('--save_total_limit', type=int, default=1,
                         help='Limit the total amount of checkpoints, delete the older checkpoints in the output_dir, does not delete by default')
     parser.add_argument("--eval_all_checkpoints", action='store_true',
                         help="Evaluate all checkpoints starting with the same prefix as model_name_or_path ending and ending with step number")
