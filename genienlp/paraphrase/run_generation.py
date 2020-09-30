@@ -343,7 +343,7 @@ def run_single_process_generation(args, config):
     
     batch_idx = 0
     for batch in tqdm(range(math.ceil(len(all_context_ids) / args.batch_size)), desc="Batch"):
-        logging.info('') # to make kubectl properly print tqdm progress bar
+        # logging.info('') # to make kubectl properly print tqdm progress bar
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_ids)))
         batch_size = batch_slice[1] - batch_slice[0]
         batch_context_tokens = all_context_ids[batch_slice[0]: batch_slice[1]]
