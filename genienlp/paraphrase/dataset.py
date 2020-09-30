@@ -17,6 +17,7 @@ class TextDataset(Dataset):
     def __init__(self, tokenizer, args, file_path=None, block_size=512, evaluate=None):
         self.tokenizer = tokenizer
         self.block_size = block_size
+        self.args = args
         assert os.path.isfile(file_path)
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(directory, os.path.basename(os.path.normpath(args.model_name_or_path)) + '_cached_lm_' + str(self.block_size) + '_' + filename)
@@ -94,17 +95,25 @@ class TextDataset(Dataset):
             logger.warning('Prompt token not found after truncating the input. Dropping the example.')
             return
 
-        self.input_ids.append(input_ids)
-        if args.train_all_tokens and not self.evaluate or output_sequence is None:
-            self.labels.append(input_ids)
-        else: # During evaluation, we only care about the output_sequence so we mask the input
-            self.labels.append([args.mlm_ignore_index]*(prompt_token_location+1)+input_ids[prompt_token_location+1:])
-        
         position_ids2 = range(len(input_ids)-prompt_token_location-1)
         if args.reverse_position_ids:
             position_ids2 = reversed(position_ids2)
-        self.position_ids.append(list(range(prompt_token_location+1)) + list(position_ids2))
-        self.segment_ids.append([self.segment1_id]*(prompt_token_location+1) + [self.segment2_id]*(len(input_ids)-prompt_token_location-1))
+
+        if self.args.mlm:
+            # print('output_token_ids = ', output_token_ids)
+            self.input_ids.append(input_token_ids)
+            self.labels.append(output_token_ids)
+            self.position_ids.append(list(range(len(input_token_ids))))
+            self.segment_ids.append([self.segment1_id]*len(input_token_ids))
+        else:
+            self.input_ids.append(input_ids)
+            if args.train_all_tokens and not self.evaluate or output_sequence is None:
+                self.labels.append(input_ids)
+            else: # During evaluation, we only care about the output_sequence so we mask the input
+                self.labels.append([args.mlm_ignore_index]*(prompt_token_location+1)+input_ids[prompt_token_location+1:])
+        
+            self.position_ids.append(list(range(prompt_token_location+1)) + list(position_ids2))
+            self.segment_ids.append([self.segment1_id]*(prompt_token_location+1) + [self.segment2_id]*(len(input_ids)-prompt_token_location-1))
 
 
     def _add_bart_example(self, input_sequence, output_sequence, args):
@@ -128,14 +137,50 @@ class TextDataset(Dataset):
     def __getitem__(self, item):
         return torch.tensor(self.input_ids[item]), torch.tensor(self.labels[item]), torch.tensor(self.position_ids[item]), torch.tensor(self.segment_ids[item])
 
+    def _pad_to_length(self, inputs, pad_len, value):
+        inputs_pad = []
+        for i in inputs:
+            pad = torch.tensor([value]*(pad_len-len(i)), dtype=torch.long)
+            # print(i)
+            # print(pad)
+            inputs_pad.append(torch.cat([i, pad], dim=0))
+        inputs_pad = torch.stack(inputs_pad, dim=0)
+        return inputs_pad
 
     def collate_fn(self, batch):
         (inputs, labels, position_ids, segment_ids) = zip(*batch)
-        inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=self.tokenizer.pad_token_id)
-        labels_pad = pad_sequence(labels, batch_first=True, padding_value=-100)
-        position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
-        segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
+        if self.args.mlm and self.args.non_ar:
+            # print('inputs = ', inputs)
+            # print('labels = ', labels)
+            # inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+            # labels_pad = pad_sequence(labels, batch_first=True, padding_value=-100)
+            padded_len = max(max([len(i) for i in labels]), max([len(i) for i in inputs]))
+
+            inputs_pad = self._pad_to_length(inputs, padded_len, self.tokenizer.pad_token_id)
+            labels_pad = self._pad_to_length(labels, padded_len, -100)
+
+            position_ids = self._pad_to_length(position_ids, padded_len, 0) # will be ignored in the loss function, so its value does not matter
+            segment_ids = self._pad_to_length(segment_ids, padded_len, 0) # will be ignored in the loss function, so its value does not matter
+
+            # continue position_id when padding
+            # position_ids2 = []
+            # for i, p in enumerate(position_ids):
+            #     pad = torch.tensor(list(range(p[-1]+1, p[-1]+len(labels_pad[0])-len(p)+1)), dtype=torch.long)
+            #     position_ids2.append(torch.cat([p, pad], dim=0))
+            # position_ids = torch.stack(position_ids2, dim=0)
+            # # position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
+            # segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=1) # will be ignored in the loss function, so its value does not matter
+        else:
+            inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+            labels_pad = pad_sequence(labels, batch_first=True, padding_value=-100)
+            position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
+            segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
     
+        # print('padded input_ids = ', inputs_pad.shape)
+        # print('padded labels = ', labels_pad.shape)
+        # print('padded position_ids = ', position_ids.shape)
+        # print('padded segment_ids = ', segment_ids.shape)
+
         return inputs_pad, labels_pad, position_ids, segment_ids
 
 

@@ -175,6 +175,10 @@ def train(args, train_dataset, model, tokenizer):
                 continue
 
             inputs, labels, position_ids, segment_ids = batch # batch is a tuple (input, labels, position_ids, segment_ids)
+            # print('inputs = ', inputs)
+            # print('labels = ', labels)
+            # print('position_ids = ', position_ids)
+            # print('segment_ids = ', segment_ids)
             
             if args.mlm:
                 inputs, labels = mask_tokens(inputs, labels, tokenizer, args.mlm_probability, args.mlm_ignore_index)
@@ -182,9 +186,11 @@ def train(args, train_dataset, model, tokenizer):
             labels = labels.to(args.device)
             position_ids = position_ids.to(args.device)
             segment_ids = segment_ids.to(args.device)
+            attention_mask = (inputs!=tokenizer.pad_token_id) # 1 for tokens that are NOT MASKED, 0 for MASKED tokens
+            
             model.train()
             
-            model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids}
+            model_inputs = {'input_ids': inputs, 'token_type_ids': segment_ids, 'position_ids': position_ids, 'attention_mask': attention_mask}
             
             # prepare inputs for bart
             if args.model_type in ['bart', 'mbart']:
@@ -337,10 +343,24 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
         labels = labels.to(args.device)
         position_ids = position_ids.to(args.device)
         segment_ids = segment_ids.to(args.device)
+        attention_mask = (inputs!=tokenizer.pad_token_id) # 1 for tokens that are NOT MASKED, 0 for MASKED tokens
+        # print('inputs = ', inputs)
+        # print('labels = ', labels)
+        # print('position_ids = ', position_ids)
+        # print('segment_ids = ', segment_ids)
+        # print('attention_mask = ', attention_mask)
+        # exit(0)
 
         with torch.no_grad():
             if args.mlm:
-                outputs = model(inputs, masked_lm_labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
+                outputs = model(inputs, masked_lm_labels=labels, token_type_ids=segment_ids, position_ids=position_ids, attention_mask=attention_mask)
+                values, indices = torch.max(torch.softmax(outputs[1], dim=2), dim=2)
+                indices = indices.tolist()
+                # print('values = ', values)
+                for e in indices:
+                    decoded = tokenizer.decode(e, skip_special_tokens=False)
+                    print('decoded = ', decoded)
+                    # print('full output = ', tokenizer.convert_ids_to_tokens(e))
             else:
                 if args.model_type == 'bart':
                     if args.non_ar:
@@ -364,8 +384,8 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
                         # print('full output = ', tokenizer.convert_ids_to_tokens(e))
                 else:
                     outputs = model(inputs, labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
-                    
             lm_loss = outputs[0]
+            # print('lm_loss = ', lm_loss)
             eval_loss += lm_loss.mean().item()
         nb_eval_steps += 1
 
