@@ -89,12 +89,6 @@ do
     i=$((i+1))
 done
 
-# paraphrasing script tests
-pipenv run python3 genienlp/paraphrase/scripts/transform_dataset.py $SRCDIR/dataset/almond/train.tsv $workdir/transformed.tsv --task almond
-if test ! -f $workdir/transformed.tsv ; then
-    echo "File not found!"
-    exit
-fi
 
 # paraphrasing tests
 cp -r $SRCDIR/dataset/paraphrasing/ $workdir/paraphrasing/
