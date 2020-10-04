@@ -127,6 +127,29 @@ def process_id(ex):
         id_ = id_[1:]
     return id_
 
+cjk_ranges = [
+    (ord(u"\u3300"), ord(u"\u33ff")),         # compatibility ideographs
+    (ord(u"\ufe30"), ord(u"\ufe4f")),         # compatibility ideographs
+    (ord(u"\uf900"), ord(u"\ufaff")),         # compatibility ideographs
+    (ord(u"\U0002F800"), ord(u"\U0002fa1f")), # compatibility ideographs
+    (ord(u'\u3040'), ord(u'\u309f')),   # Japanese Hiragana
+    (ord(u"\u30a0"), ord(u"\u30ff")),         # Japanese Katakana
+    (ord(u"\u2e80"), ord(u"\u2eff")),         # cjk radicals supplement
+    (ord(u"\u4e00"), ord(u"\u9fff")),
+    (ord(u"\u3400"), ord(u"\u4dbf")),
+    (ord(u"\U00020000"), ord(u"\U0002a6df")),
+    (ord(u"\U0002a700"), ord(u"\U0002b73f")),
+    (ord(u"\U0002b740"), ord(u"\U0002b81f")),
+    (ord(u"\U0002b820"), ord(u"\U0002ceaf"))
+]
+
+cjk_add_ons = [ord(u"\u3001")]
+
+
+def is_cjk_char(cp):
+  return cp in cjk_add_ons or any([range[0] <= cp <= range[1] for range in cjk_ranges])
+
+
 
 # the following code is adopted from huggingface's bert tokenizer code
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
@@ -183,9 +206,9 @@ class BaseAlmondTask(BaseTask):
         while i < len(sentence):
             output.append(sentence[i])
             # skip space after cjk chars only if followed by another cjk char
-            if is_chinese_char(ord(sentence[i])) and \
+            if is_cjk_char(ord(sentence[i])) and \
                     i+1 < len(sentence) and sentence[i+1] == ' ' and \
-                    i+2 < len(sentence) and is_chinese_char(ord(sentence[i+2])):
+                    i+2 < len(sentence) and is_cjk_char(ord(sentence[i+2])):
                 i += 2
             else:
                 i += 1
