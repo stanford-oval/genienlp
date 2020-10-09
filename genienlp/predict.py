@@ -35,6 +35,7 @@ from pprint import pformat
 from collections import defaultdict
 import copy
 import shutil
+import re
 
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
@@ -49,7 +50,7 @@ from . import models
 from .data_utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
 from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
-    have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
+    have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path, requote_program
 from .validate import generate_with_model, calculate_and_reduce_metrics
 
 logger = logging.getLogger(__name__)
@@ -184,20 +185,35 @@ def run(args, device):
                     raise OSError(f'{results_file_name} already exists')
 
             _, predictions, answers, contexts, _ = generate_with_model(model, it, numericalizer, task, args, prediction_file_name)
-                
+            
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
                 metrics = calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args)
 
+                answers_wo_params = []
+                for a in answers:
+                    answers_wo_params.append(requote_program(a))
+                predictions_wo_params = [[] for _ in range(len(predictions))]
+                for i, preds in enumerate(predictions):
+                    for p in preds:
+                        predictions_wo_params[i].append(requote_program(p))
+
+                metrics_wo_params = calculate_and_reduce_metrics(predictions_wo_params, answers_wo_params, metrics_to_compute, args)
+                # rename em to sm
+                metrics_wo_params['sm'] = metrics_wo_params['em']
+                del metrics_wo_params['em']
+
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')
+                    results_file.write(json.dumps(metrics_wo_params) + '\n')
 
                 if not args.silent:
                     for i, (c, p, a) in enumerate(zip(contexts, predictions, answers)):
                         logger.info(f'\nContext {i+1}: {c}\nPrediction {i + 1} ({sum(args.num_outputs)} outputs): {p}\nAnswer {i + 1}: {a}\n')
                     logger.info(metrics)
+                    logger.info(metrics_wo_params)
                     
                 task_scores[task].append((len(answers), metrics[task.metrics[0]]))
     
