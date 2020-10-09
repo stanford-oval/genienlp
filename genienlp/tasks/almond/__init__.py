@@ -37,17 +37,12 @@ from ..base_task import BaseTask
 from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
+from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
 
 from ..base_dataset import Split
 
 logger = logging.getLogger(__name__)
 
-ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Italian', 'zh': 'Chinese',
-               'hr': 'Croatian', 'ja': 'Japanese', 'ko': 'Korean', 'ru': 'Russian', 'es': 'Spanish',
-               'sv': 'Swedish', 'tr': 'Turkish', 'hi': 'Hindi', 'fr': 'French', 'de': 'German',
-               'pl': 'Polsih', 'ar': 'Arabic', 'vi': 'Vietnamese', 'ji': 'Yiddish', 'pt': 'Portuguese',
-               'el': 'Greek', 'he': 'Hebrew', 'si': 'Sinhala', 'ta': 'Tamil', 'fi': 'Finnish', 'cs': 'Czech',
-               'no': 'Norwegian', 'tl': 'Filipino', 'da': 'Danish'}
 
 class AlmondDataset(CQA):
     """Obtaining dataset for Almond semantic parsing task"""
@@ -112,70 +107,6 @@ class AlmondDataset(CQA):
                      test=None if test is None else test_data,
                      aux=None if do_curriculum is None else aux_data)
     
-
-def is_entity(token):
-    return token[0].isupper()
-
-def is_device(token):
-    return token[0] == '@'
-
-def process_id(ex):
-    id_ = ex.example_id.rsplit('/', 1)
-    id_ = id_[0] if len(id_) == 1 else id_[1]
-    # translated
-    if id_[0] == 'T':
-        id_ = id_[1:]
-    return id_
-
-cjk_ranges = [
-    (ord(u"\u3300"), ord(u"\u33ff")),         # compatibility ideographs
-    (ord(u"\ufe30"), ord(u"\ufe4f")),         # compatibility ideographs
-    (ord(u"\uf900"), ord(u"\ufaff")),         # compatibility ideographs
-    (ord(u"\U0002F800"), ord(u"\U0002fa1f")), # compatibility ideographs
-    (ord(u'\u3040'), ord(u'\u309f')),   # Japanese Hiragana
-    (ord(u"\u30a0"), ord(u"\u30ff")),         # Japanese Katakana
-    (ord(u"\u2e80"), ord(u"\u2eff")),         # cjk radicals supplement
-    (ord(u"\u4e00"), ord(u"\u9fff")),
-    (ord(u"\u3400"), ord(u"\u4dbf")),
-    (ord(u"\U00020000"), ord(u"\U0002a6df")),
-    (ord(u"\U0002a700"), ord(u"\U0002b73f")),
-    (ord(u"\U0002b740"), ord(u"\U0002b81f")),
-    (ord(u"\U0002b820"), ord(u"\U0002ceaf"))
-]
-
-cjk_add_ons = [ord(u"\u3001")]
-
-
-def is_cjk_char(cp):
-  return cp in cjk_add_ons or any([range[0] <= cp <= range[1] for range in cjk_ranges])
-
-
-
-# the following code is adopted from huggingface's bert tokenizer code
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-def is_chinese_char(cp):
-    """Checks whether CP is the codepoint of a CJK character."""
-    # This defines a "chinese character" as anything in the CJK Unicode block:
-    #   https://en.wikipedia.org/wiki/CJK_Unified_Ideographs_(Unicode_block)
-    #
-    # Note that the CJK Unicode block is NOT all Japanese and Korean characters,
-    # despite its name. The modern Korean Hangul alphabet is a different block,
-    # as is Japanese Hiragana and Katakana. Those alphabets are used to write
-    # space-separated words, so they are not treated specially and handled
-    # like the all of the other languages.
-    if (
-        (cp >= 0x4E00 and cp <= 0x9FFF)
-        or (cp >= 0x3400 and cp <= 0x4DBF)  #
-        or (cp >= 0x20000 and cp <= 0x2A6DF)  #
-        or (cp >= 0x2A700 and cp <= 0x2B73F)  #
-        or (cp >= 0x2B740 and cp <= 0x2B81F)  #
-        or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
-        or (cp >= 0xF900 and cp <= 0xFAFF)
-        or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
-    ):  #
-        return True
-
-    return False
 
 
 class BaseAlmondTask(BaseTask):
