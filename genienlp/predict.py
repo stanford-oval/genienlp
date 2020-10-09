@@ -53,6 +53,8 @@ from .validate import generate_with_model, calculate_and_reduce_metrics
 
 logger = logging.getLogger(__name__)
 
+quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
+
 
 def get_all_splits(args):
     splits = []
