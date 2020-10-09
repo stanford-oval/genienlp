@@ -30,14 +30,15 @@
 import os
 import torch
 import logging
-from tqdm import tqdm
 from collections import defaultdict
+import math
+import multiprocessing as mp
 
 from ..base_task import BaseTask
 from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
-from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
+from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char, process, chunk_file
 
 from ..base_dataset import Split
 
@@ -55,6 +56,8 @@ class AlmondDataset(CQA):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         dir_name = os.path.basename(os.path.dirname(path))
 
+        num_workers = kwargs.get('num_workers', 0)
+
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
@@ -66,13 +69,38 @@ class AlmondDataset(CQA):
                     n += 1
 
             max_examples = min(n, subsample) if subsample is not None else n
-            for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
-                parts = line.strip().split('\t')
-                examples.append(make_example(parts, dir_name, **kwargs))
-                if len(examples) >= max_examples:
-                    break
-            os.makedirs(os.path.dirname(cache_name), exist_ok=True)
+
+            if num_workers > 0:
+                num_processes = min(num_workers, int(mp.cpu_count()))
+                logger.info(f'Using {num_processes} workers...')
+                chunk_size = int(math.ceil(max_examples / num_processes))
+                num_chunks = int(math.ceil(max_examples / chunk_size))
+    
+                base_path, extension = path.rsplit('.', 1)
+    
+                chunk_file_paths = [f'{base_path}_{chunk_id}.tsv' for chunk_id in range(num_chunks)]
+                chunk_file(path, chunk_file_paths, chunk_size, num_chunks)
+                num_processes = min(num_processes, num_chunks)
+    
+                with mp.Pool(processes=num_processes) as pool:
+                    process_args = [{'in_file': chunk_file_paths[i], 'chunk_size': chunk_size, 'dir_name': dir_name,
+                                     'example_batch_size': 1, 'make_process_example': make_example,
+                                     'kwargs': kwargs} for i in range(num_chunks)]
+                    results = pool.map(process, process_args)
+    
+                # merge all results
+                examples = [item for sublist in results for item in sublist]
+    
+                for file in chunk_file_paths:
+                    os.remove(file)
+            else:
+                process_args = {'in_file': path, 'chunk_size': max_examples, 'dir_name': dir_name,
+                                'example_batch_size': 1, 'make_process_example': make_example,
+                                'kwargs': kwargs}
+                examples = process(process_args)
+
             if cache_input_data:
+                os.makedirs(os.path.dirname(cache_name), exist_ok=True)
                 logger.info(f'Caching data to {cache_name}')
                 torch.save(examples, cache_name)
 

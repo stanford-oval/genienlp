@@ -79,12 +79,16 @@ def prepare_data(args, logger):
         kwargs = {'test': None, 'validation': None}
         kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.train_languages,
-                       'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question})
+                       'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question,
+                       'num_workers': args.num_workers})
         if args.use_curriculum:
             kwargs['curriculum'] = True
 
         logger.info(f'Adding {task.name} to training datasets')
+        t0 = time.time()
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        t1 = time.time()
+        logger.info('Data loading took {} sec'.format(t1-t0))
         assert not split.eval and not split.test
         if args.use_curriculum:
             assert split.aux
@@ -105,7 +109,7 @@ def prepare_data(args, logger):
             kwargs['validation'] = args.eval_set_name
         kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.eval_languages,
-                        'almond_lang_as_question': args.almond_lang_as_question})
+                        'almond_lang_as_question': args.almond_lang_as_question, 'num_workers': args.num_workers})
         
         logger.info(f'Adding {task.name} to validation datasets')
         split = task.get_splits(args.data, lower=args.lower, **kwargs)

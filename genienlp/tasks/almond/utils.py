@@ -1,3 +1,6 @@
+from tqdm import tqdm
+
+
 ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Italian', 'zh': 'Chinese',
                'hr': 'Croatian', 'ja': 'Japanese', 'ko': 'Korean', 'ru': 'Russian', 'es': 'Spanish',
                'sv': 'Swedish', 'tr': 'Turkish', 'hi': 'Hindi', 'fr': 'French', 'de': 'German',
@@ -39,6 +42,56 @@ def process_id(ex):
     if id_[0] == 'T':
         id_ = id_[1:]
     return id_
+
+
+def chunk_file(input_src, chunk_files, chunk_size, num_chunks):
+    chunk_id = 0
+    num_lines_in_chunk = 0
+    all_out_files = [open(chunk_files[chunk_id], 'w') for chunk_id in range(num_chunks)]
+    with open(input_src, 'r', encoding='utf-8') as in_file:
+        for line in in_file:
+            all_out_files[chunk_id].write(line)
+            num_lines_in_chunk += 1
+            if num_lines_in_chunk == chunk_size:
+                chunk_id += 1
+                num_lines_in_chunk = 0
+                if chunk_id == num_chunks:
+                    break
+
+    for file in all_out_files:
+        file.close()
+
+
+def process(args):
+    path = args['in_file']
+    chunk_size = args['chunk_size']
+    dir_name = args['dir_name']
+    example_batch_size = args['example_batch_size']
+    make_process_example = args['make_process_example']
+    kwargs = args['kwargs']
+    
+    chunk_examples = []
+    
+    batch = []
+    last_batch = False
+    for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=chunk_size):
+        parts = line.strip().split('\t')
+        batch.append(parts)
+        if len(chunk_examples) + example_batch_size > chunk_size:
+            # trim batch
+            batch = batch[:chunk_size - len(chunk_examples)]
+            last_batch = True
+        if len(batch) % example_batch_size != 0 and not last_batch:
+            continue
+        assert len(batch) == 1
+        batch = batch[0]
+        chunk_examples.append(make_process_example(batch, dir_name, **kwargs))
+        batch = []
+        if len(chunk_examples) >= chunk_size:
+            break
+    
+    return chunk_examples
+
 
 
 

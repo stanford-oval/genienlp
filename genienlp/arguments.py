@@ -155,6 +155,8 @@ def parse_argv(parser):
     parser.add_argument('--transformer_hidden', default=150, type=int, help='hidden size of the transformer modules')
     parser.add_argument('--transformer_heads', default=3, type=int, help='number of heads for transformer modules')
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
+    
+    parser.add_argument('--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)')
 
     parser.add_argument('--encoder_embeddings', default='glove+char',
                         help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
