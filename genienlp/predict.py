@@ -35,6 +35,7 @@ from pprint import pformat
 from collections import defaultdict
 import copy
 import shutil
+import re
 
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
@@ -53,6 +54,8 @@ from .util import set_seed, preprocess_examples, load_config_json, make_data_loa
 from .validate import generate_with_model, calculate_and_reduce_metrics
 
 logger = logging.getLogger(__name__)
+
+quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
 
 
 def get_all_splits(args):
@@ -184,15 +187,29 @@ def run(args, device):
                     raise OSError(f'{results_file_name} already exists')
 
             _, predictions, answers, contexts, _ = generate_with_model(model, it, numericalizer, task, args, prediction_file_name)
-                
+            
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
                 metrics = calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args)
 
+                answers_wo_params = []
+                for a in answers:
+                    answers_wo_params.append(re.sub(quoted_pattern_maybe_space, '', a))
+                predictions_wo_params = [[] for _ in range(len(predictions))]
+                for i, preds in enumerate(predictions):
+                    for p in preds:
+                        predictions_wo_params[i].append(re.sub(quoted_pattern_maybe_space, '', p))
+
+                metrics_wo_params = calculate_and_reduce_metrics(predictions_wo_params, answers_wo_params, metrics_to_compute, args)
+                # rename em to sm
+                metrics_wo_params['sm'] = metrics_wo_params['em']
+                del metrics_wo_params['em']
+
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')
+                    results_file.write(json.dumps(metrics_wo_params) + '\n')
 
                 if not args.silent:
                     for i, (c, p, a) in enumerate(zip(contexts, predictions, answers)):
