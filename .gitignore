@@ -12,6 +12,9 @@ multiprocess/__pycache__/
 results/
 tests/embeddings/*
 local_files
+local_scripts/*
+dataset/*
+generated/*
 
 .DS_Store
 .idea/
@@ -27,6 +30,8 @@ lightning_logs/
 pytorch_model.bin
 tests/dataset-*
 tests/dataset/*
+tests/database/*
+tests/music/*
 tests/test_py.sh
 
 
