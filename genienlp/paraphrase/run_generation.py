@@ -446,6 +446,7 @@ def run_single_process_generation(args, config):
                             (decoder_start_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]):
                         # shift target tokens left to match the attention positions
                         tgt_tokens = tgt_tokens[1:]
+                        
                     while src_tokens[-1] == tokenizer.pad_token:
                         # remove all padding from src
                         src_tokens = src_tokens[:-1]
@@ -469,8 +470,12 @@ def run_single_process_generation(args, config):
                     if args.plot_heatmaps:
                         import matplotlib.pyplot as plt
                         import seaborn as sns
-                        sns.heatmap(torch.log(sample_layer_attention_pooled), xticklabels=src_tokens,
-                                    yticklabels=tgt_tokens, annot=True)
+                        src_tokens = [token.lower() for token in src_tokens]
+                        tgt_tokens = [token.lower() for token in tgt_tokens]
+                        g = sns.heatmap(torch.log(sample_layer_attention_pooled), xticklabels=src_tokens,
+                                    yticklabels=tgt_tokens)
+                        g.set_xticklabels(g.get_xmajorticklabels(), fontsize=12)
+                        g.set_yticklabels(g.get_ymajorticklabels(), fontsize=12)
                         if args.output_file is not None:
                             plt.savefig(os.path.join(os.path.dirname(args.output_file),
                                                      'heatmap_{}'.format(batch_idx * batch_size + i)))
