@@ -58,6 +58,8 @@ def main(args):
                                              args.question_embeddings,
                                              args.decoder_embeddings,
                                              args.max_generative_vocab,
+                                             args.num_db_types,
+                                             args.db_unk_id,
                                              logger)
 
     # load the numericalizer from the model training directory, and immediately save it in the export directory

@@ -33,14 +33,20 @@ import logging
 from collections import defaultdict
 import math
 import multiprocessing as mp
+import ujson
+import marisa_trie
+import re
+from wordfreq import zipf_frequency
 
 from ..base_task import BaseTask
 from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
+from ...data_utils.database import Database, DOMAIN_TYPE_MAPPING
+from ..base_dataset import Split
 from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char, process, chunk_file
 
-from ..base_dataset import Split
+quoted_pattern_with_space = re.compile(r'\"\s([^"]*?)\s\"')
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +68,6 @@ class AlmondDataset(CQA):
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
-            examples = []
             n = 0
             with open(path, 'r', encoding='utf-8') as fp:
                 for line in fp:
@@ -143,9 +148,47 @@ class BaseAlmondTask(BaseTask):
 
     def __init__(self, name, args):
         super().__init__(name, args)
+        self.args = args
         self._preprocess_context = args.almond_preprocess_context
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
+        
+        no_feature_fields = ['answer']
+        if self.is_contextual():
+            no_feature_fields.append('context')
+        else:
+            no_feature_fields.append('question')
+        self.no_feature_fields = no_feature_fields
 
+        # initialize the database
+        if args.do_ner:
+            self._init_db()
+
+    def _init_db(self):
+        if self.args.database_type in ['json', 'local-elastic']:
+            with open(os.path.join(self.args.database_dir, 'canonical2type.json'), 'r') as fin:
+                canonical2type = ujson.load(fin)
+            with open(os.path.join(self.args.database_dir, 'type2id.json'), 'r') as fin:
+                type2id = ujson.load(fin)
+            
+            all_canonicals = marisa_trie.Trie(canonical2type.keys())
+        
+        if self.args.database_type == 'json':
+            self.db = Database(canonical2type, type2id, all_canonicals)
+        # elif self.args.database_type == 'local-elastic':
+        #     self.db = LocalElasticDatabase(db_data_processed)
+        # elif self.args.database_type == 'remote-elastic':
+        #     self.db = RemoteElasticDatabase(es_config, unk_id, all_aliases, type2id, alias2qid, qid2typeid)
+        #     if self.args.create_type_mapping:
+        #         es_dump_type2id(self.db)
+        #         es_dump_canonical2type(self.db)
+
+        self.TTtype2DBtype = dict()
+        for domain in self.args.almond_domains:
+            self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
+
+    def is_contextual(self):
+        return NotImplementedError
+    
     @property
     def metrics(self):
         return ['em', 'bleu']
@@ -173,9 +216,104 @@ class BaseAlmondTask(BaseTask):
                 i += 1
         return "".join(output)
 
-    def tokenize(self, sentence, field_name=None):
+    def preprocess_context(self, sentence):
+        preprocessed_context = []
+        for token in sentence.split(' '):
+            if len(token) == 0:
+                continue
+            if token.startswith('@') and '.' in token:
+                word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
+                preprocessed_context += word.split('_')
+            elif token.startswith('param:'):
+                word = token[len('param:'):]
+                preprocessed_context += word.split('_')
+            elif token.startswith('enum:'):
+                word = token[len('enum:'):]
+                preprocessed_context += word.split('_')
+            else:
+                preprocessed_context.append(token)
+        return preprocessed_context
+
+    def collect_answer_entity_types(self, answer):
+        entity2type = dict()
+        
+        answer_entities = quoted_pattern_with_space.findall(answer)
+        for ent in answer_entities:
+            # this is thingtalk specific and also domain specific
+            # (music with syntax: ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ... )
+            # (spotify with syntax: ... param:artists contains " XXX " ^^com.spotify:artist and param:id =~ " XXX " ...)
+            # this needs to be changed if annotations convention changes
+        
+            # assume first syntax
+            idx = answer.index('" ' + ent + ' "')
+            schema_entity_type = answer[:idx].split()[-2]
+        
+            if schema_entity_type.startswith('param:'):
+                schema_entity_type = schema_entity_type.strip('()').rsplit(':', 1)[1]
+            else:
+                # check for second syntax
+                schema_entity_type = answer[idx + len('" ' + ent + ' "'):].split()
+                if len(schema_entity_type) == 1:
+                    schema_entity_type = 'id'
+                else:
+                    schema_entity_type = schema_entity_type[0]
+                if schema_entity_type.startswith('^^'):
+                    schema_entity_type = schema_entity_type.rsplit(':', 1)[1]
+                else:
+                    schema_entity_type = self.db.unk_type
+        
+            if schema_entity_type not in self.TTtype2DBtype.keys():
+                schema_type = self.db.unk_type
+            else:
+                schema_type = self.TTtype2DBtype[schema_entity_type]
+        
+            entity2type[ent] = schema_type
+    
+        return entity2type
+
+    def oracle_type_ids(self, tokens, entity2type):
+        tokens_type_ids = [self.db.unk_id] * len(tokens)
+        tokens_text = " ".join(tokens)
+
+        for ent in entity2type.keys():
+            ent_num_tokens = len(ent.split(' '))
+            idx = tokens_text.index(ent)
+            token_pos = len(tokens_text[:idx].strip().split(' '))
+            
+            type_id = self.db.type2id[entity2type[ent]]
+        
+            tokens_type_ids[token_pos: token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
+    
+        return tokens_type_ids
+
+    def find_types(self, tokens, answer):
+    
+        tokens_type_ids = []
+
+        if self.args.database_type == 'json':
+            if self.args.retrieve_method == 'naive':
+                tokens_type_ids = self.db.lookup(tokens, self.args.lookup_method, self.args.max_alias_len)
+            elif self.args.retrieve_method == 'entity-oracle':
+                answer_entities = quoted_pattern_with_space.findall(answer)
+                tokens_type_ids = self.db.lookup(tokens, answer_entities=answer_entities)
+            elif self.args.retrieve_method == 'type-oracle':
+                entity2type = self.collect_answer_entity_types(answer)
+                tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
+
+        return tokens_type_ids
+    
+    def find_freqs(self, tokens, tokens_type_ids):
+        token_freqs = []
+        for token, token_type_id in zip(tokens, tokens_type_ids):
+            if token_type_id == self.db.type2id[self.db.unk_type]:
+                token_freqs.append(1.0)
+            else:
+                token_freqs.append(1.0 / (zipf_frequency(token, 'en') + 1e-3))
+        return token_freqs
+
+    def tokenize(self, sentence, field_name=None, answer=None):
         if not sentence:
-            return [], []
+            return [], [], []
 
         if self.force_subword_tokenize:
             return sentence.split(' '), None
@@ -184,22 +322,7 @@ class BaseAlmondTask(BaseTask):
         
         tokens = [t for t in sentence.split(' ') if len(t) > 0]
         if self._preprocess_context and field_name in ('context'):
-            preprocessed_context = []
-            for token in sentence.split(' '):
-                if len(token) == 0:
-                    continue
-                if token.startswith('@') and '.' in token:
-                    word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
-                    preprocessed_context += word.split('_')
-                elif token.startswith('param:'):
-                    word = token[len('param:'):]
-                    preprocessed_context += word.split('_')
-                elif token.startswith('enum:'):
-                    word = token[len('enum:'):]
-                    preprocessed_context += word.split('_')
-                else:
-                    preprocessed_context.append(token)
-            tokens = preprocessed_context
+            tokens = self.preprocess_context(sentence)
 
         if self._is_program_field(field_name):
             mask = []
@@ -212,11 +335,39 @@ class BaseAlmondTask(BaseTask):
                     mask.append(in_string)
 
             assert len(tokens) == len(mask)
-            return tokens, mask
 
         else:
             mask = [not is_entity(token) and not is_device(token) for token in tokens]
-            return tokens, mask
+        
+        if hasattr(self, 'db'):
+            unk_id = self.db.unk_id
+        else:
+            unk_id = 0
+            
+        tokens_type_ids = [unk_id]*len(tokens)
+        tokens_freqs = None
+
+        if self.args.do_ner and field_name not in self.no_feature_fields:
+            if 'type' in self.args.features:
+                tokens_type_ids = self.find_types(tokens, answer)
+            if 'freq' in self.args.features:
+                tokens_freqs = self.find_freqs(tokens, tokens_type_ids)
+                
+            if self.args.verbose and self.args.do_ner:
+                    print()
+                    print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_type_ids)],
+                          sep='\n')
+            
+        zip_list = []
+        if tokens_type_ids:
+            assert len(tokens) == len(tokens_type_ids)
+            zip_list.append(tokens_type_ids)
+        if tokens_freqs:
+            assert len(tokens) == len(tokens_freqs)
+            zip_list.append(tokens_freqs)
+        features = list(zip(*zip_list))
+        
+        return tokens, mask, features
 
     def detokenize(self, tokenized, field_name=None):
         return ' '.join(tokenized)
@@ -229,6 +380,9 @@ class Almond(BaseAlmondTask):
 
     def _is_program_field(self, field_name):
         return field_name == 'answer'
+
+    def is_contextual(self):
+        return False
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
@@ -251,6 +405,9 @@ class ContextualAlmond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    def is_contextual(self):
+        return True
+
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
             _id, context, sentence, target_code = parts[:4]
@@ -270,6 +427,9 @@ class ReverseAlmond(BaseTask):
     @property
     def metrics(self):
         return ['bleu', 'em']
+
+    def is_contextual(self):
+        return False
 
     def _is_program_field(self, field_name):
         return field_name == 'context'
@@ -293,6 +453,9 @@ class AlmondDialogueNLU(BaseAlmondTask):
     """
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
+
+    def is_contextual(self):
+        return True
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
@@ -319,6 +482,9 @@ class AlmondDialogueNLUAgent(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    def is_contextual(self):
+        return True
+
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
             _id, context, sentence, target_code = parts[:4]
@@ -341,6 +507,9 @@ class AlmondDialogueNLG(BaseAlmondTask):
     """
     def _is_program_field(self, field_name):
         return field_name == 'context'
+
+    def is_contextual(self):
+        return True
 
     @property
     def metrics(self):
@@ -366,6 +535,9 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     """
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
+
+    def is_contextual(self):
+        return True
 
     @property
     def metrics(self):
@@ -450,7 +622,10 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     
     def _is_program_field(self, field_name):
         return field_name == 'answer'
-    
+
+    def is_contextual(self):
+        return False
+
     @property
     def metrics(self):
         return ['em', 'bleu']
@@ -479,6 +654,9 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    def is_contextual(self):
+        return True
+
     @property
     def metrics(self):
         return ['em', 'bleu']
@@ -500,6 +678,9 @@ class AlmondDialogMultiLingualNLG(BaseAlmondTask):
     """
     def _is_program_field(self, field_name):
         return field_name == 'context'
+    
+    def is_contextual(self):
+        return True
 
     @property
     def metrics(self):

@@ -51,6 +51,7 @@ from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_par
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
 from .validate import validate
+from .arguments import save_args
 
 
 def initialize_logger(args):
@@ -100,6 +101,15 @@ def prepare_data(args, logger):
         logger.info(f'{task.name} has {len(split.train)} training examples')
         if args.vocab_tasks is not None and task.name in args.vocab_tasks:
             vocab_sets.extend(split)
+            
+        if task.name.startswith('almond'):
+            if hasattr(task, 'db'):
+                args.num_db_types = len(task.db.type2id)
+                args.db_unk_id = task.db.unk_id
+            else:
+                args.num_db_types = 0
+                args.db_unk_id = 0
+            save_args(args, force_overwrite=True)
 
     for task in args.val_tasks:
         logger.info(f'Loading {task.name}')
@@ -125,6 +135,8 @@ def prepare_data(args, logger):
                         args.question_embeddings,
                         args.decoder_embeddings,
                         args.max_generative_vocab,
+                        args.num_db_types,
+                        args.db_unk_id,
                         logger)
     if args.load is not None:
         numericalizer.load(args.save)
@@ -149,6 +161,7 @@ def prepare_data(args, logger):
     preprocess_examples(args, args.train_tasks, train_sets, logger, train=True)
     logger.info('Preprocessing validation data')
     preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
+
 
     return numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
@@ -325,7 +338,7 @@ def get_next_batch(train_iter, aux_iters, *, task, task_idx, task_fraction, use_
 
 def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations, numericalizer, *,
           log_every, val_every, save_every, rounds, val_sets, aux_sets, writer, logger, log_prefix,
-          start_iteration=1, rnd=1, best_decascore, use_curriculum, pretraining):
+          start_iteration=1, rnd=1, best_decascore, use_curriculum, pretraining, db_unk_id):
     """main training function"""
     local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, start_iteration
 
@@ -345,23 +358,26 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
+    shared_kwargs = {
+        'append_question_to_context_too': args.append_question_to_context_too,
+        'override_question': args.override_question,
+        'override_context': args.override_context,
+        'features': args.features,
+        'db_unk_id': db_unk_id
+    }
+    
     train_iters = [(task,
-                    make_data_loader(x, numericalizer, tok, main_device, paired=args.paired,max_pairs=args.max_pairs,
-                                     train=True,  append_question_to_context_too=args.append_question_to_context_too,
-                                     override_question=args.override_question, override_context=args.override_context))
+                    make_data_loader(x, numericalizer, tok, main_device, train=True,
+                                     paired=args.paired, max_pairs=args.max_pairs, **shared_kwargs))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_values)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False, valid=True,
-                                         append_question_to_context_too=args.append_question_to_context_too,
-                                         override_question=args.override_question, override_context=args.override_context))
+    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False, **shared_kwargs))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     aux_iters = []
     if use_curriculum:
-        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True,
-                                             append_question_to_context_too=args.append_question_to_context_too,
-                                             override_question=args.override_question, override_context=args.override_context))
+        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True, **shared_kwargs))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_values)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         
@@ -558,7 +574,6 @@ def main(args):
     opt, lr_scheduler = init_opt(args, model, logger)
     start_iteration = 1
 
-
     if save_dict is not None and args.resume:
         logger.info(f'Resuming Training from {os.path.splitext(args.load)[0]}_optim.pth')
         opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'))
@@ -579,11 +594,11 @@ def main(args):
               train_iterations, numericalizer, val_sets=[], aux_sets=[], logger=logger, writer=writer,
               log_every=args.log_every, val_every=None, save_every=None, use_curriculum=False,
               rounds=len(train_sets) > 1, start_iteration=start_iteration, best_decascore=0,
-              pretraining=True, log_prefix='pretrain')
+              pretraining=True, log_prefix='pretrain', db_unk_id=args.db_unk_id)
 
     train(args, devices, model, opt, lr_scheduler, train_sets,
           args.train_iterations, numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
           log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
           rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
           best_decascore=save_dict.get('best_decascore') if save_dict is not None else None,
-          pretraining=False, log_prefix='training')
+          pretraining=False, log_prefix='training', db_unk_id=args.db_unk_id)

@@ -72,8 +72,18 @@ class IdentityEncoder(nn.Module):
         context_padding = context.data == self.pad_idx
         question_padding = question.data == self.pad_idx
 
-        context_embedded = self.encoder_embeddings(context, padding=context_padding)
-        question_embedded = self.encoder_embeddings(question, padding=question_padding)
+        context_entity_ids = None
+        question_entity_ids = None
+        if self.args.num_db_types > 0:
+            context_entity_ids = batch.context.feature[:, :, 0].long()
+            question_entity_ids = batch.question.feature[:, :, 0].long()
+            # if batch.context.feature.nelement() != 0:
+            #     context_entity_ids = batch.context.feature[:, :, 0].long()
+            # if batch.question.feature.nelement() != 0:
+            #     question_entity_ids = batch.question.feature[:, :, 0].long()
+
+        context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, padding=context_padding)
+        question_embedded = self.encoder_embeddings(question, entity_ids=question_entity_ids, padding=question_padding)
 
         # pick the top-most N transformer layers to pass to the decoder for cross-attention
         # (add 1 to account for the embedding layer - the decoder will drop it later)

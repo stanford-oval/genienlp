@@ -33,7 +33,6 @@ from typing import NamedTuple, List
 
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 from torch.jit import Final
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pack_padded_sequence as pack
@@ -93,7 +92,17 @@ def positional_encodings_like(x, t=None):
         else:
             encodings[:, channel] = torch.cos(
                 positions / 10000 ** ((channel - 1) / x.size(2)))
-    return Variable(encodings)
+    return encodings
+
+
+def positional_embedding(self, x):
+    embedded = []
+    if self.pretrained_embeddings is not None:
+        embedded += [emb.get_positional_embedding(x) for emb in self.pretrained_embeddings]
+    if self.trained_embeddings is not None:
+        # positional embedding is only calculated for pretrained embeddings
+        pass
+    return torch.cat(embedded, dim=-1)
 
 
 # torch.matmul can't do (4, 3, 2) @ (4, 2) -> (4, 3)
@@ -334,8 +343,7 @@ class PackedLSTM(nn.Module):
     def forward(self, inputs, lengths, hidden=None):
         lens, indices = torch.sort(lengths.clone().detach(), 0, True)
         inputs = inputs[indices] if self.batch_first else inputs[:, indices]
-        outputs, (h, c) = self.rnn(pack(inputs, lens.tolist(),
-                                        batch_first=self.batch_first), hidden)
+        outputs, (h, c) = self.rnn(pack(inputs, lens.tolist(), batch_first=self.batch_first), hidden)
         outputs = unpack(outputs, batch_first=self.batch_first)[0]
         _, _indices = torch.sort(indices, 0)
         outputs = outputs[_indices] if self.batch_first else outputs[:, _indices]
@@ -424,10 +432,10 @@ class CombinedEmbedding(nn.Module):
             last_layer = self.projection(last_layer)
         return EmbeddingOutput(all_layers=all_layers, last_layer=last_layer)
 
-    def forward(self, x, padding=None):
+    def forward(self, x, entity_ids=None, padding=None):
         embedded: List[EmbeddingOutput] = []
         if self.pretrained_embeddings is not None:
-            embedded += [emb(x, padding=padding) for emb in self.pretrained_embeddings]
+            embedded += [emb(x, entity_ids, padding=padding) for emb in self.pretrained_embeddings]
 
         if self.trained_embeddings is not None:
             trained_vocabulary_size = self.trained_embeddings.weight.size()[0]

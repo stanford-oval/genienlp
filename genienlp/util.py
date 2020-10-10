@@ -387,7 +387,7 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
-                     valid=False, append_question_to_context_too=False, override_question=None, override_context=None):
+                     append_question_to_context_too=False, override_question=None, override_context=None, features=None, db_unk_id=0):
     
     iterator = Iterator(dataset,
                         batch_size,
@@ -399,7 +399,8 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
     collate_function = lambda minibatch: Batch.from_examples(minibatch, numericalizer, device=device,
                                            paired=paired and train, max_pairs=max_pairs, groups=iterator.groups,
                                            append_question_to_context_too=append_question_to_context_too,
-                                           override_question=override_question, override_context=override_context)
+                                           override_question=override_question, override_context=override_context,
+                                           features=features, db_unk_id=db_unk_id)
         
     return torch.utils.data.DataLoader(iterator, batch_size=None, collate_fn=collate_function)
 
@@ -434,7 +435,9 @@ def load_config_json(args):
                     'train_context_embeddings_after', 'train_question_embeddings_after',
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
-                    'override_question', 'override_context', 'almond_has_multiple_programs']
+                    'override_question', 'override_context', 'almond_has_multiple_programs',
+                    'do_ner', 'database_type', 'elastic_config', 'max_alias_len', 'database_dir', 'retrieve_method',
+                    'lookup_method', 'almond_domains', 'features', 'num_db_types', 'db_unk_id']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
@@ -449,15 +452,40 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
-            elif r == 'almond_has_multiple_programs':
+            elif r in ['do_ner',
+                       'almond_has_multiple_programs', 'almond_lang_as_question', 'almond_preprocess_context'
+                       'train_encoder_embeddings', 'append_question_to_context_too']:
                 setattr(args, r, False)
-            elif r == 'almond_lang_as_question':
-                setattr(args, r, False)
-            elif r == 'locale':
-                setattr(args, r, 'en')
-            elif r in ('trainable_decoder_embedding', 'trainable_encoder_embeddings', 'pretrain_context',
+                
+            elif r in ('num_db_types', 'db_unk_id',
+                       'trainable_decoder_embedding', 'trainable_encoder_embeddings', 'pretrain_context',
                        'train_context_embeddings_after', 'train_question_embeddings_after'):
                 setattr(args, r, 0)
+                
+            elif r in ('num_beams', 'num_outputs', 'top_p', 'repetition_penalty'):
+                setattr(args, r, [1])
+                
+            elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
+                setattr(args, r, [0])
+            
+            elif r == 'database_type':
+                setattr(args, r, 'json')
+            elif r == 'elastic_config':
+                setattr(args, r, None)
+            elif r == 'max_alias_len':
+                setattr(args, r, 3)
+            elif r == 'database_dir':
+                setattr(args, r, None)
+            elif r == 'retrieve_method':
+                setattr(args, r, 'naive')
+            elif r == 'lookup_method':
+                setattr(args, r, 'ngrams')
+            elif r == 'almond_domains':
+                setattr(args, r, [])
+            elif r == 'features':
+                setattr(args, r, [])
+            elif r == 'locale':
+                setattr(args, r, 'en')
             elif r == 'pretrain_mlm_probability':
                 setattr(args, r, 0.15)
             elif r == 'context_embeddings':
@@ -467,8 +495,6 @@ def load_config_json(args):
                     setattr(args, r, args.encoder_embeddings)
             elif r == 'question_embeddings':
                 setattr(args, r, args.encoder_embeddings)
-            elif r == 'train_encoder_embeddings':
-                setattr(args, r, False)
             elif r == 'train_context_embeddings':
                 if args.seq2seq_encoder == 'Coattention':
                     setattr(args, r, False)
@@ -479,29 +505,14 @@ def load_config_json(args):
             elif r == 'rnn_dimension':
                 setattr(args, r, args.dimension)
             elif r == 'rnn_zero_state':
-                setattr(args, r, 'zero')
-            elif r == 'use_pretrained_bert':
-                setattr(args, r, True)
-            elif r in ('append_question_to_context_too', 'almond_preprocess_context'):
-                setattr(args, r, False)
-            elif r == 'num_beams':
-                setattr(args, r, [1])
-            elif r == 'num_outputs':
-                setattr(args, r, [1])
-            elif r == 'no_repeat_ngram_size':
-                setattr(args, r, [0])
-            elif r == 'top_p':
-                setattr(args, r, [1.0])
-            elif r == 'top_k':
-                setattr(args, r, [0])
-            elif r == 'repetition_penalty':
-                setattr(args, r, [1.0])
-            elif r == 'temperature':
-                setattr(args, r, [0.0])
+                setattr(args, r, 'average')
             elif r == 'reduce_metrics':
                 setattr(args, r, 'max')
             else:
+                # use default value
                 setattr(args, r, None)
+                
         args.dropout_ratio = 0.0
+        args.verbose = False
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)

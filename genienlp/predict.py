@@ -90,6 +90,7 @@ def get_all_splits(args):
             preprocess_examples(args, [task], [split], train=False)
             task_split_processed.append(split)
         splits.append(task_split_processed)
+
     return splits
 
 
@@ -111,7 +112,7 @@ def prepare_data(args, numericalizer, embeddings):
 def run(args, device):
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
         load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings, args.decoder_embeddings,
-                        args.max_generative_vocab, logger)
+                        args.max_generative_vocab, args.num_db_types, args.db_unk_id, logger)
     numericalizer.load(args.path)
     for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
         emb.init_for_vocab(numericalizer.vocab)
@@ -134,21 +135,24 @@ def run(args, device):
     iters = []
     task_index = 0
     for task, bs, val_set in zip(args.tasks, args.val_batch_size, val_sets):
+        shared_kwargs = {
+            'append_question_to_context_too': args.append_question_to_context_too,
+            'override_question': args.override_question,
+            'override_context': args.override_context,
+            'features': args.features,
+            'db_unk_id': args.db_unk_id
+        }
         task_iter = []
         task_languages = args.pred_languages[task_index]
         if task_languages is not None and args.separate_eval:
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
             for index, set_ in enumerate(val_set):
-                loader = make_data_loader(set_, numericalizer, bs, device,
-                                          append_question_to_context_too=args.append_question_to_context_too,
-                                          override_question=args.override_question, override_context=args.override_context)
+                loader = make_data_loader(set_, numericalizer, bs, device, **shared_kwargs)
                 task_iter.append((task, task_languages[index], loader))
         # single language task or no separate eval
         else:
-           loader = make_data_loader(val_set[0], numericalizer, bs, device,
-                                     append_question_to_context_too=args.append_question_to_context_too,
-                                     override_question=args.override_question, override_context=args.override_context)
+           loader = make_data_loader(val_set[0], numericalizer, bs, device, **shared_kwargs)
            task_iter.append((task, task_languages, loader))
 
         iters.extend(task_iter)

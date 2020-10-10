@@ -46,10 +46,15 @@ def get_commit():
                             stdout=subprocess.PIPE).stdout.read().split()[1].decode()
 
 
-def save_args(args):
-    os.makedirs(args.log_dir, exist_ok=args.exist_ok)
+def save_args(args, force_overwrite=False):
+    os.makedirs(args.log_dir, exist_ok=args.exist_ok or force_overwrite)
+    variables = vars(args).copy()
+    # remove the task objects before saving the configuration to the JSON file,
+    # because tasks are not JSON serializable.
+    del variables['train_tasks']
+    del variables['val_tasks']
     with open(os.path.join(args.log_dir, 'config.json'), 'wt') as f:
-        json.dump(vars(args), f, indent=2)
+        json.dump(variables, f, indent=2)
 
 
 def parse_argv(parser):
@@ -149,7 +154,7 @@ def parse_argv(parser):
     parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules')
-    parser.add_argument('--rnn_zero_state', default='zero', choices=['zero', 'average', 'cls'],
+    parser.add_argument('--rnn_zero_state', default='average', choices=['zero', 'average', 'cls'],
                         help='how to construct RNN zero state (for Identity encoder)')
     parser.add_argument('--transformer_layers', default=2, type=int, help='number of layers for transformer modules')
     parser.add_argument('--transformer_hidden', default=150, type=int, help='hidden size of the transformer modules')
@@ -157,6 +162,29 @@ def parse_argv(parser):
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
     
     parser.add_argument('--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)')
+    
+    parser.add_argument('--do_ner', action='store_true', help='Collect and use entity features during training')
+    parser.add_argument('--database_type', default='json', choices=['json', 'local-elastic', 'remote-elastic'],
+                        help='database to interact with for NER')
+    parser.add_argument('--elastic_config', type=str, help='Path to json file containing ES configs (used for remote-elastic only)')
+    parser.add_argument('--dump_type2id', action='store_true', help='This will create the "type to id" mapping for all entities available in ES database')
+    parser.add_argument('--dump_canonical2type', action='store_true', help='This will create the "canonical to type" mapping for all entities available in ES database')
+
+    parser.add_argument('--max_alias_len', type=int, default=3, help='N-gram maximum length for alias matching')
+    parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
+    
+    parser.add_argument('--retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
+                        help='how to retrieve types for entity tokens (bootleg option is wip')
+    
+    parser.add_argument('--lookup_method', default='ngrams', choices=['ngrams', 'smaller_first', 'longer_first'],
+                        help='smaller_first: start from one token and grow into longer spans until a match is found,'
+                             'longer_first: start from the longest span and shrink until a match is found')
+    
+    parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
+    parser.add_argument('--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
+    parser.add_argument('--features', nargs='+', default=[], help='Features that will be extracted for each entity: [type, freq] for now.'
+                                                                        ' Order is important')
+
 
     parser.add_argument('--encoder_embeddings', default='glove+char',
                         help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
@@ -328,13 +356,15 @@ def post_parse(args):
     
     for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
-    save_args(args)
 
-    # create the task objects after we saved the configuration to the JSON file, because
-    # tasks are not JSON serializable
+    args.num_features = len(args.features)
+
     # tasks with the same name share the same task object
     train_tasks_dict = get_tasks(args.train_task_names, args)
     args.train_tasks = list(train_tasks_dict.values())
     val_task_dict = get_tasks(args.val_task_names, args, available_tasks=train_tasks_dict)
     args.val_tasks = list(val_task_dict.values())
+    
+    save_args(args)
+    
     return args

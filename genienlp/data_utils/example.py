@@ -27,7 +27,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import NamedTuple, List
+from typing import NamedTuple, List, Tuple
 import itertools
 import random
 
@@ -41,12 +41,16 @@ class Example(NamedTuple):
     # or it should be treated as an opaque symbol
     context: List[str]
     context_word_mask: List[bool]
+    context_feature: List[Tuple[float]]
     question: List[str]
     question_word_mask: List[bool]
+    question_feature: List[Tuple[float]]
     answer: List[str]
     answer_word_mask: List[bool]
+    answer_feature: List[Tuple[float]]
     context_plus_question: List[str]
     context_plus_question_word_mask: List[bool]
+    context_plus_question_feature: List[Tuple[float]]
 
     vocab_fields = ['context', 'question', 'answer']
 
@@ -55,19 +59,34 @@ class Example(NamedTuple):
         args = [example_id]
 
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
-            words, mask = tokenize(arg.rstrip('\n'), field_name=argname)
-            if mask is None:
-                mask = [True for _ in words]
+            words, masks, features = tokenize(arg.rstrip('\n'), field_name=argname, answer=answer)
+            if masks is None:
+                masks = [True for _ in words]
             if lower:
                 words = [word.lower() for word in words]
             args.append(words)
-            args.append(mask)
+            args.append(masks)
+            args.append(features)
         
-        # create context_plus_question field by appending context and question words and words_masks
-        args.append(args[1] + args[3])
-        args.append(args[2] + args[4])
+        # create context_plus_question fields by appending context and question corresponding fields
+        args.append(args[1] + args[4])
+        args.append(args[2] + args[5])
+        args.append(args[3] + args[6])
         
         return Example(*args)
+    
+def get_default_fields(text, features, db_unk_id):
+    text = text.split()
+    text_mask = [True for _ in text]
+    # dummy values
+    zip_list = []
+    if 'type' in features:
+        zip_list.append([db_unk_id for _ in text])
+    if 'freq' in features:
+        zip_list.append([1.0 for _ in text])
+    text_feature = list(zip(*zip_list))
+    
+    return text, text_mask, text_feature
 
 
 class Batch(NamedTuple):
@@ -79,20 +98,20 @@ class Batch(NamedTuple):
     
     @staticmethod
     def from_examples(examples, numericalizer, device=None, paired=False, max_pairs=None, groups=None,
-                      append_question_to_context_too=False, override_question=None, override_context=None):
+                      append_question_to_context_too=False, override_question=None, override_context=None, features=None, db_unk_id=0):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         decoder_vocab = numericalizer.decoder_vocab.clone()
         max_context_len, max_question_len, max_answer_len = -1, -1, -1
 
         override_question_mask = None
         if override_question:
-            override_question = override_question.split()
-            override_question_mask = [True for _ in override_question]
-            
+            override_question, override_question_mask, override_question_feature = \
+                get_default_fields(override_question, features, db_unk_id)
+
         override_context_mask = None
         if override_context:
-            override_context = override_context.split()
-            override_context_mask = [True for _ in override_context]
+            override_context, override_context_mask, override_context_feature = \
+                get_default_fields(override_context, features, db_unk_id)
 
         if paired:
             example_pairs = []
@@ -149,26 +168,26 @@ class Batch(NamedTuple):
         # process single examples
         example_ids = [ex.example_id for ex in examples]
         if override_question:
-            question_inputs = [(override_question, override_question_mask) for _ in examples]
+            question_inputs = [(override_question, override_question_mask, override_question_feature) for _ in examples]
         else:
-            question_inputs = [(ex.question, ex.question_word_mask) for ex in examples]
+            question_inputs = [(ex.question, ex.question_word_mask, ex.question_feature) for ex in examples]
 
         if append_question_to_context_too:
-            context_inputs = [(ex.context_plus_question, ex.context_plus_question_word_mask) for ex in examples]
+            context_inputs = [(ex.context_plus_question, ex.context_plus_question_word_mask, ex.context_plus_question_feature) for ex in examples]
         elif override_context:
-            context_inputs = [(override_context, override_context_mask) for _ in examples]
+            context_inputs = [(override_context, override_context_mask, override_context_feature) for _ in examples]
         else:
-            context_inputs = [(ex.context, ex.context_word_mask) for ex in examples]
+            context_inputs = [(ex.context, ex.context_word_mask, ex.context_feature) for ex in examples]
             
-        answer_inputs = [(ex.answer, ex.answer_word_mask) for ex in examples]
+        answer_inputs = [(ex.answer, ex.answer_word_mask, ex.answer_feature) for ex in examples]
         
         all_example_ids_single = example_ids
         all_context_inputs_single = numericalizer.encode_single(context_inputs, decoder_vocab,
-                                                                device=device, max_length=max_context_len-2)
+                                                                device, max_context_len-2, db_unk_id)
         all_question_inputs_single = numericalizer.encode_single(question_inputs, decoder_vocab,
-                                                                 device=device, max_length=max_question_len-2)
+                                                                 device, max_question_len-2, db_unk_id)
         all_answer_inputs_single = numericalizer.encode_single(answer_inputs, decoder_vocab,
-                                                               device=device, max_length=max_answer_len-2)
+                                                               device, max_answer_len-2, db_unk_id)
     
         if paired:
             all_example_ids = all_example_ids_single + all_example_ids_pair
@@ -180,6 +199,7 @@ class Batch(NamedTuple):
             all_context_inputs = all_context_inputs_single
             all_question_inputs = all_question_inputs_single
             all_answer_inputs = all_answer_inputs_single
+            
         return Batch(all_example_ids,
                      all_context_inputs,
                      all_question_inputs,

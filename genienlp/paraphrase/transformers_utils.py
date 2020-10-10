@@ -1,12 +1,54 @@
+# This file contains code adopted from https://github.com/huggingface/transformers.
+# See the original copyright notice below.
+
+# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
+# Copyright 2020 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
+# Copyright 2020 Marian Team Authors and The HuggingFace Inc. team.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import copy
 import re
+import logging
 
+import math
+import random
+from typing import List, Optional
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from transformers import XLMRobertaConfig
 from transformers.modeling_bart import LayerNorm, LearnedPositionalEmbedding, BartEncoder, SelfAttention, invert_mask, \
     SinusoidalPositionalEmbedding, BartModel, BartForConditionalGeneration
+from transformers.modeling_bert import BertModel, BertEmbeddings
 
 from transformers.modeling_t5 import T5ForConditionalGeneration, T5PreTrainedModel, T5LayerNorm, T5Block
+from transformers.modeling_utils import calc_banned_ngram_tokens, calc_banned_bad_words_ids, top_k_top_p_filtering
+
+from transformers.tokenization_roberta import RobertaTokenizer
+from transformers.tokenization_utils import BatchEncoding
+from transformers.tokenization_xlm_roberta import XLMRobertaTokenizer
+
+from transformers.activations import ACT2FN
+from transformers.configuration_bart import BartConfig
+from transformers.modeling_roberta import create_position_ids_from_input_ids
 
 SPIECE_UNDERLINE = "▁"
+
+logger = logging.getLogger(__name__)
 
 language_code_re = re.compile(">>.+<<")
 
@@ -28,68 +70,16 @@ MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 MARIAN_GROUP_MEMBERS = {
     'ZH': ['cmn', 'cn', 'yue', 'ze_zh', 'zh_cn', 'zh_CN', 'zh_HK', 'zh_tw', 'zh_TW', 'zh_yue', 'zhs', 'zht', 'zh'],
     'ROMANCE': ['fr', 'fr_BE', 'fr_CA', 'fr_FR', 'wa', 'frp', 'oc', 'ca', 'rm', 'lld', 'fur', 'lij', 'lmo',
-                'es', 'es_AR', 'es_CL', 'es_CO', 'es_CR', 'es_DO', 'es_EC', 'es_ES', 'es_GT', 'es_HN', 'es_MX', 'es_NI', 'es_PA', 'es_PE', 'es_PR', 'es_SV', 'es_UY', 'es_VE',
-                'pt', 'pt_br', 'pt_BR', 'pt_PT', 'gl', 'lad', 'an', 'mwl', 'it', 'it_IT', 'co', 'nap', 'scn', 'vec', 'sc', 'ro', 'la'],
+                'es', 'es_AR', 'es_CL', 'es_CO', 'es_CR', 'es_DO', 'es_EC', 'es_ES', 'es_GT', 'es_HN', 'es_MX', 'es_NI',
+                'es_PA', 'es_PE', 'es_PR', 'es_SV', 'es_UY', 'es_VE',
+                'pt', 'pt_br', 'pt_BR', 'pt_PT', 'gl', 'lad', 'an', 'mwl', 'it', 'it_IT', 'co', 'nap', 'scn', 'vec',
+                'sc', 'ro', 'la'],
     'NORTH_EU': ['de', 'nl', 'fy', 'af', 'da', 'fo', 'is', 'no', 'nb', 'nn', 'sv'],
     'SCANDINAVIA': ['da', 'fo', 'is', 'no', 'nb', 'nn', 'sv'],
     'SAMI': ['se', 'sma', 'smj', 'smn', 'sms'],
     'NORWAY': ['nb_NO', 'nb', 'nn_NO', 'nn', 'nog', 'no_nb', 'no'],
-    'CELTIC': ['ga', 'cy', 'br', 'gd', 'kw', 'gv'],
-    'trk': ["aze_Latn", "bak", "chv", "crh", "crh_Latn", "kaz_Cyrl", "kaz_Latn", "kir_Cyrl", "kjh", "kum", "ota_Arab",
-            "ota_Latn", "sah", "tat", "tat_Arab", "tat_Latn", "tuk", "tuk_Latn", "tur", "tyv", "uig_Arab", "uig_Cyrl", "uzb_Cyrl", "uzb_Latn"],
-    'mul': ["abk", "acm", "ady", "afb", "afh_Latn", "afr", "akl_Latn", "aln", "amh", "ang_Latn", "apc", "ara", "arg", "arq", "ary",
-            "arz", "asm", "ast", "avk_Latn", "awa", "aze_Latn", "bak", "bam_Latn", "bel", "bel_Latn", "ben", "bho", "bod",
-            "bos_Latn", "bre", "brx", "brx_Latn", "bul", "bul_Latn", "cat", "ceb", "ces", "cha", "che", "chr", "chv",
-            "cjy_Hans", "cjy_Hant", "cmn", "cmn_Hans", "cmn_Hant", "cor", "cos", "crh", "crh_Latn", "csb_Latn", "cym",
-            "dan", "deu", "dsb", "dtp", "dws_Latn", "egl", "ell", "enm_Latn", "epo", "est", "eus", "ewe", "ext", "fao",
-            "fij", "fin", "fkv_Latn", "fra", "frm_Latn", "frr", "fry", "fuc", "fuv", "gan", "gcf_Latn", "gil", "gla",
-            "gle", "glg", "glv", "gom", "gos", "got_Goth", "grc_Grek", "grn", "gsw", "guj", "hat", "hau_Latn", "haw",
-            "heb", "hif_Latn", "hil", "hin", "hnj_Latn", "hoc", "hoc_Latn", "hrv", "hsb", "hun", "hye", "iba", "ibo",
-            "ido", "ido_Latn", "ike_Latn", "ile_Latn", "ilo", "ina_Latn", "ind", "isl", "ita", "izh", "jav", "jav_Java",
-            "jbo", "jbo_Cyrl", "jbo_Latn", "jdt_Cyrl", "jpn", "kab", "kal", "kan", "kat", "kaz_Cyrl", "kaz_Latn", "kek_Latn",
-            "kha", "khm", "khm_Latn", "kin", "kir_Cyrl", "kjh", "kpv", "krl", "ksh", "kum", "kur_Arab", "kur_Latn", "lad",
-            "lad_Latn", "lao", "lat_Latn", "lav", "ldn_Latn", "lfn_Cyrl", "lfn_Latn", "lij", "lin", "lit", "liv_Latn", "lkt",
-            "lld_Latn", "lmo", "ltg", "ltz", "lug", "lzh", "lzh_Hans", "mad", "mah", "mai", "mal", "mar", "max_Latn", "mdf",
-            "mfe", "mhr", "mic", "min", "mkd", "mlg", "mlt", "mnw", "moh", "mon", "mri", "mwl", "mww", "mya", "myv", "nan",
-            "nau", "nav", "nds", "niu", "nld", "nno", "nob", "nob_Hebr", "nog", "non_Latn", "nov_Latn", "npi", "nya", "oci",
-            "ori", "orv_Cyrl", "oss", "ota_Arab", "ota_Latn", "pag", "pan_Guru", "pap", "pau", "pdc", "pes", "pes_Latn",
-            "pes_Thaa", "pms", "pnb", "pol", "por", "ppl_Latn", "prg_Latn", "pus", "quc", "qya", "qya_Latn", "rap",
-            "rif_Latn", "roh", "rom", "ron", "rue", "run", "rus", "sag", "sah", "san_Deva", "scn", "sco", "sgs",
-            "shs_Latn", "shy_Latn", "sin", "sjn_Latn", "slv", "sma", "sme", "smo", "sna", "snd_Arab", "som", "spa", "sqi",
-            "srp_Cyrl", "srp_Latn", "stq", "sun", "swe", "swg", "swh", "tah", "tam", "tat", "tat_Arab", "tat_Latn", "tel",
-            "tet", "tgk_Cyrl", "tha", "tir", "tlh_Latn", "tly_Latn", "tmw_Latn", "toi_Latn", "ton", "tpw_Latn", "tso", "tuk",
-            "tuk_Latn", "tur", "tvl", "tyv", "tzl", "tzl_Latn", "udm", "uig_Arab", "uig_Cyrl", "ukr", "umb", "urd", "uzb_Cyrl",
-            "uzb_Latn", "vec", "vie", "vie_Hani", "vol_Latn", "vro", "war", "wln", "wol", "wuu", "xal", "xho", "yid", "yor",
-            "yue", "yue_Hans", "yue_Hant", "zho", "zho_Hans", "zho_Hant", "zlm_Latn", "zsm_Latn", "zul", "zza"]
+    'CELTIC': ['ga', 'cy', 'br', 'gd', 'kw', 'gv']
 }
-
-# coding=utf-8
-# Copyright 2020 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""PyTorch BART model, ported from the fairseq repo."""
-import math
-import random
-from typing import List, Optional
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-from transformers.activations import ACT2FN
-from transformers.configuration_bart import BartConfig
-from transformers.modeling_utils import calc_banned_ngram_tokens, calc_banned_bad_words_ids, top_k_top_p_filtering
-
 
 class DecoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
@@ -117,13 +107,13 @@ class DecoderLayer(nn.Module):
         self.final_layer_norm = LayerNorm(self.embed_dim)
 
     def forward(
-        self,
-        x,
-        encoder_hidden_states,
-        encoder_attn_mask=None,
-        layer_state=None,
-        causal_mask=None,
-        decoder_padding_mask=None,
+            self,
+            x,
+            encoder_hidden_states,
+            encoder_attn_mask=None,
+            layer_state=None,
+            causal_mask=None,
+            decoder_padding_mask=None,
     ):
         residual = x
 
@@ -131,7 +121,7 @@ class DecoderLayer(nn.Module):
             layer_state = {}
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
-            
+
         # Self Attention
         x, self_attn_weights = self.self_attn(
             query=x,
@@ -180,8 +170,7 @@ class DecoderLayer(nn.Module):
             cross_attn_weights,
             layer_state,
         )  # both self_attn and cross-attn weights, following t5, layer_state = cache for decoding
-            # attention weight has size (bsz, num_heads, tgt_len, src_len)
-
+        # attention weight has size (bsz, num_heads, tgt_len, src_len)
 
 class BartDecoder(nn.Module):
     """
@@ -217,15 +206,15 @@ class BartDecoder(nn.Module):
         self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
     def forward(
-        self,
-        input_ids,
-        encoder_hidden_states,
-        encoder_padding_mask,
-        decoder_padding_mask,
-        decoder_causal_mask,
-        decoder_cached_states=None,
-        use_cache=False,
-        **unused
+            self,
+            input_ids,
+            encoder_hidden_states,
+            encoder_padding_mask,
+            decoder_padding_mask,
+            decoder_causal_mask,
+            decoder_cached_states=None,
+            use_cache=False,
+            **unused
     ):
         """
         Includes several features from "Jointly Learning to Align and
@@ -310,7 +299,6 @@ class BartDecoder(nn.Module):
             next_cache = None
         return x, next_cache, all_hidden_states, list(all_self_attns), list(all_cross_attns)
 
-
 class BartModel(BartModel):
     def __init__(self, config: BartConfig):
         super().__init__(config)
@@ -325,7 +313,6 @@ class BartModel(BartModel):
 
         self.init_weights()
 
-
 class BartForConditionalGeneration(BartForConditionalGeneration):
     base_model_prefix = "model"
 
@@ -334,7 +321,7 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
         base_model = BartModel(config)
         self.model = base_model
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
-        
+
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
 
@@ -350,9 +337,9 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
                     encoder_outputs, decoder_cached_states = past[0], past[1]
             else:
                 encoder_outputs, decoder_cached_states = past[0], None
-                
+
         if not isinstance(encoder_outputs, tuple):
-            encoder_outputs = (encoder_outputs, )
+            encoder_outputs = (encoder_outputs,)
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -392,7 +379,7 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
         # length of generated sentences / unfinished sentences
         unfinished_sents = input_ids.new(batch_size).fill_(1)
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
-        
+
         if getattr(self.config, 'encoder_layers', None):
             num_layers = self.config.encoder_layers
         else:
@@ -404,12 +391,12 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
             num_heads = self.config.num_heads
 
         all_encoder_attentions = [input_ids.new_full([batch_size, num_heads, max_length,
-                                                     encoder_outputs[0].size(1)], dtype=torch.float32,
-                                                    fill_value=-1000000) for _ in range(num_layers)]
-        
+                                                      encoder_outputs[0].size(1)], dtype=torch.float32,
+                                                     fill_value=-1000000) for _ in range(num_layers)]
+
         # encoder outputs for Bart and models inheriting from BartModel encoder is (encoder hidden outputs of last layer, all_hidden_states, all_attention_weights )
         # it always outputs all_hidden_states and all_attention_weights and then filters empty ones out when passed through BartModel
-        
+
         # on the other hand, T5 encoder outputs (last-layer hidden state, presents, all_hidden_states, all_attention_weights) only if returning them is requested
         # otherwise it just returns last-layer hidden states
         past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
@@ -418,20 +405,21 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, cur_len=cur_len, **model_specific_kwargs
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, cur_len=cur_len,
+                **model_specific_kwargs
             )
 
             outputs = self(**model_inputs)
             # decoder_outputs = x, next_cache, all_hidden_states, all_self_attns, all_cross_attns
             # encoder_outputs = encoder_hidden_last_layer + all_hidden_states + all_self_attns
             # outputs = decoder_outputs + encoder_outputs
-            
+
             # outputs is then filtered if attention weights, hidden states, or cached_decoding_values are empty
             # so the index below is adjusted
             # remember we always return attention weights
-            
+
             next_token_logits = outputs[0][:, -1, :]
-            
+
             index = 2 + int(model_specific_kwargs['return_hidden_states']) + int(use_cache)
             for i in range(num_layers):
                 all_encoder_attentions[i][:, :, [cur_len - 1], :] = outputs[index][i]
@@ -443,7 +431,6 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
             # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
                 self.enforce_repetition_penalty_(next_token_logits, batch_size, 1, input_ids, repetition_penalty)
-
 
             if no_repeat_ngram_size > 0:
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
@@ -458,7 +445,7 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
 
                 for batch_idx in range(batch_size):
                     next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
-            
+
             # #TODO added and modified by mehrad from transformers modeling_utils.py
             # if self.config.is_encoder_decoder:
             #     if cur_len == 1:
@@ -526,39 +513,18 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
 
         for hypo_idx, hypo in enumerate(input_ids):
             decoded[hypo_idx, : sent_lengths[hypo_idx]] = hypo[: sent_lengths[hypo_idx]]
-        
+
         # List of each encoder layer cross-attention values each with size (bsz, num_heads, tgt_len, src_len)
-        all_encoder_attentions = [layer_all_encoder_attentions[:, :, :sent_lengths.max().item(), :] for layer_all_encoder_attentions in all_encoder_attentions]
+        all_encoder_attentions = [layer_all_encoder_attentions[:, :, :sent_lengths.max().item(), :] for
+                                  layer_all_encoder_attentions in all_encoder_attentions]
 
         return decoded, all_encoder_attentions
 
-
-
-  
-# coding=utf-8
-# Copyright 2020 Marian Team Authors and The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """PyTorch MarianMTModel model, ported from the Marian C++ repo."""
-
-
-# from transformers.modeling_bart import BartForConditionalGeneration
-
 
 MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Marian models at https://huggingface.co/models?search=Helsinki-NLP
 ]
-
 
 class MarianMTModel(BartForConditionalGeneration):
     r"""
@@ -589,27 +555,6 @@ class MarianMTModel(BartForConditionalGeneration):
             self._force_token_ids_generation(logits, self.config.eos_token_id)
         return logits
 
-
-# coding=utf-8
-# Copyright 2020 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-from transformers.tokenization_roberta import RobertaTokenizer
-from transformers.tokenization_utils import BatchEncoding
-from transformers.tokenization_xlm_roberta import XLMRobertaTokenizer
-
-
 # vocab and merges same as roberta
 vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json"
 merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
@@ -621,7 +566,6 @@ _all_bart_models = [
     "yjernite/bart_eli5",
 ]
 
-
 class BartTokenizer(RobertaTokenizer):
     # merges and vocab same as Roberta
     max_model_input_sizes = {m: 1024 for m in _all_bart_models}
@@ -630,10 +574,8 @@ class BartTokenizer(RobertaTokenizer):
         "merges_file": {m: merges_url for m in _all_bart_models},
     }
 
-
 _all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
 SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
-
 
 class MBartTokenizer(XLMRobertaTokenizer):
     """
@@ -682,7 +624,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
     }
     id_to_lang_code = {v: k for k, v in lang_code_to_id.items()}
     cur_lang_code = lang_code_to_id["en_XX"]
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
@@ -703,16 +645,16 @@ class MBartTokenizer(XLMRobertaTokenizer):
         if index in self.fairseq_ids_to_tokens:
             return self.fairseq_ids_to_tokens[index]
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
-    
+
     def prepare_translation_batch(
-        self,
-        src_texts: List[str],
-        src_lang: str = "en_XX",
-        tgt_texts: Optional[List[str]] = None,
-        tgt_lang: str = "ro_RO",
-        max_length: Optional[int] = None,
-        pad_to_max_length: bool = True,
-        return_tensors: str = "pt",
+            self,
+            src_texts: List[str],
+            src_lang: str = "en_XX",
+            tgt_texts: Optional[List[str]] = None,
+            tgt_lang: str = "ro_RO",
+            max_length: Optional[int] = None,
+            pad_to_max_length: bool = True,
+            return_tensors: str = "pt",
     ) -> BatchEncoding:
         """
         Arguments:
@@ -752,8 +694,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self.cur_lang_code = self.lang_code_to_id[src_lang]
         return model_inputs
 
-    
-
 class T5Stack(T5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
@@ -781,15 +721,15 @@ class T5Stack(T5PreTrainedModel):
         self.embed_tokens = new_embeddings
 
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        inputs_embeds=None,
-        head_mask=None,
-        past_key_value_states=None,
-        use_cache=False,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            inputs_embeds=None,
+            head_mask=None,
+            past_key_value_states=None,
+            use_cache=False,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -883,7 +823,7 @@ class T5Stack(T5PreTrainedModel):
             if self.output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)  # add self-attention
                 if self.is_decoder and encoder_hidden_states is not None:
-                    if i==0:
+                    if i == 0:
                         cross_attentions = cross_attentions + (layer_outputs[4],)  # add cross-attention
                     else:
                         cross_attentions = cross_attentions + (layer_outputs[3],)  # add cross-attention
@@ -905,7 +845,6 @@ class T5Stack(T5PreTrainedModel):
             outputs = outputs + (all_attentions,) + (cross_attentions,)
         return outputs  # last-layer hidden state, (presents,) (all hidden states), (all self_attentions), (all cross_attentions)
 
-
 class T5ForConditionalGeneration(T5ForConditionalGeneration):
     def __init__(self, config):
         super().__init__(config)
@@ -924,7 +863,6 @@ class T5ForConditionalGeneration(T5ForConditionalGeneration):
 
         self.init_weights()
 
-        
     def _generate_no_beam_search(
             self,
             input_ids,
@@ -949,31 +887,31 @@ class T5ForConditionalGeneration(T5ForConditionalGeneration):
             model_specific_kwargs,
     ):
         return BartForConditionalGeneration._generate_no_beam_search(
-                self,
-                input_ids,
-                cur_len,
-                max_length,
-                min_length,
-                do_sample,
-                temperature,
-                top_k,
-                top_p,
-                repetition_penalty,
-                no_repeat_ngram_size,
-                bad_words_ids,
-                bos_token_id,
-                pad_token_id,
-                eos_token_id,
-                decoder_start_token_id,
-                batch_size,
-                encoder_outputs,
-                attention_mask,
-                use_cache,
-                model_specific_kwargs,)
-    
+            self,
+            input_ids,
+            cur_len,
+            max_length,
+            min_length,
+            do_sample,
+            temperature,
+            top_k,
+            top_p,
+            repetition_penalty,
+            no_repeat_ngram_size,
+            bad_words_ids,
+            bos_token_id,
+            pad_token_id,
+            eos_token_id,
+            decoder_start_token_id,
+            batch_size,
+            encoder_outputs,
+            attention_mask,
+            use_cache,
+            model_specific_kwargs, )
+
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
-        
+
         # first step
         if kwargs['cur_len'] == 1:
             encoder_outputs, decoder_past_key_value_states = past[0], None
@@ -985,9 +923,9 @@ class T5ForConditionalGeneration(T5ForConditionalGeneration):
                     encoder_outputs, decoder_past_key_value_states = past[0], past[1]
             else:
                 encoder_outputs, decoder_past_key_value_states = past[0], None
-                
+
         if not isinstance(encoder_outputs, tuple):
-            encoder_outputs = (encoder_outputs, )
+            encoder_outputs = (encoder_outputs,)
 
         return {
             "decoder_input_ids": input_ids,
@@ -997,3 +935,188 @@ class T5ForConditionalGeneration(T5ForConditionalGeneration):
             "use_cache": use_cache,
         }
 
+class BertEmbeddingsV2(BertEmbeddings):
+    """Construct the embeddings from word, position, token_type, and entity_type embeddings.
+    """
+
+    def __init__(self, config, num_db_types=0, db_unk_id=0):
+        super().__init__(config)
+        self.num_db_types = num_db_types
+        self.db_unk_id = db_unk_id
+        if num_db_types > 0:
+            self.entity_type_embeddings = nn.Embedding(num_db_types, config.hidden_size, padding_idx=db_unk_id)
+
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, entity_ids=None, inputs_embeds=None):
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        seq_length = input_shape[1]
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+        if position_ids is None:
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0).expand(input_shape)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
+        position_embeddings = self.position_embeddings(position_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        if self.num_db_types > 0:
+            if entity_ids is None:
+                entity_ids = torch.zeros(input_shape, dtype=torch.long, device=device).fill_(self.db_unk_id)
+            entity_type_embeddings = self.entity_type_embeddings(entity_ids)
+            embeddings = inputs_embeds + position_embeddings + token_type_embeddings + entity_type_embeddings
+        else:
+            embeddings = inputs_embeds + position_embeddings + token_type_embeddings
+
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
+
+class BertModelV2(BertModel):
+    """
+    Subcalss of BertModel model with an additional entity type embedding layer at the bottom
+    """
+
+    def __init__(self, config, num_db_types, db_unk_id):
+        super().__init__(config)
+
+        self.embeddings = BertEmbeddingsV2(config, num_db_types, db_unk_id)
+        self.init_weights()
+
+    # def _reset_embeddings(self, num_db_types, db_unk_id):
+    #     self.embeddings = BertEmbeddingsV2(self.config, num_db_types, db_unk_id)
+    #     self.num_db_types = num_db_types
+
+    def forward(
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            entity_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+    ):
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones(input_shape, device=device)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+
+        # If a 2D ou 3D attention mask is provided for the cross-attention
+        # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+        if self.config.is_decoder and encoder_hidden_states is not None:
+            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            if encoder_attention_mask is None:
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        else:
+            encoder_extended_attention_mask = None
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
+        embedding_output = self.embeddings(
+            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, entity_ids=entity_ids, inputs_embeds=inputs_embeds
+        )
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+        )
+        sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output)
+
+        outputs = (sequence_output, pooled_output,) + encoder_outputs[
+            1:
+        ]  # add hidden_states and attentions if they are here
+        return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
+
+
+class RobertaEmbeddingsV2(BertEmbeddingsV2):
+    """
+    Same as BertEmbeddings with a tiny tweak for positional embeddings indexing and adding entity_types.
+    """
+
+    def __init__(self, config, num_db_types=0, db_unk_id=0):
+        super().__init__(config, num_db_types, db_unk_id)
+        self.padding_idx = config.pad_token_id
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size,
+                                                padding_idx=self.padding_idx)
+
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, entity_ids=None, inputs_embeds=None):
+        if position_ids is None:
+            if input_ids is not None:
+                # Create the position ids from the input token ids. Any padded tokens remain padded.
+                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx).to(input_ids.device)
+            else:
+                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+
+        return super().forward(
+            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, entity_ids=entity_ids, inputs_embeds=inputs_embeds
+        )
+
+    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+        """ We are provided embeddings directly. We cannot infer which are padded so just generate
+        sequential position ids.
+
+        :param torch.Tensor inputs_embeds:
+        :return torch.Tensor:
+        """
+        input_shape = inputs_embeds.size()[:-1]
+        sequence_length = input_shape[1]
+
+        position_ids = torch.arange(
+            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+        )
+        return position_ids.unsqueeze(0).expand(input_shape)
+
+class XLMRobertaModelV2(BertModelV2):
+    """
+    Subcalss of XLMRobertaModel model with an additional entity type embedding layer at the bottom
+    """
+
+    config_class = XLMRobertaConfig
+    base_model_prefix = "roberta"
+
+    def __init__(self, config, num_db_types, db_unk_id):
+        super().__init__(config, num_db_types, db_unk_id)
+
+        self.embeddings = RobertaEmbeddingsV2(config, num_db_types, db_unk_id)
+        self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
