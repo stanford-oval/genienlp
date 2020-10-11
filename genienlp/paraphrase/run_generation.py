@@ -329,6 +329,8 @@ def run_single_process_generation(args, config):
         else:
             t5_task = 'summarization'
         model_input_prefix = config.task_specific_params[t5_task]['prefix']
+        
+    mask_token = getattr(tokenizer, 'mask_token', '<mask>')
 
     all_input_sequences, all_input_sequence_lengths, all_example_ids, all_context_ids, estimated_output_lengths, all_golds, reverse_maps, all_prompt_ids = \
                                   create_features_from_tsv_file(file_path=args.input_file,
@@ -348,7 +350,8 @@ def run_single_process_generation(args, config):
                                                                 task=args.task,
                                                                 model_input_prefix=model_input_prefix,
                                                                 masked_paraphrasing=args.masked_paraphrasing,
-                                                                fairseq_mask_prob=args.fairseq_mask_prob)
+                                                                fairseq_mask_prob=args.fairseq_mask_prob,
+                                                                mask_token=mask_token)
 
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, original_order, reverse_maps, all_prompt_ids = \

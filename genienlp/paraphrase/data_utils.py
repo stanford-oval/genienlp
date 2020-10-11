@@ -120,21 +120,50 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
     if num_added_tokens > 0:
         logger.info('Added %d special tokens', num_added_tokens)
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
-        
-        
-def fairseq_mask(input_sequence, tokenizer, mlm_probability):
+
+from ..tasks.almond.utils import is_entity, is_device, quoted_pattern_maybe_space, device_pattern
+
+def has_match(sentence, all_entities):
+    for entity in all_entities:
+        j = 0
+        entity_tokenized = entity.split(' ')
+        found = True
+        while j < len(entity_tokenized):
+            if sentence[j] == entity_tokenized[j]:
+                j += 1
+            else:
+                found = False
+                break
+        if found:
+            return True
+    return False
+    
+def fairseq_mask(input_sequence, mlm_probability, mask_token, thingtalk):
+    
+    all_entities = []
+    all_device_tokens = []
+    if thingtalk:
+        all_entities = quoted_pattern_maybe_space.findall(thingtalk)
+        for token in device_pattern.findall(thingtalk):
+            all_device_tokens.extend(token.split('.'))
+    
     input_tokens = input_sequence.split(' ')
     input_length = len(input_tokens)
     # don't mask first and last tokens
     for i in range(1, input_length-1):
+        if is_entity(input_tokens[i]) or input_tokens[i] in all_device_tokens or has_match(input_tokens[i:], all_entities):
+            mlm_probability /= 0.9
+            continue
         if random.random() < mlm_probability:
-            input_tokens[i] = getattr(tokenizer, 'mask_token', '<mask>')
+            input_tokens[i] = mask_token
     return ' '.join(input_tokens)
     
 
 
-def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column, copy, sep_token_id,
-                                  skip_heuristics, is_cased, model_type, src_lang, subsample, task, model_input_prefix, masked_paraphrasing, fairseq_mask_prob):
+def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column,
+                                  copy, sep_token_id, skip_heuristics, is_cased, model_type,
+                                  src_lang, subsample, task, model_input_prefix,
+                                  masked_paraphrasing, fairseq_mask_prob, mask_token):
     """
     Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
     Outputs:
@@ -171,15 +200,15 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         if not skip_heuristics:
             gold, _ = input_heuristics(gold, None, is_cased, keep_special_tokens=True, keep_tokenized=True)
         all_golds.append(gold)
+        thingtalk = row[thingtalk_column] if thingtalk_column is not None else None
         if skip_heuristics:
             reverse_maps.append({})
         else:
-            thingtalk = row[thingtalk_column] if thingtalk_column is not None else None
             input_sequence, reverse_map = input_heuristics(input_sequence, thingtalk, is_cased)
             reverse_maps.append(reverse_map)
             
         if masked_paraphrasing:
-            input_sequence = fairseq_mask(input_sequence, tokenizer, fairseq_mask_prob)
+            input_sequence = fairseq_mask(input_sequence, fairseq_mask_prob, mask_token, thingtalk)
         
         # add model specific prefix
         input_sequence = model_input_prefix + input_sequence

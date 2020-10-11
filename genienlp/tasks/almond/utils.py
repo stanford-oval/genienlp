@@ -1,3 +1,8 @@
+import re
+
+quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
+device_pattern = re.compile(r'\s@([\w\.]+)\s')
+
 ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Italian', 'zh': 'Chinese',
                'hr': 'Croatian', 'ja': 'Japanese', 'ko': 'Korean', 'ru': 'Russian', 'es': 'Spanish',
                'sv': 'Swedish', 'tr': 'Turkish', 'hi': 'Hindi', 'fr': 'French', 'de': 'German',

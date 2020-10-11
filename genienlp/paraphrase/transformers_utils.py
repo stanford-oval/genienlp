@@ -773,7 +773,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
 
-    
 
 class T5Stack(T5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
