@@ -65,39 +65,25 @@ class IdentityEncoder(nn.Module):
     def set_train_question_embeddings(self, trainable):
         pass
 
-    def forward(self, batch):
-        context, context_lengths = batch.context.value, batch.context.length
-        question, question_lengths = batch.question.value, batch.question.length
-
-        context_padding = context.data == self.pad_idx
-        question_padding = question.data == self.pad_idx
-
-        context_entity_ids = None
-        question_entity_ids = None
-        if self.args.num_db_types > 0:
-            context_entity_ids = batch.context.feature[:, :, 0].long()
-            question_entity_ids = batch.question.feature[:, :, 0].long()
-            # if batch.context.feature.nelement() != 0:
-            #     context_entity_ids = batch.context.feature[:, :, 0].long()
-            # if batch.question.feature.nelement() != 0:
-            #     question_entity_ids = batch.question.feature[:, :, 0].long()
-
-        context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, padding=context_padding)
-        question_embedded = self.encoder_embeddings(question, entity_ids=question_entity_ids, padding=question_padding)
-
+    def compute_final_embeddings(self, context, question, context_entity_ids, question_entity_ids,
+                                 context_padding, question_padding, context_lengths, context_entity_masking=None, question_entity_masking=None):
+        
+        context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking, padding=context_padding)
+        question_embedded = self.encoder_embeddings(question, entity_ids=question_entity_ids, entity_masking=question_entity_masking, padding=question_padding)
+    
         # pick the top-most N transformer layers to pass to the decoder for cross-attention
         # (add 1 to account for the embedding layer - the decoder will drop it later)
         self_attended_context = context_embedded.all_layers[-(self.args.transformer_layers + 1):]
         final_context = context_embedded.last_layer
         final_question = question_embedded.last_layer
-
+    
         if self.projection is not None:
             final_context = self.dropout(final_context)
             final_context = self.projection(final_context)
-
+        
             final_question = self.dropout(final_question)
             final_question = self.projection(final_question)
-
+            
         context_rnn_state = None
         question_rnn_state = None
         if self.args.rnn_layers > 0:
@@ -129,5 +115,35 @@ class IdentityEncoder(nn.Module):
                 # convert to a tuple of two (rnn_layers, batch, rnn_dimension) tensors
                 packed_rnn_state = packed_rnn_state.chunk(2, dim=0)
                 context_rnn_state = (packed_rnn_state[0].squeeze(0), packed_rnn_state[1].squeeze(0))
-
+    
         return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state
+
+    def forward(self, batch):
+        context, context_lengths = batch.context.value, batch.context.length
+        question, question_lengths = batch.question.value, batch.question.length
+
+        context_padding = context.data == self.pad_idx
+        question_padding = question.data == self.pad_idx
+        
+        context_entity_ids = None
+        question_entity_ids = None
+        if self.args.num_db_types > 0:
+            context_entity_ids = batch.context.feature[:, :, 0].long()
+            question_entity_ids = batch.question.feature[:, :, 0].long()
+
+            context_entity_masking = context_entity_ids == self.args.db_unk_id
+            question_entity_masking = question_entity_ids == self.args.db_unk_id
+            
+        self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
+            self.compute_final_embeddings(context, question, context_entity_ids, question_entity_ids,
+                                          context_padding, question_padding, context_lengths)
+
+        context_rnn_state_entities_masked = None
+        if self.args.use_encoder_loss:
+            _, _, context_rnn_state_entities_masked, _, _ = \
+                self.compute_final_embeddings(context, question, context_entity_ids, question_entity_ids,
+                                              context_padding, question_padding, context_lengths,
+                                              context_entity_masking, question_entity_masking)
+
+
+        return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state, context_rnn_state_entities_masked

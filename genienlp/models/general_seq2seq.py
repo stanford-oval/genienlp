@@ -96,12 +96,12 @@ class Seq2Seq(PreTrainedModel):
 
     def _normal_forward(self, batch, current_token_id, past=None, expansion_factor=1, generation_dict=None, encoder_output=None):
         if encoder_output is None:
-            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
+            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state, context_rnn_state_entities_masked = self.encoder(batch)
         else:
-            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = encoder_output
+            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state, context_rnn_state_entities_masked = encoder_output
         encoder_loss = None
-        if self.training and getattr(self.args, 'use_encoder_loss', None):
-            encoder_loss = self.get_encoder_loss(context_rnn_state)
+        if self.training and self.args.use_encoder_loss:
+            encoder_loss = self.get_encoder_loss(context_rnn_state_entities_masked)
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
                             final_question, question_rnn_state, encoder_loss, current_token_id, decoder_wrapper=past,
                             expansion_factor=expansion_factor, generation_dict=generation_dict)
