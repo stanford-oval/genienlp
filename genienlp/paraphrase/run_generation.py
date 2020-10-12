@@ -215,12 +215,27 @@ def run_multi_process_generation(args):
             raise ValueError('For translation task using Marian model, if target language is a group of languages, '
                              'you have to specify the --tgt_lang flag.')
         elif args.tgt_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 1)[1]]:
-            raise ValueError('Target language is not in the model group languages, please specify the correct target language.')
+            if args.tgt_lang == 'pl':
+                args.tgt_lang = 'pol'
+            else:
+                raise ValueError('Target language is not in the model group languages, please specify the correct target language.')
+        
+    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] in MARIAN_GROUP_MEMBERS:
+        if not args.src_lang:
+            raise ValueError('For translation task using Marian model, if source language is a group of languages, '
+                             'you have to specify the --src_lang flag.')
+        elif args.src_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 2)[1]]:
+            raise ValueError('Dource language is not in the model group languages, please specify the correct source language.')
 
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] not in MARIAN_GROUP_MEMBERS and args.tgt_lang:
         logger.warning('Target language should not be provided when using models with single language pairs,'
                        'otherwise the translation outputs will be incorrect; thus we ignore the target language you provided...')
         args.tgt_lang = None
+
+    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] not in MARIAN_GROUP_MEMBERS and args.src_lang:
+        logger.warning('Source language should not be provided when using models with single language pairs,'
+                       'otherwise the translation outputs will be incorrect; thus we ignore the source language you provided...')
+        args.src_lang = None
         
     if args.model_type == 'mbart' and not (args.tgt_lang and args.src_lang):
         raise ValueError('Source and Target language should be provided when using mBART cc25 model')
@@ -431,6 +446,7 @@ def run_single_process_generation(args, config):
                             (decoder_start_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]):
                         # shift target tokens left to match the attention positions
                         tgt_tokens = tgt_tokens[1:]
+                        
                     while src_tokens[-1] == tokenizer.pad_token:
                         # remove all padding from src
                         src_tokens = src_tokens[:-1]
@@ -454,8 +470,12 @@ def run_single_process_generation(args, config):
                     if args.plot_heatmaps:
                         import matplotlib.pyplot as plt
                         import seaborn as sns
-                        sns.heatmap(torch.log(sample_layer_attention_pooled), xticklabels=src_tokens,
-                                    yticklabels=tgt_tokens, annot=True)
+                        src_tokens = [token.lower() for token in src_tokens]
+                        tgt_tokens = [token.lower() for token in tgt_tokens]
+                        g = sns.heatmap(torch.log(sample_layer_attention_pooled), xticklabels=src_tokens,
+                                    yticklabels=tgt_tokens)
+                        g.set_xticklabels(g.get_xmajorticklabels(), fontsize=12)
+                        g.set_yticklabels(g.get_ymajorticklabels(), fontsize=12)
                         if args.output_file is not None:
                             plt.savefig(os.path.join(os.path.dirname(args.output_file),
                                                      'heatmap_{}'.format(batch_idx * batch_size + i)))

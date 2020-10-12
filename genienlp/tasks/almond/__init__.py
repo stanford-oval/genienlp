@@ -37,17 +37,12 @@ from ..base_task import BaseTask
 from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
+from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
 
 from ..base_dataset import Split
 
 logger = logging.getLogger(__name__)
 
-ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Italian', 'zh': 'Chinese',
-               'hr': 'Croatian', 'ja': 'Japanese', 'ko': 'Korean', 'ru': 'Russian', 'es': 'Spanish',
-               'sv': 'Swedish', 'tr': 'Turkish', 'hi': 'Hindi', 'fr': 'French', 'de': 'German',
-               'pl': 'Polsih', 'ar': 'Arabic', 'vi': 'Vietnamese', 'ji': 'Yiddish', 'pt': 'Portuguese',
-               'el': 'Greek', 'he': 'Hebrew', 'si': 'Sinhala', 'ta': 'Tamil', 'fi': 'Finnish', 'cs': 'Czech',
-               'no': 'Norwegian', 'tl': 'Filipino', 'da': 'Danish'}
 
 class AlmondDataset(CQA):
     """Obtaining dataset for Almond semantic parsing task"""
@@ -113,47 +108,6 @@ class AlmondDataset(CQA):
                      aux=None if do_curriculum is None else aux_data)
     
 
-def is_entity(token):
-    return token[0].isupper()
-
-def is_device(token):
-    return token[0] == '@'
-
-def process_id(ex):
-    id_ = ex.example_id.rsplit('/', 1)
-    id_ = id_[0] if len(id_) == 1 else id_[1]
-    # translated
-    if id_[0] == 'T':
-        id_ = id_[1:]
-    return id_
-
-
-# the following code is adopted from huggingface's bert tokenizer code
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-def is_chinese_char(cp):
-    """Checks whether CP is the codepoint of a CJK character."""
-    # This defines a "chinese character" as anything in the CJK Unicode block:
-    #   https://en.wikipedia.org/wiki/CJK_Unified_Ideographs_(Unicode_block)
-    #
-    # Note that the CJK Unicode block is NOT all Japanese and Korean characters,
-    # despite its name. The modern Korean Hangul alphabet is a different block,
-    # as is Japanese Hiragana and Katakana. Those alphabets are used to write
-    # space-separated words, so they are not treated specially and handled
-    # like the all of the other languages.
-    if (
-        (cp >= 0x4E00 and cp <= 0x9FFF)
-        or (cp >= 0x3400 and cp <= 0x4DBF)  #
-        or (cp >= 0x20000 and cp <= 0x2A6DF)  #
-        or (cp >= 0x2A700 and cp <= 0x2B73F)  #
-        or (cp >= 0x2B740 and cp <= 0x2B81F)  #
-        or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
-        or (cp >= 0xF900 and cp <= 0xFAFF)
-        or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
-    ):  #
-        return True
-
-    return False
-
 
 class BaseAlmondTask(BaseTask):
     """Base class for the Almond semantic parsing task
@@ -162,6 +116,7 @@ class BaseAlmondTask(BaseTask):
     def __init__(self, name, args):
         super().__init__(name, args)
         self._preprocess_context = args.almond_preprocess_context
+        self._almond_has_multiple_programs = args.almond_has_multiple_programs
 
     @property
     def metrics(self):
@@ -182,9 +137,9 @@ class BaseAlmondTask(BaseTask):
         while i < len(sentence):
             output.append(sentence[i])
             # skip space after cjk chars only if followed by another cjk char
-            if is_chinese_char(ord(sentence[i])) and \
+            if is_cjk_char(ord(sentence[i])) and \
                     i+1 < len(sentence) and sentence[i+1] == ' ' and \
-                    i+2 < len(sentence) and is_chinese_char(ord(sentence[i+2])):
+                    i+2 < len(sentence) and is_cjk_char(ord(sentence[i+2])):
                 i += 2
             else:
                 i += 1
@@ -250,7 +205,10 @@ class Almond(BaseAlmondTask):
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
-        _id, sentence, target_code = parts
+        if self._almond_has_multiple_programs:
+            _id, sentence, target_code = parts[:3]
+        else:
+            _id, sentence, target_code = parts
         question = 'translate from english to thingtalk'
         context = sentence
         answer = target_code
@@ -266,7 +224,10 @@ class ContextualAlmond(BaseAlmondTask):
         return field_name in ('answer', 'context')
 
     def _make_example(self, parts, dir_name=None, **kwargs):
-        _id, context, sentence, target_code = parts
+        if self._almond_has_multiple_programs:
+            _id, context, sentence, target_code = parts[:4]
+        else:
+            _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
@@ -306,7 +267,10 @@ class AlmondDialogueNLU(BaseAlmondTask):
         return field_name in ('answer', 'context')
 
     def _make_example(self, parts, dir_name=None, **kwargs):
-        _id, context, sentence, target_code = parts
+        if self._almond_has_multiple_programs:
+            _id, context, sentence, target_code = parts[:4]
+        else:
+            _id, context, sentence, target_code = parts
 
         answer = target_code
         question = sentence
@@ -328,7 +292,10 @@ class AlmondDialogueNLUAgent(BaseAlmondTask):
         return field_name in ('answer', 'context')
 
     def _make_example(self, parts, dir_name=None, **kwargs):
-        _id, context, sentence, target_code = parts
+        if self._almond_has_multiple_programs:
+            _id, context, sentence, target_code = parts[:4]
+        else:
+            _id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
@@ -461,7 +428,10 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
         return ['em', 'bleu']
     
     def _make_example(self, parts, dir_name, **kwargs):
-        _id, sentence, target_code = parts
+        if self._almond_has_multiple_programs:
+            _id, sentence, target_code = parts[:3]
+        else:
+            _id, sentence, target_code = parts
         language = ISO_to_LANG.get(dir_name, 'English').lower()
         if kwargs.get('lang_as_question'):
             question = 'translate from {} to thingtalk'.format(language)
@@ -486,7 +456,10 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
         return ['em', 'bleu']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
-        _id, context, sentence, target_code = parts
+        if self._almond_has_multiple_programs:
+            _id, context, sentence, target_code = parts
+        else:
+            _id, context, sentence, target_code = parts[:4]
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,

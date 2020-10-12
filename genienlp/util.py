@@ -44,6 +44,8 @@ from .data_utils.iterator import Iterator
 
 logger = logging.getLogger(__name__)
 
+ENTITY_MATCH_REGEX = re.compile('^([A-Z].*)_[0-9]+$')
+
 
 class SpecialTokenMap:
     def __init__(self, pattern, forward_func, backward_func=None):
@@ -98,6 +100,56 @@ class SpecialTokenMap:
                 break
             
         return s
+
+
+def find_span_type(program, begin_index, end_index):
+    
+    if begin_index > 1 and program[begin_index - 2] == 'location:':
+        span_type = 'LOCATION'
+    elif end_index == len(program) - 1 or not program[end_index + 1].startswith('^^'):
+        span_type = 'QUOTED_STRING'
+    else:
+        if program[end_index + 1] == '^^tt:hashtag':
+            span_type = 'HASHTAG'
+        elif program[end_index + 1] == '^^tt:username':
+            span_type = 'USERNAME'
+        else:
+            span_type = 'GENERIC_ENTITY_' + program[end_index + 1][2:]
+        
+        end_index += 1
+    
+    return span_type, end_index
+
+
+def requote_program(program):
+    
+    program = program.split(' ')
+    requoted = []
+
+    in_string = False
+    begin_index = 0
+    i = 0
+    while i < len(program):
+        token = program[i]
+        if token == '"':
+            in_string = not in_string
+            if in_string:
+                begin_index = i + 1
+            else:
+                span_type, end_index = find_span_type(program, begin_index, i)
+                requoted.append(span_type)
+                i = end_index
+           
+        elif not in_string:
+            entity_match = ENTITY_MATCH_REGEX.match(token)
+            if entity_match is not None:
+                requoted.append(entity_match[1])
+            elif token != 'location:':
+                requoted.append(token)
+        
+        i += 1
+        
+    return ' '.join(requoted)
 
 
 def tokenizer(s):
@@ -211,7 +263,7 @@ def combine_folders_on_disk(folder_path_prefix, num_files, line_group_size, dele
             for file in files:
                 new_file_path = os.path.join(subdir.replace(folder_paths[i], folder_path_prefix), file)
                 if new_file_path not in new_to_olds_map:
-                    new_to_olds_map[new_file_path] = []    
+                    new_to_olds_map[new_file_path] = []
                 new_to_olds_map[new_file_path].append(os.path.join(subdir, file))
     
     for new, olds in new_to_olds_map.items():
@@ -434,7 +486,7 @@ def load_config_json(args):
                     'train_context_embeddings_after', 'train_question_embeddings_after',
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
-                    'override_question', 'override_context']
+                    'override_question', 'override_context', 'almond_has_multiple_programs']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
@@ -449,6 +501,8 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
+            elif r == 'almond_has_multiple_programs':
+                setattr(args, r, False)
             elif r == 'almond_lang_as_question':
                 setattr(args, r, False)
             elif r == 'locale':
