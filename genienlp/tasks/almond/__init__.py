@@ -161,6 +161,9 @@ class BaseAlmondTask(BaseTask):
 
         # initialize the database
         if args.do_ner:
+            self.TTtype2DBtype = dict()
+            for domain in self.args.almond_domains:
+                self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
             self._init_db()
 
     def _init_db(self):
@@ -173,7 +176,7 @@ class BaseAlmondTask(BaseTask):
             all_canonicals = marisa_trie.Trie(canonical2type.keys())
         
         if self.args.database_type == 'json':
-            self.db = Database(canonical2type, type2id, all_canonicals)
+            self.db = Database(canonical2type, type2id, all_canonicals, self.TTtype2DBtype)
         # elif self.args.database_type == 'local-elastic':
         #     self.db = LocalElasticDatabase(db_data_processed)
         # elif self.args.database_type == 'remote-elastic':
@@ -181,10 +184,6 @@ class BaseAlmondTask(BaseTask):
         #     if self.args.create_type_mapping:
         #         es_dump_type2id(self.db)
         #         es_dump_canonical2type(self.db)
-
-        self.TTtype2DBtype = dict()
-        for domain in self.args.almond_domains:
-            self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
 
     def is_contextual(self):
         return NotImplementedError
@@ -292,7 +291,7 @@ class BaseAlmondTask(BaseTask):
 
         if self.args.database_type == 'json':
             if self.args.retrieve_method == 'naive':
-                tokens_type_ids = self.db.lookup(tokens, self.args.lookup_method, self.args.max_alias_len)
+                tokens_type_ids = self.db.lookup(tokens, self.args.lookup_method, self.args.min_entity_len, self.args.max_entity_len)
             elif self.args.retrieve_method == 'entity-oracle':
                 answer_entities = quoted_pattern_with_space.findall(answer)
                 tokens_type_ids = self.db.lookup(tokens, answer_entities=answer_entities)

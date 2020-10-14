@@ -170,7 +170,8 @@ def parse_argv(parser):
     parser.add_argument('--dump_type2id', action='store_true', help='This will create the "type to id" mapping for all entities available in ES database')
     parser.add_argument('--dump_canonical2type', action='store_true', help='This will create the "canonical to type" mapping for all entities available in ES database')
 
-    parser.add_argument('--max_alias_len', type=int, default=3, help='N-gram maximum length for alias matching')
+    parser.add_argument('--min_entity_len', type=int, default=2, help='Minimum length for entities when ngrams lookup_method is used ')
+    parser.add_argument('--max_entity_len', type=int, default=4, help='Maximum length for entities when ngrams lookup_method is used ')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
     
     parser.add_argument('--retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
@@ -304,6 +305,9 @@ def post_parse(args):
         logger.warning('Paired training only works if sentence_batching is used as well.'
                         'Activating sentence_batching...')
         args.sentence_batching = True
+        
+    if args.min_entity_len <= 0:
+        logger.warning('min_entity_len should be equal to or greater than 1')
         
 
     args.train_batch_values = args.train_batch_tokens

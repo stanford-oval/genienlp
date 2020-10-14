@@ -436,8 +436,9 @@ def load_config_json(args):
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
                     'override_question', 'override_context', 'almond_has_multiple_programs',
-                    'do_ner', 'database_type', 'elastic_config', 'max_alias_len', 'database_dir', 'retrieve_method',
-                    'lookup_method', 'almond_domains', 'features', 'num_db_types', 'db_unk_id']
+                    'do_ner', 'database_type', 'elastic_config', 'min_entity_len', 'max_entity_len',
+                    'database_dir', 'retrieve_method', 'lookup_method', 'almond_domains', 'features',
+                    'num_db_types', 'db_unk_id']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
@@ -472,8 +473,10 @@ def load_config_json(args):
                 setattr(args, r, 'json')
             elif r == 'elastic_config':
                 setattr(args, r, None)
-            elif r == 'max_alias_len':
-                setattr(args, r, 3)
+            elif r == 'min_entity_len':
+                setattr(args, r, 2)
+            elif r == 'max_entity_len':
+                setattr(args, r, 4)
             elif r == 'database_dir':
                 setattr(args, r, None)
             elif r == 'retrieve_method':
