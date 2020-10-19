@@ -50,7 +50,7 @@ from .transformers_utils import MBartTokenizer, MarianMTModel
 from genienlp.util import set_seed
 from genienlp.paraphrase.data_utils import mask_tokens, add_special_tokens, load_and_cache_examples
 from genienlp.paraphrase.dataset import LengthSortedSampler
-from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints, check_args
+from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints, check_args, freeze_embeds, freeze_params
 
 
 logger = logging.getLogger(__name__)
@@ -498,6 +498,9 @@ def parse_argv(parser):
     parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
 
     parser.add_argument('--debug', action='store_true', help='print intermediate results for debugging')
+    parser.add_argument('--reset_weights', action='store_true', help='Remove all pre-training and train a model from scratch')
+    parser.add_argument("--freeze_encoder", action="store_true")
+    parser.add_argument("--freeze_embeds", action="store_true")
 
 
 def main(args):
@@ -553,12 +556,23 @@ def main(args):
     if args.block_size <= 0:
         args.block_size = tokenizer.max_len_single_sentence  # Our input block size will be the max possible for the model
     args.block_size = min(args.block_size, tokenizer.max_len_single_sentence)
-    model = model_class.from_pretrained(args.model_name_or_path,
-                                        from_tf=bool('.ckpt' in args.model_name_or_path),
-                                        config=config,
-                                        cache_dir=args.cache_dir if args.cache_dir else None)
+    
+    if args.reset_weights:
+        # only load model architecture but not the weights
+        model = model_class(config)
+    else:
+        model = model_class.from_pretrained(args.model_name_or_path,
+                                            from_tf=bool('.ckpt' in args.model_name_or_path),
+                                            config=config,
+                                            cache_dir=args.cache_dir if args.cache_dir else None)
+    
     add_special_tokens(model, tokenizer, additional_special_tokens=[args.start_special_token, args.end_special_token], pad_token=args.pad_token)
     model.to(args.device)
+
+    if args.freeze_embeds:
+        freeze_embeds(model)
+    if args.freeze_encoder:
+        freeze_params(model.get_encoder())
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # End of barrier to make sure only the first process in distributed training download model & vocab
