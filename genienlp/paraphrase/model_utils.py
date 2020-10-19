@@ -7,11 +7,48 @@ import logging
 import shutil
 import numpy as np
 
-from .transformers_utils import SPIECE_UNDERLINE
+from .transformers_utils import SPIECE_UNDERLINE, MARIAN_GROUP_MEMBERS
 
 from genienlp.metrics import computeBLEU
 
 logger = logging.getLogger(__name__)
+
+
+
+
+def check_args(args):
+    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:
+        if not args.tgt_lang:
+            raise ValueError('For translation task using Marian model, if target language is a group of languages, '
+                             'you have to specify the --tgt_lang flag.')
+        elif args.tgt_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 1)[1]]:
+            if args.tgt_lang == 'pl':
+                args.tgt_lang = 'pol'
+            else:
+                raise ValueError(
+                    'Target language is not in the model group languages, please specify the correct target language.')
+    
+    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] in MARIAN_GROUP_MEMBERS:
+        if not args.src_lang:
+            raise ValueError('For translation task using Marian model, if source language is a group of languages, '
+                             'you have to specify the --src_lang flag.')
+        elif args.src_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 2)[1]]:
+            raise ValueError(
+                'Dource language is not in the model group languages, please specify the correct source language.')
+    
+    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] not in MARIAN_GROUP_MEMBERS and args.tgt_lang:
+        logger.warning('Target language should not be provided when using models with single language pairs,'
+                       'otherwise the translation outputs will be incorrect; thus we ignore the target language you provided...')
+        args.tgt_lang = None
+    
+    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] not in MARIAN_GROUP_MEMBERS and args.src_lang:
+        logger.warning('Source language should not be provided when using models with single language pairs,'
+                       'otherwise the translation outputs will be incorrect; thus we ignore the source language you provided...')
+        args.src_lang = None
+    
+    if args.model_type == 'mbart' and not (args.tgt_lang and args.src_lang):
+        raise ValueError('Source and Target language should be provided when using mBART cc25 model')
+
 
 def sort_checkpoints(output_dir):
     return list(sorted(glob.glob(os.path.join(output_dir, "checkpointepoch=*.ckpt"), recursive=True)))

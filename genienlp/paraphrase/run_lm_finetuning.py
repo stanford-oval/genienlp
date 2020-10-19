@@ -41,16 +41,19 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   RobertaConfig, RobertaForMaskedLM, RobertaTokenizer,
                                   DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer,
                                   CamembertConfig, CamembertForMaskedLM, CamembertTokenizer,
-                                  BartConfig, BartForConditionalGeneration, BartTokenizer, MBartTokenizer)
+                                  BartConfig, BartForConditionalGeneration, BartTokenizer,
+                                  MarianConfig, MarianTokenizer)
+
+from .transformers_utils import BartForConditionalGeneration as MBartForConditionalGeneration
+from .transformers_utils import MBartTokenizer, MarianMTModel
 
 from genienlp.util import set_seed
 from genienlp.paraphrase.data_utils import mask_tokens, add_special_tokens, load_and_cache_examples
 from genienlp.paraphrase.dataset import LengthSortedSampler
-from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints
+from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints, check_args
 
 
 logger = logging.getLogger(__name__)
-
 
 
 MODEL_CLASSES = {
@@ -61,8 +64,18 @@ MODEL_CLASSES = {
     'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer),
     'camembert': (CamembertConfig, CamembertForMaskedLM, CamembertTokenizer),
     'bart': (BartConfig, BartForConditionalGeneration, BartTokenizer),
-    'mbart': (BartConfig, BartForConditionalGeneration, MBartTokenizer)
+    'mbart': (BartConfig, MBartForConditionalGeneration, MBartTokenizer),
+    'marian': (MarianConfig, MarianMTModel, MarianTokenizer)
 }
+
+def shift_tokens_right(input_ids, pad_token_id):
+    """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
+    prev_output_tokens = input_ids.clone()
+    index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
+    prev_output_tokens[:, 0] = input_ids.gather(1, index_of_eos).squeeze()
+    prev_output_tokens[:, 1:] = input_ids[:, :-1]
+    return prev_output_tokens
+
     
 
 def train(args, train_dataset, model, tokenizer):
@@ -174,12 +187,13 @@ def train(args, train_dataset, model, tokenizer):
                 steps_trained_in_current_epoch -= 1
                 continue
 
-            inputs, labels, position_ids, segment_ids = batch # batch is a tuple (input, labels, position_ids, segment_ids)
+            inputs, attention_mask, labels, position_ids, segment_ids = batch # batch is a tuple (input, labels, position_ids, segment_ids)
             
             if args.mlm:
                 inputs, labels = mask_tokens(inputs, labels, tokenizer, args.mlm_probability, args.mlm_ignore_index)
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
+            attention_mask = attention_mask.to(args.device)
             position_ids = position_ids.to(args.device)
             segment_ids = segment_ids.to(args.device)
             model.train()
@@ -187,24 +201,22 @@ def train(args, train_dataset, model, tokenizer):
             model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids}
             
             # prepare inputs for bart
-            if args.model_type in ['bart', 'mbart']:
-                # this should have been handled internally by huggingfaces's BART code
-                # TODO remove this once they add it
-                decoder_input_ids = labels[:, :-1].contiguous()
+            if args.model_type in ['bart', 'mbart', 'marian']:
+                model_inputs['attention_mask'] = attention_mask
+                # decoder_input_ids = labels[:, :-1].contiguous()
+                decoder_input_ids = shift_tokens_right(labels, args.mlm_ignore_index)
                 decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
-                lm_labels = labels[:, 1:].clone()
                 model_inputs['decoder_input_ids'] = decoder_input_ids
-                model_inputs['lm_labels'] = lm_labels
-            
-            # other models
-            else:
-                if args.mlm:
-                    model_inputs['masked_lm_labels'] = labels
-                else:
-                    model_inputs['labels'] = labels
-                
+                # labels = labels[:, 1:].clone()
+
             outputs = model(**model_inputs)
-            loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
+            lm_logits = outputs[0].contiguous()
+            assert lm_logits.shape[-1] == model.config.vocab_size
+            
+            # CrossEntropyLoss ignore_index defaults to -100
+            # If a different mlm_ignore_index is provided we make sure it is ignored when calculating the loss
+            ce_loss_fct = torch.nn.CrossEntropyLoss(ignore_index=args.mlm_ignore_index)
+            loss = ce_loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
 
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -320,27 +332,40 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
     model.eval()
 
     for batch in progress_bar(eval_dataloader, desc="Evaluating"):
-        inputs, labels, position_ids, segment_ids = batch
+        inputs, attention_mask, labels, position_ids, segment_ids = batch
         if args.mlm:
             inputs, labels = mask_tokens(inputs, labels, tokenizer, args.mlm_probability, args.mlm_ignore_index)
         inputs = inputs.to(args.device)
         labels = labels.to(args.device)
+        attention_mask = attention_mask.to(args.device)
         position_ids = position_ids.to(args.device)
         segment_ids = segment_ids.to(args.device)
 
         with torch.no_grad():
-            if args.mlm:
-                outputs = model(inputs, masked_lm_labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
+            if args.model_type in ['bart', 'mbart', 'marian']:
+                # decoder_input_ids = labels[:, :-1].contiguous()
+                decoder_input_ids = shift_tokens_right(labels, args.mlm_ignore_index)
+                decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
+                # labels = labels[:, 1:].clone()
+                outputs = model(inputs, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, position_ids=position_ids, token_type_ids=segment_ids)
             else:
-                if args.model_type == 'bart':
-                    decoder_input_ids = labels[:, :-1].contiguous()
-                    decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
-                    lm_labels = labels[:, 1:].clone()
-                    outputs = model(inputs, labels=labels, lm_labels=lm_labels, decoder_input_ids=decoder_input_ids, position_ids=position_ids, token_type_ids=segment_ids)
-                else:
-                    outputs = model(inputs, labels=labels, position_ids=position_ids, token_type_ids=segment_ids)
-            lm_loss = outputs[0]
-            eval_loss += lm_loss.mean().item()
+                outputs = model(inputs, attention_mask=attention_mask, position_ids=position_ids, token_type_ids=segment_ids)
+            lm_logits = outputs[0]
+            
+            # debugging
+            if args.debug:
+                print()
+                print([tokenizer.decode(t, skip_special_tokens=True) for t in lm_logits.max(-1)[1]])
+                
+            assert lm_logits.shape[-1] == model.config.vocab_size
+            
+            tokenizer.batch_decode(lm_logits.max(-1)[1])
+            
+            # Same behavior as modeling_bart.py, besides ignoring pad_token_id
+            ce_loss_fct = torch.nn.CrossEntropyLoss(ignore_index=args.mlm_ignore_index)
+            loss = ce_loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
+            eval_loss += loss.mean().item()
+            
         nb_eval_steps += 1
 
     eval_loss = eval_loss / nb_eval_steps
@@ -382,7 +407,7 @@ def parse_argv(parser):
                         help='If True, the model will be trained on input and output sequences, as opposed to only tokens of the output sequence')
     parser.add_argument("--reverse_position_ids", action='store_true',
                         help='If we assume we know the length of the output sequence beforehand, we can do a better job at generation.')
-
+    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument("--eval_data_file", default=None, type=str,
                         help="An optional input evaluation data file to evaluate the perplexity on (a text file).")
     parser.add_argument("--aux_eval_data_file", default=None, type=str,
@@ -424,7 +449,7 @@ def parse_argv(parser):
     parser.add_argument("--per_gpu_train_batch_size", default=4, type=int,
                         help="Batch size per GPU/CPU for training.")
     parser.add_argument("--per_gpu_eval_batch_size", default=4, type=int,
-                        help="Batch size per GPU/CPU for evaluation.")
+                        help="ze per GPU/CPU for evaluation.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--learning_rate", default=5e-5, type=float,
@@ -468,6 +493,11 @@ def parse_argv(parser):
                              "See details at https://nvidia.github.io/apex/amp.html")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="For distributed training: local_rank")
+    
+    parser.add_argument('--src_lang', type=str, default='en', help='source language used for translation task')
+    parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
+
+    parser.add_argument('--debug', action='store_true', help='print intermediate results for debugging')
 
 
 def main(args):
@@ -486,6 +516,8 @@ def main(args):
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
+    
+    check_args(args)
 
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
@@ -532,6 +564,18 @@ def main(args):
         torch.distributed.barrier()  # End of barrier to make sure only the first process in distributed training download model & vocab
 
     logger.info("Training/evaluation parameters %s", args)
+
+    model_input_prefix = ''
+    if args.model_type == 'marian' and args.tgt_lang:
+        # TODO check if extra space after pattern is necessary
+        model_input_prefix = '>>{}<< '.format(args.tgt_lang)
+    elif args.model_type == 't5':
+        if args.task == 'translate':
+            t5_task = 'translation_{}_to_{}'.format(args.src_lang, args.tgt_lang)
+        else:
+            t5_task = 'summarization'
+        model_input_prefix = config.task_specific_params[t5_task]['prefix']
+    args.model_input_prefix = model_input_prefix
 
     # Training
     if args.do_train:

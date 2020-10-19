@@ -41,7 +41,7 @@ except RuntimeError:
 import torch
 
 from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_GROUP_MEMBERS
+from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer
 
@@ -53,6 +53,7 @@ from transformers import PretrainedConfig
 from ..util import set_seed, combine_files_on_disk, split_file_on_disk, get_part_path
 from .GPT2Seq2Seq import GPT2Seq2Seq
 from .data_utils import group_together
+from .model_utils import check_args
 
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -208,38 +209,10 @@ def run_multi_process_generation(args):
     else:
         raise ValueError('Model should be either GPT2, BART, MBART, or Marian')
     
+    check_args(args)
+    
     if args.trained_model_type and args.trained_model_type != '' and args.model_type != args.trained_model_type:
         raise ValueError('The loaded model type does not match with what the user provided')
-    
-    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:
-        if not args.tgt_lang:
-            raise ValueError('For translation task using Marian model, if target language is a group of languages, '
-                             'you have to specify the --tgt_lang flag.')
-        elif args.tgt_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 1)[1]]:
-            if args.tgt_lang == 'pl':
-                args.tgt_lang = 'pol'
-            else:
-                raise ValueError('Target language is not in the model group languages, please specify the correct target language.')
-        
-    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] in MARIAN_GROUP_MEMBERS:
-        if not args.src_lang:
-            raise ValueError('For translation task using Marian model, if source language is a group of languages, '
-                             'you have to specify the --src_lang flag.')
-        elif args.src_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 2)[1]]:
-            raise ValueError('Dource language is not in the model group languages, please specify the correct source language.')
-
-    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] not in MARIAN_GROUP_MEMBERS and args.tgt_lang:
-        logger.warning('Target language should not be provided when using models with single language pairs,'
-                       'otherwise the translation outputs will be incorrect; thus we ignore the target language you provided...')
-        args.tgt_lang = None
-
-    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] not in MARIAN_GROUP_MEMBERS and args.src_lang:
-        logger.warning('Source language should not be provided when using models with single language pairs,'
-                       'otherwise the translation outputs will be incorrect; thus we ignore the source language you provided...')
-        args.src_lang = None
-        
-    if args.model_type == 'mbart' and not (args.tgt_lang and args.src_lang):
-        raise ValueError('Source and Target language should be provided when using mBART cc25 model')
     
     if args.prompt_column is not None and args.copy is not None and args.copy != 0:
         raise ValueError('Cannot copy from the input and use prompt at the same time. Disable either --copy or --prompt_column.')
@@ -445,7 +418,7 @@ def run_single_process_generation(args, config):
                     layer_attention = all_encoder_attentions[-1]
                     sample_layer_attention = layer_attention[sample_index, :, :, :]
 
-                    if tgt_tokens[0] in [tokenizer.pad_token, tokenizer.bos_token, special_tokens['sep_token']] or \
+                    if tgt_tokens[0] in [tokenizer.pad_token, special_tokens['bos_token'], special_tokens['sep_token']] or \
                             (decoder_start_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]):
                         # shift target tokens left to match the attention positions
                         tgt_tokens = tgt_tokens[1:]

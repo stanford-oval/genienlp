@@ -36,6 +36,7 @@ class TextDataset(Dataset):
                 self.segment1_id = self.prompt_token_id
                 self.segment2_id = self.eos_token_id
             self.input_ids = []
+            self.attention_mask = []
             self.labels = []
             self.position_ids = []
             self.segment_ids = []
@@ -45,20 +46,42 @@ class TextDataset(Dataset):
 
             if not self.evaluate and args.aux_train_data_file is not None:
                 number_of_lines = get_number_of_lines(args.aux_train_data_file)
+                lines = min(args.subsample, number_of_lines)
+                i = 0
                 with open(args.aux_train_data_file, encoding="utf-8") as f_in:
                     for line in progress_bar(f_in, desc='Tokenizing Auxiliary File', total=number_of_lines):
                         parts = list(map(lambda part: part.strip(), line.split('\t')))
-                    if 'bart' in args.model_type:
-                        self._add_bart_example(parts[0], None, args)
-                    else:
-                        self._add_example(parts[0], None, args)
+                        i += 1
+                        if i > lines:
+                            break
+                        
+                        parts[0] = args.model_input_prefix + parts[0]
+                        if args.model_type == 'bart':
+                            self._add_bart_example(parts[0], None)
+                        elif args.model_type == 'mbart':
+                            self._add_mbart_example(parts[0], None, args)
+                        elif args.model_type == 'marian':
+                            self._add_marian_example(parts[0], None)
+                        else:
+                            self._add_example(parts[0], None, args)
 
             number_of_lines = get_number_of_lines(file_path)
+            lines = min(args.subsample, number_of_lines)
+            i = 0
             with open(file_path, encoding="utf-8") as f_in:
                 for line in progress_bar(f_in, desc='Tokenizing', total=number_of_lines):
                     parts = list(map(lambda part: part.strip(), line.split('\t')))
-                    if 'bart' in args.model_type:
-                        self._add_bart_example(parts[0], parts[1], args)
+                    i += 1
+                    if i > lines:
+                        break
+                        
+                    parts[0] = args.model_input_prefix + parts[0]
+                    if args.model_type == 'bart':
+                        self._add_bart_example(parts[0], parts[1])
+                    elif args.model_type == 'mbart':
+                        self._add_mbart_example(parts[0], parts[1], args)
+                    elif args.model_type == 'marian':
+                        self._add_marian_example(parts[0], parts[1])
                     else:
                         self._add_example(parts[0], parts[1], args)
             if args.sort_by_length:
@@ -105,38 +128,78 @@ class TextDataset(Dataset):
             position_ids2 = reversed(position_ids2)
         self.position_ids.append(list(range(prompt_token_location+1)) + list(position_ids2))
         self.segment_ids.append([self.segment1_id]*(prompt_token_location+1) + [self.segment2_id]*(len(input_ids)-prompt_token_location-1))
+        
+        # ignored
+        self.attention_mask.append([1]*len(input_ids))
+        
 
-
-    def _add_bart_example(self, input_sequence, output_sequence, args):
-        # TODO we should make use of tokenizer.build_inputs_with_special_tokens(sequence1, sequence2). Add special tokens manualy only if our model does not support two sequences (like GPT2).
+    def _add_bart_example(self, input_sequence, output_sequence):
         
         encoded_input_ids = self.tokenizer.encode_plus(input_sequence)['input_ids']
+        encoded_attention_mask = self.tokenizer.encode_plus(input_sequence)['attention_mask']
         encoded_output_ids = self.tokenizer.encode_plus(output_sequence)['input_ids']
         
         self.max_input_length = max(self.max_input_length, len(encoded_input_ids))
         self.max_output_length = max(self.max_output_length, len(encoded_output_ids))
         
         self.input_ids.append(encoded_input_ids)
+        self.attention_mask.append(encoded_attention_mask)
         self.position_ids.append(list(range(len(encoded_input_ids))))
         self.segment_ids.append([self.segment1_id] * len(encoded_input_ids))
         
+        self.labels.append(encoded_output_ids)
+
+    def _add_mbart_example(self, input_sequence, output_sequence, args):
+    
+        model_inputs = self.tokenizer.prepare_seq2seq_batch([input_sequence], args.src_lang, [output_sequence], args.tgt_lang)
+    
+        encoded_input_ids = model_inputs['input_ids'].tolist()[0]
+        encoded_attention_mask = model_inputs['attention_mask'].tolist()[0]
+        encoded_output_ids = model_inputs['labels'].tolist()[0]
+    
+        self.max_input_length = max(self.max_input_length, len(encoded_input_ids))
+        self.max_output_length = max(self.max_output_length, len(encoded_output_ids))
+    
+        self.input_ids.append(encoded_input_ids)
+        self.attention_mask.append(encoded_attention_mask)
+        self.position_ids.append(list(range(len(encoded_input_ids))))
+        self.segment_ids.append([self.segment1_id] * len(encoded_input_ids))
+    
+        self.labels.append(encoded_output_ids)
+
+    def _add_marian_example(self, input_sequence, output_sequence):
+    
+        model_inputs = self.tokenizer.prepare_translation_batch([input_sequence], [output_sequence])
+    
+        encoded_input_ids = model_inputs['input_ids'].tolist()[0]
+        encoded_attention_mask = model_inputs['attention_mask'].tolist()[0]
+        encoded_output_ids = model_inputs['decoder_input_ids'].tolist()[0]
+    
+        self.max_input_length = max(self.max_input_length, len(encoded_input_ids))
+        self.max_output_length = max(self.max_output_length, len(encoded_output_ids))
+    
+        self.input_ids.append(encoded_input_ids)
+        self.attention_mask.append(encoded_attention_mask)
+        self.position_ids.append(list(range(len(encoded_input_ids))))
+        self.segment_ids.append([self.segment1_id] * len(encoded_input_ids))
+    
         self.labels.append(encoded_output_ids)
         
     def __len__(self):
         return len(self.input_ids)
 
     def __getitem__(self, item):
-        return torch.tensor(self.input_ids[item]), torch.tensor(self.labels[item]), torch.tensor(self.position_ids[item]), torch.tensor(self.segment_ids[item])
-
+        return torch.tensor(self.input_ids[item]), torch.tensor(self.attention_mask[item]), torch.tensor(self.labels[item]), torch.tensor(self.position_ids[item]), torch.tensor(self.segment_ids[item])
 
     def collate_fn(self, batch):
-        (inputs, labels, position_ids, segment_ids) = zip(*batch)
+        (inputs, attention_mask, labels, position_ids, segment_ids) = zip(*batch)
         inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=self.tokenizer.pad_token_id)
         labels_pad = pad_sequence(labels, batch_first=True, padding_value=-100)
+        attention_mask = pad_sequence(attention_mask, batch_first=True, padding_value=0)
         position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
         segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
     
-        return inputs_pad, labels_pad, position_ids, segment_ids
+        return inputs_pad, attention_mask, labels_pad, position_ids, segment_ids
 
 
 class LengthSortedSampler(torch.utils.data.Sampler):
