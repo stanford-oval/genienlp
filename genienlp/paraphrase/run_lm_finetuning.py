@@ -498,9 +498,14 @@ def parse_argv(parser):
     parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
 
     parser.add_argument('--debug', action='store_true', help='print intermediate results for debugging')
-    parser.add_argument('--reset_weights', action='store_true', help='Remove all pre-training and train a model from scratch')
+    parser.add_argument('--no_pretraining', action='store_true', help='Remove all pre-training and train a model from scratch')
     parser.add_argument("--freeze_encoder", action="store_true")
     parser.add_argument("--freeze_embeds", action="store_true")
+
+    parser.add_argument('--input_column', type=int, required=True,
+                        help='The column in the input file which contains the input sentences.')
+    parser.add_argument('--gold_column', type=int, default=None,
+                        help='The column in the input file which contains the gold sentences. Defaults to --input_column if no gold is available.')
 
 
 def main(args):
@@ -521,6 +526,9 @@ def main(args):
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
     
     check_args(args)
+    
+    if args.gold_column is None:
+        args.gold_column = args.input_column
 
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
@@ -557,7 +565,7 @@ def main(args):
         args.block_size = tokenizer.max_len_single_sentence  # Our input block size will be the max possible for the model
     args.block_size = min(args.block_size, tokenizer.max_len_single_sentence)
     
-    if args.reset_weights:
+    if args.no_pretraining:
         # only load model architecture but not the weights
         model = model_class(config)
     else:

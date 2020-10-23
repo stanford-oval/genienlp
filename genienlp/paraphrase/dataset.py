@@ -55,15 +55,15 @@ class TextDataset(Dataset):
                         if i > lines:
                             break
                         
-                        parts[0] = args.model_input_prefix + parts[0]
+                        parts[args.input_column] = args.model_input_prefix + parts[args.input_column]
                         if args.model_type == 'bart':
-                            self._add_bart_example(parts[0], None)
+                            self._add_bart_example(parts[args.input_column], None)
                         elif args.model_type == 'mbart':
-                            self._add_mbart_example(parts[0], None, args)
+                            self._add_mbart_example(parts[args.input_column], None, args)
                         elif args.model_type == 'marian':
-                            self._add_marian_example(parts[0], None)
+                            self._add_marian_example(parts[args.input_column], None)
                         else:
-                            self._add_example(parts[0], None, args)
+                            self._add_example(parts[args.input_column], None, args)
 
             number_of_lines = get_number_of_lines(file_path)
             lines = min(args.subsample, number_of_lines)
@@ -75,15 +75,15 @@ class TextDataset(Dataset):
                     if i > lines:
                         break
                         
-                    parts[0] = args.model_input_prefix + parts[0]
+                    parts[args.input_column] = args.model_input_prefix + parts[args.input_column]
                     if args.model_type == 'bart':
-                        self._add_bart_example(parts[0], parts[1])
+                        self._add_bart_example(parts[args.input_column], parts[args.gold_column])
                     elif args.model_type == 'mbart':
-                        self._add_mbart_example(parts[0], parts[1], args)
+                        self._add_mbart_example(parts[args.input_column], parts[args.gold_column], args)
                     elif args.model_type == 'marian':
-                        self._add_marian_example(parts[0], parts[1])
+                        self._add_marian_example(parts[args.input_column], parts[args.gold_column])
                     else:
-                        self._add_example(parts[0], parts[1], args)
+                        self._add_example(parts[args.input_column], parts[args.gold_column], args)
             if args.sort_by_length:
                 _, self.input_ids, self.labels, self.position_ids, self.segment_ids = tuple(zip(*sorted(list(zip([len(x) for x in self.input_ids], self.input_ids, self.labels, self.position_ids, self.segment_ids)))))
             logger.info('Maximum input length: %d', self.max_input_length)
