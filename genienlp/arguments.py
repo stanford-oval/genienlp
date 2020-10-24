@@ -222,7 +222,7 @@ def parse_argv(parser):
                         help='Ok if the save directory already exists, i.e. overwrite is ok')
 
     parser.add_argument('--skip_cache', action='store_true',
-                        help='whether to use exisiting cached splits or generate new ones')
+                        help='whether to use existing cached splits or generate new ones')
     parser.add_argument('--cache_input_data', action='store_true',
                         help='Cache examples from input data for faster subsequent trainings')
     parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')

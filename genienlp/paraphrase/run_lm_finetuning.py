@@ -494,7 +494,7 @@ def parse_argv(parser):
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="For distributed training: local_rank")
     
-    parser.add_argument('--src_lang', type=str, default='en', help='source language used for translation task')
+    parser.add_argument('--src_lang', type=str, help='source language used for translation task')
     parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
 
     parser.add_argument('--debug', action='store_true', help='print intermediate results for debugging')
@@ -506,6 +506,8 @@ def parse_argv(parser):
                         help='The column in the input file which contains the input sentences.')
     parser.add_argument('--gold_column', type=int, default=None,
                         help='The column in the input file which contains the gold sentences. Defaults to --input_column if no gold is available.')
+    
+    parser.add_argument('--cache_input_data', action='store_true', help='Cache examples from input data for faster subsequent trainings')
 
 
 def main(args):

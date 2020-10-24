@@ -88,8 +88,9 @@ class TextDataset(Dataset):
                 _, self.input_ids, self.labels, self.position_ids, self.segment_ids = tuple(zip(*sorted(list(zip([len(x) for x in self.input_ids], self.input_ids, self.labels, self.position_ids, self.segment_ids)))))
             logger.info('Maximum input length: %d', self.max_input_length)
             logger.info("Saving features into cached file %s", cached_features_file)
-            with open(cached_features_file, 'wb') as handle:
-                pickle.dump((self.input_ids, self.labels, self.position_ids, self.segment_ids), handle, protocol=pickle.HIGHEST_PROTOCOL)
+            if args.cache_input_data:
+                with open(cached_features_file, 'wb') as handle:
+                    pickle.dump((self.input_ids, self.labels, self.position_ids, self.segment_ids), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def _add_example(self, input_sequence, output_sequence, args):
         # TODO we should make use of tokenizer.build_inputs_with_special_tokens(sequence1, sequence2). Add special tokens manualy only if our model does not support two sequences (like GPT2).
