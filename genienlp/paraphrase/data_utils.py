@@ -56,18 +56,6 @@ def group_together(file_paths, num_samples):
     return all_groups
 
 
-def load_and_cache_examples(args, tokenizer, evaluate=False, aux=False):
-    if evaluate:
-        if aux:
-            file_path = args.aux_eval_data_file
-        else:
-            file_path = args.eval_data_file
-    else:
-        file_path = args.train_data_file
-    dataset = TextDataset(tokenizer, args, file_path=file_path, block_size=args.block_size, evaluate=evaluate)
-    return dataset
-
-
 def mask_tokens(inputs, labels, tokenizer, mlm_probability, mlm_ignore_index):
     """
     Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.

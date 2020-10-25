@@ -47,9 +47,9 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
 from .transformers_utils import BartForConditionalGeneration as MBartForConditionalGeneration
 from .transformers_utils import MBartTokenizer, MarianMTModel
 
-from genienlp.util import set_seed
-from genienlp.paraphrase.data_utils import mask_tokens, add_special_tokens, load_and_cache_examples
-from genienlp.paraphrase.dataset import LengthSortedSampler
+from genienlp.util import set_seed, split_file_on_disk
+from genienlp.paraphrase.data_utils import mask_tokens, add_special_tokens
+from genienlp.paraphrase.dataset import LengthSortedSampler, TextDataset
 from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints, check_args, freeze_embeds, freeze_params
 
 
@@ -78,7 +78,7 @@ def shift_tokens_right(input_ids, pad_token_id):
 
     
 
-def train(args, train_dataset, model, tokenizer):
+def train(args, train_dataset, model, tokenizer, input_file_name=None, multiple_shards=False, init_global_step=0, init_epochs_trained=0):
     """ Train the model """
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter(logdir=args.tensorboard_dir)
@@ -142,6 +142,7 @@ def train(args, train_dataset, model, tokenizer):
 
     # Train!
     logger.info("***** Running training *****")
+    logger.info("  Input file name = %s", input_file_name)
     logger.info("  Num examples = %d", len(train_dataset))
     logger.info("  Num Epochs = %d", args.num_train_epochs)
     logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
@@ -150,8 +151,8 @@ def train(args, train_dataset, model, tokenizer):
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
 
-    global_step = 0
-    epochs_trained = 0
+    global_step = init_global_step
+    epochs_trained = init_epochs_trained
     steps_trained_in_current_epoch = 0
     # Check if continuing training from a checkpoint
     if os.path.exists(args.model_name_or_path):
@@ -165,13 +166,16 @@ def train(args, train_dataset, model, tokenizer):
         logger.info("  Continuing training from global step %d", global_step)
         logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
 
-    tr_loss, logging_loss = 0.0, 0.0
+    tr_loss, logging_loss = 0, 0
 
     model_to_resize = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
     model_to_resize.resize_token_embeddings(len(tokenizer))
 
     model.zero_grad()
-    train_iterator = prange(epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
+    if multiple_shards:
+        train_iterator = prange(epochs_trained, 1, desc="Epoch", disable=args.local_rank not in [-1, 0])
+    else:
+        train_iterator = prange(epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproducibility (even between python 2 and 3)
     best_eval_perplexity = float('Inf')
     for _ in train_iterator:
@@ -299,14 +303,19 @@ def train(args, train_dataset, model, tokenizer):
     if args.local_rank in [-1, 0]:
         tb_writer.close()
 
-    return global_step, tr_loss / global_step
+    return global_step, tr_loss
 
 
 def evaluate(args, model, tokenizer, prefix="", aux=False):
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_output_dir = args.output_dir
+    
+    if aux:
+        file_path = args.aux_eval_data_file
+    else:
+        file_path = args.eval_data_file
 
-    eval_dataset = load_and_cache_examples(args, tokenizer, evaluate=True, aux=aux)
+    eval_dataset = TextDataset(tokenizer, args, file_path=file_path, block_size=args.block_size, evaluate=True)
 
     if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(eval_output_dir)
@@ -460,7 +469,7 @@ def parse_argv(parser):
                         help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float,
                         help="Max gradient norm.")
-    parser.add_argument("--num_train_epochs", default=1.0, type=float,
+    parser.add_argument("--num_train_epochs", default=1, type=int,
                         help="Total number of training epochs to perform.")
     parser.add_argument("--max_steps", default=-1, type=int,
                         help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
@@ -499,6 +508,7 @@ def parse_argv(parser):
 
     parser.add_argument('--debug', action='store_true', help='print intermediate results for debugging')
     parser.add_argument('--no_pretraining', action='store_true', help='Remove all pre-training and train a model from scratch')
+    parser.add_argument("--freeze_decoder", action="store_true")
     parser.add_argument("--freeze_encoder", action="store_true")
     parser.add_argument("--freeze_embeds", action="store_true")
 
@@ -508,6 +518,10 @@ def parse_argv(parser):
                         help='The column in the input file which contains the gold sentences. Defaults to --input_column if no gold is available.')
     
     parser.add_argument('--cache_input_data', action='store_true', help='Cache examples from input data for faster subsequent trainings')
+    
+    parser.add_argument('--num_input_chunks', default=1, type=int, help='We split input into multiple chunks, then load and train on each chunk individually')
+    parser.add_argument('--delete_after_chunking', action='store_true', help='Delete input file after chinking it')
+
 
 
 def main(args):
@@ -583,6 +597,9 @@ def main(args):
         freeze_embeds(model)
     if args.freeze_encoder:
         freeze_params(model.get_encoder())
+    if args.freeze_decoder:
+        if args.model_type in ['bart', 'mbart', 'marian']:
+            freeze_params(model.model.decoder)
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # End of barrier to make sure only the first process in distributed training download model & vocab
@@ -603,17 +620,46 @@ def main(args):
 
     # Training
     if args.do_train:
-        if args.local_rank not in [-1, 0]:
-            torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training process the dataset, and the others will use the cache
+        
+        if args.num_input_chunks > 1:
+    
+            all_input_files = split_file_on_disk(args.train_data_file, args.num_input_chunks, delete=args.delete_after_chunking)
+            global_step, epochs_trained, total_tr_loss = 0, 0, 0.0
+            
+            for n in range(args.num_train_epochs):
+                
+                for i in range(args.num_input_chunks):
+                
+                    if args.local_rank not in [-1, 0]:
+                        torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training process the dataset, and the others will use the cache
+                    
+                    train_dataset = TextDataset(tokenizer, args, file_path=all_input_files[i], block_size=args.block_size, evaluate=True)
+            
+                    if args.local_rank == 0:
+                        torch.distributed.barrier()
+    
+                    global_step, tr_loss = train(args, train_dataset, model, tokenizer, all_input_files[i], True, global_step, epochs_trained)
+                    total_tr_loss += tr_loss
 
-        train_dataset = load_and_cache_examples(args, tokenizer, evaluate=False)
+                epochs_trained += 1
 
-        if args.local_rank == 0:
-            torch.distributed.barrier()
+                logger.info(" global_step = %s, average loss = %s", global_step, total_tr_loss / global_step)
+            
+            for file in all_input_files:
+                os.remove(file)
+            
+        else:
+            if args.local_rank not in [-1, 0]:
+                torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training process the dataset, and the others will use the cache
 
-        global_step, tr_loss = train(args, train_dataset, model, tokenizer)
-        logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
+            train_dataset = TextDataset(tokenizer, args, file_path=args.train_data_file, block_size=args.block_size, evaluate=True)
 
+            if args.local_rank == 0:
+                torch.distributed.barrier()
+
+            global_step, tr_loss = train(args, train_dataset, model, tokenizer, args.train_data_file, False)
+            
+            logger.info(" global_step = %s, average loss = %s", global_step, tr_loss / global_step)
 
     # Evaluation
     results = {}

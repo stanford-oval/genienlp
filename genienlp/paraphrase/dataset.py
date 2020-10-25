@@ -87,8 +87,9 @@ class TextDataset(Dataset):
             if args.sort_by_length:
                 _, self.input_ids, self.labels, self.position_ids, self.segment_ids = tuple(zip(*sorted(list(zip([len(x) for x in self.input_ids], self.input_ids, self.labels, self.position_ids, self.segment_ids)))))
             logger.info('Maximum input length: %d', self.max_input_length)
-            logger.info("Saving features into cached file %s", cached_features_file)
+            
             if args.cache_input_data:
+                logger.info("Saving features into cached file %s", cached_features_file)
                 with open(cached_features_file, 'wb') as handle:
                     pickle.dump((self.input_ids, self.labels, self.position_ids, self.segment_ids), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
