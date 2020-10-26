@@ -241,27 +241,32 @@ class BaseAlmondTask(BaseTask):
             # this is thingtalk specific and also domain specific
             # (music with syntax: ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ... )
             # (spotify with syntax: ... param:artists contains " XXX " ^^com.spotify:artist and param:id =~ " XXX " ...)
-            # this needs to be changed if annotations convention changes
+            # (another syntax: ... filter param:geo:Location == location: " XXXX " and ...)
+            # ** this should change if annotations convention changes **
         
             # assume first syntax
             idx = answer.index('" ' + ent + ' "')
-            schema_entity_type = answer[:idx].split()[-2]
-        
-            if schema_entity_type.startswith('param:'):
-                schema_entity_type = schema_entity_type.strip('()').rsplit(':', 1)[1]
-            else:
-                # check for second syntax
-                schema_entity_type = answer[idx + len('" ' + ent + ' "'):].split()
-                if len(schema_entity_type) == 1:
-                    schema_entity_type = 'id'
-                else:
-                    schema_entity_type = schema_entity_type[0]
-                if schema_entity_type.startswith('^^'):
-                    schema_entity_type = schema_entity_type.rsplit(':', 1)[1]
-                else:
-                    schema_entity_type = self.db.unk_type
-        
-            if schema_entity_type not in self.TTtype2DBtype.keys():
+
+            schema_entity_type = None
+
+            answer_tokens_after_entity = answer[idx + len('" ' + ent + ' "'):].split()
+            if answer_tokens_after_entity[0].startswith('^^'):
+                schema_entity_type = answer_tokens_after_entity[0].rsplit(':', 1)[1]
+                
+            if schema_entity_type is None:
+            
+                answer_tokens_before_entity = answer[:idx].split()
+                
+                # check last three tokens to find one that starts with param
+                for i in range(3):
+                    if answer_tokens_before_entity[-i].startswith('param:'):
+                        schema_entity_type = answer_tokens_before_entity[-i]
+                        break
+            
+                if schema_entity_type:
+                    schema_entity_type = schema_entity_type.strip('()').rsplit(':', 1)[1]
+                    
+            if schema_entity_type is None or schema_entity_type not in self.TTtype2DBtype.keys():
                 schema_type = self.db.unk_type
             else:
                 schema_type = self.TTtype2DBtype[schema_entity_type]

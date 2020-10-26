@@ -439,6 +439,7 @@ def run_single_process_generation(args, config):
                     tgt_tokens = tokenizer.convert_ids_to_tokens(out_cropped)
                     
                     # get last layer attention vectors
+                    # TODO: get penultimate layer of attention vectors
                     layer_attention = all_encoder_attentions[-1]
                     sample_layer_attention = layer_attention[sample_index, :, :, :]
 
