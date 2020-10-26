@@ -69,7 +69,9 @@ class Server:
         return Batch.from_examples([ex], self.numericalizer, device=self.device,
                                    append_question_to_context_too=self.args.append_question_to_context_too,
                                    override_question=self.args.override_question,
-                                   override_context=self.args.override_context)
+                                   override_context=self.args.override_context,
+                                   features=self.args.features,
+                                   db_unk_id=self.args.db_unk_id)
 
     def handle_request(self, line):
         request = json.loads(line)
@@ -87,10 +89,13 @@ class Server:
         question = request['question']
         if not question:
             question = task.default_question
-        answer = ''
+        
+        if 'answer' in request.keys():
+            answer = request['answer']
+        else:
+            answer = ''
 
-        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize,
-                              lower=self.args.lower)
+        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
 
         batch = self.numericalize_example(ex)
         predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
@@ -156,6 +161,7 @@ def parse_argv(parser):
                         help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
+    parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
 
 
 def main(args):

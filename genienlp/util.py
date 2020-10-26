@@ -437,14 +437,14 @@ def load_config_json(args):
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_lang_as_question',
                     'override_question', 'override_context', 'almond_has_multiple_programs',
                     'do_ner', 'database_type', 'elastic_config', 'min_entity_len', 'max_entity_len',
-                    'database_dir', 'retrieve_method', 'lookup_method', 'almond_domains', 'features',
-                    'num_db_types', 'db_unk_id']
+                    'retrieve_method', 'lookup_method', 'almond_domains', 'features',
+                    'num_db_types', 'db_unk_id', 'use_encoder_loss']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
             # num_beams used to be an integer in previous versions of the code
             config['num_beams'] = [config['num_beams']]
-        overwrite = ['val_batch_size', 'num_beams', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty', 'temperature', 'reduce_metrics']
+        overwrite = ['database_dir', 'val_batch_size', 'num_beams', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty', 'temperature', 'reduce_metrics']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -453,7 +453,7 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
-            elif r in ['do_ner',
+            elif r in ['do_ner', 'use_encoder_loss',
                        'almond_has_multiple_programs', 'almond_lang_as_question', 'almond_preprocess_context'
                        'train_encoder_embeddings', 'append_question_to_context_too']:
                 setattr(args, r, False)
