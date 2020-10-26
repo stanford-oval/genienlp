@@ -42,7 +42,8 @@ from ..base_task import BaseTask
 from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
-from ...data_utils.database import Database, DOMAIN_TYPE_MAPPING
+from ...data_utils.database import Database
+from ...data_utils.database_utils import DOMAIN_TYPE_MAPPING
 from ..base_dataset import Split
 from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char, process, chunk_file
 
