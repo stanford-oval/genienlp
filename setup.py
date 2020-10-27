@@ -65,6 +65,7 @@ setuptools.setup(
         'pytrie==0.3.1',
         'wordfreq==2.3.2',
         'elasticsearch==7.9.1',
-
+        'ujson==1.35',
+        'marisa_trie==0.7.5'
     ]
 )
