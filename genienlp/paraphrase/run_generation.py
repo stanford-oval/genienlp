@@ -357,8 +357,7 @@ def run_single_process_generation(args, config):
     stop_token_ids = [tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens]
     
     batch_idx = 0
-    for batch in tqdm(range(math.ceil(len(all_context_ids) / args.batch_size)), desc="Batch"):
-        logging.info('') # to make kubectl properly print tqdm progress bar
+    for batch in range(math.ceil(len(all_context_ids) / args.batch_size)):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_ids)))
         batch_size = batch_slice[1] - batch_slice[0]
         batch_context_tokens = all_context_ids[batch_slice[0]: batch_slice[1]]
@@ -503,8 +502,8 @@ def run_single_process_generation(args, config):
                 batch_outputs[sample_index].append(text)
                 
         all_outputs.extend(batch_outputs)
-        if batch_idx < 1:
-            logger.info('First batch output: %s', str(all_outputs))
+        # if batch_idx < 1:
+            # logger.info('First batch output: %s', str(all_outputs))
         batch_idx += 1
 
     # sort the results back to their original order
