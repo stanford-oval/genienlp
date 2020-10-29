@@ -199,20 +199,16 @@ def run(args, device):
                     for p in preds:
                         predictions_wo_params[i].append(requote_program(p))
 
-                metrics_wo_params = calculate_and_reduce_metrics(predictions_wo_params, answers_wo_params, metrics_to_compute, args)
-                # rename em to sm
-                metrics_wo_params['sm'] = metrics_wo_params['em']
-                del metrics_wo_params['em']
+                # TODO add this as a proper metric in metrics.py
+                metrics['sm'] = calculate_and_reduce_metrics(predictions_wo_params, answers_wo_params, metrics_to_compute, args)['em']
 
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')
-                    results_file.write(json.dumps(metrics_wo_params) + '\n')
 
                 if not args.silent:
                     for i, (c, p, a) in enumerate(zip(contexts, predictions, answers)):
                         logger.info(f'\nContext {i+1}: {c}\nPrediction {i + 1} ({sum(args.num_outputs)} outputs): {p}\nAnswer {i + 1}: {a}\n')
                     logger.info(metrics)
-                    logger.info(metrics_wo_params)
                     
                 task_scores[task].append((len(answers), metrics[task.metrics[0]]))
     

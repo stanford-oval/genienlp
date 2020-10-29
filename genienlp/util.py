@@ -277,8 +277,9 @@ def combine_folders_on_disk(folder_path_prefix, num_files, line_group_size, dele
                         if new_json is None:
                             try:
                                 new_json = json.load(f)
-                            except JSONDecodeError as e:
-                                logger.info('Failed to read json file %s with content:\n %s', new, f.read())
+                            except JSONDecodeError:
+                                f.seek(0)
+                                logger.info('Failed to read json file %s with content:\n %s', old, f.read())
                         else:
                             for k, v in json.load(f).items():
                                 new_json[k] += v
