@@ -143,6 +143,8 @@ def parse_argv(parser):
     parser.add_argument('--masked_paraphrasing', action='store_true', help='mask input tokens and infill them using denoising pretrained model')
     parser.add_argument('--fairseq_mask_prob', type=float, default=0.15, help='Probability of an input token being masked in the sentence for masked_paraphrasing')
     
+    parser.add_argument('--verbose', action='store_true', help='log additional information for debugging purposes')
+    
     parser.add_argument('--fp16', action='store_true',
                         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit. On certain GPUs (e.g. Nvidia V100) improves the inference speed")
     parser.add_argument('--fp16_opt_level', type=str, default='O1',
@@ -501,8 +503,8 @@ def run_single_process_generation(args, config):
                 batch_outputs[sample_index].append(text)
                 
         all_outputs.extend(batch_outputs)
-        # if batch_idx < 1:
-            # logger.info('First batch output: %s', str(all_outputs))
+        if batch_idx < 1 and args.verbose:
+            logger.info('First batch output: %s', str(all_outputs))
         batch_idx += 1
 
     # sort the results back to their original order
