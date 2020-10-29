@@ -120,7 +120,7 @@ class BaseAlmondTask(BaseTask):
 
     @property
     def metrics(self):
-        return ['em', 'bleu']
+        return ['em', 'sm', 'bleu']
 
     def _is_program_field(self, field_name):
         raise NotImplementedError()
@@ -341,7 +341,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
 
     @property
     def metrics(self):
-        return ['em', 'bleu']
+        return ['em', 'sm', 'bleu']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
@@ -425,7 +425,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     
     @property
     def metrics(self):
-        return ['em', 'bleu']
+        return ['em', 'sm', 'bleu']
     
     def _make_example(self, parts, dir_name, **kwargs):
         if self._almond_has_multiple_programs:
@@ -453,7 +453,7 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
 
     @property
     def metrics(self):
-        return ['em', 'bleu']
+        return ['em', 'sm', 'bleu']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:

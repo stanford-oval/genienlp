@@ -20,7 +20,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-from tqdm import tqdm
 import math
 import json
 import re
@@ -143,6 +142,8 @@ def parse_argv(parser):
     
     parser.add_argument('--masked_paraphrasing', action='store_true', help='mask input tokens and infill them using denoising pretrained model')
     parser.add_argument('--fairseq_mask_prob', type=float, default=0.15, help='Probability of an input token being masked in the sentence for masked_paraphrasing')
+    
+    parser.add_argument('--verbose', action='store_true', help='log additional information for debugging purposes')
     
     parser.add_argument('--fp16', action='store_true',
                         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit. On certain GPUs (e.g. Nvidia V100) improves the inference speed")
@@ -357,8 +358,7 @@ def run_single_process_generation(args, config):
     stop_token_ids = [tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens]
     
     batch_idx = 0
-    for batch in tqdm(range(math.ceil(len(all_context_ids) / args.batch_size)), desc="Batch"):
-        logging.info('') # to make kubectl properly print tqdm progress bar
+    for batch in range(math.ceil(len(all_context_ids) / args.batch_size)):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_ids)))
         batch_size = batch_slice[1] - batch_slice[0]
         batch_context_tokens = all_context_ids[batch_slice[0]: batch_slice[1]]
@@ -503,7 +503,7 @@ def run_single_process_generation(args, config):
                 batch_outputs[sample_index].append(text)
                 
         all_outputs.extend(batch_outputs)
-        if batch_idx < 1:
+        if batch_idx < 1 and args.verbose:
             logger.info('First batch output: %s', str(all_outputs))
         batch_idx += 1
 
