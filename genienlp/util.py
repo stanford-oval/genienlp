@@ -387,7 +387,8 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
-                     append_question_to_context_too=False, override_question=None, override_context=None, features=None, db_unk_id=0):
+                     append_question_to_context_too=False, override_question=None, override_context=None,
+                     features=None, features_size=None, features_default_val=None):
     
     iterator = Iterator(dataset,
                         batch_size,
@@ -400,7 +401,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                                            paired=paired and train, max_pairs=max_pairs, groups=iterator.groups,
                                            append_question_to_context_too=append_question_to_context_too,
                                            override_question=override_question, override_context=override_context,
-                                           features=features, db_unk_id=db_unk_id)
+                                           features=features, features_size=features_size, features_default_val=features_default_val)
         
     return torch.utils.data.DataLoader(iterator, batch_size=None, collate_fn=collate_function)
 

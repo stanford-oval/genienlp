@@ -174,6 +174,11 @@ def parse_argv(parser):
     parser.add_argument('--max_entity_len', type=int, default=4, help='Maximum length for entities when ngrams lookup_method is used ')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
     
+    parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
+    parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
+    parser.add_argument('--bootleg_dump_features', action='store_true', help='Just dump bootleg features and exit code')
+    parser.add_argument('--bootleg_skip_feature_creation', action='store_true', help='Skip creating features and use dumped features')
+    
     parser.add_argument('--retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
                         help='how to retrieve types for entity tokens (bootleg option is wip')
     
@@ -183,8 +188,10 @@ def parse_argv(parser):
     
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
-    parser.add_argument('--features', nargs='+', default=[], help='Features that will be extracted for each entity: [type, freq] for now.'
+    parser.add_argument('--features', nargs='+', type=str, default=['type', 'freq'], help='Features that will be extracted for each entity: "type" and "freq" are supported.'
                                                                         ' Order is important')
+    parser.add_argument('--features_size', nargs='+', type=int, default=[1, 1], help='Max length of each feature vector. All features are padded up to this length')
+    parser.add_argument('--features_default_val', nargs='+', type=float, default=[0, 1.0], help='Max length of each feature vector. All features are padded up to this length')
 
 
     parser.add_argument('--encoder_embeddings', default='glove+char',
@@ -242,7 +249,6 @@ def parse_argv(parser):
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
     parser.add_argument('--gradient_accumulation_steps', default=1, type=int, help='Number of accumulation steps. Useful to effectively get larger batch sizes.')
     
-
     parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside args.save')
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')
 
@@ -267,6 +273,8 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'],
                         help='growth strategy for curriculum')
+    
+
 
 
 def post_parse(args):
@@ -295,8 +303,11 @@ def post_parse(args):
     if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
         raise ValueError('Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
     
-    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1) :
+    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
+    
+    if len(args.features) != len(args.features_size):
+        raise ValueError('You should specify max feature size for each feature you provided')
 
     if args.override_context and args.append_question_to_context_too:
         raise ValueError('You cannot use append_question_to_context_too when overriding context')

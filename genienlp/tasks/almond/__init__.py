@@ -36,14 +36,16 @@ import multiprocessing as mp
 import ujson
 import marisa_trie
 import re
+import sys
 from wordfreq import zipf_frequency
 
 from ..base_task import BaseTask
 from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
-from ...data_utils.example import Example
+from ...data_utils.example import Example, Feature
 from ...data_utils.database import Database
 from ...data_utils.database_utils import DOMAIN_TYPE_MAPPING
+from ...data_utils.bootleg import Bootleg
 from ..base_dataset import Split
 from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char, process, chunk_file
 
@@ -57,13 +59,21 @@ class AlmondDataset(CQA):
 
     base_url = None
 
-    def __init__(self, path, *, make_example, subsample=None, cached_path=None, skip_cache=False, cache_input_data=False, **kwargs):
+    def __init__(self, path, *, make_example, **kwargs):
         
         #TODO fix cache_path for multilingual task
+        subsample = kwargs.get('subsample')
+        cached_path = kwargs.get('cached_path')
+        skip_cache = kwargs.get('skip_cache', True)
+        cache_input_data = kwargs.get('cache_input_data', False)
+        bootleg = kwargs.get('bootleg', None)
+        num_workers = kwargs.get('num_workers', 0)
+        features_size = kwargs.get('features_size')
+        features_default_val = kwargs.get('features_default_val')
+        bootleg_dump_features = kwargs.get('bootleg_dump_features')
+        
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         dir_name = os.path.basename(os.path.dirname(path))
-
-        num_workers = kwargs.get('num_workers', 0)
 
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
@@ -75,7 +85,7 @@ class AlmondDataset(CQA):
                     n += 1
 
             max_examples = min(n, subsample) if subsample is not None else n
-
+            
             if num_workers > 0:
                 num_processes = min(num_workers, int(mp.cpu_count()))
                 logger.info(f'Using {num_processes} workers...')
@@ -104,7 +114,46 @@ class AlmondDataset(CQA):
                                 'example_batch_size': 1, 'make_process_example': make_example,
                                 'kwargs': kwargs}
                 examples = process(process_args)
-
+                
+            if bootleg:
+                config_ovrrides = bootleg.fixed_overrides
+                
+                input_file_dir = os.path.dirname(path)
+                input_file_name = os.path.basename(path.rsplit('.', 1)[0] + '_bootleg.jsonl')
+                
+                data_overrides = [
+                    "--data_config.data_dir", input_file_dir,
+                    "--data_config.test_dataset.file", input_file_name
+                ]
+                
+                # get config args
+                config_ovrrides.extend(data_overrides)
+                config_args = bootleg.create_config(config_ovrrides)
+                
+                # create jsonl files from input examples
+                # jsonl is the input format bootleg expects
+                bootleg.create_jsonl(path, examples)
+                
+                # extract mentions and mention spans in the sentence and write them to output jsonl files
+                bootleg.extract_mentions(path)
+                
+                # find the right entity candidate for each mention
+                # extract type ids for each token in input sentence
+                all_token_type_ids = bootleg.parse_mentions(config_args, input_file_name[:-len('_bootleg.jsonl')], mode='dump_preds', type_size=features_size[0], type_default_val=int(features_default_val[0]))
+                
+                # override type_ids with extracted types
+                assert len(examples) == len(all_token_type_ids)
+                for ex, tokens_type_ids in zip(examples, all_token_type_ids):
+                    if bootleg.is_contextual:
+                        for i in range(len(tokens_type_ids)):
+                            ex.question_feature[i] = ex.question_feature[i]._replace(type_ids=tokens_type_ids[i])
+                            ex.context_plus_question_feature[i + len(ex.context)] = ex.context_plus_question_feature[i + len(ex.context)]._replace(type_ids=tokens_type_ids[i])
+                            
+                    else:
+                        for i in range(len(tokens_type_ids)):
+                            ex.context_feature[i] = ex.context_feature[i]._replace(type_ids=tokens_type_ids[i])
+                            ex.context_plus_question_feature[i] = ex.context_plus_question_feature[i]._replace(type_ids=tokens_type_ids[i])
+                            
             if cache_input_data:
                 os.makedirs(os.path.dirname(cache_name), exist_ok=True)
                 logger.info(f'Caching data to {cache_name}')
@@ -161,11 +210,18 @@ class BaseAlmondTask(BaseTask):
         self.no_feature_fields = no_feature_fields
 
         # initialize the database
+        self.db = None
+        self.bootleg = None
+        
         if args.do_ner:
+            self.unk_id = args.features_default_val[0]
             self.TTtype2DBtype = dict()
-            for domain in self.args.almond_domains:
-                self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
-            self._init_db()
+            if self.args.retrieve_method == 'bootleg':
+                self._init_bootleg()
+            else:
+                for domain in self.args.almond_domains:
+                    self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
+                self._init_db()
 
     def _init_db(self):
         if self.args.database_type in ['json', 'local-elastic']:
@@ -177,7 +233,7 @@ class BaseAlmondTask(BaseTask):
             all_canonicals = marisa_trie.Trie(canonical2type.keys())
         
         if self.args.database_type == 'json':
-            self.db = Database(canonical2type, type2id, all_canonicals, self.TTtype2DBtype)
+            self.db = Database(canonical2type, self.type2id, all_canonicals, self.TTtype2DBtype)
         # elif self.args.database_type == 'local-elastic':
         #     self.db = LocalElasticDatabase(db_data_processed)
         # elif self.args.database_type == 'remote-elastic':
@@ -185,6 +241,9 @@ class BaseAlmondTask(BaseTask):
         #     if self.args.create_type_mapping:
         #         es_dump_type2id(self.db)
         #         es_dump_canonical2type(self.db)
+
+    def _init_bootleg(self):
+        self.bootleg = Bootleg(self.args.bootleg_input_dir, self.args.bootleg_model, self.unk_id, self.args.num_workers, self.is_contextual(), self.args.bootleg_skip_feature_creation)
 
     def is_contextual(self):
         return NotImplementedError
@@ -200,7 +259,7 @@ class BaseAlmondTask(BaseTask):
         raise NotImplementedError()
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
     
     def _detokenize_cjk_chars(self, sentence):
         output = []
@@ -343,16 +402,11 @@ class BaseAlmondTask(BaseTask):
 
         else:
             mask = [not is_entity(token) and not is_device(token) for token in tokens]
-        
-        if hasattr(self, 'db'):
-            unk_id = self.db.unk_id
-        else:
-            unk_id = 0
             
-        tokens_type_ids = [unk_id]*len(tokens)
-        tokens_freqs = None
+        tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokens))]
+        tokens_freqs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(len(tokens))]
 
-        if self.args.do_ner and field_name not in self.no_feature_fields:
+        if self.args.do_ner and self.bootleg is None and field_name not in self.no_feature_fields:
             if 'type' in self.args.features:
                 tokens_type_ids = self.find_types(tokens, answer)
             if 'freq' in self.args.features:
@@ -362,7 +416,7 @@ class BaseAlmondTask(BaseTask):
                     print()
                     print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_type_ids)],
                           sep='\n')
-            
+             
         zip_list = []
         if tokens_type_ids:
             assert len(tokens) == len(tokens_type_ids)
@@ -370,7 +424,7 @@ class BaseAlmondTask(BaseTask):
         if tokens_freqs:
             assert len(tokens) == len(tokens_freqs)
             zip_list.append(tokens_freqs)
-        features = list(zip(*zip_list))
+        features = [Feature(*tup) for tup in zip(*zip_list)]
         
         return tokens, mask, features
 
@@ -592,7 +646,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
         
         for dir in all_dirs:
             almond_dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
-                                                         make_example=self._make_example, **kwargs)
+                                                         make_example=self._make_example, bootleg=self.bootleg, **kwargs)
             all_datasets.append(almond_dataset)
             
         used_fields = [field for field in all_datasets[0]._fields if getattr(all_datasets[0], field) is not None]

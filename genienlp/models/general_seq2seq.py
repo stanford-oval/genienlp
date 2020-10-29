@@ -86,7 +86,7 @@ class Seq2Seq(PreTrainedModel):
         masked_batch = batch._replace(context=batch.context._replace(value=masked_input))
 
         self_attended_context, _final_context, _context_rnn_state, _final_question, _question_rnn_state = \
-            self.encoder(masked_batch)
+            self.encoder(masked_batch, self.args.features_size, self.args.features_default_val)
         context_logits = self.context_pretrain_lm_head(self_attended_context[-1])
 
         context_logits = context_logits.view(-1, self.numericalizer.num_tokens)
@@ -96,7 +96,7 @@ class Seq2Seq(PreTrainedModel):
 
     def _normal_forward(self, batch, current_token_id, past=None, expansion_factor=1, generation_dict=None, encoder_output=None):
         if encoder_output is None:
-            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state, context_rnn_state_entities_masked = self.encoder(batch)
+            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state, context_rnn_state_entities_masked = self.encoder(batch, self.args.features_size, self.args.features_default_val)
         else:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state, context_rnn_state_entities_masked = encoder_output
         encoder_loss = None
@@ -169,7 +169,7 @@ class Seq2Seq(PreTrainedModel):
                  do_sample
                  ):
 
-        encoder_output = self.encoder(batch)
+        encoder_output = self.encoder(batch, self.args.features_size, self.args.features_default_val)
         self.config.vocab_size = len(batch.decoder_vocab)
         self.config.is_encoder_decoder = False # in order to make it work with `transformers` generation code, we should treat this as a decoder-only model
         batch_size = len(batch.example_id)
@@ -197,16 +197,3 @@ class Seq2Seq(PreTrainedModel):
         generated = torch.cat((generated[:, 0:1], generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)), dim=1) # map everything to full vocabulary except BOS which already is in full vocabulary
 
         return generated
-        
-
-    
-            
-        
-    
-    
-    
-    
-    
-    
-    
-    

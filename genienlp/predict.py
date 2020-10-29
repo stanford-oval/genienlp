@@ -140,7 +140,8 @@ def run(args, device):
             'override_question': args.override_question,
             'override_context': args.override_context,
             'features': args.features,
-            'db_unk_id': args.db_unk_id
+            'features_size': args.features_size,
+            'features_default_val': args.features_default_val
         }
         task_iter = []
         task_languages = args.pred_languages[task_index]

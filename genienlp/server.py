@@ -71,8 +71,9 @@ class Server:
                                    override_question=self.args.override_question,
                                    override_context=self.args.override_context,
                                    features=self.args.features,
-                                   db_unk_id=self.args.db_unk_id)
-
+                                   features_size=self.args.features_size,
+                                   features_default_val=self.args.features_default_val
+                                   )
     def handle_request(self, line):
         request = json.loads(line)
 

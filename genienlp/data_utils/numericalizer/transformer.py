@@ -105,7 +105,7 @@ class TransformerNumericalizer(object):
         self.decoder_vocab = DecoderVocabulary(self._decoder_words, self._tokenizer,
                                                pad_token=self.pad_token, eos_token=self.eos_token)
 
-    def encode_single(self, minibatch, decoder_vocab, device=None, max_length=-1, db_unk_id=0):
+    def encode_single(self, minibatch, decoder_vocab, features_size, features_default_val, device=None, max_length=-1):
         assert isinstance(minibatch, list)
 
         # apply word-piece tokenization to everything first
@@ -133,7 +133,6 @@ class TransformerNumericalizer(object):
                     wp_features.append(features[j])
                 assert len(wps) == len(wp_features)
             all_wp_features.append(wp_features)
-            
 
         if max_length > -1:
             max_len = max_length
@@ -155,22 +154,22 @@ class TransformerNumericalizer(object):
                                  [self.init_token] + \
                                  list(wp_tokens[:max_len]) + \
                                  [self.eos_token]
-                for wp_feature in wp_features_unpacked:
-                    padded_features_example = [db_unk_id] * max(0, max_len - len(wp_feature)) + \
-                                     [db_unk_id] + \
+                for i, wp_feature in enumerate(wp_features_unpacked):
+                    padded_features_example = [[features_default_val[i]] * features_size[i] for _ in range(max(0, max_len - len(wp_feature)))] + \
+                                     [[features_default_val[i]] * features_size[i]] + \
                                      list(wp_feature[:max_len]) + \
-                                     [db_unk_id]
+                                     [[features_default_val[i]] * features_size[i]]
                     padded_features.append(padded_features_example)
             else:
                 padded_example = [self.init_token] + \
                                  list(wp_tokens[:max_len]) + \
                                  [self.eos_token] + \
                                  [self.pad_token] * max(0, max_len - len(wp_tokens))
-                for wp_feature in wp_features_unpacked:
-                    padded_features_example = [db_unk_id] + \
+                for i, wp_feature in enumerate(wp_features_unpacked):
+                    padded_features_example = [[features_default_val[i]] * features_size[i]] + \
                                      list(wp_feature[:max_len]) + \
-                                     [db_unk_id] + \
-                                     [db_unk_id] * max(0, max_len - len(wp_feature))
+                                     [[features_default_val[i]] * features_size[i]] + \
+                                     [[features_default_val[i]] * features_size[i] for _ in range(max(0, max_len - len(wp_feature)))]
                     padded_features.append(padded_features_example)
 
             all_padded.append(padded_example)
@@ -183,11 +182,13 @@ class TransformerNumericalizer(object):
         length = torch.tensor(lengths, dtype=torch.int32, device=device)
         numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
         decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-        feature = torch.tensor(all_padded_features, dtype=torch.float32, device=device)
         
-        if feature.ndim < 3:
-            feature = feature.unsqueeze(-1)  # (batch, num_features, length)
-        feature = feature.transpose(1, 2)
+        # concat all features
+        all_tensor_features = []
+        for token_features in all_padded_features:
+            all_tensor_features.append(torch.cat([torch.tensor(data, dtype=torch.float32, device=device) for data in token_features], dim=-1))
+
+        feature = torch.stack(all_tensor_features)
 
         return SequentialField(length=length, value=numerical, limited=decoder_numerical, feature=feature)
 

@@ -124,8 +124,8 @@ class TransformerEmbedding(torch.nn.Module):
 
         return position_embeddings
 
-    def forward(self, input: torch.Tensor, entity_ids=None, entity_masking=None, padding=None):
-        inputs = {'input_ids': input, 'attention_mask': (~padding).to(dtype=torch.float)}
+    def forward(self, input: torch.Tensor, entity_ids=None, entity_masking=None, mask_entities=False, padding=None, output_hidden_states=True):
+        inputs = {'input_ids': input, 'attention_mask': (~padding).to(dtype=torch.float), 'mask_entities': mask_entities, 'output_hidden_states': output_hidden_states}
         if entity_ids is not None:
             inputs['entity_ids'] = entity_ids
         if entity_masking is not None:
@@ -234,7 +234,6 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             # load the tokenizer once to ensure all files are downloaded
             AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
 
-            # if num_db_types > 0:
             if emb_type in BERT_PRETRAINED_MODEL_ARCHIVE_LIST:
                 transformer_model = BertModelV2(config, num_db_types, db_unk_id).from_pretrained(emb_type,
                                                                                                  num_db_types=num_db_types,
@@ -248,9 +247,6 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
                                                                                                      cache_dir=cachedir,
                                                                                                      output_hidden_states=True)
             context_vectors.append(TransformerEmbedding(transformer_model))
-            # else:
-            #     context_vectors.append(
-            #         TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
 
         else:
             if numericalizer is not None:
@@ -283,7 +279,6 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             # load the tokenizer once to ensure all files are downloaded
             AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
 
-            # if num_db_types > 0:
             if emb_type in BERT_PRETRAINED_MODEL_ARCHIVE_LIST:
                 transformer_model = BertModelV2(config, num_db_types, db_unk_id).from_pretrained(emb_type,
                                                                                                  num_db_types=num_db_types,
@@ -297,9 +292,6 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
                                                                                                      cache_dir=cachedir,
                                                                                                      output_hidden_states=True)
             question_vectors.append(TransformerEmbedding(transformer_model))
-            # else:
-            #     question_vectors.append(
-            #         TransformerEmbedding(AutoModel.from_pretrained(emb_type, config=config, cache_dir=cachedir)))
 
         else:
             if numericalizer is not None:

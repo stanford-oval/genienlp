@@ -1,3 +1,5 @@
+import json
+import os
 from tqdm import tqdm
 
 
@@ -42,6 +44,7 @@ def process_id(ex):
     if id_[0] == 'T':
         id_ = id_[1:]
     return id_
+
 
 
 def chunk_file(input_src, chunk_files, chunk_size, num_chunks):

@@ -36,7 +36,7 @@ from transformers.modeling_bart import LayerNorm, LearnedPositionalEmbedding, Ba
 from transformers.modeling_bert import BertModel, BertEmbeddings
 
 from transformers.modeling_t5 import T5ForConditionalGeneration, T5PreTrainedModel, T5LayerNorm, T5Block
-from transformers.modeling_utils import calc_banned_ngram_tokens, calc_banned_bad_words_ids, top_k_top_p_filtering
+from transformers.generation_utils import calc_banned_ngram_tokens, calc_banned_bad_words_ids, top_k_top_p_filtering
 
 from transformers.tokenization_roberta import RobertaTokenizer
 from transformers.tokenization_utils import BatchEncoding
@@ -947,7 +947,8 @@ class BertEmbeddingsV2(BertEmbeddings):
         if num_db_types > 0:
             self.entity_type_embeddings = nn.Embedding(num_db_types, config.hidden_size, padding_idx=db_unk_id)
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, entity_ids=None, entity_masking=None, inputs_embeds=None):
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None,
+                entity_ids=None, entity_masking=None, mask_entities=False, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -961,26 +962,26 @@ class BertEmbeddingsV2(BertEmbeddings):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        if entity_masking is not None:
-            input_ids = input_ids * entity_masking
+        if entity_masking is not None and mask_entities:
+            input_ids = input_ids * ~(entity_masking.max(-1)[0].bool())
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
         
-        #TODO currently if encoder loss is used we don't use type embeddings
-        # make it so that both are possible too
-        if entity_masking is not None:
-            embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-        
-        elif self.num_db_types > 0:
-            if entity_ids is None:
-                entity_ids = torch.zeros(input_shape, dtype=torch.long, device=device).fill_(self.db_unk_id)
+        if self.num_db_types > 0:
+            # average embedding of different types
+            # size (batch, length, num_types, emb_dim)
             entity_type_embeddings = self.entity_type_embeddings(entity_ids)
-            embeddings = inputs_embeds + position_embeddings + token_type_embeddings + entity_type_embeddings
-        else:
-            embeddings = inputs_embeds + position_embeddings + token_type_embeddings
+            type_lengths = entity_masking.sum(-1)
+            type_lengths[type_lengths == 0] = 1
+
+            entity_type_embeddings = entity_type_embeddings.sum(-2) / type_lengths.unsqueeze(-1)
+            
+            embeddings += entity_type_embeddings
 
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
@@ -997,10 +998,6 @@ class BertModelV2(BertModel):
         self.embeddings = BertEmbeddingsV2(config, num_db_types, db_unk_id)
         self.init_weights()
 
-    # def _reset_embeddings(self, num_db_types, db_unk_id):
-    #     self.embeddings = BertEmbeddingsV2(self.config, num_db_types, db_unk_id)
-    #     self.num_db_types = num_db_types
-
     def forward(
             self,
             input_ids=None,
@@ -1009,11 +1006,19 @@ class BertModelV2(BertModel):
             position_ids=None,
             entity_ids=None,
             entity_masking=None,
+            mask_entities=False,
             head_mask=None,
             inputs_embeds=None,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
+            output_attentions=None,
+            output_hidden_states=None,
     ):
+        
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1055,7 +1060,8 @@ class BertModelV2(BertModel):
 
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
-            entity_ids=entity_ids, entity_masking=entity_masking, inputs_embeds=inputs_embeds
+            entity_ids=entity_ids, entity_masking=entity_masking, mask_entities=mask_entities,
+            inputs_embeds=inputs_embeds
         )
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1063,6 +1069,8 @@ class BertModelV2(BertModel):
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
@@ -1085,7 +1093,8 @@ class RobertaEmbeddingsV2(BertEmbeddingsV2):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size,
                                                 padding_idx=self.padding_idx)
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, entity_ids=None, entity_masking=None, inputs_embeds=None):
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None,
+                entity_ids=None, entity_masking=None, mask_entities=False, inputs_embeds=None):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
@@ -1094,7 +1103,7 @@ class RobertaEmbeddingsV2(BertEmbeddingsV2):
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         return super().forward(
-            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, entity_ids=entity_ids, entity_masking=entity_masking, inputs_embeds=inputs_embeds
+            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, entity_ids=entity_ids, entity_masking=entity_masking, mask_entities=mask_entities, inputs_embeds=inputs_embeds
         )
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
