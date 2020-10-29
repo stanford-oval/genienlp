@@ -49,7 +49,7 @@ from . import models
 from .data_utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
 from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
-    have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path, requote_program
+    have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
 from .validate import generate_with_model, calculate_and_reduce_metrics
 
 logger = logging.getLogger(__name__)
@@ -190,17 +190,6 @@ def run(args, device):
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
                 metrics = calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args)
-
-                answers_wo_params = []
-                for a in answers:
-                    answers_wo_params.append(requote_program(a))
-                predictions_wo_params = [[] for _ in range(len(predictions))]
-                for i, preds in enumerate(predictions):
-                    for p in preds:
-                        predictions_wo_params[i].append(requote_program(p))
-
-                # TODO add this as a proper metric in metrics.py
-                metrics['sm'] = calculate_and_reduce_metrics(predictions_wo_params, answers_wo_params, metrics_to_compute, args)['em']
 
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')

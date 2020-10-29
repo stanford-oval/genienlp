@@ -40,6 +40,7 @@ from pyrouge import Rouge155
 from sacrebleu import corpus_bleu
 
 from .tasks.generic_dataset import Query
+from .util import requote_program
 
 
 def to_lf(s, table):
@@ -220,6 +221,8 @@ def f1_score(prediction, ground_truth):
 def exact_match(prediction, ground_truth):
     return prediction == ground_truth
 
+def structure_match(prediction, ground_truth):
+    return requote_program(prediction) == requote_program(ground_truth)
 
 def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
     scores_for_ground_truths = []
@@ -235,6 +238,10 @@ def computeF1(outputs, targets):
 
 def computeEM(outputs, targets):
     outs = [metric_max_over_ground_truths(exact_match, o, t) for o, t in zip(outputs, targets)]
+    return sum(outs) / len(outputs) * 100
+
+def computeSM(outputs, targets):
+    outs = [metric_max_over_ground_truths(structure_match, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
 
 
@@ -440,10 +447,15 @@ def compute_metrics(greedy, answer, requested_metrics, batch_mode=True):
     em = computeEM(greedy, answer)
     metric_keys += ['em']
     metric_values += [em]
+    if 'sm' in requested_metrics:
+        sm = computeSM(greedy, answer)
+        metric_keys.append('sm')
+        metric_values.append(sm)
     if 'bleu' in requested_metrics:
         bleu = computeBLEU(greedy, answer)
         metric_keys.append('bleu')
         metric_values.append(bleu)
+
     if 'avg_rouge' in requested_metrics:
         rouge = computeROUGE(greedy, answer)
         metric_keys += ['rouge1', 'rouge2', 'rougeL', 'avg_rouge']
