@@ -1,6 +1,8 @@
 import copy
 import re
 
+from typing import Union
+
 from transformers.modeling_bart import LayerNorm, LearnedPositionalEmbedding, BartEncoder, SelfAttention, invert_mask, \
     SinusoidalPositionalEmbedding, BartModel, BartForConditionalGeneration
 
@@ -131,7 +133,7 @@ class DecoderLayer(nn.Module):
             layer_state = {}
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
-            
+
         # Self Attention
         x, self_attn_weights = self.self_attn(
             query=x,
@@ -326,6 +328,152 @@ class BartModel(BartModel):
         self.init_weights()
 
 
+class NBartForConditionalGeneration(BartForConditionalGeneration):
+    base_model_prefix = "model"
+
+    def __init__(self, config: BartConfig):
+        super().__init__(config)
+        base_model = BartModel(config)
+        self.model = base_model
+        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
+
+    def _generate_no_beam_search(
+        self,
+        input_ids,
+        cur_len,
+        max_length,
+        min_length,
+        do_sample,
+        temperature,
+        top_k,
+        top_p,
+        repetition_penalty,
+        no_repeat_ngram_size,
+        bad_words_ids,
+        bos_token_id,
+        pad_token_id,
+        eos_token_id,
+        decoder_start_token_id,
+        batch_size,
+        encoder_outputs,
+        attention_mask,
+        use_cache,
+        model_specific_kwargs,
+    ):
+        """ Generate sequences for each example without beam search (num_beams == 1).
+            All returned sequence are generated independantly.
+        """
+        # length of generated sentences / unfinished sentences
+        unfinished_sents = input_ids.new(batch_size).fill_(1)
+        sent_lengths = input_ids.new(batch_size).fill_(max_length)
+
+        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
+        confidences = []
+
+        while cur_len < max_length:
+            model_inputs = self.prepare_inputs_for_generation(
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
+            )
+
+            if model_specific_kwargs.get('mc_dropout'):
+                sampled_outputs = []
+                for _ in range(10):
+                    sampled_outputs.append(self(**model_inputs)[0])
+                sampled_outputs = torch.stack(sampled_outputs, 3)
+                outputs = torch.mean(sampled_outputs, 3)
+                next_token_logits = outputs[:, -1, :]
+            else:
+                outputs = self(**model_inputs)
+                next_token_logits = outputs[0][:, -1, :]
+
+            # if model has past, then set the past variable to speed up decoding
+            if self._use_cache(outputs, use_cache):
+                past = outputs[1]
+
+            # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
+            if repetition_penalty != 1.0:
+                self.enforce_repetition_penalty_(next_token_logits, batch_size, 1, input_ids, repetition_penalty)
+
+            if no_repeat_ngram_size > 0:
+                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
+                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+                banned_tokens = calc_banned_ngram_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
+                for batch_idx in range(batch_size):
+                    next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
+
+            if bad_words_ids is not None:
+                # calculate a list of banned tokens according to bad words
+                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
+
+                for batch_idx in range(batch_size):
+                    next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
+
+            # set eos token prob to zero if min_length is not reached
+            if eos_token_id is not None and cur_len < min_length:
+                next_token_logits[:, eos_token_id] = -float("inf")
+
+            if do_sample:
+                # Temperature (higher temperature => more likely to sample low probability tokens)
+                if temperature != 1.0:
+                    next_token_logits = next_token_logits / temperature
+                # Top-p/top-k filtering
+                next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
+                # Sample
+                probs = F.softmax(next_token_logits, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
+                if model_specific_kwargs.get('mc_dropout'):
+                    sampled_probs = F.softmax(sampled_outputs, dim=1)
+                    confidences.append(torch.std(sampled_probs, dim=2))
+                else:
+                    confidences.append(torch.gather(probs, 1, next_token.unsqueeze(-1)))
+            else:
+                # Greedy decoding
+                next_token = torch.argmax(next_token_logits, dim=-1)
+
+            # update generations and finished sentences
+            if eos_token_id is not None:
+                # pad finished sentences if eos_token_id exist
+                tokens_to_add = next_token * unfinished_sents + (pad_token_id) * (1 - unfinished_sents)
+            else:
+                tokens_to_add = next_token
+
+            # add token and increase length by one
+            input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
+            cur_len = cur_len + 1
+
+            if eos_token_id is not None:
+                eos_in_sents = tokens_to_add == eos_token_id
+                # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
+                is_sents_unfinished_and_token_to_add_is_eos = unfinished_sents.mul(eos_in_sents.long()).bool()
+                sent_lengths.masked_fill_(is_sents_unfinished_and_token_to_add_is_eos, cur_len)
+                # unfinished_sents is set to zero if eos in sentence
+                unfinished_sents.mul_((~eos_in_sents).long())
+
+            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            if unfinished_sents.max() == 0:
+                break
+
+            # extend attention_mask for new generated input if only decoder
+            if self.config.is_encoder_decoder is False:
+                attention_mask = torch.cat(
+                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+                )
+
+        # if there are different sentences lengths in the batch, some batches have to be padded
+        if sent_lengths.min().item() != sent_lengths.max().item():
+            assert pad_token_id is not None, "`Pad_token_id` has to be defined if batches have different lengths"
+            # finished sents are filled with pad_token
+            decoded = input_ids.new(batch_size, sent_lengths.max().item()).fill_(pad_token_id)
+        else:
+            decoded = input_ids
+
+        for hypo_idx, hypo in enumerate(input_ids):
+            decoded[hypo_idx, : sent_lengths[hypo_idx]] = hypo[: sent_lengths[hypo_idx]]
+
+        confidences = torch.stack(confidences, 1).squeeze(-1)
+        return decoded, confidences
+
+
 class BartForConditionalGeneration(BartForConditionalGeneration):
     base_model_prefix = "model"
 
@@ -334,7 +482,7 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
         base_model = BartModel(config)
         self.model = base_model
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
-        
+
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
 
@@ -350,7 +498,7 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
                     encoder_outputs, decoder_cached_states = past[0], past[1]
             else:
                 encoder_outputs, decoder_cached_states = past[0], None
-                
+
         if not isinstance(encoder_outputs, tuple):
             encoder_outputs = (encoder_outputs, )
 
@@ -392,7 +540,7 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
         # length of generated sentences / unfinished sentences
         unfinished_sents = input_ids.new(batch_size).fill_(1)
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
-        
+
         if getattr(self.config, 'encoder_layers', None):
             num_layers = self.config.encoder_layers
         else:
@@ -406,10 +554,10 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
         all_encoder_attentions = [input_ids.new_full([batch_size, num_heads, max_length,
                                                      encoder_outputs[0].size(1)], dtype=torch.float32,
                                                     fill_value=-1000000) for _ in range(num_layers)]
-        
+
         # encoder outputs for Bart and models inheriting from BartModel encoder is (encoder hidden outputs of last layer, all_hidden_states, all_attention_weights )
         # it always outputs all_hidden_states and all_attention_weights and then filters empty ones out when passed through BartModel
-        
+
         # on the other hand, T5 encoder outputs (last-layer hidden state, presents, all_hidden_states, all_attention_weights) only if returning them is requested
         # otherwise it just returns last-layer hidden states
         past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
@@ -425,13 +573,13 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
             # decoder_outputs = x, next_cache, all_hidden_states, all_self_attns, all_cross_attns
             # encoder_outputs = encoder_hidden_last_layer + all_hidden_states + all_self_attns
             # outputs = decoder_outputs + encoder_outputs
-            
+
             # outputs is then filtered if attention weights, hidden states, or cached_decoding_values are empty
             # so the index below is adjusted
             # remember we always return attention weights
-            
+
             next_token_logits = outputs[0][:, -1, :]
-            
+
             index = 2 + int(model_specific_kwargs['return_hidden_states']) + int(use_cache)
             for i in range(num_layers):
                 all_encoder_attentions[i][:, :, [cur_len - 1], :] = outputs[index][i]
@@ -458,7 +606,7 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
 
                 for batch_idx in range(batch_size):
                     next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
-            
+
             # #TODO added and modified by mehrad from transformers modeling_utils.py
             # if self.config.is_encoder_decoder:
             #     if cur_len == 1:
@@ -482,6 +630,7 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
                 next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
                 # Sample
                 probs = F.softmax(next_token_logits, dim=-1)
+
                 next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
                 # Greedy decoding
@@ -526,7 +675,7 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
 
         for hypo_idx, hypo in enumerate(input_ids):
             decoded[hypo_idx, : sent_lengths[hypo_idx]] = hypo[: sent_lengths[hypo_idx]]
-        
+
         # List of each encoder layer cross-attention values each with size (bsz, num_heads, tgt_len, src_len)
         all_encoder_attentions = [layer_all_encoder_attentions[:, :, :sent_lengths.max().item(), :] for layer_all_encoder_attentions in all_encoder_attentions]
 
@@ -534,7 +683,7 @@ class BartForConditionalGeneration(BartForConditionalGeneration):
 
 
 
-  
+
 # coding=utf-8
 # Copyright 2020 Marian Team Authors and The HuggingFace Inc. team.
 #
@@ -630,6 +779,82 @@ class BartTokenizer(RobertaTokenizer):
         "merges_file": {m: merges_url for m in _all_bart_models},
     }
 
+    def convert_ids_to_tokens(self, ids: Union[int, List[int]], skip_special_tokens: bool = False, return_indices: bool = False) -> Union[str, List[str]]:
+        """
+        Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary
+        and added tokens.
+
+        Args:
+            ids (:obj:`int` or :obj:`List[int]`):
+                The token id (or token ids) to convert to tokens.
+            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to remove special tokens in the decoding.
+
+        Returns:
+            :obj:`str` or :obj:`List[str]`: The decoded token(s).
+        """
+        if isinstance(ids, int):
+            if ids in self.added_tokens_decoder:
+                return self.added_tokens_decoder[ids]
+            else:
+                return self._convert_id_to_token(ids)
+        tokens = []
+        kept_indices = []
+        for i, index in enumerate(ids):
+            index = int(index)
+            if skip_special_tokens and index in self.all_special_ids:
+                continue
+            if index in self.added_tokens_decoder:
+                tokens.append(self.added_tokens_decoder[index])
+            else:
+                tokens.append(self._convert_id_to_token(index))
+            kept_indices.append(i)
+
+        if not return_indices:
+            return tokens
+        else:
+            return tokens, kept_indices
+
+    def decode(self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True, return_indices: bool = False) -> str:
+        """
+        Converts a sequence of ids (integer) in a string, using the tokenizer and vocabulary
+        with options to remove special tokens and clean up tokenization spaces.
+        Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
+
+        Args:
+            token_ids: list of tokenized input ids. Can be obtained using the `encode` or `encode_plus` methods.
+            skip_special_tokens: if set to True, will replace special tokens.
+            clean_up_tokenization_spaces: if set to True, will clean up the tokenization spaces.
+        """
+        filtered_tokens, filtered_indices = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens, return_indices=return_indices)
+        # To avoid mixing byte-level and unicode for byte-level BPT
+        # we need to build string separatly for added tokens and byte-level tokens
+        # cf. https://github.com/huggingface/transformers/issues/1133
+        sub_texts = []
+        current_sub_text = []
+        final_filtered_indices = []
+        for (token, idx) in zip(filtered_tokens, filtered_indices):
+            if skip_special_tokens and token in self.all_special_ids:
+                continue
+            if token in self.added_tokens_encoder:
+                if current_sub_text:
+                    sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+                    current_sub_text = []
+                sub_texts.append(token)
+            else:
+                current_sub_text.append(token)
+                final_filtered_indices.append(idx)
+        if current_sub_text:
+            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+
+        text = " ".join(sub_texts)
+        if clean_up_tokenization_spaces:
+            text = self.clean_up_tokenization(text)
+        if return_indices:
+            return text, final_filtered_indices
+        else:
+            return text
+
 
 _all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
 SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
@@ -682,7 +907,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
     }
     id_to_lang_code = {v: k for k, v in lang_code_to_id.items()}
     cur_lang_code = lang_code_to_id["en_XX"]
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
@@ -703,7 +928,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         if index in self.fairseq_ids_to_tokens:
             return self.fairseq_ids_to_tokens[index]
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
-    
+
     def prepare_translation_batch(
         self,
         src_texts: List[str],
@@ -752,7 +977,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self.cur_lang_code = self.lang_code_to_id[src_lang]
         return model_inputs
 
-    
+
 
 class T5Stack(T5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
@@ -924,7 +1149,7 @@ class T5ForConditionalGeneration(T5ForConditionalGeneration):
 
         self.init_weights()
 
-        
+
     def _generate_no_beam_search(
             self,
             input_ids,
@@ -970,10 +1195,10 @@ class T5ForConditionalGeneration(T5ForConditionalGeneration):
                 attention_mask,
                 use_cache,
                 model_specific_kwargs,)
-    
+
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
-        
+
         # first step
         if kwargs['cur_len'] == 1:
             encoder_outputs, decoder_past_key_value_states = past[0], None
@@ -985,7 +1210,7 @@ class T5ForConditionalGeneration(T5ForConditionalGeneration):
                     encoder_outputs, decoder_past_key_value_states = past[0], past[1]
             else:
                 encoder_outputs, decoder_past_key_value_states = past[0], None
-                
+
         if not isinstance(encoder_outputs, tuple):
             encoder_outputs = (encoder_outputs, )
 
@@ -996,4 +1221,3 @@ class T5ForConditionalGeneration(T5ForConditionalGeneration):
             "attention_mask": attention_mask,
             "use_cache": use_cache,
         }
-

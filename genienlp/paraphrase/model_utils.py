@@ -6,6 +6,9 @@ import re
 import logging
 import shutil
 import numpy as np
+import matplotlib.pyplot as plt
+
+from operator import mul
 
 from .transformers_utils import SPIECE_UNDERLINE
 
@@ -57,21 +60,63 @@ def _rotate_checkpoints(args, checkpoint_prefix, use_mtime=False):
         shutil.rmtree(checkpoint)
 
 
-def compute_metrics(generations, golds, reduction='average'):
+def compute_ece(exact_match, confidences, num_bins = 10, binning = 'uniform', output_reliability_diagrams = None):
+    '''
+    Compute expected calibration error.
+    binning = 'uniform' corresponds to standard ECE, binning = 'adaptive' corresponds to AdaECE as defined in https://arxiv.org/pdf/2002.09437.pdf
+    output_reliability_diagrams: a path to output reliability diagram plots for ECE, AdaECE
+    '''
+    if binning == 'uniform':
+        bin_intervals = np.arange(0, 1, 1.0 / num_bins)
+    elif binning == 'adaptive':
+        bin_intervals = np.quantile(confidences, np.arange(0, 1, 1.0/num_bins), interpolation='higher')
+
+    bin_assignment = np.digitize(confidences, bin_intervals)
+    bin_accuracies = [0.0 for _ in range(num_bins)]
+    bin_errors = [0.0 for _ in range(num_bins)]
+    bin_sizes = [0 for _ in range(num_bins)]
+    for i, bin in enumerate(bin_assignment):
+        bin_errors[bin - 1] += abs(confidences[i] - exact_match[i])
+        bin_accuracies[bin - 1] += exact_match[i]
+        bin_sizes[bin - 1] += 1
+    ece = 0.0
+    for bin, err in enumerate(bin_errors):
+        ece += err / bin_sizes[bin] if bin_sizes[bin] > 0 else 0
+
+    if output_reliability_diagrams:
+        bin_accuracies = [acc / bin_sizes[i] if bin_sizes[i] > 0 else 0 for (i, acc) in enumerate(bin_accuracies)]
+        plt.bar(np.arange(num_bins), bin_accuracies)
+        plt.ylabel("Accuracy")
+        plt.xlabel("Confidence")
+        plt.title(f"Reliability diagram, {binning} bins")
+        plt.xticks(np.arange(num_bins), [round(x, 2) for x in bin_intervals])
+        plt.savefig(f"output_reliability_diagrams_{binning}")
+
+    return ece
+
+
+def compute_metrics(generations, golds, reduction='average', output_reliability_diagrams = None):
     """
     Inputs:
         generations: a list of list of strings; generations[i] is a list of all generated outputs of the model for example i
         golds: a list of strings; golds[i] is the gold answer for example i
         reduction: how we should compute an example's metrics from its multiple generations
+        output_reliability_diagrams: path prefix for reliability diagram output plots
     """
-    total_bleu = 0.0
-    # all_bleu = []
-    total_exact_match = 0.0
-    count = 0.0
+    all_bleu = []
+    all_exact_matches = []
+    sentence_confidences = []
     for idx, output in enumerate(generations):
         bleu_score = 0.0
         exact_match = 0.0
+        sentence_confidence = 0.0
         for sample in output:
+            if isinstance(sample, tuple):
+                sample, confidences = sample
+                if reduction == 'average':
+                    sentence_confidence += math.prod(confidences)
+                else:
+                    sentence_confidence = max(sentence_confidence, math.prod(confidences))
             if reduction == 'average':
                 bleu_score += computeBLEU([sample], [[golds[idx]]])
             else:
@@ -84,11 +129,18 @@ def compute_metrics(generations, golds, reduction='average'):
         if reduction == 'average':
             bleu_score /= len(output)
             exact_match /= len(output)
-        total_bleu += bleu_score
-        total_exact_match += exact_match
-        count += 1
+            sentence_confidence /= len(output)
+        all_bleu.append(bleu_score)
+        all_exact_matches.append(exact_match)
+        sentence_confidences.append(sentence_confidence)
 
-    return {'bleu': total_bleu/count, 'em': total_exact_match/count*100}
+    # compute_uncertainty_metrics()
+    total_bleu = sum(all_bleu)
+    total_exact_match = sum(all_exact_matches)
+    ece = compute_ece(all_exact_matches, sentence_confidences, binning='uniform', output_reliability_diagrams=output_reliability_diagrams)
+    ada_ece = compute_ece(all_exact_matches, sentence_confidences, binning='adaptive', output_reliability_diagrams=output_reliability_diagrams)
+
+    return {'bleu': total_bleu / len(all_bleu), 'em': 100.0 * total_exact_match / len(all_exact_matches), 'ece': ece, 'ada_ece': ada_ece}
 
 
 def compute_attention(sample_layer_attention, att_pooling):
@@ -97,7 +149,7 @@ def compute_attention(sample_layer_attention, att_pooling):
         sample_layer_attention_pooled = torch.mean(sample_layer_attention, dim=0, keepdim=False)
     elif att_pooling == 'max':
         sample_layer_attention_pooled = torch.max(sample_layer_attention, dim=0, keepdim=False)[0]
-    
+
     return sample_layer_attention_pooled
 
 
@@ -105,7 +157,7 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     # find positions of quotation marks in src and tgt
     src2tgt_mapping = {}
     src2tgt_mapping_index = {}
-    
+
     ## FIXED: quotation marks are exclusively used to wrap parameters so just check if they are present in target token
     # quote_wordpiece = tokenizer.tokenize('"')[0]
     # quote_token = '"'
@@ -113,19 +165,19 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     tgt_quotation_symbols = ['"']
     if tgt_lang == 'ru':
         tgt_quotation_symbols.extend(['«', '»'])
-    
+
     src_spans_ind = [index for index, token in enumerate(src_tokens) if
                      any([symbol in token for symbol in src_quotation_symbols])]
     tgt_spans_ind = [index for index, token in enumerate(tgt_tokens) if
                      any([symbol in token for symbol in tgt_quotation_symbols])]
-    
+
     if model_type == 'marian':
         src_strings = tokenizer.spm_source.DecodePieces(src_tokens)
         tgt_strings = tokenizer.spm_target.DecodePieces(tgt_tokens)
     else:
         src_strings = tokenizer.convert_tokens_to_string(src_tokens)
         tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
-    
+
     if len(src_spans_ind) % 2 != 0:
         logging.error('corrupted span in src string: [{}]'.format(src_strings))
         return tgt_strings, False
@@ -133,24 +185,24 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
         logging.error('corrupted span in tgt string: [{}] with src string: [{}]\n'
                       'outputting example without reverting the parameter'.format(tgt_strings, src_strings))
         return tgt_strings, False
-    
+
     # arrange spans and exclude quotation mark indices
     src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
     tgt_spans = [(tgt_spans_ind[i] + 1, tgt_spans_ind[i + 1] - 1) for i in range(0, len(tgt_spans_ind), 2)]
-    
+
     if len(src_spans) != len(tgt_spans):
         logging.error('numbers of spans in src and tgt strings do not match: [{}], [{}]\n'
                       'outputting example without reverting the parameter'.format(src_strings, tgt_strings))
-        
+
         return tgt_strings, False
-    
+
     tgt_span_success = set()
     for src_idx, (beg, end) in enumerate(src_spans):
         i = beg
         tgt_span_idx = None
         while i <= end:
             max_tgt_att_idx = torch.argmax(sample_layer_attention_pooled[:, i]).item()
-            
+
             # find span in tgt that contains this index
             for tgt_idx, (s1, s2) in enumerate(tgt_spans):
                 if s1 <= max_tgt_att_idx <= s2 and (s1, s2) not in tgt_span_success:
@@ -164,7 +216,7 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
             else:
                 # span could not be found; check the next wordpiece
                 i += 1
-        
+
         if tgt_span_idx is None:
             logger.error(
                 'Could not find a corresponding span in tgt for ({}, {}) src span in src string: [{}]'.format(beg, end,
@@ -190,15 +242,15 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     #         new_tgt_tokens.append(tgt_tokens[i])
     #         i += 1
     # final_output = tokenizer.convert_tokens_to_ids(new_tgt_tokens)
-    
+
     src_quoted_pattern_maybe_space = re.compile(r'[{0}]\s?([^{0}]*?)\s?[{0}]'.format(''.join(src_quotation_symbols)))
     tgt_quoted_pattern_maybe_space = re.compile(r'[{0}]\s?([^{0}]*?)\s?[{0}]'.format(''.join(tgt_quotation_symbols)))
-    
+
     src_matches = list(re.finditer(src_quoted_pattern_maybe_space, src_strings))
     tgt_matches = list(re.finditer(tgt_quoted_pattern_maybe_space, tgt_strings))
-    
+
     tgt2src_mapping_index = {v: k for k, v in src2tgt_mapping_index.items()}
-    
+
     # move through characters
     tokens = []
     curr = 0
@@ -211,51 +263,51 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
         curr = end
     if curr < len(tgt_strings):
         tokens.append(tgt_strings[curr:])
-    
+
     text = ' '.join(tokens)
-    
+
     return text, True
 
 
 def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, model_type):
     # find positions of quotation marks in src
     src2tgt_mapping = {}
-    
+
     src_spans_ind = [index for index, token in enumerate(src_tokens) if '"' in token]
     tgt_is_piece = [1 if token[0] == SPIECE_UNDERLINE else 0 for token in tgt_tokens]
     tgt_piece2word_mapping = list(np.cumsum(tgt_is_piece) - 1)
-    
+
     if len(src_spans_ind) % 2 != 0:
         logging.error('corrupted span in src string: [{}]'.format(tokenizer.spm_source.DecodePieces(src_tokens)))
         # this almost never happens but if it does it is usually because quotation is missing from the end of src_tokens
         # we temporary fix this by adding '"' to the end of src_tokens
         src_tokens += tokenizer.tokenize('"')
         src_spans_ind = [index for index, token in enumerate(src_tokens) if '"' in token]
-    
+
     if model_type == 'marian':
         src_strings = tokenizer.spm_source.DecodePieces(src_tokens)
         tgt_strings = tokenizer.spm_target.DecodePieces(tgt_tokens)
     else:
         src_strings = tokenizer.convert_tokens_to_string(src_tokens)
         tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
-    
+
     # arrange spans and exclude quotation mark indices
     src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
-    
+
     for src_idx, (beg, end) in enumerate(src_spans):
         s1 = torch.argmax(sample_layer_attention_pooled[:, beg]).item()
         s2 = torch.argmax(sample_layer_attention_pooled[:, end]).item()
-        
+
         # clamp values to max tgt_tokens length
         s1 = min(s1, len(tgt_tokens) - 1)
         s2 = min(s2, len(tgt_tokens) - 1)
-        
+
         src2tgt_mapping[(beg, end)] = (s1, s2)
-    
+
     quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
-    
+
     src_matches = list(re.finditer(quoted_pattern_maybe_space, src_strings))
-    
+
     # update src2tgt_mapping to map to word indices in response
     for key, value in src2tgt_mapping.items():
         s1, s2 = value
@@ -265,7 +317,7 @@ def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_
         except:
             raise ValueError('corrupted span in tgt string: [{}] with src string: [{}]\n'
                              'outputting example without reverting the parameter'.format(tgt_strings, src_strings))
-    
+
     # move through words
     tgt_strings_words = tgt_strings.split(' ')
     tokens = []
@@ -279,7 +331,7 @@ def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_
         curr = end
     if curr < len(tgt_strings_words):
         tokens.extend(tgt_strings_words[curr:])
-    
+
     text = ' '.join(tokens)
-    
+
     return text

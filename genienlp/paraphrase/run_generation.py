@@ -38,7 +38,7 @@ try:
      set_start_method('spawn')
 except RuntimeError:
     pass
- 
+
 import torch
 
 from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
@@ -46,8 +46,7 @@ from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETR
 
 from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer
 
-from transformers import BartForConditionalGeneration
-from .transformers_utils import MarianMTModel, T5ForConditionalGeneration, BartForConditionalGeneration as MBartForConditionalGeneration
+from .transformers_utils import MarianMTModel, T5ForConditionalGeneration, NBartForConditionalGeneration as BartForConditionalGeneration, BartForConditionalGeneration as MBartForConditionalGeneration
 from .transformers_utils import BartTokenizer, MBartTokenizer
 
 from transformers import PretrainedConfig
@@ -99,7 +98,7 @@ def parse_argv(parser):
                         help='If True, the trained model is cased, so if --skip_heuristics is not set, we will convert the input to upper case and the output back to lower case.')
     parser.add_argument("--metric_reduction", type=str, choices=['average', 'max'], default='average',
                         help="How we should calculate metrics where there are multiple generations per example.")
-    
+
     parser.add_argument("--pipe_mode", action='store_true', help='If set, we will generate paraphrases of paraphrases of ... as well.')
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate num_samples outputs for each set of hyperparameters.
     parser.add_argument("--num_samples", type=int, nargs='+', default=[1])
@@ -111,7 +110,7 @@ def parse_argv(parser):
     parser.add_argument("--top_p", type=float, nargs='+', default=[0.9], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
-    
+
     parser.add_argument("--copy", type=int, default=0,
                         help='Number of tokens that will be copied at the beginning of generation. Helps preserve the original meaning of the input sequence.')
     parser.add_argument("--no_cuda", action='store_true',
@@ -122,11 +121,11 @@ def parse_argv(parser):
                         help="Tokens (other than the model-specific `eos_token`) at which text generation should be stopped.")
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")
-    
+
     parser.add_argument('--cache_dir', default='.embeddings', type=str, help='where to save transforemrs cached models, configs, and tokenizers.')
-    
+
     parser.add_argument('--trained_model_type', type=str, help='if provided we make sure the loaded model matches the model_type')
-    
+
     parser.add_argument('--src_lang', type=str, default='en', help='source language used for translation task')
     parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
     parser.add_argument('--return_attentions', action='store_true', help='return self and cross attention weights for seq2seq models')
@@ -140,15 +139,17 @@ def parse_argv(parser):
     parser.add_argument('--subsample', type=int, default=20000000, help='subsample input datasets')
     parser.add_argument('--task', type=str, required=True, choices=['paraphrase', 'translate'])
     parser.add_argument("--output_example_ids_too", action='store_true', help='Generate two column output with ids in the first column')
-    
+
     parser.add_argument('--masked_paraphrasing', action='store_true', help='mask input tokens and infill them using denoising pretrained model')
     parser.add_argument('--fairseq_mask_prob', type=float, default=0.15, help='Probability of an input token being masked in the sentence for masked_paraphrasing')
-    
+
     parser.add_argument('--fp16', action='store_true',
                         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit. On certain GPUs (e.g. Nvidia V100) improves the inference speed")
     parser.add_argument('--fp16_opt_level', type=str, default='O1',
                         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
                              "See details at https://nvidia.github.io/apex/amp.html")
+    parser.add_argument('--reliability-diagrams-output-file', type=str, help='Generate reliability diagrams with given file prefix')
+    parser.add_argument('--mc-dropout', action='store_true', help='Whether to apply MC Dropout')
 
 
 
@@ -192,7 +193,7 @@ def main(args):
 
 def run_multi_process_generation(args):
     config = PretrainedConfig.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
-    
+
     # get model type from saved config
     if hasattr(config, 'model_type'):
         args.model_type = getattr(config, 'model_type')
@@ -206,10 +207,10 @@ def run_multi_process_generation(args):
                 args.model_type = 'bart'
     else:
         raise ValueError('Model should be either GPT2, BART, MBART, or Marian')
-    
+
     if args.trained_model_type and args.trained_model_type != '' and args.model_type != args.trained_model_type:
         raise ValueError('The loaded model type does not match with what the user provided')
-    
+
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:
         if not args.tgt_lang:
             raise ValueError('For translation task using Marian model, if target language is a group of languages, '
@@ -219,7 +220,7 @@ def run_multi_process_generation(args):
                 args.tgt_lang = 'pol'
             else:
                 raise ValueError('Target language is not in the model group languages, please specify the correct target language.')
-        
+
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] in MARIAN_GROUP_MEMBERS:
         if not args.src_lang:
             raise ValueError('For translation task using Marian model, if source language is a group of languages, '
@@ -236,10 +237,10 @@ def run_multi_process_generation(args):
         logger.warning('Source language should not be provided when using models with single language pairs,'
                        'otherwise the translation outputs will be incorrect; thus we ignore the source language you provided...')
         args.src_lang = None
-        
+
     if args.model_type == 'mbart' and not (args.tgt_lang and args.src_lang):
         raise ValueError('Source and Target language should be provided when using mBART cc25 model')
-    
+
     if args.prompt_column is not None and args.copy is not None and args.copy != 0:
         raise ValueError('Cannot copy from the input and use prompt at the same time. Disable either --copy or --prompt_column.')
 
@@ -247,7 +248,7 @@ def run_multi_process_generation(args):
         args.gold_column = args.input_column
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     args.n_gpu = torch.cuda.device_count()
-    
+
     if args.output_file is not None:
         if not os.path.exists(os.path.dirname(args.output_file)):
             os.makedirs(os.path.dirname(args.output_file), exist_ok=False)
@@ -267,7 +268,7 @@ def run_multi_process_generation(args):
             copy_args.n_gpu = 1
             copy_args.input_file = all_input_files[gpu_idx]
             copy_args.output_file = get_part_path(args.output_file, gpu_idx)
-            
+
             p = Process(target=run_single_process_generation, args=(copy_args, config))
             all_processes.append(p)
             p.start()
@@ -285,10 +286,10 @@ def run_multi_process_generation(args):
 
 def run_single_process_generation(args, config):
     model_class, tokenizer_class, special_tokens = MODEL_CLASSES[args.model_type]
-    
+
     return_attentions = args.return_attentions
     return_hidden_states = args.return_hidden_states
-    
+
     model = model_class.from_pretrained(args.model_name_or_path,
                                         output_attentions=return_attentions,
                                         output_hidden_states=return_hidden_states,
@@ -303,17 +304,25 @@ def run_single_process_generation(args, config):
         model = amp.initialize(model, opt_level=args.fp16_opt_level)
 
     model.eval()
+
+    def apply_dropout(m):
+        if type(m) == torch.nn.Dropout:
+            m.train()
+    if args.mc_dropout:
+        raise NotImplementedError
+        model.apply(apply_dropout)
+
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     eos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['eos_token'])
     sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
-    
+
     if pad_token_id is None:
         logger.error('Your tokenizer does not have a padding token')
 
     if args.model_type == 'gpt2':
         model.set_token_ids(eos_token_id=eos_token_id,
-                            sep_token_id=sep_token_id, 
+                            sep_token_id=sep_token_id,
                             pad_token_id=pad_token_id)
 
     logger.info(args)
@@ -355,7 +364,7 @@ def run_single_process_generation(args, config):
     all_outputs = []
 
     stop_token_ids = [tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens]
-    
+
     batch_idx = 0
     for batch in tqdm(range(math.ceil(len(all_context_ids) / args.batch_size)), desc="Batch"):
         logging.info('') # to make kubectl properly print tqdm progress bar
@@ -375,12 +384,12 @@ def run_single_process_generation(args, config):
                 padded_batch_context_tokens.append(batch_context_tokens[i]+[pad_token_id]*(max_length-len(batch_context_tokens[i])))
             batch_context_tensor = torch.tensor(padded_batch_context_tokens, dtype=torch.long, device=args.device)
             attention_mask = (batch_context_tensor!=pad_token_id).to(torch.long)
-            
+
         if args.model_type == 'mbart':
             decoder_start_token_id = tokenizer.lang_code_to_id[args.tgt_lang]
         else:
             decoder_start_token_id = None
-            
+
         max_length = batch_context_tensor.shape[1] + args.length
 
         all_encoder_attentions = None
@@ -392,7 +401,7 @@ def run_single_process_generation(args, config):
                                  decoder_start_token_id=decoder_start_token_id,
                                  min_length=args.min_output_length,
                                  max_length=max_length,
-                                 num_beams=args.num_beams[hyperparameter_idx],
+                                 num_beams=1,
                                  top_k=args.top_k[hyperparameter_idx],
                                  top_p=args.top_p[hyperparameter_idx],
                                  early_stopping=True,
@@ -406,14 +415,16 @@ def run_single_process_generation(args, config):
                                  return_attentions=return_attentions,
                                  return_hidden_states=return_hidden_states,
                                  use_cache=True,
+                                 mc_dropout=args.mc_dropout
                                 )
 
             # TODO fix the way output attention is handled. Some models do not support it.
             if return_attentions and args.task == 'translate':
                 decoded, all_encoder_attentions = outputs
             else:
-                decoded = outputs
-            
+                decoded, confidences = outputs
+                confidences = confidences[:, :].tolist()
+
             if not isinstance(decoded, list):
                 decoded = decoded[:, :].tolist()
             for i, out in enumerate(decoded):
@@ -433,11 +444,11 @@ def run_single_process_generation(args, config):
                 ### include eos_token too; it will get removed during decoding
                 min_index = min_index + 1
                 out_cropped = out[:min_index]
-            
+
                 if args.task == 'translate':
                     src_tokens = tokenizer.convert_ids_to_tokens(batch_context_tensor[sample_index])
                     tgt_tokens = tokenizer.convert_ids_to_tokens(out_cropped)
-                    
+
                     # get last layer attention vectors
                     layer_attention = all_encoder_attentions[-1]
                     sample_layer_attention = layer_attention[sample_index, :, :, :]
@@ -446,7 +457,7 @@ def run_single_process_generation(args, config):
                             (decoder_start_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]):
                         # shift target tokens left to match the attention positions
                         tgt_tokens = tgt_tokens[1:]
-                        
+
                     while src_tokens[-1] == tokenizer.pad_token:
                         # remove all padding from src
                         src_tokens = src_tokens[:-1]
@@ -466,7 +477,7 @@ def run_single_process_generation(args, config):
                     sample_layer_attention = sample_layer_attention[:, :len(tgt_tokens), :len(src_tokens)]
 
                     sample_layer_attention_pooled = compute_attention(sample_layer_attention, args.att_pooling)
-                    
+
                     if args.plot_heatmaps:
                         import matplotlib.pyplot as plt
                         import seaborn as sns
@@ -480,11 +491,11 @@ def run_single_process_generation(args, config):
                             plt.savefig(os.path.join(os.path.dirname(args.output_file),
                                                      'heatmap_{}'.format(batch_idx * batch_size + i)))
                         plt.show()
-                    
+
                     # remove end token if present
                     if tgt_tokens[-1] in [special_tokens['bos_token'], special_tokens['eos_token']]:
                         tgt_tokens = tgt_tokens[:-1]
-                    
+
                     if args.replace_qp:
                         tgt_lang = args.tgt_lang if args.tgt_lang else args.model_name_or_path.rsplit('-', 1)[1]
                         text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, args.model_type, tgt_lang)
@@ -493,15 +504,17 @@ def run_single_process_generation(args, config):
                     else:
                         text = tokenizer.convert_tokens_to_string(tgt_tokens)
                 else:
-                    text = tokenizer.decode(out_cropped, clean_up_tokenization_spaces=True, skip_special_tokens=True)
+                    text, filtered_token_indices = tokenizer.decode(out_cropped, clean_up_tokenization_spaces=True, skip_special_tokens=True, return_indices=True)
+                    sample_confidences = confidences[sample_index]
+                    sample_confidences = [sample_confidences[idx] for idx in filtered_token_indices]
 
                 text = re.sub('\s\s+', ' ', text)  # remove duplicate white spaces
                 text = text.strip()
-                
+
                 if not args.skip_heuristics:
                     text = output_heuristics(text, batch_reverse_maps[sample_index])
-                batch_outputs[sample_index].append(text)
-                
+                batch_outputs[sample_index].append((text, sample_confidences))
+
         all_outputs.extend(batch_outputs)
         if batch_idx < 1:
             logger.info('First batch output: %s', str(all_outputs))
@@ -521,7 +534,8 @@ def run_single_process_generation(args, config):
     else:
         print(json.dumps(all_outputs, indent=2))
 
-    metrics = compute_metrics(all_outputs, all_golds, reduction=args.metric_reduction)
+    metrics = compute_metrics(all_outputs, all_golds, reduction=args.metric_reduction, output_reliability_diagrams=args.reliability_diagrams_output_file)
     logger.info('Average BLEU score = %.2f', metrics['bleu'])
     logger.info('Exact match score = %.2f', metrics['em'])
-
+    logger.info('ECE = %2.f', metrics['ece'])
+    logger.info('AdaECE = %2.f', metrics['ada_ece'])
