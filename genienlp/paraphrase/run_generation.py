@@ -150,6 +150,9 @@ def parse_argv(parser):
                              "See details at https://nvidia.github.io/apex/amp.html")
     parser.add_argument('--reliability-diagrams-output-file', type=str, help='Generate reliability diagrams with given file prefix')
     parser.add_argument('--mc-dropout', action='store_true', help='Whether to apply MC Dropout')
+    
+    parser.add_argument("--calibration", type=str, choices=['train', 'eval'], help="When specified, model probabilities for calibrator will be written in this file.")
+    parser.add_argument("--calibrator_path", type=str, help="Where to save/load calibrator model if calibration set to train/eval; ignored otherwise.")
 
 
 
@@ -252,6 +255,13 @@ def run_multi_process_generation(args):
     if args.output_file is not None:
         if not os.path.exists(os.path.dirname(args.output_file)):
             os.makedirs(os.path.dirname(args.output_file), exist_ok=False)
+
+    if args.calibration is not None:
+        if args.calibrator_path is not None:
+            if not os.path.exists(os.path.dirname(args.calibrator_path)):
+                os.makedirs(os.path.dirname(args.calibrator_path), exist_ok=False)
+        else:
+            raise ValueError('Must provide calibration file path if --calibration is set')
 
     set_seed(args)
 
@@ -536,7 +546,33 @@ def run_single_process_generation(args, config):
     else:
         print(json.dumps(all_outputs, indent=2))
 
-    metrics = compute_metrics(all_outputs, all_golds, reduction=args.metric_reduction, output_reliability_diagrams=args.reliability_diagrams_output_file)
+    if args.calibration == 'train':
+        # Write calibrator training data to file for inspection
+        calibration_training_file = args.calibrator_path + '.data.csv'
+        with open(calibration_training_file, 'w') as calibration_file:
+            for i, output in enumerate(all_outputs):
+                for j, text_confidences in enumerate(output):
+                    if isinstance(text_confidences, tuple):
+                        text, confidences = text_confidences
+                        # TODO: this input will change when we support beam search
+                        confidence = np.prod(confidences)
+                        correct = re.sub(r'\s+', '', text).lower() == re.sub(r'\s+', '', all_golds[i]).lower()
+                        calibration_file.write('{},{}\n'.format(int(correct), confidence))
+
+        import xgboost as xgb
+        logger.info('Training calibrator and saving model to file...')
+        dtrain = xgb.DMatrix('{}?format=csv&label_column=0'.format(calibration_training_file))
+        params = {'max_depth': 3, 'subsample': 0.8, 'objective': 'binary:logistic'} # TODO: how to set number of trees???
+        bst = xgb.train(params, dtrain)
+        bst.save_model(args.calibrator_path)
+    
+    metrics = compute_metrics(
+            all_outputs,
+            all_golds,
+            reduction=args.metric_reduction,
+            output_reliability_diagrams=args.reliability_diagrams_output_file,
+            calibrator_path=(args.calibrator_path if args.calibration == 'eval' else None)
+        )
     logger.info('Average BLEU score = %.2f', metrics['bleu'])
     logger.info('Exact match score = %.2f', metrics['em'])
     logger.info('ECE = %.2f', metrics['ece'])
