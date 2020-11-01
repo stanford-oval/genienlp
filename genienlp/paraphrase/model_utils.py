@@ -114,9 +114,9 @@ def compute_metrics(generations, golds, reduction='average', output_reliability_
             if isinstance(sample, tuple):
                 sample, confidences = sample
                 if reduction == 'average':
-                    sentence_confidence += math.prod(confidences)
+                    sentence_confidence += np.prod(confidences)
                 else:
-                    sentence_confidence = max(sentence_confidence, math.prod(confidences))
+                    sentence_confidence = max(sentence_confidence, np.prod(confidences))
             if reduction == 'average':
                 bleu_score += computeBLEU([sample], [[golds[idx]]])
             else:

@@ -527,6 +527,8 @@ def run_single_process_generation(args, config):
         with open(args.output_file, 'w') as output_file:
             for i, output in enumerate(all_outputs):
                 for j, text in enumerate(output):
+                    if isinstance(text, tuple):
+                        text, _ = text
                     if args.output_example_ids_too:
                         output_file.write('\t'.join(['{}-{}'.format(all_example_ids[i], j), text]) + '\n')
                     else:
@@ -537,5 +539,5 @@ def run_single_process_generation(args, config):
     metrics = compute_metrics(all_outputs, all_golds, reduction=args.metric_reduction, output_reliability_diagrams=args.reliability_diagrams_output_file)
     logger.info('Average BLEU score = %.2f', metrics['bleu'])
     logger.info('Exact match score = %.2f', metrics['em'])
-    logger.info('ECE = %2.f', metrics['ece'])
-    logger.info('AdaECE = %2.f', metrics['ada_ece'])
+    logger.info('ECE = %.2f', metrics['ece'])
+    logger.info('AdaECE = %.2f', metrics['ada_ece'])
