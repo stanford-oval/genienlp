@@ -97,7 +97,7 @@ def compute_ece(exact_match, confidences, num_bins = 10, binning = 'uniform', ou
 
 def compute_metrics(
     generations,
-    golds, 
+    golds,
     reduction='average',
     output_reliability_diagrams = None,
     beam_search = False,
@@ -160,7 +160,7 @@ def compute_metrics(
     total_bleu = sum(all_bleu)
     total_exact_match = sum(all_exact_matches)
     ece = compute_ece(all_exact_matches, sentence_confidences, binning='uniform', output_reliability_diagrams=output_reliability_diagrams)
-    ada_ece = compute_ece(all_exact_matches, sentence_confidences, binning='adaptive', output_reliability_diagrams=output_reliability_diagrams)
+    ada_ece = compute_ece(all_exact_matches, sentence_confidences, binning='adaptive')
 
     return {'bleu': total_bleu / len(all_bleu), 'em': 100.0 * total_exact_match / len(all_exact_matches), 'ece': ece, 'ada_ece': ada_ece}
 
