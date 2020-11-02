@@ -411,7 +411,7 @@ def run_single_process_generation(args, config):
                                  decoder_start_token_id=decoder_start_token_id,
                                  min_length=args.min_output_length,
                                  max_length=max_length,
-                                 num_beams=1,
+                                 num_beams=args.num_beams[hyperparameter_idx],
                                  top_k=args.top_k[hyperparameter_idx],
                                  top_p=args.top_p[hyperparameter_idx],
                                  early_stopping=True,
@@ -433,6 +433,12 @@ def run_single_process_generation(args, config):
                 decoded, all_encoder_attentions = outputs
             else:
                 decoded, confidences = outputs
+                # If beam search off, confidences is list of token-level probabilities
+                #  for each token in each output sentence.
+                # If beam search on, confidences is list of sentence-level probabilities
+                #  for each beam from each output sentence.
+                # TODO: we probably would like to get token-level probabilities for
+                # each beam for comparability.
                 confidences = confidences[:, :].tolist()
 
             if not isinstance(decoded, list):
@@ -516,7 +522,8 @@ def run_single_process_generation(args, config):
                 else:
                     text, filtered_token_indices = tokenizer.decode(out_cropped, clean_up_tokenization_spaces=True, skip_special_tokens=True, return_indices=True)
                     sample_confidences = confidences[sample_index]
-                    sample_confidences = [sample_confidences[idx] for idx in filtered_token_indices]
+                    if args.num_beams[hyperparameter_idx] == 1:
+                        sample_confidences = [sample_confidences[idx] for idx in filtered_token_indices]
 
                 text = re.sub('\s\s+', ' ', text)  # remove duplicate white spaces
                 text = text.strip()
@@ -554,10 +561,14 @@ def run_single_process_generation(args, config):
                 for j, text_confidences in enumerate(output):
                     if isinstance(text_confidences, tuple):
                         text, confidences = text_confidences
-                        # TODO: this input will change when we support beam search
-                        confidence = np.prod(confidences)
                         correct = re.sub(r'\s+', '', text).lower() == re.sub(r'\s+', '', all_golds[i]).lower()
-                        calibration_file.write('{},{}\n'.format(int(correct), confidence))
+
+                        if args.num_beams[0] == 1: #TODO: how to account for multiple beam size inputs?
+                            confidences = np.prod(confidences)
+                        else:
+                            confidences = ','.join([str(c) for c in confidences])
+                        
+                        calibration_file.write('{},{}\n'.format(int(correct), confidences))
 
         import xgboost as xgb
         logger.info('Training calibrator and saving model to file...')
@@ -571,6 +582,7 @@ def run_single_process_generation(args, config):
             all_golds,
             reduction=args.metric_reduction,
             output_reliability_diagrams=args.reliability_diagrams_output_file,
+            beam_search = (args.num_beams[0] > 1),
             calibrator_path=(args.calibrator_path if args.calibration == 'eval' else None)
         )
     logger.info('Average BLEU score = %.2f', metrics['bleu'])

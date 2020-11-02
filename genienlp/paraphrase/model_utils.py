@@ -95,13 +95,21 @@ def compute_ece(exact_match, confidences, num_bins = 10, binning = 'uniform', ou
     return ece
 
 
-def compute_metrics(generations, golds, reduction='average', output_reliability_diagrams = None, calibrator_path = None):
+def compute_metrics(
+    generations,
+    golds, 
+    reduction='average',
+    output_reliability_diagrams = None,
+    beam_search = False,
+    calibrator_path = None
+):
     """
     Inputs:
         generations: a list of list of strings; generations[i] is a list of all generated outputs of the model for example i
         golds: a list of strings; golds[i] is the gold answer for example i
         reduction: how we should compute an example's metrics from its multiple generations
         output_reliability_diagrams: path prefix for reliability diagram output plots
+        beam_search: whether beam search was used (affect format of confidence scores)
         calibrator_path: if specified, file path of random forest calibrator to use instead of direct probabilities
     """
     calibrator = None
@@ -120,10 +128,9 @@ def compute_metrics(generations, golds, reduction='average', output_reliability_
         for sample in output:
             if isinstance(sample, tuple):
                 sample, confidences = sample
-                confidence = np.prod(confidences)
+                confidence = np.max(confidences) if beam_search else np.prod(confidences)
                 if calibrator is not None:
-                    # TODO: the input format will change when we implement beam search
-                    calibrator_input = np.atleast_2d(confidence)
+                    calibrator_input = np.atleast_2d(confidences if beam_search else confidence)
                     confidence = calibrator.predict(xgb.DMatrix(calibrator_input))[0]
                     # TODO: if we do other than using classifier/logisitc loss,
                     # apply logistic function so the result is in [0,1]
