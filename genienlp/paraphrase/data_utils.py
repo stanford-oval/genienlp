@@ -4,6 +4,7 @@ import random
 
 import torch
 import logging
+import numpy as np
 
 from ..data_utils.progbar import progress_bar
 from ..util import detokenize, tokenize, lower_case, SpecialTokenMap
@@ -145,13 +146,70 @@ def fairseq_mask(input_sequence, mlm_probability, mask_token, thingtalk):
         if random.random() < mlm_probability:
             input_tokens[i] = mask_token
     return ' '.join(input_tokens)
+
+def token_deletion(input_sequence, mlm_probability, thingtalk):
+    all_entities = []
+    all_device_tokens = []
+    if thingtalk:
+        all_entities = quoted_pattern_maybe_space.findall(thingtalk)
+        for token in device_pattern.findall(thingtalk):
+            all_device_tokens.extend(token.split('.'))
     
+    input_tokens = input_sequence.split(' ')
+    input_length = len(input_tokens)
+    # don't mask first and last tokens
+    for i in range(1, input_length-1):
+        if is_entity(input_tokens[i]) or input_tokens[i] in all_device_tokens or has_match(input_tokens[i:], all_entities):
+            mlm_probability /= 0.9
+            continue
+        if random.random() < mlm_probability:
+            input_tokens.pop(i)
+    return ' '.join(input_tokens)
+
+def text_infilling(input_sequence, num_text_spans, thingtalk):
+    all_entities = []
+    all_device_tokens = []
+    if thingtalk:
+        all_entities = quoted_pattern_maybe_space.findall(thingtalk)
+        for token in device_pattern.findall(thingtalk):
+            all_device_tokens.extend(token.split('.'))
+
+    input_tokens = input_sequence.split(' ')
+    possible_indexes = range(len(input_tokens))
+    num_successful_spans = 0
+    while num_successful_spans < num_text_spans:
+        num_tokens_to_mask = np.random.poisson(lam=3)
+        
+        # don't reuse indexes that we've already chosen
+        token_start_index = random.sample(possible_indexes)
+        for j in range(0, num_tokens_to_mask):
+            curr_token = input_tokens[token_start_index + j]
+            # check for crucial token
+            if is_entity(curr_token) or curr_token in all_device_tokens or has_match(input_tokens[j + token_start_index:], all_entities):
+                break
+            else:
+
+
+def sentence_permutation(input_sequence):
+    input_tokens = input_sequence.split('.')
+    random.shuffle(input_tokens)
+    return ' '.join(input_tokens)
+
+def document_rotation(input_sequence):
+    input_tokens = input_sequence.split(' ')
+    token_index_to_rotate = random.randInt(0, len(input_tokens) - 1)
+    input_tokens = input_tokens[token_index_to_rotate:] + input_tokens[:token_index_to_rotate]
+    return ' '.join(input_tokens)
+
 
 
 def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column,
                                   copy, sep_token_id, skip_heuristics, is_cased, model_type,
                                   src_lang, subsample, task, model_input_prefix,
-                                  masked_paraphrasing, fairseq_mask_prob, mask_token):
+                                  masked_paraphrasing, fairseq_mask_prob, mask_token,
+                                  delete_tokens, delete_token_prob,
+                                  infill_text, num_text_spans,
+                                  permute_sentence, rotate_document):
     """
     Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
     Outputs:
@@ -197,6 +255,14 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
             
         if masked_paraphrasing:
             input_sequence = fairseq_mask(input_sequence, fairseq_mask_prob, mask_token, thingtalk)
+        if delete_tokens:
+            input_sequence = token_deletion(input_sequence, delete_token_prob, thingtalk)
+        if infill_text:
+            input_sequence = text_infilling(input_sequence, num_text_spans, thingtalk)
+        if permute_sentence:
+            input_sequence = sentence_permutation(input_sequence)
+        if rotate_document:
+            input_sequence = sentence_permutation(input_sequence)
         
         # add model specific prefix
         input_sequence = model_input_prefix + input_sequence
