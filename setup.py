@@ -49,7 +49,7 @@ setuptools.setup(
     install_requires=[
         'numpy>=1.14.5',
         'python-dateutil>=2.7.3',
-        'torch~=1.4',
+        'torch~=1.6',
         'revtok==0.0.3',
         'tqdm~=4.0',
         'tensorboardX==2.0.*',
