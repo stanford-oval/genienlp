@@ -41,9 +41,8 @@ class MQANEncoder(nn.Module):
         self.pad_idx = numericalizer.pad_id
 
         self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
-                                                    trained_dimension=0,
-                                                    project=True,
-                                                    finetune_pretrained=args.train_encoder_embeddings)
+                                                    finetune_pretrained=args.train_encoder_embeddings,
+                                                    trained_dimension=0, project=True)
 
         def dp(args):
             return args.dropout_ratio if args.rnn_layers > 1 else 0.

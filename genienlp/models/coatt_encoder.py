@@ -39,14 +39,12 @@ class CoattentionEncoder(nn.Module):
         self.pad_idx = numericalizer.pad_id
 
         self.context_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
-                                                    trained_dimension=args.trainable_encoder_embeddings,
-                                                    project=True,
-                                                    finetune_pretrained=args.train_context_embeddings)
+                                                    finetune_pretrained=args.train_context_embeddings,
+                                                    trained_dimension=args.trainable_encoder_embeddings, project=True)
 
         self.question_embeddings = CombinedEmbedding(numericalizer, question_embeddings, args.dimension,
-                                                     trained_dimension=0,
-                                                     project=True,
-                                                     finetune_pretrained=args.train_question_embeddings)
+                                                     finetune_pretrained=args.train_question_embeddings,
+                                                     trained_dimension=0, project=True)
 
         self.dropout = nn.Dropout(args.dropout_ratio)
 

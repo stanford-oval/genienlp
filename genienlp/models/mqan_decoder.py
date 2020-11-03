@@ -46,9 +46,8 @@ class MQANDecoder(nn.Module):
         self.args = args
 
         self.decoder_embeddings = CombinedEmbedding(numericalizer, decoder_embeddings, args.dimension,
-                                                    trained_dimension=args.trainable_decoder_embeddings,
-                                                    project=True,
-                                                    finetune_pretrained=False)
+                                                    finetune_pretrained=False,
+                                                    trained_dimension=args.trainable_decoder_embeddings, project=True)
 
         if args.transformer_layers > 0:
             self.self_attentive_decoder = TransformerDecoder(args.dimension, args.transformer_heads,

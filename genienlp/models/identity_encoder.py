@@ -40,9 +40,8 @@ class IdentityEncoder(nn.Module):
         self.pad_idx = numericalizer.pad_id
 
         self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
-                                                    trained_dimension=0,
-                                                    project=False,
-                                                    finetune_pretrained=args.train_context_embeddings)
+                                                    finetune_pretrained=args.train_context_embeddings,
+                                                    trained_dimension=0, project=False)
 
         if self.args.rnn_layers > 0 and self.args.rnn_dimension != self.args.dimension:
             self.dropout = nn.Dropout(args.dropout_ratio)

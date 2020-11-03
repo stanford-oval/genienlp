@@ -97,8 +97,8 @@ def positional_encodings_like(x, t=None):
 
 def positional_embedding(self, x):
     embedded = []
-    if self.pretrained_embeddings is not None:
-        embedded += [emb.get_positional_embedding(x) for emb in self.pretrained_embeddings]
+    if self.pretrained_transformer_embeddings is not None:
+        embedded += [emb.get_positional_embedding(x) for emb in self.pretrained_transformer_embeddings]
     if self.trained_embeddings is not None:
         # positional embedding is only calculated for pretrained embeddings
         pass
@@ -378,19 +378,22 @@ class CombinedEmbedding(nn.Module):
     project: Final[bool]
     dimension: Final[int]
 
-    def __init__(self, numericalizer, pretrained_embeddings,
-                 output_dimension,
-                 finetune_pretrained=False,
-                 trained_dimension=0,
-                 project=True):
+    def __init__(self, numericalizer, pretrained_transformer_embeddings, output_dimension, finetune_pretrained=False,
+                 trained_dimension=0, project=True, pretrained_embeddings=None):
         super().__init__()
         self.project = project
-        self.pretrained_embeddings = nn.ModuleList(pretrained_embeddings)
+        self.pretrained_transformer_embeddings = nn.ModuleList(pretrained_transformer_embeddings)
+        
+        self.pretrained_embeddings = nn.ModuleList(pretrained_embeddings) if pretrained_embeddings else None
 
         dimension = 0
-        for idx, embedding in enumerate(self.pretrained_embeddings):
+        for embedding in self.pretrained_transformer_embeddings:
             dimension += embedding.dim
         self.set_trainable(finetune_pretrained)
+        
+        if self.pretrained_embeddings:
+            for embedding in self.pretrained_embeddings:
+                dimension += embedding.weight.size()[1]
 
         if trained_dimension > 0:
             self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
@@ -404,7 +407,7 @@ class CombinedEmbedding(nn.Module):
         self.dimension = output_dimension
 
     def set_trainable(self, trainable):
-        self.pretrained_embeddings.requires_grad_(trainable)
+        self.pretrained_transformer_embeddings.requires_grad_(trainable)
 
     def _combine_embeddings(self, embeddings):
         if len(embeddings) == 1:
@@ -434,8 +437,8 @@ class CombinedEmbedding(nn.Module):
 
     def forward(self, x, entity_ids=None, entity_masking=None, mask_entities=None, padding=None):
         embedded: List[EmbeddingOutput] = []
-        if self.pretrained_embeddings is not None:
-            embedded += [emb(x, entity_ids, entity_masking, mask_entities, padding) for emb in self.pretrained_embeddings]
+        if self.pretrained_transformer_embeddings is not None:
+            embedded += [emb(x, entity_ids, entity_masking, mask_entities, padding) for emb in self.pretrained_transformer_embeddings]
 
         if self.trained_embeddings is not None:
             trained_vocabulary_size = self.trained_embeddings.weight.size()[0]
