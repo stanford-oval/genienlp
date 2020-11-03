@@ -233,7 +233,7 @@ class BaseAlmondTask(BaseTask):
             all_canonicals = marisa_trie.Trie(canonical2type.keys())
         
         if self.args.database_type == 'json':
-            self.db = Database(canonical2type, self.type2id, all_canonicals, self.TTtype2DBtype)
+            self.db = Database(canonical2type, type2id, all_canonicals, self.TTtype2DBtype)
         # elif self.args.database_type == 'local-elastic':
         #     self.db = LocalElasticDatabase(db_data_processed)
         # elif self.args.database_type == 'remote-elastic':
@@ -334,9 +334,16 @@ class BaseAlmondTask(BaseTask):
             entity2type[ent] = schema_type
     
         return entity2type
+    
+    def pad_features(self, features, max_size, pad_id):
+        if len(features) > max_size:
+            tokens = features[:max_size]
+        else:
+            features += [pad_id] * (max_size - len(features))
+        return features
 
     def oracle_type_ids(self, tokens, entity2type):
-        tokens_type_ids = [self.db.unk_id] * len(tokens)
+        tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokens))]
         tokens_text = " ".join(tokens)
 
         for ent in entity2type.keys():
@@ -345,13 +352,13 @@ class BaseAlmondTask(BaseTask):
             token_pos = len(tokens_text[:idx].strip().split(' '))
             
             type_id = self.db.type2id[entity2type[ent]]
+            type_id = self.pad_features([type_id], self.args.features_size[0], self.args.features_default_val[0])
         
             tokens_type_ids[token_pos: token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
     
         return tokens_type_ids
 
     def find_types(self, tokens, answer):
-    
         tokens_type_ids = []
 
         if self.args.database_type == 'json':
@@ -368,11 +375,12 @@ class BaseAlmondTask(BaseTask):
     
     def find_freqs(self, tokens, tokens_type_ids):
         token_freqs = []
+        
         for token, token_type_id in zip(tokens, tokens_type_ids):
-            if token_type_id == self.db.type2id[self.db.unk_type]:
-                token_freqs.append(1.0)
+            if token_type_id == self.args.features_default_val[0]:
+                token_freqs.append([1.0] * self.args.features_size[1])
             else:
-                token_freqs.append(1.0 / (zipf_frequency(token, 'en') + 1e-3))
+                token_freqs.append([1.0 / (zipf_frequency(token, 'en') + 1e-3)] * self.args.features_size[1])
         return token_freqs
 
     def tokenize(self, sentence, field_name=None, answer=None):
