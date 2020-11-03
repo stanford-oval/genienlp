@@ -67,13 +67,25 @@ If you use the MultiTask Question Answering model in your work, please cite [*Th
 }
 ```
 
-If you use the BERT-LSTM model (Identity encoder + MQAN decoder), please cite [_Schema2QA: Answering Complex Queries on the Structured Web with a Neural Model_](https://arxiv.org/abs/2001.05609)
+If you use the BERT-LSTM model (Identity encoder + MQAN decoder), please cite [Schema2QA: High-Quality and Low-Cost Q&A Agents for the Structured Web](https://arxiv.org/abs/2001.05609)
 
 ```bibtex
-@article{Xu2020Schema2QA,
-  title={Schema2QA: Answering Complex Queries on the Structured Web with a Neural Model},
+@InProceedings{xu2020schema2qa,
+  title={{Schema2QA}: High-Quality and Low-Cost {Q\&A} Agents for the Structured Web},
   author={Silei Xu and Giovanni Campagna and Jian Li and Monica S. Lam},
-  journal={arXiv preprint arXiv:2001.05609},
+  booktitle={Proceedings of the 29th ACM International Conference on Information and Knowledge Management},
+  year={2020},
+  doi={https://doi.org/10.1145/3340531.3411974}
+}
+```
+
+If you use the paraphrasing model (BART or GPT-2 fine-tuned on a paraphrasing dataset), please cite [AutoQA: From Databases to QA Semantic Parsers with Only Synthetic Training Data](https://arxiv.org/abs/2010.04806)
+
+```bibtex
+@inproceedings{xu2020autoqa,
+  title={Auto{QA}: From Databases to {QA} Semantic Parsers with Only Synthetic Training Data},
+  author={Silei Xu and Sina J. Semnani  and Giovanni Campagna and Monica S. Lam},
+  booktitle={Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing},
   year={2020}
 }
 ```
