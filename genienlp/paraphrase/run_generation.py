@@ -534,7 +534,7 @@ def run_single_process_generation(args, config):
 
         all_outputs.extend(batch_outputs)
         if batch_idx < 1:
-            logger.info('First batch output: %s', str(all_outputs[:10]))
+            logger.info('First batch output: %s', str(all_outputs))
         batch_idx += 1
 
     # sort the results back to their original order
@@ -574,14 +574,13 @@ def run_single_process_generation(args, config):
         logger.info('Training calibrator and saving model to file...')
         dtrain = xgb.DMatrix('{}?format=csv&label_column=0'.format(calibration_training_file))
         params = {
-            'max_depth': 3, 
-            'subsample': 0.8, 
-            'objective': 'binary:logistic', 
+            'max_depth': 3,
+            'subsample': 0.8,
+            'objective': 'binary:logistic',
         } # TODO: how to set number of trees?
         bst = xgb.train(params, dtrain)
         logger.info(bst.eval(dtrain, name='train'))
         logger.info('Calibrator training complete.')
-        labels = dtrain.get_label()        
         bst.save_model(args.calibrator_path)
     
     metrics = compute_metrics(

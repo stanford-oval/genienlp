@@ -73,15 +73,17 @@ def compute_ece(exact_match, confidences, num_bins = 10, binning = 'uniform', ou
 
     bin_assignment = np.digitize(confidences, bin_intervals)
     bin_accuracies = [0.0 for _ in range(num_bins)]
-    bin_errors = [0.0 for _ in range(num_bins)]
+    bin_confidences = [0.0 for _ in range(num_bins)]
     bin_sizes = [0 for _ in range(num_bins)]
     for i, bin in enumerate(bin_assignment):
-        bin_errors[bin - 1] += abs(confidences[i] - exact_match[i])
+        bin_confidences[bin - 1] += confidences[i]
         bin_accuracies[bin - 1] += exact_match[i]
         bin_sizes[bin - 1] += 1
+    total_count = sum(bin_sizes)
     ece = 0.0
-    for bin, err in enumerate(bin_errors):
-        ece += err / bin_sizes[bin] if bin_sizes[bin] > 0 else 0
+    for bin, conf in enumerate(bin_confidences):
+        ece += abs(conf - bin_accuracies[bin]) if bin_sizes[bin] > 0 else 0
+    ece /= total_count
 
     if output_reliability_diagrams:
         bin_accuracies = [acc / bin_sizes[i] if bin_sizes[i] > 0 else 0 for (i, acc) in enumerate(bin_accuracies)]
@@ -125,7 +127,8 @@ def compute_metrics(
         import xgboost as xgb
         calibrator = xgb.Booster()
         calibrator.load_model(calibrator_path)
-
+    
+    correct_predictions = 0
     all_bleu = []
     all_exact_matches = []
     sentence_confidences = []
@@ -160,6 +163,8 @@ def compute_metrics(
             bleu_score /= len(output)
             exact_match /= len(output)
             sentence_confidence /= len(output)
+        if abs(exact_match - sentence_confidence) <= 0.5:
+            correct_predictions += 1
         all_bleu.append(bleu_score)
         all_exact_matches.append(exact_match)
         sentence_confidences.append(sentence_confidence)
@@ -170,7 +175,7 @@ def compute_metrics(
     ece = compute_ece(all_exact_matches, sentence_confidences, binning='uniform', output_reliability_diagrams=output_reliability_diagrams)
     ada_ece = compute_ece(all_exact_matches, sentence_confidences, binning='adaptive')
 
-    return {'bleu': total_bleu / len(all_bleu), 'em': 100.0 * total_exact_match / len(all_exact_matches), 'ece': ece, 'ada_ece': ada_ece}
+    return {'bleu': total_bleu / len(all_bleu), 'em': 100.0 * total_exact_match / len(all_exact_matches), 'ece': ece, 'ada_ece': ada_ece, 'prediction_acc': 100.0 * correct_prediction / len(all_exact_matches)}
 
 
 def compute_attention(sample_layer_attention, att_pooling):
