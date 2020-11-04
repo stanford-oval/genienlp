@@ -85,12 +85,20 @@ def compute_ece(exact_match, confidences, num_bins = 10, binning = 'uniform', ou
 
     if output_reliability_diagrams:
         bin_accuracies = [acc / bin_sizes[i] if bin_sizes[i] > 0 else 0 for (i, acc) in enumerate(bin_accuracies)]
-        plt.bar(np.arange(num_bins), bin_accuracies)
-        plt.ylabel("Accuracy")
-        plt.xlabel("Confidence")
-        plt.title(f"Reliability diagram, {binning} bins")
+        total_count = sum(bin_sizes)
+        bin_fractions = [size / total_count for size in bin_sizes]
+        fig, axs = plt.subplots(2, figsize=(5,7), sharex=True, sharey=True)
+        axs[0].bar(np.arange(num_bins), bin_fractions)
+        axs[0].set_ylabel("Percent of Samples")
+        axs[1].bar(np.arange(num_bins), bin_accuracies)
+        axs[1].set_ylabel("Accuracy")
+        axs[1].set_xlabel("Confidence")
+        if binning == 'uniform':
+            axs[1].plot([0,num_bins],[0,1], '--', c='black')
+        fig.suptitle(f"Reliability diagram, {binning} bins")
+        plt.ylim(0,1)
         plt.xticks(np.arange(num_bins), [round(x, 2) for x in bin_intervals])
-        plt.savefig(f"output_reliability_diagrams_{binning}")
+        plt.savefig(f"{output_reliability_diagrams}_{binning}")
 
     return ece
 
