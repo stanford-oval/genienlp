@@ -76,12 +76,12 @@ def compute_ece(exact_match, confidences, num_bins = 10, binning = 'uniform', ou
     bin_errors = [0.0 for _ in range(num_bins)]
     bin_sizes = [0 for _ in range(num_bins)]
     for i, bin in enumerate(bin_assignment):
-        bin_errors[bin - 1] += abs(confidences[i] - exact_match[i])
+        bin_errors[bin - 1] += confidences[i] - exact_match[i]
         bin_accuracies[bin - 1] += exact_match[i]
         bin_sizes[bin - 1] += 1
     ece = 0.0
     for bin, err in enumerate(bin_errors):
-        ece += err / bin_sizes[bin] if bin_sizes[bin] > 0 else 0
+        ece += abs(err) / bin_sizes[bin] if bin_sizes[bin] > 0 else 0
 
     if output_reliability_diagrams:
         bin_accuracies = [acc / bin_sizes[i] if bin_sizes[i] > 0 else 0 for (i, acc) in enumerate(bin_accuracies)]
