@@ -34,15 +34,15 @@ from .common import CombinedEmbedding, LayerNorm, LinearFeedforward
 
 
 class IdentityEncoder(nn.Module):
-    def __init__(self, numericalizer, args, context_embeddings, question_embeddings):
+    def __init__(self, numericalizer, args, context_embeddings, question_embeddings, embed_comb_method='cat'):
         super().__init__()
         self.args = args
         self.pad_idx = numericalizer.pad_id
 
         self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
                                                     finetune_pretrained=args.train_context_embeddings,
-                                                    trained_dimension=0, project=False)
-
+                                                    trained_dimension=0, project=False,
+                                                    embed_comb_method=embed_comb_method)
         if self.args.rnn_layers > 0 and self.args.rnn_dimension != self.args.dimension:
             self.dropout = nn.Dropout(args.dropout_ratio)
             self.projection = nn.Linear(self.encoder_embeddings.dimension, self.args.rnn_dimension, bias=False)

@@ -38,7 +38,7 @@ from .common import CombinedEmbedding, TransformerDecoder, LSTMDecoderAttention,
 
 
 class MQANDecoder(nn.Module):
-    def __init__(self, numericalizer, args, decoder_embeddings):
+    def __init__(self, numericalizer, args, decoder_embeddings, pretrained_embeddings, embed_comb_method):
         super().__init__()
         self.numericalizer = numericalizer
         self.pad_idx = numericalizer.pad_id
@@ -47,7 +47,9 @@ class MQANDecoder(nn.Module):
 
         self.decoder_embeddings = CombinedEmbedding(numericalizer, decoder_embeddings, args.dimension,
                                                     finetune_pretrained=False,
-                                                    trained_dimension=args.trainable_decoder_embeddings, project=True)
+                                                    trained_dimension=args.trainable_decoder_embeddings, project=True,
+                                                    pretrained_embeddings=pretrained_embeddings,
+                                                    embed_comb_method=embed_comb_method)
 
         if args.transformer_layers > 0:
             self.self_attentive_decoder = TransformerDecoder(args.dimension, args.transformer_heads,

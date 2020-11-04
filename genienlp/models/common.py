@@ -379,27 +379,50 @@ class CombinedEmbedding(nn.Module):
     dimension: Final[int]
 
     def __init__(self, numericalizer, pretrained_transformer_embeddings, output_dimension, finetune_pretrained=False,
-                 trained_dimension=0, project=True, pretrained_embeddings=None):
+                 trained_dimension=0, project=True, pretrained_embeddings=None, embed_comb_method='cat'):
         super().__init__()
         self.project = project
         self.pretrained_transformer_embeddings = nn.ModuleList(pretrained_transformer_embeddings)
-        
-        self.pretrained_embeddings = nn.ModuleList(pretrained_embeddings) if pretrained_embeddings else None
+        self.pretrained_embeddings = nn.ModuleList(pretrained_embeddings)
+        self.embed_comb_method = embed_comb_method
 
-        dimension = 0
-        for embedding in self.pretrained_transformer_embeddings:
-            dimension += embedding.dim
-        self.set_trainable(finetune_pretrained)
-        
-        if self.pretrained_embeddings:
+        if embed_comb_method == 'cat':
+            dimension = 0
+            for embedding in self.pretrained_transformer_embeddings:
+                dimension += embedding.dim
+            self.set_trainable(finetune_pretrained)
+
+            if self.pretrained_embeddings:
+                for embedding in self.pretrained_embeddings:
+                    dimension += embedding.weight.size()[1]
+
+            if trained_dimension > 0:
+                self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
+                dimension += trained_dimension
+            else:
+                self.trained_embeddings = None
+
+        elif embed_comb_method == 'sum':
+            dimension = -1
+            for embedding in self.pretrained_transformer_embeddings:
+                if dimension == -1:
+                    dimension = embedding.dim
+                else:
+                    assert dimension == embedding.dim
+            self.set_trainable(finetune_pretrained)
+
             for embedding in self.pretrained_embeddings:
-                dimension += embedding.weight.size()[1]
+                if dimension == -1:
+                    dimension = embedding.weight.size()[1]
+                else:
+                    assert dimension == embedding.weight.size()[1]
 
-        if trained_dimension > 0:
-            self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
-            dimension += trained_dimension
-        else:
-            self.trained_embeddings = None
+            if trained_dimension > 0:
+                assert dimension == trained_dimension
+                self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
+            else:
+                self.trained_embeddings = None
+
         if self.project:
             self.projection = Feedforward(dimension, output_dimension)
         else:
@@ -428,9 +451,14 @@ class CombinedEmbedding(nn.Module):
                 for layer_list, layer in zip(all_layers, emb.all_layers):
                     layer_list.append(layer)
             last_layer.append(emb.last_layer)
-
-        all_layers = [torch.cat(layer, dim=2) for layer in all_layers]
-        last_layer = torch.cat(last_layer, dim=2)
+        
+        if self.embed_comb_method == 'cat':
+            all_layers = [torch.cat(layer, dim=2) for layer in all_layers]
+            last_layer = torch.cat(last_layer, dim=2)
+        elif self.embed_comb_method == 'sum':
+            all_layers = [sum(layer) for layer in all_layers]
+            last_layer = sum(last_layer)
+            
         if self.project:
             last_layer = self.projection(last_layer)
         return EmbeddingOutput(all_layers=all_layers, last_layer=last_layer)
@@ -439,6 +467,14 @@ class CombinedEmbedding(nn.Module):
         embedded: List[EmbeddingOutput] = []
         if self.pretrained_transformer_embeddings is not None:
             embedded += [emb(x, entity_ids, entity_masking, mask_entities, padding) for emb in self.pretrained_transformer_embeddings]
+        
+        if self.pretrained_embeddings is not None:
+            for embedding in self.pretrained_embeddings:
+                trained_vocabulary_size = embedding.weight.size()[0]
+                valid_x = torch.lt(x, trained_vocabulary_size)
+                masked_x = torch.where(valid_x, x, torch.zeros_like(x))
+                output = embedding(masked_x)
+                embedded.append(EmbeddingOutput(all_layers=[output], last_layer=output))
 
         if self.trained_embeddings is not None:
             trained_vocabulary_size = self.trained_embeddings.weight.size()[0]
@@ -446,8 +482,11 @@ class CombinedEmbedding(nn.Module):
             masked_x = torch.where(valid_x, x, torch.zeros_like(x))
             output = self.trained_embeddings(masked_x)
             embedded.append(EmbeddingOutput(all_layers=[output], last_layer=output))
+            
 
         return self._combine_embeddings(embedded)
+
+        
 
 
 class SemanticFusionUnit(nn.Module):

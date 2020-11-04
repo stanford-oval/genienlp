@@ -193,6 +193,9 @@ def parse_argv(parser):
     parser.add_argument('--features_size', nargs='+', type=int, default=[1, 1], help='Max length of each feature vector. All features are padded up to this length')
     parser.add_argument('--features_default_val', nargs='+', type=float, default=[0, 1.0], help='Max length of each feature vector. All features are padded up to this length')
 
+    parser.add_argument('--have_decoder_type_embeddings', action='store_true', help='')
+    parser.add_argument('--tie_encoder_decoder_type_embeds', action='store_true', help='')
+
 
     parser.add_argument('--encoder_embeddings', default='glove+char',
                         help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
