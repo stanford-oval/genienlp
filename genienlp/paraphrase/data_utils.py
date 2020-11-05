@@ -147,7 +147,7 @@ def fairseq_mask(input_sequence, mlm_probability, mask_token, thingtalk):
             input_tokens[i] = mask_token
     return ' '.join(input_tokens)
 
-def token_deletion(input_sequence, mlm_probability, thingtalk):
+def token_deletion(input_sequence, mlm_probability, mask_token, thingtalk):
     all_entities = []
     all_device_tokens = []
     if thingtalk:
@@ -163,10 +163,15 @@ def token_deletion(input_sequence, mlm_probability, thingtalk):
             mlm_probability /= 0.9
             continue
         if random.random() < mlm_probability:
-            input_tokens.pop(i)
+            # temporarily put a mask token here
+            input_tokens[i] = mask_token
+    
+    # go through all the tokens, and delete the ones that were masked
+    input_tokens = list(filter(lambda x: x != mask_token, input_tokens))
+
     return ' '.join(input_tokens)
 
-def text_infilling(input_sequence, num_text_spans, thingtalk):
+def text_infilling(input_sequence, num_text_spans, mask_token, thingtalk):
     all_entities = []
     all_device_tokens = []
     if thingtalk:
@@ -175,20 +180,32 @@ def text_infilling(input_sequence, num_text_spans, thingtalk):
             all_device_tokens.extend(token.split('.'))
 
     input_tokens = input_sequence.split(' ')
-    possible_indexes = range(len(input_tokens))
+
     num_successful_spans = 0
     while num_successful_spans < num_text_spans:
         num_tokens_to_mask = np.random.poisson(lam=3)
-        
-        # don't reuse indexes that we've already chosen
-        token_start_index = random.sample(possible_indexes)
-        for j in range(0, num_tokens_to_mask):
-            curr_token = input_tokens[token_start_index + j]
-            # check for crucial token
-            if is_entity(curr_token) or curr_token in all_device_tokens or has_match(input_tokens[j + token_start_index:], all_entities):
-                break
-            else:
+        mask_start_index = random.randInt(0, len(input_tokens) - 1)
 
+        if mask_start_index + num_tokens_to_mask > len(input_tokens):
+            continue
+        if input_tokens[mask_start_index] == mask_token:
+            continue
+        
+        contains_crucial_token = False
+        # check this span for a crucial token
+        for j in range(0, num_tokens_to_mask):
+            curr_token = input_tokens[mask_start_index + j]
+            if is_entity(curr_token) or curr_token in all_device_tokens or has_match(input_tokens[j + mask_start_index:], all_entities):
+                contains_crucial_token = True
+                break
+        if not contains_crucial_token:
+            num_successful_spans += 1
+            if num_tokens_to_mask + mask_start_index != len(input_tokens):
+                input_tokens = input_tokens[:mask_start_index] + mask_token + input_tokens[mask_start_index + num_tokens_to_mask:]
+            else: 
+                input_tokens = input_tokens[:mask_start_index] + mask_token
+
+    return ' '.join(input_tokens)
 
 def sentence_permutation(input_sequence):
     input_tokens = input_sequence.split('.')
@@ -200,8 +217,6 @@ def document_rotation(input_sequence):
     token_index_to_rotate = random.randInt(0, len(input_tokens) - 1)
     input_tokens = input_tokens[token_index_to_rotate:] + input_tokens[:token_index_to_rotate]
     return ' '.join(input_tokens)
-
-
 
 def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column,
                                   copy, sep_token_id, skip_heuristics, is_cased, model_type,
@@ -256,9 +271,9 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         if masked_paraphrasing:
             input_sequence = fairseq_mask(input_sequence, fairseq_mask_prob, mask_token, thingtalk)
         if delete_tokens:
-            input_sequence = token_deletion(input_sequence, delete_token_prob, thingtalk)
+            input_sequence = token_deletion(input_sequence, delete_token_prob, mask_token, thingtalk)
         if infill_text:
-            input_sequence = text_infilling(input_sequence, num_text_spans, thingtalk)
+            input_sequence = text_infilling(input_sequence, num_text_spans, mask_token, thingtalk)
         if permute_sentence:
             input_sequence = sentence_permutation(input_sequence)
         if rotate_document:

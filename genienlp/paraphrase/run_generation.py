@@ -324,7 +324,12 @@ def run_single_process_generation(args, config):
                                                                 model_input_prefix=model_input_prefix,
                                                                 masked_paraphrasing=args.masked_paraphrasing,
                                                                 fairseq_mask_prob=args.fairseq_mask_prob,
-                                                                mask_token=mask_token)
+                                                                mask_token=mask_token,
+                                                                delete_tokens=args.delete_token_prob,
+                                                                infill_text=args.infill_text,
+                                                                num_text_spans=args.num_text_spans,
+                                                                permute_sentence=args.permute_sentence,
+                                                                rotate_document=args.rotate_document)
 
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, original_order, reverse_maps, all_prompt_ids = \
