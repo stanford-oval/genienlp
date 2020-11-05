@@ -86,7 +86,7 @@ class Seq2Seq(PreTrainedModel):
                 decoder_embed_comb_method = 'sum'
                 decoder_type_embeddings = torch.nn.Embedding(self.args.num_db_types, self.args.trainable_decoder_embeddings, padding_idx=int(self.args.features_default_val[0]))
         
-        if not isinstance(decoder_type_embeddings, list):
+        if decoder_type_embeddings and not isinstance(decoder_type_embeddings, list):
             decoder_type_embeddings = [decoder_type_embeddings]
         
         self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings, decoder_type_embeddings, decoder_embed_comb_method)

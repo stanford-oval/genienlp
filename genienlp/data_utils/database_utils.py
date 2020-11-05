@@ -24,8 +24,7 @@ DOMAIN_TYPE_MAPPING['restaurants'] = {'Person': 'Q5', 'Restaurant': 'Q571', 'ser
 DOMAIN_TYPE_MAPPING['hotels'] = {'Hotel': 'Q571', 'LocationFeatureSpecification': 'Q5912147', 'geo': 'Q2221906',
                                  'CheckinTime': 'Q1068755', 'CheckoutTime': 'Q56353377', 'starRating.ratingValue': 'Q2976556'}   # Q5912147:hotel amenity, Q2976556:hotel rating
 
-# Dialogues
-
+## Dialogues
 DOMAIN_TYPE_MAPPING['spotify'] = {'id': 'Q134556', 'song': 'Q7366', 'artist': 'Q5',
                                   'artists': 'Q5', 'album': 'Q208569', 'genres': 'Q188451'}   # Q188451:music genre
 

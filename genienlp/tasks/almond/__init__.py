@@ -139,20 +139,21 @@ class AlmondDataset(CQA):
                 
                 # find the right entity candidate for each mention
                 # extract type ids for each token in input sentence
-                all_token_type_ids = bootleg.parse_mentions(config_args, input_file_name[:-len('_bootleg.jsonl')], mode='dump_preds', type_size=features_size[0], type_default_val=int(features_default_val[0]))
+                all_token_type_ids, all_tokens_type_probs = bootleg.parse_mentions(config_args, input_file_name[:-len('_bootleg.jsonl')], mode='dump_preds', type_size=features_size[0], type_default_val=int(features_default_val[0]))
                 
-                # override type_ids with extracted types
-                assert len(examples) == len(all_token_type_ids)
-                for ex, tokens_type_ids in zip(examples, all_token_type_ids):
+                # override examples features with bootleg features
+                assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
+                for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
                     if bootleg.is_contextual:
                         for i in range(len(tokens_type_ids)):
-                            ex.question_feature[i] = ex.question_feature[i]._replace(type_ids=tokens_type_ids[i])
-                            ex.context_plus_question_feature[i + len(ex.context)] = ex.context_plus_question_feature[i + len(ex.context)]._replace(type_ids=tokens_type_ids[i])
+                            examples[n].question_feature[i] = ex.question_feature[i]._replace(type_ids=tokens_type_ids[i], token_freq=tokens_type_probs[i])
+                            examples[n].context_plus_question_feature[i + len(ex.context)] = ex.context_plus_question_feature[i + len(ex.context)]._replace(type_ids=tokens_type_ids[i], token_freq=tokens_type_probs[i])
                             
                     else:
                         for i in range(len(tokens_type_ids)):
-                            ex.context_feature[i] = ex.context_feature[i]._replace(type_ids=tokens_type_ids[i])
-                            ex.context_plus_question_feature[i] = ex.context_plus_question_feature[i]._replace(type_ids=tokens_type_ids[i])
+                            examples[n].context_feature[i] = ex.context_feature[i]._replace(type_ids=tokens_type_ids[i], token_freq=tokens_type_probs[i])
+                            examples[n].context_plus_question_feature[i] = ex.context_plus_question_feature[i]._replace(type_ids=tokens_type_ids[i], token_freq=tokens_type_probs[i])
+
                             
             if cache_input_data:
                 os.makedirs(os.path.dirname(cache_name), exist_ok=True)

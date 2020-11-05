@@ -124,12 +124,14 @@ class TransformerEmbedding(torch.nn.Module):
 
         return position_embeddings
 
-    def forward(self, input: torch.Tensor, entity_ids=None, entity_masking=None, mask_entities=False, padding=None, output_hidden_states=True):
+    def forward(self, input: torch.Tensor, entity_ids=None, entity_masking=None, entity_probs=None, mask_entities=False, padding=None, output_hidden_states=True):
         inputs = {'input_ids': input, 'attention_mask': (~padding).to(dtype=torch.float), 'mask_entities': mask_entities, 'output_hidden_states': output_hidden_states}
         if entity_ids is not None:
             inputs['entity_ids'] = entity_ids
         if entity_masking is not None:
             inputs['entity_masking'] = entity_masking
+        if entity_probs is not None:
+            inputs['entity_probs'] = entity_probs
         last_hidden_state, _pooled, hidden_states = self.model(**inputs)
 
         return EmbeddingOutput(all_layers=hidden_states, last_layer=last_hidden_state)

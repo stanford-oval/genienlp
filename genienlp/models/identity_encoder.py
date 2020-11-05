@@ -66,10 +66,12 @@ class IdentityEncoder(nn.Module):
 
     def compute_final_embeddings(self, context, question, context_entity_ids, question_entity_ids,
                                  context_padding, question_padding, context_lengths,
-                                 context_entity_masking=None, question_entity_masking=None, mask_entities=True):
+                                 context_entity_masking=None, question_entity_masking=None,
+                                 context_entity_probs=None, question_entity_probs=None,
+                                 mask_entities=True):
         
-        context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking, mask_entities=mask_entities, padding=context_padding)
-        question_embedded = self.encoder_embeddings(question, entity_ids=question_entity_ids, entity_masking=question_entity_masking, mask_entities=mask_entities, padding=question_padding,)
+        context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking, entity_probs=context_entity_probs, mask_entities=mask_entities, padding=context_padding)
+        question_embedded = self.encoder_embeddings(question, entity_ids=question_entity_ids, entity_masking=question_entity_masking, entity_probs=question_entity_probs, mask_entities=mask_entities, padding=question_padding,)
         
         # pick the top-most N transformer layers to pass to the decoder for cross-attention
         # (add 1 to account for the embedding layer - the decoder will drop it later)
@@ -127,19 +129,25 @@ class IdentityEncoder(nn.Module):
         
         context_entity_ids, question_entity_ids = None, None
         context_entity_masking, question_entity_masking = None, None
+        context_entity_probs, question_entity_probs = None, None
         if self.args.num_db_types > 0:
             context_entity_ids = batch.context.feature[:, :, :features_size[0]].long()
             question_entity_ids = batch.question.feature[:, :, :features_size[0]].long()
 
             context_entity_masking = (context_entity_ids != features_default_val[0]).int()
             question_entity_masking = (question_entity_ids != features_default_val[0]).int()
+            
+            if self.args.entity_type_agg_method == 'weighted':
+                context_entity_probs = batch.context.feature[:, :, features_size[0]:features_size[0]+features_size[1]].long()
+                question_entity_probs = batch.question.feature[:, :, features_size[0]:features_size[0]+features_size[1]].long()
         
         self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
             self.compute_final_embeddings(context, question,
                                           context_entity_ids, question_entity_ids,
                                           context_padding, question_padding,
                                           context_lengths,
-                                          context_entity_masking, question_entity_masking)
+                                          context_entity_masking, question_entity_masking,
+                                          context_entity_probs, question_entity_probs)
 
         context_rnn_state_entities_masked = None
         if self.args.use_encoder_loss:
@@ -149,6 +157,7 @@ class IdentityEncoder(nn.Module):
                                               context_padding, question_padding,
                                               context_lengths,
                                               context_entity_masking, question_entity_masking,
+                                              context_entity_probs, question_entity_probs,
                                               mask_entities=True)
 
 

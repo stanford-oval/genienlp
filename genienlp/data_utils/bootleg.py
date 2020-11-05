@@ -9,7 +9,7 @@ class Bootleg(object):
     def __init__(self, bootleg_input_dir, bootleg_model, unk_id, num_workers, is_contextual, bootleg_skip_feature_creation):
         self.bootleg_input_dir = bootleg_input_dir
         self.bootleg_model = bootleg_model
-        self.unk_id = unk_id
+        self.unk_id = int(unk_id)
         self.num_workers = num_workers
         self.is_contextual = is_contextual
         self.bootleg_skip_feature_creation = bootleg_skip_feature_creation
@@ -78,6 +78,30 @@ class Bootleg(object):
             run.main(config_args, mode)
         
         all_tokens_type_ids = []
+        all_tokens_type_probs = []
+        
+        threshold = 0.3
+
+        def reverse_bisect_left(a, x, lo=0, hi=None):
+            """Insert item x in list a, and keep it reverse-sorted assuming a
+            is reverse-sorted.
+
+            If x is already in a, insert it to the right of the rightmost x.
+
+            Optional args lo (default 0) and hi (default len(a)) bound the
+            slice of a to be searched.
+            """
+            if lo < 0:
+                raise ValueError('lo must be non-negative')
+            if hi is None:
+                hi = len(a)
+            while lo < hi:
+                mid = (lo + hi) // 2
+                if x > a[mid]:
+                    hi = mid
+                else:
+                    lo = mid + 1
+            return lo
 
         # return tokens_type_ids
         with open(f'{self.output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}/bootleg_labels.jsonl', 'r') as fin:
@@ -85,11 +109,37 @@ class Bootleg(object):
                 line = ujson.loads(line)
                 tokenized = line['sentence'].split(' ')
                 tokens_type_ids = [[self.unk_id] * type_size for _ in range(len(tokenized))]
-                for qid, span in zip(line['qids'], line['spans']):
-                    type_id = self.pad_features([self.type2id[type] for type in self.qid2type[qid]], type_size, type_default_val)
+                tokens_type_probs = [[0.0] * type_size for _ in range(len(tokenized))]
+                for all_qids, all_probs, span in zip(line['cand_qids'], line['cand_probs'], line['spans']):
+                    
+                    # filter qids with confidence lower than a threshold
+                    idx = reverse_bisect_left(all_probs, threshold, lo=0)
+                    all_qids = all_qids[:idx]
+                    all_probs = all_probs[:idx]
+                    
+                    # TODO: now we only keep the first type for each qid
+                    # extend so we can keep all types and aggregate later
 
-                    tokens_type_ids[span[0]:span[1]] = [type_id] * (span[1] - span[0])
+                    type_ids = []
+                    type_probs = []
+                    for qid, prob in zip(all_qids, all_probs):
+                        # get all type for a qid
+                        all_types = self.qid2type[qid]
+                        if len(all_types):
+                            # choose only the first type
+                            type_id = self.type2id[all_types[0]]
+                            type_ids.append(type_id)
+                            type_probs.append(prob)
+                        
+                    padded_type_ids = self.pad_features(type_ids, type_size, type_default_val)
+                    padded_type_probs = self.pad_features(type_probs, type_size, 0.0)
+                        
+                    # type_id = self.pad_features([self.type2id[type] for type in self.qid2type[qid]], type_size, type_default_val)
+
+                    tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
+                    tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
                     
                 all_tokens_type_ids.append(tokens_type_ids)
+                all_tokens_type_probs.append(tokens_type_probs)
                 
-        return all_tokens_type_ids
+        return all_tokens_type_ids, all_tokens_type_probs

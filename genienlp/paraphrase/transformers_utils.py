@@ -948,7 +948,7 @@ class BertEmbeddingsV2(BertEmbeddings):
             self.entity_type_embeddings = nn.Embedding(num_db_types, config.hidden_size, padding_idx=db_unk_id)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None,
-                entity_ids=None, entity_masking=None, mask_entities=False, inputs_embeds=None):
+                entity_ids=None, entity_masking=None, entity_probs=None, mask_entities=False, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -975,9 +975,14 @@ class BertEmbeddingsV2(BertEmbeddings):
         if self.num_db_types > 0:
             # average embedding of different types
             # size (batch, length, num_types, emb_dim)
-            entity_type_embeddings = self.entity_type_embeddings(entity_ids)
             type_lengths = entity_masking.sum(-1)
             type_lengths[type_lengths == 0] = 1
+            
+            entity_type_embeddings = self.entity_type_embeddings(entity_ids)
+            
+            # weighted average
+            if entity_probs is not None:
+                entity_type_embeddings = entity_type_embeddings * entity_probs.unsqueeze(-1)
 
             entity_type_embeddings = entity_type_embeddings.sum(-2) / type_lengths.unsqueeze(-1)
             
@@ -1006,6 +1011,7 @@ class BertModelV2(BertModel):
             position_ids=None,
             entity_ids=None,
             entity_masking=None,
+            entity_probs=None,
             mask_entities=False,
             head_mask=None,
             inputs_embeds=None,
@@ -1060,8 +1066,8 @@ class BertModelV2(BertModel):
 
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
-            entity_ids=entity_ids, entity_masking=entity_masking, mask_entities=mask_entities,
-            inputs_embeds=inputs_embeds
+            entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs,
+            mask_entities=mask_entities, inputs_embeds=inputs_embeds
         )
         encoder_outputs = self.encoder(
             embedding_output,

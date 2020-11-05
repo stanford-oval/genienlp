@@ -463,10 +463,10 @@ class CombinedEmbedding(nn.Module):
             last_layer = self.projection(last_layer)
         return EmbeddingOutput(all_layers=all_layers, last_layer=last_layer)
 
-    def forward(self, x, entity_ids=None, entity_masking=None, mask_entities=None, padding=None):
+    def forward(self, x, entity_ids=None, entity_masking=None, entity_probs=None, mask_entities=None, padding=None):
         embedded: List[EmbeddingOutput] = []
         if self.pretrained_transformer_embeddings is not None:
-            embedded += [emb(x, entity_ids, entity_masking, mask_entities, padding) for emb in self.pretrained_transformer_embeddings]
+            embedded += [emb(x, entity_ids, entity_masking, entity_probs, mask_entities, padding) for emb in self.pretrained_transformer_embeddings]
         
         if self.pretrained_embeddings is not None:
             for embedding in self.pretrained_embeddings:
