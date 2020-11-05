@@ -431,6 +431,8 @@ class NBartForConditionalGeneration(BartForConditionalGeneration):
             else:
                 # Greedy decoding
                 next_token = torch.argmax(next_token_logits, dim=-1)
+                probs = F.softmax(next_token_logits, dim=-1)
+                confidences.append(probs[next_token])
 
             # update generations and finished sentences
             if eos_token_id is not None:
