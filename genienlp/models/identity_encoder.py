@@ -120,7 +120,7 @@ class IdentityEncoder(nn.Module):
     
         return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state
 
-    def forward(self, batch, features_size, features_default_val):
+    def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length
         question, question_lengths = batch.question.value, batch.question.length
 
@@ -131,15 +131,15 @@ class IdentityEncoder(nn.Module):
         context_entity_masking, question_entity_masking = None, None
         context_entity_probs, question_entity_probs = None, None
         if self.args.num_db_types > 0:
-            context_entity_ids = batch.context.feature[:, :, :features_size[0]].long()
-            question_entity_ids = batch.question.feature[:, :, :features_size[0]].long()
+            context_entity_ids = batch.context.feature[:, :, :self.args.features_size[0]].long()
+            question_entity_ids = batch.question.feature[:, :, :self.args.features_size[0]].long()
 
-            context_entity_masking = (context_entity_ids != features_default_val[0]).int()
-            question_entity_masking = (question_entity_ids != features_default_val[0]).int()
+            context_entity_masking = (context_entity_ids != self.args.features_default_val[0]).int()
+            question_entity_masking = (question_entity_ids != self.args.features_default_val[0]).int()
             
             if self.args.entity_type_agg_method == 'weighted':
-                context_entity_probs = batch.context.feature[:, :, features_size[0]:features_size[0]+features_size[1]].long()
-                question_entity_probs = batch.question.feature[:, :, features_size[0]:features_size[0]+features_size[1]].long()
+                context_entity_probs = batch.context.feature[:, :, self.args.features_size[0]:self.args.features_size[0] + self.args.features_size[1]].long()
+                question_entity_probs = batch.question.feature[:, :, self.args.features_size[0]:self.args.features_size[0] + self.args.features_size[1]].long()
         
         self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
             self.compute_final_embeddings(context, question,

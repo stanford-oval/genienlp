@@ -38,10 +38,13 @@ from torch.nn import functional as F
 from torch.nn.utils.rnn import pack_padded_sequence as pack
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
 
+from ..data_utils.embeddings import EmbeddingOutput
 
-class EmbeddingOutput(NamedTuple):
-    all_layers: List[torch.Tensor]
-    last_layer: torch.Tensor
+
+# class EmbeddingOutput(NamedTuple):
+#     name: str
+#     all_layers: List[torch.Tensor]
+#     last_layer: torch.Tensor
 
 
 INF = 1e10
@@ -97,8 +100,8 @@ def positional_encodings_like(x, t=None):
 
 def positional_embedding(self, x):
     embedded = []
-    if self.pretrained_transformer_embeddings is not None:
-        embedded += [emb.get_positional_embedding(x) for emb in self.pretrained_transformer_embeddings]
+    if self.pretrained_embeddings is not None:
+        embedded += [emb.get_positional_embedding(x) for emb in self.pretrained_embeddings]
     if self.trained_embeddings is not None:
         # positional embedding is only calculated for pretrained embeddings
         pass
@@ -378,22 +381,23 @@ class CombinedEmbedding(nn.Module):
     project: Final[bool]
     dimension: Final[int]
 
-    def __init__(self, numericalizer, pretrained_transformer_embeddings, output_dimension, finetune_pretrained=False,
-                 trained_dimension=0, project=True, pretrained_embeddings=None, embed_comb_method='cat'):
+    def __init__(self, numericalizer, pretrained_embeddings, output_dimension, finetune_pretrained=False,
+                 trained_dimension=0, project=True, entity_embeddings=None, embed_comb_method='cat'):
         super().__init__()
         self.project = project
-        self.pretrained_transformer_embeddings = nn.ModuleList(pretrained_transformer_embeddings)
         self.pretrained_embeddings = nn.ModuleList(pretrained_embeddings)
+        self.entity_embeddings = nn.ModuleList(entity_embeddings)
         self.embed_comb_method = embed_comb_method
+        self.sum_before = None
 
         if embed_comb_method == 'cat':
             dimension = 0
-            for embedding in self.pretrained_transformer_embeddings:
+            for embedding in self.pretrained_embeddings:
                 dimension += embedding.dim
             self.set_trainable(finetune_pretrained)
 
-            if self.pretrained_embeddings:
-                for embedding in self.pretrained_embeddings:
+            if self.entity_embeddings:
+                for embedding in self.entity_embeddings:
                     dimension += embedding.weight.size()[1]
 
             if trained_dimension > 0:
@@ -404,18 +408,24 @@ class CombinedEmbedding(nn.Module):
 
         elif embed_comb_method == 'sum':
             dimension = -1
-            for embedding in self.pretrained_transformer_embeddings:
+            for embedding in self.pretrained_embeddings:
                 if dimension == -1:
                     dimension = embedding.dim
                 else:
                     assert dimension == embedding.dim
             self.set_trainable(finetune_pretrained)
 
-            for embedding in self.pretrained_embeddings:
+            for embedding in self.entity_embeddings:
                 if dimension == -1:
                     dimension = embedding.weight.size()[1]
                 else:
-                    assert dimension == embedding.weight.size()[1]
+                    # if dimension is equal sum up before projection
+                    # otherwise project other embeddings first and then sum up with entity embeddings
+                    if embedding.weight.size()[1] == dimension:
+                        assert self.project
+                        self.sum_before = True
+                    else:
+                        self.sum_after = False
 
             if trained_dimension > 0:
                 assert dimension == trained_dimension
@@ -430,7 +440,7 @@ class CombinedEmbedding(nn.Module):
         self.dimension = output_dimension
 
     def set_trainable(self, trainable):
-        self.pretrained_transformer_embeddings.requires_grad_(trainable)
+        self.pretrained_embeddings.requires_grad_(trainable)
 
     def _combine_embeddings(self, embeddings):
         if len(embeddings) == 1:
@@ -438,10 +448,11 @@ class CombinedEmbedding(nn.Module):
             last_layer = embeddings[0].last_layer
             if self.project:
                 last_layer = self.projection(last_layer)
-            return EmbeddingOutput(all_layers=all_layers, last_layer=last_layer)
+            return EmbeddingOutput(name='combined', all_layers=all_layers, last_layer=last_layer)
 
         all_layers = None
         last_layer = []
+        names = []
         for emb in embeddings:
             if all_layers is None:
                 all_layers = [[layer] for layer in emb.all_layers]
@@ -451,42 +462,68 @@ class CombinedEmbedding(nn.Module):
                 for layer_list, layer in zip(all_layers, emb.all_layers):
                     layer_list.append(layer)
             last_layer.append(emb.last_layer)
+            names.append(emb.name)
         
         if self.embed_comb_method == 'cat':
             all_layers = [torch.cat(layer, dim=2) for layer in all_layers]
             last_layer = torch.cat(last_layer, dim=2)
+            if self.project:
+                last_layer = self.projection(last_layer)
         elif self.embed_comb_method == 'sum':
-            all_layers = [sum(layer) for layer in all_layers]
-            last_layer = sum(last_layer)
-            
-        if self.project:
-            last_layer = self.projection(last_layer)
-        return EmbeddingOutput(all_layers=all_layers, last_layer=last_layer)
+            if self.sum_after:
+                proj_layer = []
+                non_proj_layer = []
+                # exclude entity embeddings
+                for name, layer in zip(names, last_layer):
+                    if name != 'entity':
+                        non_proj_layer.append(layer)
+                    else:
+                        proj_layer.append(layer)
+                        
+                last_layer = self.projection(proj_layer)
+                for layer in non_proj_layer:
+                    last_layer += layer
+            else:
+                all_layers = [sum(layer) for layer in all_layers]
+                last_layer = sum(last_layer)
+
+                if self.project:
+                    last_layer = self.projection(last_layer)
+
+        return EmbeddingOutput(name='combined', all_layers=all_layers, last_layer=last_layer)
 
     def forward(self, x, entity_ids=None, entity_masking=None, entity_probs=None, mask_entities=None, padding=None):
         embedded: List[EmbeddingOutput] = []
-        if self.pretrained_transformer_embeddings is not None:
-            embedded += [emb(x, entity_ids, entity_masking, entity_probs, mask_entities, padding) for emb in self.pretrained_transformer_embeddings]
+        if len(self.pretrained_embeddings):
+            embedded += [emb(x, entity_ids, entity_masking, entity_probs, mask_entities, padding) for emb in self.pretrained_embeddings]
         
-        if self.pretrained_embeddings is not None:
-            for embedding in self.pretrained_embeddings:
-                trained_vocabulary_size = embedding.weight.size()[0]
-                valid_x = torch.lt(x, trained_vocabulary_size)
-                masked_x = torch.where(valid_x, x, torch.zeros_like(x))
-                output = embedding(masked_x)
-                embedded.append(EmbeddingOutput(all_layers=[output], last_layer=output))
+        if len(self.entity_embeddings):
+            for embedding in self.entity_embeddings:
+                # average embedding of different types
+                # size (batch, length, num_types, emb_dim)
+                type_lengths = entity_masking.sum(-1)
+                type_lengths[type_lengths == 0] = 1
+
+                entity_type_embeddings = embedding(entity_ids)
+
+                # weighted average
+                if entity_probs is not None:
+                    entity_type_embeddings = entity_type_embeddings * entity_probs.unsqueeze(-1)
+
+                entity_type_embeddings = entity_type_embeddings.sum(-2) / type_lengths.unsqueeze(-1)
+
+                embedded.append(EmbeddingOutput(name='entity', all_layers=[entity_type_embeddings], last_layer=entity_type_embeddings))
 
         if self.trained_embeddings is not None:
             trained_vocabulary_size = self.trained_embeddings.weight.size()[0]
             valid_x = torch.lt(x, trained_vocabulary_size)
             masked_x = torch.where(valid_x, x, torch.zeros_like(x))
             output = self.trained_embeddings(masked_x)
-            embedded.append(EmbeddingOutput(all_layers=[output], last_layer=output))
+            embedded.append(EmbeddingOutput(name='trained', all_layers=[output], last_layer=output))
             
 
         return self._combine_embeddings(embedded)
 
-        
 
 
 class SemanticFusionUnit(nn.Module):

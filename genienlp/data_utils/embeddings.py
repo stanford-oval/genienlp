@@ -53,6 +53,7 @@ EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update(
     {embedding: XLMRobertaNumericalizer for embedding in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST})
 
 class EmbeddingOutput(NamedTuple):
+    name: str
     all_layers: List[torch.Tensor]
     last_layer: torch.Tensor
 
@@ -92,7 +93,7 @@ class WordVectorEmbedding(torch.nn.Module):
 
     def forward(self, input: torch.Tensor, padding=None):
         last_layer = self.embedding[0](input.cpu()).to(input.device)
-        return EmbeddingOutput(all_layers=[last_layer], last_layer=last_layer)
+        return EmbeddingOutput(name='word_vector', all_layers=[last_layer], last_layer=last_layer)
 
     def to(self, *args, **kwargs):
         # ignore attempts to move the word embedding, which should stay on CPU
@@ -134,7 +135,7 @@ class TransformerEmbedding(torch.nn.Module):
             inputs['entity_probs'] = entity_probs
         last_hidden_state, _pooled, hidden_states = self.model(**inputs)
 
-        return EmbeddingOutput(all_layers=hidden_states, last_layer=last_hidden_state)
+        return EmbeddingOutput(name='transformer', all_layers=hidden_states, last_layer=last_hidden_state)
 
 class PretrainedLMEmbedding(torch.nn.Module):
     def __init__(self, model_name, cachedir):
@@ -174,7 +175,7 @@ class PretrainedLMEmbedding(torch.nn.Module):
     def forward(self, input: torch.Tensor, padding=None):
         pretrained_indices = torch.gather(self.vocab_to_pretrained, dim=0, index=input)
         rnn_output = self.model(pretrained_indices)
-        return EmbeddingOutput(all_layers=[rnn_output], last_layer=rnn_output)
+        return EmbeddingOutput('pretrained_lm', all_layers=[rnn_output], last_layer=rnn_output)
 
 def _name_to_vector(emb_name, cachedir):
     if emb_name == 'glove':
