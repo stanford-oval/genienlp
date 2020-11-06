@@ -75,7 +75,7 @@ class Seq2Seq(PreTrainedModel):
                 # if encode decoder outputs are tied chances are dimensions are different
                 # so concat embeddings and project to decoder dimension
             if self.args.tie_encoder_decoder_type_embeds:
-                encoder_type_embeddings = self.encoder.encoder_embeddings.pretrained_transformer_embeddings[0].model.embeddings.entity_type_embeddings
+                encoder_type_embeddings = self.encoder.encoder_embeddings.pretrained_embeddings[0].model.embeddings.entity_type_embeddings
                 decoder_type_embeddings = torch.nn.Embedding(*encoder_type_embeddings.weight.size(), padding_idx=encoder_type_embeddings.padding_idx)
                 decoder_type_embeddings.weight = encoder_type_embeddings.weight
             else:

@@ -388,7 +388,7 @@ class CombinedEmbedding(nn.Module):
         self.pretrained_embeddings = nn.ModuleList(pretrained_embeddings)
         self.entity_embeddings = nn.ModuleList(entity_embeddings)
         self.embed_comb_method = embed_comb_method
-        self.sum_before = None
+        self.sum_after_projection = False
 
         if embed_comb_method == 'cat':
             dimension = 0
@@ -396,42 +396,41 @@ class CombinedEmbedding(nn.Module):
                 dimension += embedding.dim
             self.set_trainable(finetune_pretrained)
 
-            if self.entity_embeddings:
-                for embedding in self.entity_embeddings:
-                    dimension += embedding.weight.size()[1]
-
             if trained_dimension > 0:
                 self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
                 dimension += trained_dimension
             else:
                 self.trained_embeddings = None
+                
+            if self.entity_embeddings:
+                for embedding in self.entity_embeddings:
+                    dimension += embedding.weight.size()[1]
 
         elif embed_comb_method == 'sum':
-            dimension = -1
+            dimension = 0
             for embedding in self.pretrained_embeddings:
-                if dimension == -1:
+                if dimension == 0:
                     dimension = embedding.dim
-                else:
-                    assert dimension == embedding.dim
+                elif embedding.dim != dimension:
+                    raise ValueError('Pretrained Embeddings should have the same size when embed_comb_method is "sum"')
             self.set_trainable(finetune_pretrained)
 
-            for embedding in self.entity_embeddings:
-                if dimension == -1:
-                    dimension = embedding.weight.size()[1]
-                else:
-                    # if dimension is equal sum up before projection
-                    # otherwise project other embeddings first and then sum up with entity embeddings
-                    if embedding.weight.size()[1] == dimension:
-                        assert self.project
-                        self.sum_before = True
-                    else:
-                        self.sum_after = False
-
             if trained_dimension > 0:
-                assert dimension == trained_dimension
+                if dimension == 0:
+                    dimension = trained_dimension
+                elif trained_dimension != dimension:
+                    assert project
+                    self.sum_after_projection = True
                 self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
             else:
                 self.trained_embeddings = None
+                
+            for embedding in self.entity_embeddings:
+                if dimension == 0:
+                    dimension = embedding.weight.size()[1]
+                elif embedding.weight.size()[1] != dimension:
+                    assert project
+                    self.sum_after_projection = True
 
         if self.project:
             self.projection = Feedforward(dimension, output_dimension)
@@ -465,32 +464,41 @@ class CombinedEmbedding(nn.Module):
             names.append(emb.name)
         
         if self.embed_comb_method == 'cat':
-            all_layers = [torch.cat(layer, dim=2) for layer in all_layers]
-            last_layer = torch.cat(last_layer, dim=2)
+            new_all_layers = [torch.cat(layer_list, dim=2) for layer_list in all_layers]
+            new_last_layer = torch.cat(last_layer, dim=2)
             if self.project:
-                last_layer = self.projection(last_layer)
+                new_last_layer = self.projection(new_last_layer)
         elif self.embed_comb_method == 'sum':
-            if self.sum_after:
-                proj_layer = []
-                non_proj_layer = []
-                # exclude entity embeddings
-                for name, layer in zip(names, last_layer):
-                    if name != 'entity':
-                        non_proj_layer.append(layer)
+            new_all_layers = []
+            new_last_layer = []
+            if self.sum_after_projection:
+                for layer in last_layer:
+                    if layer.shape[-1] != self.dimension:
+                        new_last_layer.append(self.projection(layer))
                     else:
-                        proj_layer.append(layer)
+                        new_last_layer.append(layer)
                         
-                last_layer = self.projection(proj_layer)
-                for layer in non_proj_layer:
-                    last_layer += layer
+                for layer_list in all_layers:
+                    new_layer_list = []
+                    for layer in layer_list:
+                        if layer.shape[-1] != self.dimension:
+                            new_layer_list.append(self.projection(layer))
+                        else:
+                            new_layer_list.append(layer)
+
+                    new_all_layers.append(new_layer_list)
+
+                new_all_layers = [sum(layer_list) for layer_list in new_all_layers]
+                new_last_layer = sum(new_last_layer)
+
             else:
-                all_layers = [sum(layer) for layer in all_layers]
-                last_layer = sum(last_layer)
+                new_all_layers = [sum(layer_list) for layer_list in all_layers]
+                new_last_layer = sum(last_layer)
 
                 if self.project:
-                    last_layer = self.projection(last_layer)
+                    new_last_layer = self.projection(new_last_layer)
 
-        return EmbeddingOutput(name='combined', all_layers=all_layers, last_layer=last_layer)
+        return EmbeddingOutput(name='combined', all_layers=new_all_layers, last_layer=new_last_layer)
 
     def forward(self, x, entity_ids=None, entity_masking=None, entity_probs=None, mask_entities=None, padding=None):
         embedded: List[EmbeddingOutput] = []
