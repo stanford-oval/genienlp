@@ -44,8 +44,6 @@ from tensorboardX import SummaryWriter
 
 from . import arguments
 from . import models
-from .data_utils.embeddings import load_embeddings
-from .data_utils.example import Example
 from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader,\
     log_model_size, init_devices
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel

@@ -46,7 +46,6 @@ except RuntimeError:
 import torch
 
 from . import models
-from .data_utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
 from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
     have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path

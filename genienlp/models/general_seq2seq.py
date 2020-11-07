@@ -41,8 +41,7 @@ from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
 from .common import mask_tokens
-from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration, BartConfig, BartTokenizer
-from torch import nn
+from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration
 
 ENCODERS = {
     'MQANEncoder': MQANEncoder,
@@ -275,7 +274,7 @@ class Seq2Seq(PreTrainedModel):
         
 
            
-class Bart(nn.Module):
+class Bart(torch.nn.Module):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
