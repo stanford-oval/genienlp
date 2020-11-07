@@ -594,5 +594,12 @@ def run_single_process_generation(args, config):
     logger.info('Average BLEU score = %.2f', metrics['bleu'])
     logger.info('Exact match score = %.2f', metrics['em'])
     logger.info('Prediction accuracy = %.2f', metrics['prediction_acc'])
+    logger.info(
+            'TP = %d; TN = %d; FP = %d; FN = %d',
+            metrics['true_positive'],
+            metrics['true_negative'],
+            metrics['false_positive'],
+            metrics['false_negative']
+        )
     logger.info('ECE = %.2f', metrics['ece'])
     logger.info('AdaECE = %.2f', metrics['ada_ece'])

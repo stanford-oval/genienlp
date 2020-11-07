@@ -128,7 +128,10 @@ def compute_metrics(
         calibrator = xgb.Booster()
         calibrator.load_model(calibrator_path)
     
-    correct_predictions = 0
+    true_positive = 0
+    true_negative = 0
+    false_positive = 0
+    false_negative = 0
     all_bleu = []
     all_exact_matches = []
     sentence_confidences = []
@@ -163,8 +166,16 @@ def compute_metrics(
             bleu_score /= len(output)
             exact_match /= len(output)
             sentence_confidence /= len(output)
-        if abs(exact_match - sentence_confidence) <= 0.5:
-            correct_predictions += 1
+        if sentence_confidence >= 0.5:
+            if exact_match >= 0.5:
+                true_positive += 1
+            else:
+                false_positive += 1
+        else:
+            if exact_match < 0.5:
+                true_negative += 1
+            else:
+                false_negative += 1
         all_bleu.append(bleu_score)
         all_exact_matches.append(exact_match)
         sentence_confidences.append(sentence_confidence)
@@ -180,7 +191,11 @@ def compute_metrics(
         'em': 100.0 * total_exact_match / len(all_exact_matches),
         'ece': ece,
         'ada_ece': ada_ece,
-        'prediction_acc': 100.0 * correct_predictions / len(all_exact_matches)
+        'false_positive': false_positive,
+        'false_negative': false_negative,
+        'true_positive': true_positive,
+        'true_negative': true_negative,
+        'prediction_acc': 100.0 * (true_positive + true_negative) / len(all_exact_matches)
     }
 
 
