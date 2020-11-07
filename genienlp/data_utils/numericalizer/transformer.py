@@ -443,12 +443,17 @@ class BartNumericalizer(TransformerNumericalizer):
         # print('minibatch = ', minibatch)
         batch_tokens = []
         for tokens, mask in minibatch:
-            batch_tokens.append(' '.join(tokens))
+            if len(tokens) == 0:
+                batch_tokens.append(' ')
+            else:
+                batch_tokens.append(' '.join(tokens))
+        
         encoded_batch = self._tokenizer.batch_encode_plus(batch_tokens, add_special_tokens=True, pad_to_max_length=True, return_attention_masks=True)
         length = torch.sum(torch.tensor(encoded_batch['attention_mask'], dtype=torch.int32, device=device), dim=1)
         numerical = torch.tensor(encoded_batch['input_ids'], dtype=torch.int64, device=device)
         # print('length = ', length)
         # print('numerical = ', numerical)
+
         decoder_numerical = numerical
 
         return SequentialField(length=length, value=numerical, limited=decoder_numerical)
@@ -508,3 +513,4 @@ class BartNumericalizer(TransformerNumericalizer):
 
     def decode(self, tensor):
         return self.convert_ids_to_tokens(tensor)
+        

@@ -132,13 +132,9 @@ class Seq2Seq(PreTrainedModel):
 
     def add_new_vocab_from_data(self, splits):
         logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens from training')
-        new_words = []
         for task_splits in splits:
             for split in task_splits:
-                new_words += self.numericalizer.grow_vocab(split)
-                logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
-        for emb in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
-            emb.grow_for_vocab(self.numericalizer.vocab, new_words)
+                self.numericalizer.grow_vocab(split)
 
     def _init_embeddings_from_data(self, args, vocab_sets, is_loading):
         numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
@@ -373,10 +369,3 @@ class Bart(nn.Module):
         # print('generated = ', generated)
         
         return generated
-    
-    
-    
-    
-    
-    
-    

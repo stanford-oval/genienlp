@@ -49,21 +49,16 @@ logger = logging.getLogger(__name__)
 
 
 class Server:
-    def __init__(self, args, numericalizer, embeddings, model, device):
+    def __init__(self, args, numericalizer, model, device):
         self.args = args
         self.device = device
         self.numericalizer = numericalizer
         self.model = model
 
-        logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens from training')
-        self._embeddings = embeddings
-
         self._cached_tasks = dict()
 
     def numericalize_example(self, ex):
-        new_words = self.numericalizer.grow_vocab([ex])
-        for emb in self._embeddings:
-            emb.grow_for_vocab(self.numericalizer.vocab, new_words)
+        self.model.add_new_vocab_from_data([[[ex]]])
 
         # batch of size 1
         return Batch.from_examples([ex], self.numericalizer, device=self.device,
@@ -166,22 +161,19 @@ def main(args):
     logger.info(f'Loading from {args.best_checkpoint}')
 
     devices = init_devices(args)
-    save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
+    device = devices[0] # server only runs on a single device
 
-    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
-        load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings,
-                        args.decoder_embeddings, args.max_generative_vocab)
-    numericalizer.load(args.path)
-    for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
-        emb.init_for_vocab(numericalizer.vocab)
-
-    logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
-    model_dict = save_dict['model_state_dict']
-    model.load_state_dict(model_dict)
+    model, _ = Model.from_pretrained(args.path,
+                                     model_checkpoint_file=args.checkpoint_name,
+                                     args=args,
+                                     device=device
+                                    )
 
-    server = Server(args, numericalizer, context_embeddings + question_embeddings + decoder_embeddings,
-                    model, devices[0])
+    
+    model.to(device)
+    model.eval()
+
+    server = Server(args, model.numericalizer, model, device)
 
     server.run()
