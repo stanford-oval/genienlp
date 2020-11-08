@@ -61,7 +61,7 @@ class Iterator(torch.utils.data.IterableDataset):
         
         self.use_data_sort_key = use_data_sort_key
         if use_data_sort_key:
-            self.sort_key = self.dataset.sort_key_fn
+            self.sort_key = context_answer_len
         else:
             self.sort_key = context_answer_len
 
@@ -136,7 +136,9 @@ class Iterator(torch.utils.data.IterableDataset):
         each chunk using sort_key, then batch these examples and shuffle the
         batches.
         """
-        for p in self._batch(data, self.batch_size * 100):
+        for p in self._batch(data, self.batch_size * 10000):
+            print('sorting')
+            # exit(0)
             p_batch = self._batch(sorted(p, key=self.sort_key), self.batch_size)
             if self.shuffle:
                 p_batch = list(p_batch)

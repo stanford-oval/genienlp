@@ -30,6 +30,7 @@
 from typing import NamedTuple, List
 import itertools
 import random
+import torch
 
 from .numericalizer.sequential_field import SequentialField
 
@@ -185,3 +186,61 @@ class Batch(NamedTuple):
                      all_question_inputs,
                      all_answer_inputs,
                      decoder_vocab)
+
+    @staticmethod
+    def collate_batches(batches):
+        # print('batches = ', batches)
+        example_id = []
+        context_values, context_lengths, context_limiteds = [], [], []
+        question_values, question_lengths, question_limiteds = [], [], []
+        answer_values, answer_lengths, answer_limiteds = [], [], []
+        decoder_vocab = None
+
+        max_context_length = 0
+        max_question_length = 0
+        max_answer_length = 0
+        min_context_length = 1000000
+        for batch in batches:
+            example_id.append(batch.example_id[0])
+            context_values.append(batch.context.value)
+            context_lengths.append(batch.context.length)
+            context_limiteds.append(batch.context.limited)
+            max_context_length = max(max_context_length, batch.context.length)
+            min_context_length = min(min_context_length, batch.context.length)
+
+            question_values.append(batch.question.value)
+            question_lengths.append(batch.question.length)
+            question_limiteds.append(batch.question.limited)
+            max_question_length = max(max_question_length, batch.question.length)
+
+            answer_values.append(batch.answer.value)
+            answer_lengths.append(batch.answer.length)
+            answer_limiteds.append(batch.answer.limited)
+            max_answer_length = max(max_answer_length, batch.answer.length)
+
+            decoder_vocab = batch.decoder_vocab
+
+        context_values = [x[:max_context_length] for x in context_values]
+        context_limiteds = [x[:max_context_length] for x in context_limiteds]
+        question_values = [x[:max_question_length] for x in question_values]
+        question_limiteds = [x[:max_question_length] for x in question_limiteds]
+        answer_values = [x[:max_answer_length] for x in answer_values]
+        answer_limiteds = [x[:max_answer_length] for x in answer_limiteds]
+
+        # print('context_values = ', [c.shape for c in context_values])
+        # print('max_context_length = ', max_context_length)
+        # print('min_context_length = ', min_context_length)
+        # exit(0)
+        context = SequentialField(value=torch.stack(context_values, dim=0),
+                                  length=torch.stack(context_lengths, dim=0),
+                                  limited=torch.stack(context_limiteds, dim=0))
+
+        question = SequentialField(value=torch.stack(question_values, dim=0),
+                                   length=torch.stack(question_lengths, dim=0),
+                                   limited=torch.stack(question_limiteds, dim=0))
+
+        answer = SequentialField(value=torch.stack(answer_values, dim=0),
+                                 length=torch.stack(answer_lengths, dim=0),
+                                 limited=torch.stack(answer_limiteds, dim=0))
+
+        return Batch(example_id=example_id, context=context, question=question, answer=answer, decoder_vocab=decoder_vocab)

@@ -42,6 +42,8 @@ import torch
 
 from .data_utils.example import Batch
 from .data_utils.iterator import Iterator
+from .data_utils.numericalizer.sequential_field import SequentialField
+
 
 logger = logging.getLogger(__name__)
 
@@ -447,17 +449,27 @@ def elapsed_time(log):
 def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
                      valid=False, append_question_to_context_too=False, override_question=None, override_context=None):
     
-    iterator = Iterator(dataset,
+    all_features = Batch.from_examples(dataset, numericalizer, device=device,
+                                  paired=paired and train, max_pairs=max_pairs, groups=dataset.groups,
+                                  append_question_to_context_too=append_question_to_context_too,
+                                  override_question=override_question, override_context=override_context)
+    all_f = []
+    for i in range(len(all_features.example_id)):
+        all_f.append(Batch(example_id=all_features.example_id[i],
+                            context=SequentialField(value=all_features.context.value[i], length=all_features.context.length[i], limited=all_features.context.limited[i]),
+                            question=SequentialField(value=all_features.question.value[i], length=all_features.question.length[i], limited=all_features.question.limited[i]),
+                            answer=SequentialField(value=all_features.answer.value[i], length=all_features.answer.length[i], limited=all_features.answer.limited[i]),
+                            decoder_vocab=all_features.decoder_vocab))
+    
+
+    iterator = Iterator(all_f,
                         batch_size,
                         shuffle=train,
                         repeat=train,
-                        use_data_batch_fn=train,
-                        use_data_sort_key=train)
+                        use_data_batch_fn=False,
+                        use_data_sort_key=True)
     
-    collate_function = lambda minibatch: Batch.from_examples(minibatch, numericalizer, device=device,
-                                           paired=paired and train, max_pairs=max_pairs, groups=iterator.groups,
-                                           append_question_to_context_too=append_question_to_context_too,
-                                           override_question=override_question, override_context=override_context)
+    collate_function = lambda batches: Batch.collate_batches(batches)
         
     return torch.utils.data.DataLoader(iterator, batch_size=None, collate_fn=collate_function)
 

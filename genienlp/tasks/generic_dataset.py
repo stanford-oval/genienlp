@@ -51,7 +51,7 @@ def make_example_id(dataset, example_id):
 
 # sort_key funcs
 def context_answer_len(ex):
-    return interleave_keys(len(ex.context), len(ex.answer))
+    return interleave_keys(ex.context.length, ex.answer.length)
 
 def id_value(ex):
     id_ = ex.example_id.rsplit('/', 1)
