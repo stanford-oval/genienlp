@@ -184,7 +184,7 @@ def text_infilling(input_sequence, num_text_spans, mask_token, thingtalk):
     num_successful_spans = 0
     while num_successful_spans < num_text_spans:
         num_tokens_to_mask = np.random.poisson(lam=3)
-        mask_start_index = random.randInt(0, len(input_tokens) - 1)
+        mask_start_index = random.randint(0, len(input_tokens) - 1)
 
         if mask_start_index + num_tokens_to_mask > len(input_tokens):
             continue
@@ -201,9 +201,9 @@ def text_infilling(input_sequence, num_text_spans, mask_token, thingtalk):
         if not contains_crucial_token:
             num_successful_spans += 1
             if num_tokens_to_mask + mask_start_index != len(input_tokens):
-                input_tokens = input_tokens[:mask_start_index] + mask_token + input_tokens[mask_start_index + num_tokens_to_mask:]
+                input_tokens = input_tokens[:mask_start_index] + [mask_token] + input_tokens[mask_start_index + num_tokens_to_mask:]
             else: 
-                input_tokens = input_tokens[:mask_start_index] + mask_token
+                input_tokens = input_tokens[:mask_start_index] + [mask_token]
 
     return ' '.join(input_tokens)
 
@@ -214,7 +214,7 @@ def sentence_permutation(input_sequence):
 
 def document_rotation(input_sequence):
     input_tokens = input_sequence.split(' ')
-    token_index_to_rotate = random.randInt(0, len(input_tokens) - 1)
+    token_index_to_rotate = random.randint(0, len(input_tokens) - 1)
     input_tokens = input_tokens[token_index_to_rotate:] + input_tokens[:token_index_to_rotate]
     return ' '.join(input_tokens)
 
