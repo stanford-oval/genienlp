@@ -430,7 +430,11 @@ class BartNumericalizer(TransformerNumericalizer):
 
 
     def load(self, save_dir):
-        raise NotImplementedError
+        self._tokenizer = BartTokenizer.from_pretrained(save_dir)
+        self.decoder_vocab = DecoderVocabulary(self._tokenizer.decoder.values(), None, pad_token=self._tokenizer.pad_token, eos_token=self._tokenizer.eos_token)
+
+    def save(self, save_dir):
+        self._tokenizer.save_pretrained(save_dir)
 
     def build_vocab(self, vocab_fields, vocab_sets):
         raise NotImplementedError
