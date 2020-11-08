@@ -41,8 +41,8 @@ import numpy as np
 import torch
 
 from .data_utils.example import Batch
-from .data_utils.iterator import Iterator
 from .data_utils.numericalizer.sequential_field import SequentialField
+from .tasks.generic_dataset import context_answer_len
 
 
 logger = logging.getLogger(__name__)
@@ -445,6 +445,48 @@ def elapsed_time(log):
     seconds = int(t)
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
+class LengthSortedSampler(torch.utils.data.Sampler):
+
+    def __init__(self, data_source, batch_size, shuffle, repeat):
+        self.data_source = data_source
+        self.batch_size = batch_size # number of examples or number of tokens
+        self.shuffle = shuffle
+        self.repeat = repeat
+        self.total_returned_items = 0
+        self.last_batch_start_index = 0
+        self.last_batch_start_index = self._get_next_batch_start_index()
+
+    def __len__(self):
+        return len(self.data_source)
+
+    def __iter__(self):
+        self.total_returned_items = 0
+        self.last_batch_start_index = 0
+        self.last_batch_start_index = self._get_next_batch_start_index()
+        return self
+
+    def __next__(self):
+        batch = []
+        tokens_in_batch = 0
+        i = self._get_next_batch_start_index()
+        while tokens_in_batch <= self.batch_size:
+            new_example = self.data_source[i]
+            batch.append(i)
+            tokens_in_batch += context_answer_len(new_example) # TODO len should accoutn for all tokens
+            # print('i = ', i)
+            # print('example_len = ', context_answer_len(new_example))
+            i += 1
+            if i == len(self):
+                break
+
+        self.last_batch_start_index += len(batch)
+        return slice(batch[0], batch[-1]+1)
+
+    def _get_next_batch_start_index(self):
+        if self.shuffle:
+            return random.randint(0, len(self))
+        else:
+            return self.last_batch_start_index
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
                      valid=False, append_question_to_context_too=False, override_question=None, override_context=None):
@@ -462,16 +504,12 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                             decoder_vocab=all_features.decoder_vocab))
     
 
-    iterator = Iterator(all_f,
-                        batch_size,
-                        shuffle=train,
-                        repeat=train,
-                        use_data_batch_fn=False,
-                        use_data_sort_key=True)
+    all_f = list(sorted(all_f, key=context_answer_len))
+    sampler = LengthSortedSampler(all_f, batch_size=batch_size, shuffle=train, repeat=train)
     
     collate_function = lambda batches: Batch.collate_batches(batches)
         
-    return torch.utils.data.DataLoader(iterator, batch_size=None, collate_fn=collate_function)
+    return torch.utils.data.DataLoader(all_f, sampler=sampler, batch_size=None, collate_fn=collate_function)
 
 
 def pad(x, new_channel, dim, val=None):

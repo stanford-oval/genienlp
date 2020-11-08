@@ -189,6 +189,7 @@ class Batch(NamedTuple):
 
     @staticmethod
     def collate_batches(batches):
+        print('len(batches) = ', len(batches))
         # print('batches = ', batches)
         example_id = []
         context_values, context_lengths, context_limiteds = [], [], []
