@@ -124,16 +124,20 @@ class Seq2Seq(PreTrainedModel):
         self.decoder = DECODERS[args.seq2seq_decoder](self.numericalizer, args, self.decoder_embeddings)
 
         if self.args.pretrain_context > 0:
-            self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, numericalizer.num_tokens)
+            self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, self.numericalizer.num_tokens)
 
     def set_train_context_embeddings(self, trainable):
         self.encoder.set_train_context_embeddings(trainable)
 
     def add_new_vocab_from_data(self, splits):
         logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens from training')
+        new_words = []
         for task_splits in splits:
             for split in task_splits:
-                self.numericalizer.grow_vocab(split)
+                new_words += self.numericalizer.grow_vocab(split)
+                logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
+        for emb in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
+            emb.grow_for_vocab(self.numericalizer.vocab, new_words)
 
     def _init_embeddings_from_data(self, args, vocab_sets, is_loading):
         numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \

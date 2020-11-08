@@ -246,6 +246,7 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
             f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}found new best model')
         torch.save(save_model_state_dict, os.path.join(log_dir, 'best.pth'))
         torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
+        model.module.numericalizer.save(saver._savedir)
 
     return best_decascore
 
