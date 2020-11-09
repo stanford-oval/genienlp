@@ -179,7 +179,7 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_dump_features', action='store_true', help='Just dump bootleg features and exit code')
     parser.add_argument('--bootleg_skip_feature_creation', action='store_true', help='Skip creating features and use dumped features')
     
-    parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], help='Method used to aggregate several type embeddings for a single mention')
+    parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], default='average', help='Method used to aggregate several type embeddings for a single mention')
 
     
     parser.add_argument('--retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,

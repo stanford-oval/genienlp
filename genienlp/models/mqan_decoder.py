@@ -107,8 +107,11 @@ class MQANDecoder(nn.Module):
                 if self.args.entity_type_agg_method == 'weighted':
                     answer_entity_probs = batch.answer.feature[:, :, self.args.features_size[0]:self.args.features_size[0] + self.args.features_size[1]].long()
 
-            answer_embedded = self.decoder_embeddings(answer[:, :-1], entity_ids=answer_entity_ids[:, :-1, :], entity_masking=answer_entity_masking[:, :-1, :],
-                                                      entity_probs=answer_entity_probs[:, :-1, :], padding=answer_padding[:, :-1]).last_layer
+            answer_embedded = self.decoder_embeddings(answer[:, :-1],
+                                                      entity_ids=answer_entity_ids[:, :-1, :] if answer_entity_ids is not None else None,
+                                                      entity_masking=answer_entity_masking[:, :-1, :] if answer_entity_masking is not None else None,
+                                                      entity_probs=answer_entity_probs[:, :-1, :] if answer_entity_probs is not None else None,
+                                                      padding=answer_padding[:, :-1]).last_layer
 
             if self.args.transformer_layers > 0:
                 self_attended_decoded = self.self_attentive_decoder(answer_embedded,
