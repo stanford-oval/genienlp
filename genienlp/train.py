@@ -81,7 +81,8 @@ def prepare_data(args, logger):
                                 'sentence_batching': args.sentence_batching,
                                 'almond_lang_as_question': args.almond_lang_as_question,
                                 'num_workers': args.num_workers, 'features_size': args.features_size,
-                                'features_default_val': args.features_default_val
+                                'features_default_val': args.features_default_val,
+                                'verbose': args.verbose
                                 }
     
     for task in args.train_tasks:

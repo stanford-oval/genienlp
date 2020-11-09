@@ -70,7 +70,7 @@ class AlmondDataset(CQA):
         num_workers = kwargs.get('num_workers', 0)
         features_size = kwargs.get('features_size')
         features_default_val = kwargs.get('features_default_val')
-        bootleg_dump_features = kwargs.get('bootleg_dump_features')
+        verbose = kwargs.get('verbose', False)
         
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         dir_name = os.path.basename(os.path.dirname(path))
@@ -153,7 +153,14 @@ class AlmondDataset(CQA):
                         for i in range(len(tokens_type_ids)):
                             examples[n].context_feature[i] = ex.context_feature[i]._replace(type_ids=tokens_type_ids[i], token_freq=tokens_type_probs[i])
                             examples[n].context_plus_question_feature[i] = ex.context_plus_question_feature[i]._replace(type_ids=tokens_type_ids[i], token_freq=tokens_type_probs[i])
-
+                            
+                if verbose:
+                    print()
+                    for ex in examples:
+                        if bootleg.is_contextual:
+                            print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(ex.question_tokens, ex.question_feature)], sep='\n')
+                        else:
+                            print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(ex.context, ex.context_feature)], sep='\n')
                             
             if cache_input_data:
                 os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -423,8 +430,7 @@ class BaseAlmondTask(BaseTask):
                 
             if self.args.verbose and self.args.do_ner:
                     print()
-                    print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_type_ids)],
-                          sep='\n')
+                    print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_type_ids)], sep='\n')
              
         zip_list = []
         if tokens_type_ids:
