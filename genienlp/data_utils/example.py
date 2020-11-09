@@ -33,6 +33,7 @@ import random
 import torch
 
 from .numericalizer.sequential_field import SequentialField
+from torch.nn.utils.rnn import pad_sequence
 
 
 class Example(NamedTuple):
@@ -228,20 +229,27 @@ class Batch(NamedTuple):
         answer_values = [x[:max_answer_length] for x in answer_values]
         answer_limiteds = [x[:max_answer_length] for x in answer_limiteds]
 
-        # print('context_values = ', [c.shape for c in context_values])
-        # print('max_context_length = ', max_context_length)
-        # print('min_context_length = ', min_context_length)
-        # exit(0)
-        context = SequentialField(value=torch.stack(context_values, dim=0),
-                                  length=torch.stack(context_lengths, dim=0),
-                                  limited=torch.stack(context_limiteds, dim=0))
+        context_values = pad_sequence(context_values, padding_value=0, batch_first=True)
+        context_limiteds = pad_sequence(context_limiteds, padding_value=0, batch_first=True)
+        context_lengths = torch.stack(context_lengths, dim=0)
+        question_values = pad_sequence(question_values, padding_value=0, batch_first=True)
+        question_limiteds = pad_sequence(question_limiteds, padding_value=0, batch_first=True)
+        question_lengths = torch.stack(question_lengths, dim=0)
+        answer_values = pad_sequence(answer_values, padding_value=0, batch_first=True)
+        answer_limiteds = pad_sequence(answer_limiteds, padding_value=0, batch_first=True)
+        answer_lengths = torch.stack(answer_lengths, dim=0)
 
-        question = SequentialField(value=torch.stack(question_values, dim=0),
-                                   length=torch.stack(question_lengths, dim=0),
-                                   limited=torch.stack(question_limiteds, dim=0))
+        context = SequentialField(value=context_values,
+                                  length=context_lengths,
+                                  limited=context_limiteds)
 
-        answer = SequentialField(value=torch.stack(answer_values, dim=0),
-                                 length=torch.stack(answer_lengths, dim=0),
-                                 limited=torch.stack(answer_limiteds, dim=0))
+        question = SequentialField(value=question_values,
+                                   length=question_lengths,
+                                   limited=question_limiteds)
+
+        answer = SequentialField(value=answer_values,
+                                 length=answer_lengths,
+                                 limited=answer_limiteds)
+
 
         return Batch(example_id=example_id, context=context, question=question, answer=answer, decoder_vocab=decoder_vocab)
