@@ -455,61 +455,14 @@ class BartNumericalizer(TransformerNumericalizer):
         encoded_batch = self._tokenizer.batch_encode_plus(batch_tokens, add_special_tokens=True, pad_to_max_length=True, return_attention_masks=True)
         length = torch.sum(torch.tensor(encoded_batch['attention_mask'], dtype=torch.int32, device=device), dim=1)
         numerical = torch.tensor(encoded_batch['input_ids'], dtype=torch.int64, device=device)
-        # print('length = ', length)
-        # print('numerical = ', numerical)
 
         decoder_numerical = numerical
 
         return SequentialField(length=length, value=numerical, limited=decoder_numerical)
 
     def encode_pair(self, minibatch, decoder_vocab, device=None):
+        # TODO
         raise NotImplementedError
-        # apply word-piece tokenization to everything first
-        wp_tokenized_a = []
-        wp_tokenized_b = []
-        for (tokens_a, mask_a), (tokens_b, mask_b) in minibatch:
-            wp_tokenized_a.append(self._tokenizer.tokenize(tokens_a, mask_a))
-            wp_tokenized_b.append(self._tokenizer.tokenize(tokens_b, mask_b))
-
-        if self.fix_length is None:
-            max_len = max(len(wp_a) + len(wp_b) for wp_a, wp_b in zip(wp_tokenized_a, wp_tokenized_b))
-        else:
-            max_len = self.fix_length
-
-        padded = []
-        lengths = []
-        numerical = []
-        decoder_numerical = []
-        for (wp_tokens_a, _), (wp_tokens_b, _) in minibatch:
-            if self.pad_first:
-                padded_example = [self.pad_token] * max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b)) + \
-                                 [self.init_token] + \
-                                 list(wp_tokens_a[:max_len]) + \
-                                 [self.sep_token] + \
-                                 [self.sep_token] + \
-                                 list(wp_tokens_b[:max_len]) + \
-                                 [self.eos_token]
-
-            else:
-                padded_example = [self.init_token] + \
-                                 list(wp_tokens_a[:max_len]) + \
-                                 [self.sep_token] + \
-                                 [self.sep_token] + \
-                                 list(wp_tokens_b[:max_len]) + \
-                                 [self.eos_token] + \
-                                 [self.pad_token] * max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b))
-
-            padded.append(padded_example)
-            lengths.append(len(padded_example) - max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b)))
-
-            numerical.append(self._tokenizer.convert_tokens_to_ids(padded_example))
-            decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
-
-        length = torch.tensor(lengths, dtype=torch.int32, device=device)
-        numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
-        decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-
-        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
 
     def reverse(self, batch, detokenize, field_name=None):
         _reversed = self._tokenizer.batch_decode(batch, skip_special_tokens=True)
