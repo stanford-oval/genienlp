@@ -27,7 +27,6 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 import math
 from typing import NamedTuple, List
 
@@ -37,15 +36,16 @@ from torch.jit import Final
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pack_padded_sequence as pack
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
+from transformers import BertConfig
+from transformers.modeling_bert import BertLayerNorm
 
-from ..data_utils.embeddings import EmbeddingOutput
+from ..paraphrase.transformers_utils import BertModelV2
 
 
-# class EmbeddingOutput(NamedTuple):
-#     name: str
-#     all_layers: List[torch.Tensor]
-#     last_layer: torch.Tensor
-
+class EmbeddingOutput(NamedTuple):
+    name: str
+    all_layers: List[torch.Tensor]
+    last_layer: torch.Tensor
 
 INF = 1e10
 EPSILON = 1e-10
@@ -375,6 +375,50 @@ class Feedforward(nn.Module):
 
     def forward(self, x):
         return self.activation(self.linear(self.dropout(x)))
+
+class BertCombinerHead(nn.Module):
+    
+    def __init__(self, args, input_dim, output_dim, tanh=False, norm=False, freeze=True):
+        super().__init__()
+        ENT_BERT_ENCODER_CONFIG = {
+            "attention_probs_dropout_prob": 0.1,
+            "directionality": "bidi",
+            "hidden_act": "gelu",
+            "hidden_dropout_prob": 0.1,
+            "hidden_size": 1024,
+            "initializer_range": 0.02,
+            "intermediate_size": 4096,
+            "max_position_embeddings": 512,
+            "num_attention_heads": 16,
+            "num_hidden_layers": 4,
+            "output_hidden_states": True
+        }
+        config = ENT_BERT_ENCODER_CONFIG
+        config["num_hidden_layers"] = args.kg_encoder_layer
+        config = BertConfig.from_dict(config)
+        self.model = BertModelV2(config, num_db_types=0)
+        
+        if tanh is True:
+            self.proj_activation = nn.Tanh()
+        else:
+            self.proj_activation = None
+
+        self.norm = norm
+        if self.norm is True:
+            self.LayerNorm = BertLayerNorm(config.hidden_size, eps=1e-12)
+            self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        
+    def forward(self, emb_output):
+        if self.proj_activation:
+            emb_output = self.proj_activation(emb_output)
+            
+        if self.norm:
+            emb_output = self.LayerNorm(emb_output)
+            emb_output = self.dropout(emb_output)
+            
+        last_hidden_state, _pooled, hidden_states = self.model(embedding_output=emb_output)
+        
+        return EmbeddingOutput(name='combine', all_layers=hidden_states, last_layer=last_hidden_state)
 
 
 class CombinedEmbedding(nn.Module):

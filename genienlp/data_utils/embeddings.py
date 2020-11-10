@@ -30,6 +30,7 @@
 
 import torch
 import os
+import numpy as np
 from collections import defaultdict
 import logging
 from transformers import AutoTokenizer, AutoModel, AutoConfig, \
@@ -41,6 +42,8 @@ from .numericalizer.transformer import BertNumericalizer, XLMRobertaNumericalize
 from . import word_vectors
 from .almond_embeddings import AlmondEmbeddings
 from .pretrained_lstm_lm import PretrainedLTSMLM
+
+from genienlp.models.common import Feedforward
 
 from ..paraphrase.transformers_utils import BertModelV2, XLMRobertaModelV2
 
@@ -136,6 +139,25 @@ class TransformerEmbedding(torch.nn.Module):
         last_hidden_state, _pooled, hidden_states = self.model(**inputs)
 
         return EmbeddingOutput(name='transformer', all_layers=hidden_states, last_layer=last_hidden_state)
+
+class BootlegEmbedding(torch.nn.Module):
+    def __init__(self, ent_emb_file, output_dim, freeze=True):
+        super().__init__()
+        self.ent_emb_file = ent_emb_file
+        ent_emb_matrix = torch.from_numpy(np.load(ent_emb_file))
+        self.ent_embeddings = torch.nn.Embedding(*ent_emb_matrix.size(), padding_idx=0)
+        self.ent_embeddings.weight.data.copy_(ent_emb_matrix)
+
+        if freeze:
+            for param in self.ent_embeddings.parameters():
+                param.requires_grad = False
+        self.ent_proj = Feedforward(ent_emb_matrix.size()[1], output_dim, bias=False)
+
+    def forward(self, input_ent_ids: torch.Tensor):
+        ents_embeddings = self.ent_embeddings(input_ent_ids)
+        ents_embeddings = self.ent_proj(ents_embeddings)
+
+        return EmbeddingOutput(name='bootleg', all_layers=ents_embeddings, last_layer=ents_embeddings)
 
 class PretrainedLMEmbedding(torch.nn.Module):
     def __init__(self, model_name, cachedir):
