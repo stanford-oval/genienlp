@@ -42,11 +42,12 @@ from . import word_vectors
 from .almond_embeddings import AlmondEmbeddings
 from .pretrained_lstm_lm import PretrainedLTSMLM
 
-_logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP = dict()
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: BertNumericalizer for embedding in BERT_PRETRAINED_MODEL_ARCHIVE_LIST})
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: XLMRobertaNumericalizer for embedding in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST})
+
 
 class EmbeddingOutput(NamedTuple):
     all_layers: List[torch.Tensor]
@@ -183,7 +184,7 @@ def get_embedding_type(emb_name):
     
 
 def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb_names,
-                    max_generative_vocab=50000, logger=_logger, cache_only=False):
+                    max_generative_vocab=50000, cache_only=False):
     logger.info(f'Getting pretrained word vectors and pretrained models')
 
     context_emb_names = context_emb_names.split('+')

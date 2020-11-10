@@ -420,6 +420,7 @@ def set_seed(args):
 
 
 def get_trainable_params(model, name=False):
+    #TODO is always called with name=False, so remove the if statement
     if name:
         return list(filter(lambda p: p[1].requires_grad, model.named_parameters()))
     else:

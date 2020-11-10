@@ -29,14 +29,19 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import torch
+import logging
+import os
 
 from .coatt_encoder import CoattentionEncoder
+from ..data_utils.embeddings import load_embeddings
+from ..data_utils.numericalizer.transformer import BartNumericalizer
+from ..data_utils.example import Example
 from .lstm_encoder import BiLSTMEncoder
 from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
 from .common import mask_tokens
-from transformers import PreTrainedModel, PretrainedConfig
+from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration
 
 ENCODERS = {
     'MQANEncoder': MQANEncoder,
@@ -48,34 +53,107 @@ DECODERS = {
     'MQANDecoder': MQANDecoder
 }
 
+logger = logging.getLogger(__name__)
+
 
 class Seq2Seq(PreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        """
+        Inputs:
+            pretrained_model_name_or_path: is the path to the directory where the model is saved.
+                                           Is named this way to match the parent's and siblings' method signatures
+            args
+            device
+            vocab_sets
+        
+        Outputs:
+            model: the loaded model
+            best_decascore: the best deca score when the training of this model was finished
+        """
+
+        # obtain function arguments from **kwargs
+        save_directory = pretrained_model_name_or_path
+        model_checkpoint_file = kwargs.pop("model_checkpoint_file", None)
         args = kwargs.pop("args", None)
         device = kwargs.pop("device", None)
-        numericalizer = kwargs.pop("numericalizer", None)
-        context_embeddings = kwargs.pop("context_embeddings", None)
-        question_embeddings = kwargs.pop("question_embeddings", None)
-        decoder_embeddings = kwargs.pop("decoder_embeddings", None)
-        save_dict = torch.load(args.best_checkpoint, map_location=device)
-        model = Seq2Seq(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
-        model.load_state_dict(save_dict['model_state_dict'])
-        return model
+        vocab_sets = kwargs.pop("vocab_sets", None)
 
-    def __init__(self, numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings):
+        full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
+        logger.info(f'Loading the model from {full_checkpoint_path}')
+        model = Seq2Seq(args=args, vocab_sets=vocab_sets, is_loading=True, save_directory=save_directory)
+        save_dict = torch.load(full_checkpoint_path, map_location=device)
+        model.load_state_dict(save_dict['model_state_dict'])
+
+        return model, save_dict.get('best_decascore')
+
+    def __init__(self, config=None, *inputs, **kwargs):
+        """
+        Relevant inputs should be provided using kwargs. This method is defined this way to match parent's and siblings' method signatures.
+        Inputs:
+            args
+            vocab_sets
+            is_loading
+            save_directory: The directory where numericalizer can be loaded from. Should be provided whenever `is_loading` is True
+        """
         super().__init__(PretrainedConfig()) # dummy PretrainedConfig
+        # obtain function arguments from **kwargs
+        args = kwargs.pop("args", None)
+        vocab_sets = kwargs.pop("vocab_sets", None)
+        is_loading = kwargs.pop("is_loading", False)
+        save_directory = kwargs.pop("save_directory", None)
+
+        self.numericalizer, self.context_embeddings, self.question_embeddings, self.decoder_embeddings = \
+            self._init_embeddings_from_data(args, vocab_sets, is_loading)
         self.args = args
-        self.numericalizer = numericalizer
-        self.encoder = ENCODERS[args.seq2seq_encoder](numericalizer, args, context_embeddings, question_embeddings)
-        self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings)
+
+        if is_loading:
+            logger.info(f'Loading the accompanying numericalizer from {save_directory}')
+            self.numericalizer.load(save_directory)
+
+        logger.info(f'Initializing encoder and decoder embeddings')
+        for vec in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
+            vec.init_for_vocab(self.numericalizer.vocab)
+        
+        logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens')
+        logger.debug(f'The first 200 tokens:')
+        logger.debug(self.numericalizer.vocab.itos[:200])
+
+        self.encoder = ENCODERS[args.seq2seq_encoder](self.numericalizer, args, self.context_embeddings, self.question_embeddings)
+        self.decoder = DECODERS[args.seq2seq_decoder](self.numericalizer, args, self.decoder_embeddings)
 
         if self.args.pretrain_context > 0:
-            self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, numericalizer.num_tokens)
+            self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, self.numericalizer.num_tokens)
 
     def set_train_context_embeddings(self, trainable):
         self.encoder.set_train_context_embeddings(trainable)
+
+    def add_new_vocab_from_data(self, splits):
+        logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens from training')
+        new_words = []
+        for task_splits in splits:
+            for split in task_splits:
+                new_words += self.numericalizer.grow_vocab(split)
+                logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
+        for emb in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
+            emb.grow_for_vocab(self.numericalizer.vocab, new_words)
+
+    def _init_embeddings_from_data(self, args, vocab_sets, is_loading):
+        numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
+        load_embeddings(args.embeddings,
+                        args.context_embeddings,
+                        args.question_embeddings,
+                        args.decoder_embeddings,
+                        args.max_generative_vocab)
+
+        if not is_loading:
+            logger.info(f'Building vocabulary')
+            numericalizer.build_vocab(Example.vocab_fields, vocab_sets)
+        else:
+            pass # numericalizer is going to be loaded from a file, so no need to do anything
+
+        return numericalizer, context_embeddings, question_embeddings, decoder_embeddings
 
     def set_train_question_embeddings(self, trainable):
         self.encoder.set_train_question_embeddings(trainable)
@@ -199,14 +277,92 @@ class Seq2Seq(PreTrainedModel):
         return generated
         
 
-    
-            
+           
+class Bart(torch.nn.Module):
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        save_directory = pretrained_model_name_or_path
+        model_checkpoint_file = kwargs.pop("model_checkpoint_file", None)
+        args = kwargs.pop("args", None)
+        device = kwargs.pop("device", None)
+        # vocab_sets = kwargs.pop("vocab_sets", None)
+
+        full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
+        logger.info(f'Loading the model from {full_checkpoint_path}')
+        model = Bart(args=args)
+        save_dict = torch.load(full_checkpoint_path, map_location=device)
+        model.load_state_dict(save_dict['model_state_dict'])
+
+        return model, save_dict.get('best_decascore')
+
+
+    def __init__(self, config=None, *inputs, **kwargs):
+        self.args = kwargs.pop("args", None)
+        super().__init__()
+        self.bart = BartForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder)
+        self.numericalizer = BartNumericalizer(self.args.seq2seq_decoder)
+
+    def forward(self, *input, **kwargs):
+        #TODO pretraining
+        if self.training:
+            batch = input[0]
+            pretraining = kwargs.pop("pretraining", None)
+
+            pad = self.numericalizer._tokenizer.pad_token_id
+            source_ids, source_mask, y = batch.context.value, batch.context.value!=pad, batch.answer.value
+            y_ids = y[:, :-1].contiguous()
+            lm_labels = y[:, 1:].clone()
+            lm_labels[y[:, 1:] == pad] = -100
+            return self.bart.forward(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels)
+
+        else:
+            return self.bart.forward(**kwargs)
         
-    
-    
-    
-    
-    
-    
-    
-    
+    def set_train_context_embeddings(self, trainable):
+        #TODO
+        pass
+
+    def set_train_question_embeddings(self, trainable):
+        #TODO
+        pass
+
+    def add_new_vocab_from_data(self, splits):
+        pass
+
+    def generate(self,
+                 batch,
+                 max_output_length,
+                 num_outputs,
+                 temperature,
+                 repetition_penalty,
+                 top_k,
+                 top_p,
+                 num_beams,
+                 no_repeat_ngram_size,
+                 do_sample
+                 ):
+
+        input_ids = batch.context.value
+        # print('input_ids = ', input_ids)
+        # TODO attention_mask
+        generated = self.bart.generate(input_ids=input_ids,
+                                     max_length=max_output_length,
+                                     min_length=2, # generate at least one token after BOS
+                                     bos_token_id=self.numericalizer._tokenizer.bos_token_id,
+                                     pad_token_id=self.numericalizer._tokenizer.pad_token_id,
+                                     early_stopping=True,
+                                     num_return_sequences=num_outputs,
+                                     repetition_penalty=repetition_penalty,
+                                     temperature=temperature,
+                                     eos_token_id=self.numericalizer._tokenizer.eos_token_id,
+                                     top_k=top_k,
+                                     top_p=top_p,
+                                     num_beams=num_beams,
+                                     no_repeat_ngram_size=no_repeat_ngram_size,
+                                     do_sample=do_sample,
+                                    )
+
+        # print('generated = ', generated)
+        
+        return generated

@@ -43,8 +43,8 @@
 # limitations under the License.
 
 import unicodedata
-from transformers import BertTokenizer, XLMRobertaTokenizer, BasicTokenizer
 from collections import OrderedDict
+from transformers import BertTokenizer, XLMRobertaTokenizer, BasicTokenizer
 
 
 class MaskedXLMRobertaWordPieceTokenizer(object):

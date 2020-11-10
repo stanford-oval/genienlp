@@ -77,6 +77,12 @@ class Dataset(torch.utils.data.Dataset):
         for x in self.examples:
             yield x
 
+    def __repr__(self):
+        if self.examples is not None:
+            return 'Dataset('+self.examples.__repr__()+')'
+        else:
+            return 'Dataset()'
+
     @classmethod
     def download(cls, root, check=None):
         """Download and unzip an online archive (.zip, .gz, or .tgz).
