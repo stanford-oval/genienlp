@@ -1,4 +1,6 @@
 import ujson
+import numpy as np
+import pickle
 from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
 from bootleg import run
@@ -6,13 +8,17 @@ from bootleg import run
 
 class Bootleg(object):
     
-    def __init__(self, bootleg_input_dir, bootleg_model, unk_id, num_workers, is_contextual, bootleg_skip_feature_creation):
+    def __init__(self, bootleg_input_dir, bootleg_model, unk_id, num_workers, is_contextual,
+                 bootleg_skip_feature_creation, bootleg_dump_mode, bootleg_batch_size, bootleg_integration):
         self.bootleg_input_dir = bootleg_input_dir
         self.bootleg_model = bootleg_model
         self.unk_id = int(unk_id)
         self.num_workers = num_workers
         self.is_contextual = is_contextual
         self.bootleg_skip_feature_creation = bootleg_skip_feature_creation
+        self.bootleg_dump_mode = bootleg_dump_mode
+        self.bootleg_batch_size = bootleg_batch_size
+        self.bootleg_integration = bootleg_integration
         
         self.model = f'{bootleg_input_dir}/{bootleg_model}'
         self.config_path = f'{self.model}/bootleg_config.json'
@@ -33,7 +39,7 @@ class Bootleg(object):
         
         self.fixed_overrides = [
              "--data_config.entity_dir", self.entity_dir,
-             "--run_config.eval_batch_size", '30',
+             "--run_config.eval_batch_size", str(self.bootleg_batch_size),
              "--run_config.save_dir", self.output_dir,
              "--run_config.init_checkpoint", self.model,
              "--run_config.loglevel", 'debug',
@@ -73,9 +79,9 @@ class Bootleg(object):
             tokens += [pad_id] * (max_size - len(tokens))
         return tokens
     
-    def parse_mentions(self, config_args, file_name, mode, type_size, type_default_val):
+    def disambiguate_mentions(self, config_args, file_name, type_size, type_default_val):
         if not self.bootleg_skip_feature_creation:
-            run.main(config_args, mode)
+            run.main(config_args, self.bootleg_dump_mode)
         
         all_tokens_type_ids = []
         all_tokens_type_probs = []
@@ -85,14 +91,7 @@ class Bootleg(object):
         def reverse_bisect_left(a, x, lo=0, hi=None):
             """Insert item x in list a, and keep it reverse-sorted assuming a
             is reverse-sorted.
-
-            If x is already in a, insert it to the right of the rightmost x.
-
-            Optional args lo (default 0) and hi (default len(a)) bound the
-            slice of a to be searched.
             """
-            if lo < 0:
-                raise ValueError('lo must be non-negative')
             if hi is None:
                 hi = len(a)
             while lo < hi:
@@ -102,44 +101,87 @@ class Bootleg(object):
                 else:
                     lo = mid + 1
             return lo
-
-        # return tokens_type_ids
-        with open(f'{self.output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}/bootleg_labels.jsonl', 'r') as fin:
-            for i, line in enumerate(fin):
-                line = ujson.loads(line)
-                tokenized = line['sentence'].split(' ')
-                tokens_type_ids = [[self.unk_id] * type_size for _ in range(len(tokenized))]
-                tokens_type_probs = [[0.0] * type_size for _ in range(len(tokenized))]
-                for all_qids, all_probs, span in zip(line['cand_qids'], line['cand_probs'], line['spans']):
+        
+        if self.bootleg_integration == 2:
+            # return tokens_type_ids
+            with open(f'{self.output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}/bootleg_labels.jsonl', 'r') as fin:
+                for i, line in enumerate(fin):
+                    line = ujson.loads(line)
+                    tokenized = line['sentence'].split(' ')
+                    tokens_type_ids = [[self.unk_id] * type_size for _ in range(len(tokenized))]
+                    tokens_type_probs = [[0.0] * type_size for _ in range(len(tokenized))]
                     
-                    # filter qids with confidence lower than a threshold
-                    idx = reverse_bisect_left(all_probs, threshold, lo=0)
-                    all_qids = all_qids[:idx]
-                    all_probs = all_probs[:idx]
                     
-                    # TODO: now we only keep the first type for each qid
-                    # extend so we can keep all types and aggregate later
-
-                    type_ids = []
-                    type_probs = []
-                    for qid, prob in zip(all_qids, all_probs):
-                        # get all type for a qid
-                        all_types = self.qid2type[qid]
-                        if len(all_types):
-                            # choose only the first type
-                            type_id = self.type2id[all_types[0]]
-                            type_ids.append(type_id)
-                            type_probs.append(prob)
+                    # we only have ctx_emb_ids for top candidates
+                    # TODO  output ctx_emb_ids for all 30 candidates
+                    for ctx_emb_id, prob, span in zip(line['ctx_emb_ids'], line['probs'], line['spans']):
                         
-                    padded_type_ids = self.pad_features(type_ids, type_size, type_default_val)
-                    padded_type_probs = self.pad_features(type_probs, type_size, 0.0)
+                        # account for padding and UNK id added to embedding matrix
+                        ctx_emb_id += 2
                         
-                    # type_id = self.pad_features([self.type2id[type] for type in self.qid2type[qid]], type_size, type_default_val)
-
-                    tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
-                    tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
-                    
-                all_tokens_type_ids.append(tokens_type_ids)
-                all_tokens_type_probs.append(tokens_type_probs)
+                        type_ids = [ctx_emb_id]
+                        type_probs = [prob]
                 
+                        padded_type_ids = self.pad_features(type_ids, type_size, type_default_val)
+                        padded_type_probs = self.pad_features(type_probs, type_size, 0.0)
+                
+                        tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
+                        tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
+            
+                    all_tokens_type_ids.append(tokens_type_ids)
+                    all_tokens_type_probs.append(tokens_type_probs)
+            
+        else:
+            # return tokens_type_ids
+            with open(f'{self.output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}/bootleg_labels.jsonl', 'r') as fin:
+                for i, line in enumerate(fin):
+                    line = ujson.loads(line)
+                    tokenized = line['sentence'].split(' ')
+                    tokens_type_ids = [[self.unk_id] * type_size for _ in range(len(tokenized))]
+                    tokens_type_probs = [[0.0] * type_size for _ in range(len(tokenized))]
+                    for all_qids, all_probs, span in zip(line['cand_qids'], line['cand_probs'], line['spans']):
+                        
+                        # filter qids with confidence lower than a threshold
+                        idx = reverse_bisect_left(all_probs, threshold, lo=0)
+                        all_qids = all_qids[:idx]
+                        all_probs = all_probs[:idx]
+                        
+                        #TODO: now we only keep the first type for each qid
+                        # extend so we can keep all types and aggregate later
+    
+                        type_ids = []
+                        type_probs = []
+                        for qid, prob in zip(all_qids, all_probs):
+                            # get all type for a qid
+                            all_types = self.qid2type[qid]
+                            if len(all_types):
+                                # choose only the first type
+                                type_id = self.type2id[all_types[0]]
+                                type_ids.append(type_id)
+                                type_probs.append(prob)
+                            
+                        padded_type_ids = self.pad_features(type_ids, type_size, type_default_val)
+                        padded_type_probs = self.pad_features(type_probs, type_size, 0.0)
+                        
+                        tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
+                        tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
+                        
+                    all_tokens_type_ids.append(tokens_type_ids)
+                    all_tokens_type_probs.append(tokens_type_probs)
+                    
         return all_tokens_type_ids, all_tokens_type_probs
+    
+    
+    def expand_emb(self, file_name):
+        dir = f'{self.output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}'
+        with open(f'{dir}/bootleg_embs.npy', 'rb') as fin:
+            emb_data = np.load(fin)
+            
+            # add embeddings for the padding and unknown special tokens
+            new_emb = np.concatenate([np.zeros([2, emb_data.shape[1]], dtype='float'), emb_data], axis=0)
+            with open(f'{dir}/ent_embedding.npy', 'wb') as fout:
+                np.save(fout, new_emb)
+
+            # v = [i - 2 for i in range(new_emb.shape[0])]
+            # with open(f'{dir}/ent_vocab.pkl', 'wb') as fout:
+            #     pickle.dump(v, fout)

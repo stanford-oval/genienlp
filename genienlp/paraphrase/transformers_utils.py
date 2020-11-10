@@ -997,7 +997,7 @@ class BertModelV2(BertModel):
     Subcalss of BertModel model with an additional entity type embedding layer at the bottom
     """
 
-    def __init__(self, config, num_db_types, db_unk_id):
+    def __init__(self, config, num_db_types, db_unk_id=0):
         super().__init__(config)
 
         self.embeddings = BertEmbeddingsV2(config, num_db_types, db_unk_id)
@@ -1019,6 +1019,7 @@ class BertModelV2(BertModel):
             encoder_attention_mask=None,
             output_attentions=None,
             output_hidden_states=None,
+            embedding_output=None,
     ):
         
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1063,12 +1064,14 @@ class BertModelV2(BertModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
-        embedding_output = self.embeddings(
-            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
-            entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs,
-            mask_entities=mask_entities, inputs_embeds=inputs_embeds
-        )
+        
+        if embedding_output is None:
+            embedding_output = self.embeddings(
+                input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
+                entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs,
+                mask_entities=mask_entities, inputs_embeds=inputs_embeds
+            )
+            
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,

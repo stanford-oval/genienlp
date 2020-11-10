@@ -139,7 +139,10 @@ class AlmondDataset(CQA):
                 
                 # find the right entity candidate for each mention
                 # extract type ids for each token in input sentence
-                all_token_type_ids, all_tokens_type_probs = bootleg.parse_mentions(config_args, input_file_name[:-len('_bootleg.jsonl')], mode='dump_preds', type_size=features_size[0], type_default_val=int(features_default_val[0]))
+                all_token_type_ids, all_tokens_type_probs = bootleg.disambiguate_mentions(config_args, input_file_name[:-len('_bootleg.jsonl')], type_size=features_size[0], type_default_val=int(features_default_val[0]))
+                
+                # expand embeds
+                bootleg.expand_emb(input_file_name[:-len('_bootleg.jsonl')])
                 
                 # override examples features with bootleg features
                 assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
@@ -251,7 +254,10 @@ class BaseAlmondTask(BaseTask):
         #         es_dump_canonical2type(self.db)
 
     def _init_bootleg(self):
-        self.bootleg = Bootleg(self.args.bootleg_input_dir, self.args.bootleg_model, self.unk_id, self.args.num_workers, self.is_contextual(), self.args.bootleg_skip_feature_creation)
+        self.bootleg = Bootleg(self.args.bootleg_input_dir, self.args.bootleg_model, self.unk_id,
+                               self.args.num_workers, self.is_contextual(),
+                               self.args.bootleg_skip_feature_creation, self.args.bootleg_dump_mode,
+                               self.args.bootleg_batch_size, self.args.bootleg_integration)
 
     def is_contextual(self):
         return NotImplementedError

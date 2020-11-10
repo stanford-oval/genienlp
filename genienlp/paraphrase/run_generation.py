@@ -35,7 +35,7 @@ from genienlp.paraphrase.data_utils import create_features_from_tsv_file, output
 from genienlp.paraphrase.model_utils import compute_metrics, compute_attention, replace_quoted_params, force_replace_quoted_params
 
 try:
-     set_start_method('spawn')
+    set_start_method('spawn')
 except RuntimeError:
     pass
  

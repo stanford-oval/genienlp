@@ -177,7 +177,11 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
     parser.add_argument('--bootleg_dump_features', action='store_true', help='Just dump bootleg features and exit code')
+    parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_embs', help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
     parser.add_argument('--bootleg_skip_feature_creation', action='store_true', help='Skip creating features and use dumped features')
+    parser.add_argument('--bootleg_batch_size', type=int, default=30, help='Batch size used for inference using bootleg')
+    parser.add_argument('--bootleg_integration', type=int, choices=[1, 2], help='In level 1 we extract types for top Qid candidates and feed it to the bottom of Encoder using an entity embedding layer'
+                                                                                'In level 2 we use bootleg entity embeddings directly by concatenating it with Encoder output representations')
     
     parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], default='average', help='Method used to aggregate several type embeddings for a single mention')
 
