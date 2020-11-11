@@ -85,7 +85,7 @@ class TextDataset(Dataset):
                     else:
                         self._add_example(parts[args.input_column], parts[args.gold_column], args)
             if args.sort_by_length:
-                _, self.input_ids, self.labels, self.position_ids, self.segment_ids = tuple(zip(*sorted(list(zip([len(x) for x in self.input_ids], self.input_ids, self.labels, self.position_ids, self.segment_ids)))))
+                _, self.input_ids, self.attention_mask, self.labels, self.position_ids, self.segment_ids = tuple(zip(*sorted(list(zip([len(x) for x in self.input_ids], self.input_ids, self.attention_mask, self.labels, self.position_ids, self.segment_ids)))))
             logger.info('Maximum input length: %d', self.max_input_length)
             
             if args.cache_input_data:

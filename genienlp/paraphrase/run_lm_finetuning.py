@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-This script in used for fine-tuning library models on a dataset.
+This script is used for fine-tuning library models on a dataset.
 GPT and GPT-2 are fine-tuned using a Causal Language Modeling (CLM) loss while BERT family models are fine-tuned
 using a Masked Language Modeling (MLM) loss. BART, MBART, and MARIAN are fine-tuned on supervised data using Cross Entropy (CE) loss.
 """
@@ -205,6 +205,7 @@ def train(args, train_dataset, model, tokenizer, input_file_name=None, multiple_
             elif args.model_type == 'bart':
                 # TODO according to huggingface bart should also use shift_tokens_right
                 # check if that change affects results
+                model_inputs['attention_mask'] = attention_mask
                 decoder_input_ids = labels.contiguous()
                 decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
                 model_inputs['decoder_input_ids'] = decoder_input_ids
@@ -355,6 +356,7 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
                 decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
                 model_inputs['decoder_input_ids'] = decoder_input_ids
             elif args.model_type == 'bart':
+                model_inputs['attention_mask'] = attention_mask
                 decoder_input_ids = labels.contiguous()
                 decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
                 model_inputs['decoder_input_ids'] = decoder_input_ids
