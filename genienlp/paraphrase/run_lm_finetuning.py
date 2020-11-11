@@ -196,14 +196,18 @@ def train(args, train_dataset, model, tokenizer, input_file_name=None, multiple_
             
             model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids}
             
-            # prepare inputs for bart
-            if args.model_type in ['bart', 'mbart', 'marian']:
+            # prepare inputs for mbart, and marian
+            if args.model_type in ['mbart', 'marian']:
                 model_inputs['attention_mask'] = attention_mask
-                # decoder_input_ids = labels[:, :-1].contiguous()
                 decoder_input_ids = shift_tokens_right(labels, args.mlm_ignore_index)
                 decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
                 model_inputs['decoder_input_ids'] = decoder_input_ids
-                # labels = labels[:, 1:].clone()
+            elif args.model_type == 'bart':
+                # TODO according to huggingface bart should also use shift_tokens_right
+                # check if that change affects results
+                decoder_input_ids = labels.contiguous()
+                decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
+                model_inputs['decoder_input_ids'] = decoder_input_ids
 
             outputs = model(**model_inputs)
             lm_logits = outputs[0].contiguous()
@@ -343,14 +347,19 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
         segment_ids = segment_ids.to(args.device)
 
         with torch.no_grad():
-            if args.model_type in ['bart', 'mbart', 'marian']:
-                # decoder_input_ids = labels[:, :-1].contiguous()
+            model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids}
+            
+            if args.model_type in ['mbart', 'marian']:
+                model_inputs['attention_mask'] = attention_mask
                 decoder_input_ids = shift_tokens_right(labels, args.mlm_ignore_index)
                 decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
-                # labels = labels[:, 1:].clone()
-                outputs = model(inputs, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, position_ids=position_ids, token_type_ids=segment_ids)
-            else:
-                outputs = model(inputs, attention_mask=attention_mask, position_ids=position_ids, token_type_ids=segment_ids)
+                model_inputs['decoder_input_ids'] = decoder_input_ids
+            elif args.model_type == 'bart':
+                decoder_input_ids = labels.contiguous()
+                decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
+                model_inputs['decoder_input_ids'] = decoder_input_ids
+
+            outputs = model(**model_inputs)
             lm_logits = outputs[0]
             
             # debugging

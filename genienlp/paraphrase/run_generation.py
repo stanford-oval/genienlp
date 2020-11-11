@@ -372,9 +372,10 @@ def run_single_process_generation(args, config):
                 padded_batch_context_tokens.append(batch_context_tokens[i]+[pad_token_id]*(max_length-len(batch_context_tokens[i])))
             batch_context_tensor = torch.tensor(padded_batch_context_tokens, dtype=torch.long, device=args.device)
             attention_mask = (batch_context_tensor!=pad_token_id).to(torch.long)
-            
+
         if args.model_type == 'mbart':
             decoder_start_token_id = tokenizer.lang_code_to_id[args.tgt_lang]
+            model.config.decoder_start_token_id = decoder_start_token_id
         else:
             decoder_start_token_id = None
             
