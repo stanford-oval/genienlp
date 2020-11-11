@@ -41,7 +41,7 @@ import numpy as np
 import torch
 from tqdm import trange
 
-from .data_utils.example import Batch
+from .data_utils.example import NumericalizedExamples
 from .data_utils.numericalizer.sequential_field import SequentialField
 from .data_utils.iterator import LengthSortedIterator
 
@@ -450,13 +450,13 @@ def elapsed_time(log):
 def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
                      append_question_to_context_too=False, override_question=None, override_context=None):
     
-    all_features = Batch.from_examples(dataset, numericalizer, device=device,
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer, device=device,
                                   paired=paired and train, max_pairs=max_pairs, groups=dataset.groups,
                                   append_question_to_context_too=append_question_to_context_too,
                                   override_question=override_question, override_context=override_context)
     all_f = []
     for i in trange(len(all_features.example_id), desc='Converting dataset to features'):
-        all_f.append(Batch(example_id=[all_features.example_id[i]],
+        all_f.append(NumericalizedExamples(example_id=[all_features.example_id[i]],
                             context=SequentialField(value=all_features.context.value[i][:all_features.context.length[i]], length=all_features.context.length[i], limited=all_features.context.limited[i][:all_features.context.length[i]]),
                             question=SequentialField(value=all_features.question.value[i][:all_features.question.length[i]], length=all_features.question.length[i], limited=all_features.question.limited[i][:all_features.question.length[i]]),
                             answer=SequentialField(value=all_features.answer.value[i][:all_features.answer.length[i]], length=all_features.answer.length[i], limited=all_features.answer.limited[i][:all_features.answer.length[i]]),
@@ -466,7 +466,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
     # get the sorted data_source
     all_f = sampler.data_source
     
-    return torch.utils.data.DataLoader(all_f, batch_sampler=sampler, collate_fn=Batch.collate_batches, num_workers=0)
+    return torch.utils.data.DataLoader(all_f, batch_sampler=sampler, collate_fn=NumericalizedExamples.collate_batches, num_workers=0)
 
 
 def pad(x, new_channel, dim, val=None):

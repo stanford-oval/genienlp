@@ -38,7 +38,7 @@ from pprint import pformat
 import torch
 
 from . import models
-from .data_utils.example import Batch
+from .data_utils.example import NumericalizedExamples
 from .tasks.generic_dataset import Example
 from .tasks.registry import get_tasks
 from .util import set_seed, init_devices, load_config_json, log_model_size
@@ -60,7 +60,7 @@ class Server:
         self.model.add_new_vocab_from_data([[[ex]]])
 
         # batch of size 1
-        return Batch.from_examples([ex], self.numericalizer, device=self.device,
+        return NumericalizedExamples.from_examples([ex], self.numericalizer, device=self.device,
                                    append_question_to_context_too=self.args.append_question_to_context_too,
                                    override_question=self.args.override_question,
                                    override_context=self.args.override_context)

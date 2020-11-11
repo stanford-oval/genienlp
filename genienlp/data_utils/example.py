@@ -72,7 +72,7 @@ class Example(NamedTuple):
         return Example(*args)
 
 
-class Batch(NamedTuple):
+class NumericalizedExamples(NamedTuple):
     example_id: List[str]
     context: SequentialField
     question: SequentialField
@@ -182,7 +182,7 @@ class Batch(NamedTuple):
             all_context_inputs = all_context_inputs_single
             all_question_inputs = all_question_inputs_single
             all_answer_inputs = all_answer_inputs_single
-        return Batch(all_example_ids,
+        return NumericalizedExamples(all_example_ids,
                      all_context_inputs,
                      all_question_inputs,
                      all_answer_inputs,
@@ -244,4 +244,4 @@ class Batch(NamedTuple):
                                  limited=answer_limiteds)
 
 
-        return Batch(example_id=example_id, context=context, question=question, answer=answer, decoder_vocab=decoder_vocab)
+        return NumericalizedExamples(example_id=example_id, context=context, question=question, answer=answer, decoder_vocab=decoder_vocab)
