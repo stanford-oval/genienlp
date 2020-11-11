@@ -190,8 +190,6 @@ class Batch(NamedTuple):
 
     @staticmethod
     def collate_batches(batches):
-        print('len(batches) = ', len(batches))
-        # print('batches = ', batches)
         example_id = []
         context_values, context_lengths, context_limiteds = [], [], []
         question_values, question_lengths, question_limiteds = [], [], []
@@ -222,12 +220,6 @@ class Batch(NamedTuple):
 
             decoder_vocab = batch.decoder_vocab
 
-        context_values = [x[:max_context_length] for x in context_values]
-        context_limiteds = [x[:max_context_length] for x in context_limiteds]
-        question_values = [x[:max_question_length] for x in question_values]
-        question_limiteds = [x[:max_question_length] for x in question_limiteds]
-        answer_values = [x[:max_answer_length] for x in answer_values]
-        answer_limiteds = [x[:max_answer_length] for x in answer_limiteds]
 
         context_values = pad_sequence(context_values, padding_value=0, batch_first=True)
         context_limiteds = pad_sequence(context_limiteds, padding_value=0, batch_first=True)

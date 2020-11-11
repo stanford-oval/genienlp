@@ -189,8 +189,8 @@ def parse_argv(parser):
                         help='force subword tokenization of code tokens too')
     parser.add_argument('--append_question_to_context_too', action='store_true', default=False,
                         help='')
-    parser.add_argument('--override_question', default=None, help='Override the question for all tasks')
-    parser.add_argument('--override_context', default=None, help='Override the context for all tasks')
+    parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
+    parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--almond_preprocess_context', action='store_true', default=False, help='')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
