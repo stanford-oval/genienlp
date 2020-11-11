@@ -134,6 +134,18 @@ class TextDataset(Dataset):
         # ignored
         self.attention_mask.append([1]*len(input_ids))
         
+        
+    def _update_seq2seq_example(self, encoded_input_ids, encoded_attention_mask, encoded_output_ids):
+        self.max_input_length = max(self.max_input_length, len(encoded_input_ids))
+        self.max_output_length = max(self.max_output_length, len(encoded_output_ids))
+    
+        self.input_ids.append(encoded_input_ids)
+        self.attention_mask.append(encoded_attention_mask)
+        self.position_ids.append(list(range(len(encoded_input_ids))))
+        self.segment_ids.append([self.segment1_id] * len(encoded_input_ids))
+    
+        self.labels.append(encoded_output_ids)
+        
 
     def _add_bart_example(self, input_sequence, output_sequence):
         
@@ -141,15 +153,8 @@ class TextDataset(Dataset):
         encoded_attention_mask = self.tokenizer.encode_plus(input_sequence)['attention_mask']
         encoded_output_ids = self.tokenizer.encode_plus(output_sequence)['input_ids']
         
-        self.max_input_length = max(self.max_input_length, len(encoded_input_ids))
-        self.max_output_length = max(self.max_output_length, len(encoded_output_ids))
+        self._update_seq2seq_example(encoded_input_ids, encoded_attention_mask, encoded_output_ids)
         
-        self.input_ids.append(encoded_input_ids)
-        self.attention_mask.append(encoded_attention_mask)
-        self.position_ids.append(list(range(len(encoded_input_ids))))
-        self.segment_ids.append([self.segment1_id] * len(encoded_input_ids))
-        
-        self.labels.append(encoded_output_ids)
 
     def _add_mbart_example(self, input_sequence, output_sequence, args):
     
@@ -159,15 +164,7 @@ class TextDataset(Dataset):
         encoded_attention_mask = model_inputs['attention_mask'].tolist()[0]
         encoded_output_ids = model_inputs['labels'].tolist()[0]
     
-        self.max_input_length = max(self.max_input_length, len(encoded_input_ids))
-        self.max_output_length = max(self.max_output_length, len(encoded_output_ids))
-    
-        self.input_ids.append(encoded_input_ids)
-        self.attention_mask.append(encoded_attention_mask)
-        self.position_ids.append(list(range(len(encoded_input_ids))))
-        self.segment_ids.append([self.segment1_id] * len(encoded_input_ids))
-    
-        self.labels.append(encoded_output_ids)
+        self._update_seq2seq_example(encoded_input_ids, encoded_attention_mask, encoded_output_ids)
 
     def _add_marian_example(self, input_sequence, output_sequence):
     
@@ -177,15 +174,7 @@ class TextDataset(Dataset):
         encoded_attention_mask = model_inputs['attention_mask'].tolist()[0]
         encoded_output_ids = model_inputs['decoder_input_ids'].tolist()[0]
     
-        self.max_input_length = max(self.max_input_length, len(encoded_input_ids))
-        self.max_output_length = max(self.max_output_length, len(encoded_output_ids))
-    
-        self.input_ids.append(encoded_input_ids)
-        self.attention_mask.append(encoded_attention_mask)
-        self.position_ids.append(list(range(len(encoded_input_ids))))
-        self.segment_ids.append([self.segment1_id] * len(encoded_input_ids))
-    
-        self.labels.append(encoded_output_ids)
+        self._update_seq2seq_example(encoded_input_ids, encoded_attention_mask, encoded_output_ids)
         
     def __len__(self):
         return len(self.input_ids)
