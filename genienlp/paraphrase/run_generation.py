@@ -15,7 +15,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Conditional text generation with transformer models
+"""
+This script in used for text generation using library models.
+It currently supports paraphrasing and translation tasks.
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -141,14 +143,16 @@ def parse_argv(parser):
     parser.add_argument('--task', type=str, required=True, choices=['paraphrase', 'translate'])
     parser.add_argument("--output_example_ids_too", action='store_true', help='Generate two column output with ids in the first column')
     
-    parser.add_argument('--masked_paraphrasing', action='store_true', help='mask input tokens and infill them using denoising pretrained model')
-    parser.add_argument('--fairseq_mask_prob', type=float, default=0.15, help='Probability of an input token being masked in the sentence for masked_paraphrasing')
-    parser.add_argument('--delete_tokens', action='store_true', help='delete input tokens and infill them using denoising pretrained model')
-    parser.add_argument('--delete_token_prob', type=float, default=0.15, help='Probability of an input token being deleted in the sentence for masked_paraphrasing')
-    parser.add_argument('--infill_text', action='store_true', help='use text infilling method to generate paraphrased sentences')
-    parser.add_argument('--num_text_spans', type=int, default=5, help='number of text spans to sample for text infilling method')
-    parser.add_argument('--permute_sentence', action='store_true', help='use sentence permutation method to generate paraphrased sentences')
-    parser.add_argument('--rotate_document', action='store_true', help='use document rotation method to generate paraphrased sentences')
+    parser.add_argument('--mask_tokens', action='store_true', help='mask input tokens and infill them using denoising pretrained model')
+    parser.add_argument('--mask_token_prob', type=float, default=0.15, help='Probability of an input token being masked in the sentence')
+    parser.add_argument('--delete_tokens', action='store_true', help='delete input tokens and infill them using denoising pretrained model'
+                                                                     'In contrast to token masking, the model should decide which positions have missing inputs')
+    parser.add_argument('--delete_token_prob', type=float, default=0.15, help='Probability of an input token being deleted in the sentence')
+    parser.add_argument('--infill_text', action='store_true', help='mask consecutive tokens and infill them using denoising pretrained model')
+    parser.add_argument('--num_text_spans', type=int, default=3, help='number of text spans to sample for text infilling method')
+    parser.add_argument('--permute_sentences', action='store_true', help='divide document into sentences based on fill stops and'
+                                                                         'permutate them. Use this only if input has multiple sentences.')
+    parser.add_argument('--rotate_sentence', action='store_true', help='a pivot token is chosen randomly, and sentence is rotated so new sentence start with pivot token')
 
     parser.add_argument('--fp16', action='store_true',
                         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit. On certain GPUs (e.g. Nvidia V100) improves the inference speed")
@@ -214,6 +218,13 @@ def run_multi_process_generation(args):
         raise ValueError('Model should be either GPT2, BART, MBART, or Marian')
     
     check_args(args)
+
+    if sum([args.mask_tokens, args.delete_tokens, args.infill_text, args.permute_sentences, args.rotate_sentence]) >= 2:
+        raise ValueError('Mixing denoising techniques is unlikely to work. Please use one method per run')
+    
+    if (args.mask_tokens or args.delete_tokens or args.rotate_sentence) and args.model_type == 'mbart':
+        raise ValueError('MBART is pretrained only with text_infilling and permute_sentences noising methods. '
+                         'Applying other noising techniques is unlikely to work')
     
     if args.trained_model_type and args.trained_model_type != '' and args.model_type != args.trained_model_type:
         raise ValueError('The loaded model type does not match with what the user provided')
@@ -307,7 +318,7 @@ def run_single_process_generation(args, config):
             t5_task = 'summarization'
         model_input_prefix = config.task_specific_params[t5_task]['prefix']
         
-    mask_token = getattr(tokenizer, 'mask_token', '<mask>')
+    masking_token = getattr(tokenizer, 'mask_token', '<mask>')
 
     all_input_sequences, all_input_sequence_lengths, all_example_ids, all_context_ids, estimated_output_lengths, all_golds, reverse_maps, all_prompt_ids = \
                                   create_features_from_tsv_file(file_path=args.input_file,
@@ -326,15 +337,15 @@ def run_single_process_generation(args, config):
                                                                 subsample=args.subsample,
                                                                 task=args.task,
                                                                 model_input_prefix=model_input_prefix,
-                                                                masked_paraphrasing=args.masked_paraphrasing,
-                                                                fairseq_mask_prob=args.fairseq_mask_prob,
-                                                                mask_token=mask_token,
+                                                                mask_tokens=args.mask_tokens,
+                                                                mask_token_prob=args.mask_token_prob,
+                                                                masking_token=masking_token,
                                                                 delete_tokens=args.delete_tokens,
                                                                 delete_token_prob=args.delete_token_prob,
                                                                 infill_text=args.infill_text,
                                                                 num_text_spans=args.num_text_spans,
-                                                                permute_sentence=args.permute_sentence,
-                                                                rotate_document=args.rotate_document)
+                                                                permute_sentences=args.permute_sentences,
+                                                                rotate_sentence=args.rotate_sentence)
 
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, original_order, reverse_maps, all_prompt_ids = \
@@ -395,7 +406,7 @@ def run_single_process_generation(args, config):
                                 )
 
             # TODO fix the way output attention is handled. Some models do not support it.
-            if return_attentions and args.task == 'translate':
+            if return_attentions:
                 decoded, all_encoder_attentions = outputs
             else:
                 decoded = outputs

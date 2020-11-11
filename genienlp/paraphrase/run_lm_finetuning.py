@@ -16,9 +16,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for language modeling on a text file (GPT, GPT-2, BERT, RoBERTa).
-GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa are fine-tuned
-using a masked language modeling (MLM) loss.
+This script in used for fine-tuning library models on a dataset.
+GPT and GPT-2 are fine-tuned using a Causal Language Modeling (CLM) loss while BERT family models are fine-tuned
+using a Masked Language Modeling (MLM) loss. BART, MBART, and MARIAN are fine-tuned on supervised data using Cross Entropy (CE) loss.
 """
 
 from __future__ import absolute_import, division, print_function
@@ -50,7 +50,8 @@ from .transformers_utils import MBartTokenizer, MarianMTModel
 from genienlp.util import set_seed, split_file_on_disk
 from genienlp.paraphrase.data_utils import mask_tokens, add_special_tokens
 from genienlp.paraphrase.dataset import LengthSortedSampler, TextDataset
-from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints, check_args, freeze_embeds, freeze_params
+from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints,\
+    check_args, freeze_embeds, freeze_params, shift_tokens_right
 
 
 logger = logging.getLogger(__name__)
@@ -68,15 +69,6 @@ MODEL_CLASSES = {
     'marian': (MarianConfig, MarianMTModel, MarianTokenizer)
 }
 
-def shift_tokens_right(input_ids, pad_token_id):
-    """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
-    prev_output_tokens = input_ids.clone()
-    index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
-    prev_output_tokens[:, 0] = input_ids.gather(1, index_of_eos).squeeze()
-    prev_output_tokens[:, 1:] = input_ids[:, :-1]
-    return prev_output_tokens
-
-    
 
 def train(args, train_dataset, model, tokenizer, input_file_name=None, multiple_shards=False, init_global_step=0, init_epochs_trained=0):
     """ Train the model """

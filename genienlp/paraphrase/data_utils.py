@@ -9,8 +9,9 @@ import numpy as np
 from ..data_utils.progbar import progress_bar
 from ..util import detokenize, tokenize, lower_case, SpecialTokenMap
 
-from genienlp.paraphrase.dataset import TextDataset
 from genienlp.util import get_number_of_lines
+from ..tasks.almond.utils import is_entity, quoted_pattern_maybe_space, device_pattern
+
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +111,6 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
         logger.info('Added %d special tokens', num_added_tokens)
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
 
-from ..tasks.almond.utils import is_entity, is_device, quoted_pattern_maybe_space, device_pattern
-
 def has_match(sentence, all_entities):
     for entity in all_entities:
         j = 0
@@ -127,7 +126,7 @@ def has_match(sentence, all_entities):
             return True
     return False
     
-def fairseq_mask(input_sequence, mlm_probability, mask_token, thingtalk):
+def token_masking(input_sequence, mlm_probability, mask_token, thingtalk):
     
     all_entities = []
     all_device_tokens = []
@@ -138,6 +137,7 @@ def fairseq_mask(input_sequence, mlm_probability, mask_token, thingtalk):
     
     input_tokens = input_sequence.split(' ')
     input_length = len(input_tokens)
+    
     # don't mask first and last tokens
     for i in range(1, input_length-1):
         if is_entity(input_tokens[i]) or input_tokens[i] in all_device_tokens or has_match(input_tokens[i:], all_entities):
@@ -157,6 +157,7 @@ def token_deletion(input_sequence, mlm_probability, mask_token, thingtalk):
     
     input_tokens = input_sequence.split(' ')
     input_length = len(input_tokens)
+    
     # don't mask first and last tokens
     for i in range(1, input_length-1):
         if is_entity(input_tokens[i]) or input_tokens[i] in all_device_tokens or has_match(input_tokens[i:], all_entities):
@@ -221,10 +222,11 @@ def document_rotation(input_sequence):
 def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column,
                                   copy, sep_token_id, skip_heuristics, is_cased, model_type,
                                   src_lang, subsample, task, model_input_prefix,
-                                  masked_paraphrasing, fairseq_mask_prob, mask_token,
+                                  mask_tokens, mask_token_prob, masking_token,
                                   delete_tokens, delete_token_prob,
                                   infill_text, num_text_spans,
-                                  permute_sentence, rotate_document):
+                                  permute_sentences,
+                                  rotate_sentence):
     """
     Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
     Outputs:
@@ -268,16 +270,16 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
             input_sequence, reverse_map = input_heuristics(input_sequence, thingtalk, is_cased)
             reverse_maps.append(reverse_map)
             
-        if masked_paraphrasing:
-            input_sequence = fairseq_mask(input_sequence, fairseq_mask_prob, mask_token, thingtalk)
+        if mask_tokens:
+            input_sequence = token_masking(input_sequence, mask_token_prob, masking_token, thingtalk)
         if delete_tokens:
-            input_sequence = token_deletion(input_sequence, delete_token_prob, mask_token, thingtalk)
+            input_sequence = token_deletion(input_sequence, delete_token_prob, masking_token, thingtalk)
         if infill_text:
-            input_sequence = text_infilling(input_sequence, num_text_spans, mask_token, thingtalk)
-        if permute_sentence:
+            input_sequence = text_infilling(input_sequence, num_text_spans, masking_token, thingtalk)
+        if permute_sentences:
             input_sequence = sentence_permutation(input_sequence)
-        if rotate_document:
-            input_sequence = sentence_permutation(input_sequence)
+        if rotate_sentence:
+            input_sequence = document_rotation(input_sequence)
         
         # add model specific prefix
         input_sequence = model_input_prefix + input_sequence

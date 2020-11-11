@@ -129,7 +129,7 @@ for model in "sshleifer/bart-tiny-random" ; do
   fi
 
   # use a pre-trained model
-  pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $model --length 15 --temperature 0 --repetition_penalty 1.0 --num_samples 1 --batch_size 3 --input_file $workdir/masked_paraphrasing/dev.tsv --input_column 0 --gold_column 1 --output_file $workdir/generated_"$base_model"_aligned.tsv  --skip_heuristics --task paraphrase --masked_paraphrasing --fairseq_mask_prob 0.15
+  pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $model --length 15 --temperature 0 --repetition_penalty 1.0 --num_samples 1 --batch_size 3 --input_file $workdir/masked_paraphrasing/dev.tsv --input_column 0 --gold_column 1 --output_file $workdir/generated_"$base_model"_aligned.tsv  --skip_heuristics --task paraphrase --mask_tokens --mask_token_prob 0.15
 
   if test ! -f $workdir/generated_"$base_model"_aligned.tsv   ; then
       echo "File not found!"
