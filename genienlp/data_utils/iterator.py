@@ -54,7 +54,6 @@ class LengthSortedIterator(torch.utils.data.Sampler):
 
         self.sort_key = sort_key_fn
         self.batch_size_fn = batch_size_fn
-        print('batch_size_fn = ', batch_size_fn.__name__)
         self.groups = groups
         
         if sort:

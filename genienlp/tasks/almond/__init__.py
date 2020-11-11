@@ -230,7 +230,6 @@ class NaturalSeq2Seq(BaseAlmondTask):
             _id = "id-null"
         else:
             _id, input_sequence, target_sequence = parts
-        # print('parts = ', parts)
         question = 'translate from input to output'
         context = input_sequence
         answer = target_sequence

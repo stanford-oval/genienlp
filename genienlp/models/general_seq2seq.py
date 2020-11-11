@@ -305,8 +305,6 @@ class Bart(torch.nn.Module):
 
     def forward(self, *input, **kwargs):
         #TODO pretraining
-        # print('kwargs = ', kwargs.keys())
-        # print('input_ids = ', kwargs['input_ids'])
         if self.training:
             batch = input[0]
             pretraining = kwargs.pop("pretraining", None)
@@ -316,12 +314,8 @@ class Bart(torch.nn.Module):
             y_ids = y[:, :-1].contiguous()
             lm_labels = y[:, 1:].clone()
             lm_labels[y[:, 1:] == pad] = -100
-            # print({'source_ids':source_ids, 'attention_mask': source_mask, 'decoder_input_ids':y_ids, 'lm_labels':lm_labels})
             return self.bart.forward(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels)
 
-            # print('input_ids = ', batch.context.value)
-            # print('lm_labels = ', batch.answer.value)
-            # return super().forward(input_ids=batch.context.value, decoder_input_ids=batch.answer.value, lm_labels=batch.answer.value)
         else:
             return self.bart.forward(**kwargs)
         
@@ -369,6 +363,4 @@ class Bart(torch.nn.Module):
                                      do_sample=do_sample,
                                     )
 
-        # print('generated = ', generated)
-        
         return generated
