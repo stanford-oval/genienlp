@@ -593,13 +593,19 @@ def run_single_process_generation(args, config):
         )
     logger.info('Average BLEU score = %.2f', metrics['bleu'])
     logger.info('Exact match score = %.2f', metrics['em'])
-    logger.info('Prediction accuracy = %.2f', metrics['prediction_acc'])
-    logger.info(
-            'TP = %d; TN = %d; FP = %d; FN = %d',
-            metrics['true_positive'],
-            metrics['true_negative'],
-            metrics['false_positive'],
-            metrics['false_negative']
-        )
     logger.info('ECE = %.2f', metrics['ece'])
     logger.info('AdaECE = %.2f', metrics['ada_ece'])
+    best_threshold = np.argmax(metrics['prediction_metrics']['F1'])
+    logger.info('Best threshold by F1 score is %.2f',
+        metrics['prediction_metrics']['thresholds'][best_threshold])
+    logger.info('Prediction accuracy = %.2f', metrics['prediction_metrics']['precision'][best_threshold])
+    logger.info(
+            'TP = %d; TN = %d; FP = %d; FN = %d; F1 = %.2f; included = %.2f',
+            metrics['prediction_metrics']['tp'][best_threshold],
+            metrics['prediction_metrics']['tn'][best_threshold],
+            metrics['prediction_metrics']['fp'][best_threshold],
+            metrics['prediction_metrics']['fn'][best_threshold],
+            metrics['prediction_metrics']['F1'][best_threshold],
+            metrics['prediction_metrics']['included'][best_threshold],
+        )
+    

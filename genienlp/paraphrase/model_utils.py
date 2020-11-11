@@ -128,10 +128,12 @@ def compute_metrics(
         calibrator = xgb.Booster()
         calibrator.load_model(calibrator_path)
     
-    true_positive = 0
-    true_negative = 0
-    false_positive = 0
-    false_negative = 0
+    # Store prediction metrics for thresholds at percent-increments to plot later
+    thresholds = np.arange(0, 1, 0.01)
+    prediction_metrics = {'thresholds': thresholds}
+    for metric in ["tp","tn","fp","fn"]:
+        prediction_metrics[metric] = np.zeros_like(thresholds)
+
     all_bleu = []
     all_exact_matches = []
     sentence_confidences = []
@@ -166,16 +168,17 @@ def compute_metrics(
             bleu_score /= len(output)
             exact_match /= len(output)
             sentence_confidence /= len(output)
-        if sentence_confidence >= 0.5:
-            if exact_match >= 0.5:
-                true_positive += 1
+        for i, threshold in enumerate(thresholds):
+            if sentence_confidence >= threshold:
+                if exact_match >= 0.5:
+                    prediction_metrics['tp'][i] += 1
+                else:
+                    prediction_metrics['fp'][i] += 1
             else:
-                false_positive += 1
-        else:
-            if exact_match < 0.5:
-                true_negative += 1
-            else:
-                false_negative += 1
+                if exact_match < 0.5:
+                    prediction_metrics['tn'][i] += 1
+                else:
+                    prediction_metrics['fn'][i] += 1
         all_bleu.append(bleu_score)
         all_exact_matches.append(exact_match)
         sentence_confidences.append(sentence_confidence)
@@ -186,16 +189,34 @@ def compute_metrics(
     ece = compute_ece(all_exact_matches, sentence_confidences, binning='uniform', output_reliability_diagrams=output_reliability_diagrams)
     ada_ece = compute_ece(all_exact_matches, sentence_confidences, binning='adaptive')
 
+    prediction_metrics['included'] = (
+        prediction_metrics['tp'] + prediction_metrics['fp']) / (
+        prediction_metrics['tp'] + prediction_metrics['fp'] + prediction_metrics['tn'] + prediction_metrics['fn'])
+    prediction_metrics['prediction_acc'] = (
+        prediction_metrics['tp'] + prediction_metrics['tn']) / (
+        prediction_metrics['tp'] + prediction_metrics['fp'] + prediction_metrics['tn'] + prediction_metrics['fn'])
+    prediction_metrics['precision'] = prediction_metrics['tp'] / (
+        prediction_metrics['tp'] + prediction_metrics['fp'])
+    prediction_metrics['F1'] = 2 * prediction_metrics['tp'] / (
+        2 * prediction_metrics['tp'] + prediction_metrics['fp'] +  + prediction_metrics['fn'])
+
+    if output_reliability_diagrams is not None:
+        fig, ax = plt.subplots(1, figsize=(5,4))
+        ax.plot(thresholds, prediction_metrics['included'], label='Fraction included')
+        ax.plot(thresholds, prediction_metrics['precision'], label='Precision')
+        ax.plot(thresholds, prediction_metrics['F1'], label='F1 score')
+        ax.set_xlabel("Confidence Threshold")
+        fig.suptitle("Model Performance vs. Confidence Threshold")
+        plt.ylim(top=1.02)
+        plt.legend()
+        plt.savefig(f"{output_reliability_diagrams}_performance")
+
     return {
         'bleu': total_bleu / len(all_bleu),
         'em': 100.0 * total_exact_match / len(all_exact_matches),
         'ece': ece,
         'ada_ece': ada_ece,
-        'false_positive': false_positive,
-        'false_negative': false_negative,
-        'true_positive': true_positive,
-        'true_negative': true_negative,
-        'prediction_acc': 100.0 * (true_positive + true_negative) / len(all_exact_matches)
+        'prediction_metrics': prediction_metrics
     }
 
 
