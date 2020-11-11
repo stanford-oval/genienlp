@@ -39,10 +39,11 @@ import time
 import re
 import numpy as np
 import torch
+from tqdm import trange
 
 from .data_utils.example import Batch
 from .data_utils.numericalizer.sequential_field import SequentialField
-from .tasks.generic_dataset import context_answer_len
+from .data_utils.iterator import LengthSortedIterator
 
 
 logger = logging.getLogger(__name__)
@@ -445,71 +446,27 @@ def elapsed_time(log):
     seconds = int(t)
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
-class LengthSortedSampler(torch.utils.data.Sampler):
-
-    def __init__(self, data_source, batch_size, shuffle, repeat):
-        self.data_source = data_source
-        self.batch_size = batch_size # number of examples or number of tokens
-        self.shuffle = shuffle
-        self.repeat = repeat
-        self.total_returned_items = 0
-        self.last_batch_start_index = 0
-        self.last_batch_start_index = self._get_next_batch_start_index()
-
-    def __len__(self):
-        return len(self.data_source)
-
-    def __iter__(self):
-        self.total_returned_items = 0
-        self.last_batch_start_index = 0
-        self.last_batch_start_index = self._get_next_batch_start_index()
-        return self
-
-    def __next__(self):
-        batch = []
-        tokens_in_batch = 0
-        i = self._get_next_batch_start_index()
-        while tokens_in_batch <= self.batch_size:
-            new_example = self.data_source[i]
-            batch.append(i)
-            tokens_in_batch += context_answer_len(new_example) # TODO len should accoutn for all tokens
-            # print('i = ', i)
-            # print('example_len = ', context_answer_len(new_example))
-            i += 1
-            if i == len(self):
-                break
-
-        self.last_batch_start_index += len(batch)
-        return slice(batch[0], batch[-1]+1)
-
-    def _get_next_batch_start_index(self):
-        if self.shuffle:
-            return random.randint(0, len(self))
-        else:
-            return self.last_batch_start_index
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
-                     valid=False, append_question_to_context_too=False, override_question=None, override_context=None):
+                     append_question_to_context_too=False, override_question=None, override_context=None):
     
     all_features = Batch.from_examples(dataset, numericalizer, device=device,
                                   paired=paired and train, max_pairs=max_pairs, groups=dataset.groups,
                                   append_question_to_context_too=append_question_to_context_too,
                                   override_question=override_question, override_context=override_context)
     all_f = []
-    for i in range(len(all_features.example_id)):
-        all_f.append(Batch(example_id=all_features.example_id[i],
+    for i in trange(len(all_features.example_id), desc='Converting dataset to features'):
+        all_f.append(Batch(example_id=[all_features.example_id[i]],
                             context=SequentialField(value=all_features.context.value[i][:all_features.context.length[i]], length=all_features.context.length[i], limited=all_features.context.limited[i][:all_features.context.length[i]]),
                             question=SequentialField(value=all_features.question.value[i][:all_features.question.length[i]], length=all_features.question.length[i], limited=all_features.question.limited[i][:all_features.question.length[i]]),
                             answer=SequentialField(value=all_features.answer.value[i][:all_features.answer.length[i]], length=all_features.answer.length[i], limited=all_features.answer.limited[i][:all_features.answer.length[i]]),
                             decoder_vocab=all_features.decoder_vocab))
     
-
-    all_f = list(sorted(all_f, key=context_answer_len))
-    sampler = LengthSortedSampler(all_f, batch_size=batch_size, shuffle=train, repeat=train)
+    sampler = LengthSortedIterator(all_f, batch_size=batch_size, sort=train, shuffle=train, repeat=train, sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
+    # get the sorted data_source
+    all_f = sampler.data_source
     
-    collate_function = lambda batches: Batch.collate_batches(batches)
-        
-    return torch.utils.data.DataLoader(all_f, sampler=sampler, batch_size=None, collate_fn=collate_function)
+    return torch.utils.data.DataLoader(all_f, batch_sampler=sampler, collate_fn=Batch.collate_batches, num_workers=0)
 
 
 def pad(x, new_channel, dim, val=None):
