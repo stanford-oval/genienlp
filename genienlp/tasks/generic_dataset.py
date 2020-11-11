@@ -53,12 +53,18 @@ def make_example_id(dataset, example_id):
 def context_answer_len(ex):
     return interleave_keys(ex.context.length, ex.answer.length)
 
+def context_question_len(ex):
+    return ex.context.length + ex.question.length
+
 def id_value(ex):
     id_ = ex.example_id.rsplit('/', 1)
     id_ = id_[0] if len(id_) == 1 else id_[1]
     return id_
 
 # batch_size funcs
+def input_tokens_fn(new, count, sofar):
+    return sofar + context_question_len(new)
+
 def token_batch_fn(new, count, sofar):
     prev_max_len = sofar / (count - 1) if count > 1 else 0
     return max(len(new.context), 5 * len(new.answer), prev_max_len) * count
@@ -70,7 +76,7 @@ def default_batch_fn(new, count, sofar):
 
 class CQA(Dataset):
     
-    def __init__(self, examples, sort_key_fn=context_answer_len, batch_size_fn=token_batch_fn, groups=None, **kwargs):
+    def __init__(self, examples, sort_key_fn=context_question_len, batch_size_fn=input_tokens_fn, groups=None, **kwargs):
         self.sort_key_fn = sort_key_fn
         self.batch_size_fn = batch_size_fn
         self.groups = groups
