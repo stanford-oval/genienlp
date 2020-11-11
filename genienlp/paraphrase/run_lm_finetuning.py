@@ -515,9 +515,9 @@ def parse_argv(parser):
     parser.add_argument("--freeze_encoder", action="store_true")
     parser.add_argument("--freeze_embeds", action="store_true")
 
-    parser.add_argument('--input_column', type=int, required=True,
+    parser.add_argument('--input_column', type=int, default=0,
                         help='The column in the input file which contains the input sentences.')
-    parser.add_argument('--gold_column', type=int, default=None,
+    parser.add_argument('--gold_column', type=int, default=1,
                         help='The column in the input file which contains the gold sentences. Defaults to --input_column if no gold is available.')
     
     parser.add_argument('--cache_input_data', action='store_true', help='Cache examples from input data for faster subsequent trainings')
