@@ -33,6 +33,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tensorboardX import SummaryWriter
 
 from ..data_utils.progbar import progress_bar, prange
+import shutil
 
 from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   BertConfig, BertForMaskedLM, BertTokenizer,
@@ -523,7 +524,7 @@ def parse_argv(parser):
     parser.add_argument('--cache_input_data', action='store_true', help='Cache examples from input data for faster subsequent trainings')
     
     parser.add_argument('--num_input_chunks', default=1, type=int, help='We split input into multiple chunks, then load and train on each chunk individually')
-    parser.add_argument('--delete_after_chunking', action='store_true', help='Delete input file after chinking it')
+    parser.add_argument('--delete_after_chunking', action='store_true', help='Delete input file after chunking it')
 
 
 
@@ -541,8 +542,13 @@ def main(args):
         raise ValueError("Cannot do evaluation without an evaluation data file. Either supply a file to --eval_data_file "
                          "or remove the --do_eval argument.")
 
-    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
-        raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
+    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
+        # clean all files within the directory
+        if args.overwrite_output_dir:
+            shutil.rmtree(args.output_dir)
+        else:
+            raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
+    
     
     check_args(args)
     
