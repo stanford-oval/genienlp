@@ -33,7 +33,7 @@ def is_device(token):
     return token[0] == '@'
 
 def process_id(ex):
-    id_ = ex.example_id.rsplit('/', 1)
+    id_ = ex.example_id[0].rsplit('/', 1)
     id_ = id_[0] if len(id_) == 1 else id_[1]
     # translated
     if id_[0] == 'T':

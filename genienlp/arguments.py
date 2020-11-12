@@ -253,8 +253,8 @@ def post_parse(args):
                 indices.append(i)
         return indices
     
-    #TODO relax the following assertions by dropping samples from batches in Iter
-    if args.sentence_batching and args.train_batch_tokens % len(args.train_languages.split('+')) != 0:
+    #TODO relax the following assertions by dropping samples from batches in Iterator
+    if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_languages.split('+')) != 0:
         raise ValueError('Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
     if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
         raise ValueError('Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
