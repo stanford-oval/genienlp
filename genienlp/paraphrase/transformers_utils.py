@@ -116,6 +116,7 @@ class DecoderLayer(nn.Module):
             encoder_decoder_attention=True,
         )
         self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
+
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNorm(self.embed_dim)
@@ -145,6 +146,7 @@ class DecoderLayer(nn.Module):
             attn_mask=causal_mask,
             need_weights=self.output_attentions,
         )
+
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         if not self.normalize_before:
@@ -377,16 +379,8 @@ class NBartForConditionalGeneration(BartForConditionalGeneration):
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
 
-            if model_specific_kwargs.get('mc_dropout'):
-                sampled_outputs = []
-                for _ in range(10):
-                    sampled_outputs.append(self(**model_inputs)[0])
-                sampled_outputs = torch.stack(sampled_outputs, 3)
-                outputs = torch.mean(sampled_outputs, 3)
-                next_token_logits = outputs[:, -1, :]
-            else:
-                outputs = self(**model_inputs)
-                next_token_logits = outputs[0][:, -1, :]
+            outputs = self(**model_inputs)
+            next_token_logits = outputs[0][:, -1, :]
 
             # if model has past, then set the past variable to speed up decoding
             if self._use_cache(outputs, use_cache):
@@ -423,11 +417,7 @@ class NBartForConditionalGeneration(BartForConditionalGeneration):
                 # Sample
                 probs = F.softmax(next_token_logits, dim=-1)
                 next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
-                if model_specific_kwargs.get('mc_dropout'):
-                    sampled_probs = F.softmax(sampled_outputs, dim=1)
-                    confidences.append(torch.std(sampled_probs, dim=2))
-                else:
-                    confidences.append(torch.gather(probs, 1, next_token.unsqueeze(-1)))
+                confidences.append(torch.gather(probs, 1, next_token.unsqueeze(-1)))
             else:
                 # Greedy decoding
                 next_token = torch.argmax(next_token_logits, dim=-1)
@@ -514,7 +504,7 @@ class NBartForConditionalGeneration(BartForConditionalGeneration):
 
         # scores for each sentence in the beam
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
-        
+
         # for greedy decoding it is made sure that only tokens of the first beam are considered to avoid sampling the exact same tokens three times
         if do_sample is False:
             beam_scores[:, 1:] = -1e9
@@ -726,7 +716,7 @@ class NBartForConditionalGeneration(BartForConditionalGeneration):
         # retrieve best hypotheses
         for i, hypotheses in enumerate(generated_hyps):
             sorted_hyps = sorted(hypotheses.beams, key=lambda x: x[0])
-            # These scores are calculated as (sum of token-level log probs) / length. 
+            # These scores are calculated as (sum of token-level log probs) / length.
             # We want to back-calculate confidence = exp(score * length) to be consistent
             # with non-beam search.
             beam_scores.append(torch.tensor([math.exp(hyp[0] * len(hyp[1])) for hyp in sorted_hyps[::-1]]))
@@ -735,7 +725,7 @@ class NBartForConditionalGeneration(BartForConditionalGeneration):
                 best_hyp = sorted_hyps.pop()[1]
                 sent_lengths[effective_batch_idx] = len(best_hyp)
                 best.append(best_hyp)
-            
+
 
         # shorter batches are filled with pad_token
         if sent_lengths.min().item() != sent_lengths.max().item():

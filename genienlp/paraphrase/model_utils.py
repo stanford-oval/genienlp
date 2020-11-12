@@ -127,7 +127,7 @@ def compute_metrics(
         import xgboost as xgb
         calibrator = xgb.Booster()
         calibrator.load_model(calibrator_path)
-    
+
     correct_predictions = 0
     all_bleu = []
     all_exact_matches = []
@@ -175,7 +175,7 @@ def compute_metrics(
     ece = compute_ece(all_exact_matches, sentence_confidences, binning='uniform', output_reliability_diagrams=output_reliability_diagrams)
     ada_ece = compute_ece(all_exact_matches, sentence_confidences, binning='adaptive')
 
-    return {'bleu': total_bleu / len(all_bleu), 'em': 100.0 * total_exact_match / len(all_exact_matches), 'ece': ece, 'ada_ece': ada_ece, 'prediction_acc': 100.0 * correct_prediction / len(all_exact_matches)}
+    return {'bleu': total_bleu / len(all_bleu), 'em': 100.0 * total_exact_match / len(all_exact_matches), 'ece': ece, 'ada_ece': ada_ece, 'prediction_acc': 100.0 * correct_predictions / len(all_exact_matches)}
 
 
 def compute_attention(sample_layer_attention, att_pooling):
