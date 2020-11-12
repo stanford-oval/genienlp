@@ -462,7 +462,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                             answer=SequentialField(value=all_features.answer.value[i][:all_features.answer.length[i]], length=all_features.answer.length[i], limited=all_features.answer.limited[i][:all_features.answer.length[i]]),
                             decoder_vocab=all_features.decoder_vocab))
     
-    sampler = LengthSortedIterator(all_f, batch_size=batch_size, sort=train, shuffle=train, repeat=train, sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
+    sampler = LengthSortedIterator(all_f, batch_size=batch_size, sort=train, shuffle_and_repeat=train, sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
     # get the sorted data_source
     all_f = sampler.data_source
     

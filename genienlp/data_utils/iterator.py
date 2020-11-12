@@ -31,20 +31,16 @@
 import torch
 import random
 
-from .example import Batch
-from ..tasks.generic_dataset import default_batch_fn
-
-
 
 class LengthSortedIterator(torch.utils.data.Sampler):
     """
     """
 
-    def __init__(self, data_source, batch_size, sort, shuffle, repeat, sort_key_fn, batch_size_fn, groups=1):
+    def __init__(self, data_source, batch_size, sort, shuffle_and_repeat, sort_key_fn, batch_size_fn, groups=1):
         """
         batch_size: can be number of tokens or number of examples, the type is inferred from batch_size_fn
         sort: if False, disables sorting and uses the original order. Useful for evaluation.
-        shuffle: is not a true shuffle
+        shuffle_and_repeat: if True, the order of returned examples are semi-shuffled, and there is no end to the iterator
         groups: used for sentence batching
         """
         if groups == None:
@@ -61,9 +57,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         else:
             self.data_source = data_source
         self.batch_size = batch_size # number of examples or number of tokens
-        self.shuffle = shuffle
-        self.repeat = repeat
-        self.total_returned_items = 0
+        self.shuffle_and_repeat = shuffle_and_repeat
         self.last_batch_start_index = 0
         self.last_batch_start_index = self._get_next_batch_start_index()
 
@@ -71,7 +65,6 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         return len(self.data_source)
 
     def __iter__(self):
-        self.total_returned_items = 0
         self.last_batch_start_index = 0
         self.last_batch_start_index = self._get_next_batch_start_index()
         return self
@@ -80,22 +73,23 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         batch_of_indices = []
         current_batch_size = 0
         i = self._get_next_batch_start_index()
+        if i >= len(self):
+            # This is the end of the iterator
+            assert not self.shuffle_and_repeat
+            raise StopIteration
         while current_batch_size < self.batch_size:
             new_example = self.data_source[i]
             batch_of_indices.append(i)
             current_batch_size = self.batch_size_fn(new=new_example, count=len(batch_of_indices), sofar=current_batch_size)
             i += 1
             if i == len(self):
-                if not self.shuffle and not self.repeat:
-                    raise StopIteration
-                else:
-                    break # don't start from i=0; there is a large difference between the length of the first and last element
+                break # don't start from i=0; there is a large difference between the length of the first and last element
 
         self.last_batch_start_index += len(batch_of_indices)
         return batch_of_indices
 
     def _get_next_batch_start_index(self):
-        if self.shuffle:
+        if self.shuffle_and_repeat:
             # if self.groups > 1, this ensures that the start of each batch is a multiply of self.groups, i.e. where a group starts
             return random.randrange(0, len(self) / self.groups) * self.groups
         else:
