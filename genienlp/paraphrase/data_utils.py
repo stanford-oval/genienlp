@@ -2,10 +2,10 @@ import sys
 import re
 import random
 
-from tqdm import tqdm
 import torch
 import logging
 
+from ..data_utils.progbar import progress_bar
 from ..util import detokenize, tokenize, lower_case, SpecialTokenMap
 
 from genienlp.paraphrase.dataset import TextDataset
@@ -151,15 +151,15 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
 
     if file_path is not None:
         number_of_lines = get_number_of_lines(file_path)
-        disable_tqdm = False
+        disable_progbar = False
         input_file = open(file_path)
     else:
         number_of_lines = 1
-        disable_tqdm = True
+        disable_progbar = True
         input_file = sys.stdin
 
     line_count = 0
-    for line in tqdm(input_file, desc='Reading Input File', total=number_of_lines, disable=disable_tqdm):
+    for line in progress_bar(input_file, desc='Reading Input File', total=number_of_lines, disable=disable_progbar):
         row = [r.strip() for r in line.split('\t')]
         input_sequence = row[input_column]
         gold = row[gold_column]

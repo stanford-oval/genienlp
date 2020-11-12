@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
-from tqdm import tqdm
 import random
 
+from ...data_utils.progbar import progress_bar
 
 def main():
     parser = ArgumentParser()
@@ -20,7 +20,7 @@ def main():
     random.seed(args.seed)
 
     with open(args.input, 'r') as input_file, open(args.output1, 'w') as output_file1, open(args.output2, 'w') as output_file2:
-        for line in tqdm(input_file):
+        for line in progress_bar(input_file):
             r = random.random()
             if r < args.output1_ratio:
                 output_file1.write(line)

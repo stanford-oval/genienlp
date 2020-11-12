@@ -1,10 +1,10 @@
 from argparse import ArgumentParser
 import csv
-from tqdm import tqdm
 import re
 
-from genienlp.util import tokenize, lower_case
-from genienlp.paraphrase.data_utils import remove_thingtalk_quotes
+from ...util import tokenize, lower_case
+from ..data_utils import remove_thingtalk_quotes
+from ...data_utils.progbar import progress_bar
 
 def is_subset(set1, set2):
     """
@@ -116,7 +116,7 @@ def main():
         if args.remove_duplicates:
             seen_examples = set()
         all_thrown_away_rows = []
-        for row in tqdm(reader, desc='Lines'):
+        for row in progress_bar(reader, desc='Lines'):
             output_rows = []
             thrown_away_rows = []
             if args.transformation == 'remove_thingtalk_quotes':

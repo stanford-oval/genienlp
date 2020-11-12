@@ -3,12 +3,12 @@ import torch
 import pickle
 import logging
 import random
-from tqdm import tqdm
 
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
-from genienlp.util import get_number_of_lines
+from ..util import get_number_of_lines
+from ..data_utils.progbar import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class TextDataset(Dataset):
             if not self.evaluate and args.aux_train_data_file is not None:
                 number_of_lines = get_number_of_lines(args.aux_train_data_file)
                 with open(args.aux_train_data_file, encoding="utf-8") as f_in:
-                    for line in tqdm(f_in, desc='Tokenizing Auxiliary File', total=number_of_lines):
+                    for line in progress_bar(f_in, desc='Tokenizing Auxiliary File', total=number_of_lines):
                         parts = list(map(lambda part: part.strip(), line.split('\t')))
                     if 'bart' in args.model_type:
                         self._add_bart_example(parts[0], None, args)
@@ -55,7 +55,7 @@ class TextDataset(Dataset):
 
             number_of_lines = get_number_of_lines(file_path)
             with open(file_path, encoding="utf-8") as f_in:
-                for line in tqdm(f_in, desc='Tokenizing', total=number_of_lines):
+                for line in progress_bar(f_in, desc='Tokenizing', total=number_of_lines):
                     parts = list(map(lambda part: part.strip(), line.split('\t')))
                     if 'bart' in args.model_type:
                         self._add_bart_example(parts[0], parts[1], args)

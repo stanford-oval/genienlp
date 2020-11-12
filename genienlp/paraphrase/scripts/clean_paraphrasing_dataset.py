@@ -1,12 +1,13 @@
 from argparse import ArgumentParser
 import csv
 import sys
-from tqdm import tqdm
-from genienlp.util import detokenize
 import random
 import os
 import re
 import nltk
+
+from ...data_utils.progbar import progress_bar
+from ...util import detokenize
 
 nltk.download('averaged_perceptron_tagger')
 csv.field_size_limit(sys.maxsize)
@@ -114,7 +115,7 @@ def main():
         train_writer = csv.writer(train_output_file, delimiter='\t')
         dev_writer = csv.writer(dev_output_file, delimiter='\t')
         reader = csv.reader(input_file, delimiter='\t')
-        for row in tqdm(reader, desc='Lines'):
+        for row in progress_bar(reader, desc='Lines'):
             is_written = False
 
             # Decide which output file this example should be written to. Note that all the examples generated from this row will go to the same file
