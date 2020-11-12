@@ -172,7 +172,7 @@ def train(args, train_dataset, model, tokenizer, input_file_name=None, multiple_
     set_seed(args)  # Added here for reproducibility (even between python 2 and 3)
     best_eval_perplexity = float('Inf')
     for _ in train_iterator:
-        if args.max_steps > 0:
+        if args.max_steps > 0 and not multiple_shards:
             total_steps = args.max_steps*args.gradient_accumulation_steps
         else:
             total_steps = len(train_dataloader)
@@ -242,54 +242,54 @@ def train(args, train_dataset, model, tokenizer, input_file_name=None, multiple_
                 model.zero_grad()
                 global_step += 1
 
-                if args.local_rank in [-1, 0] and ((args.logging_steps > 0 and global_step % args.logging_steps == 0) or global_step == total_steps-1):
-                    # Log metrics
-                    if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
-                        results = evaluate(args, model, tokenizer)
-                        if args.aux_eval_data_file is not None:
-                            aux_results = evaluate(args, model, tokenizer, aux=True)
-                            for key, value in aux_results.items():
-                                tb_writer.add_scalar('auxiliary_eval_{}'.format(key), value, global_step)
-                        if best_eval_perplexity > results['perplexity']:
-                            best_eval_perplexity = results['perplexity']
-                            if not os.path.exists(args.output_dir):
-                                os.makedirs(args.output_dir)
-                            logger.info("Saving new best model to %s", args.output_dir)
-                            # Save a trained model, configuration and tokenizer using `save_pretrained()`.
-                            # They can then be reloaded using `from_pretrained()`
-                            model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
-                            model_to_save.save_pretrained(args.output_dir)
-                            tokenizer.save_pretrained(args.output_dir)
+            if args.local_rank in [-1, 0] and ((args.logging_steps > 0 and global_step % args.logging_steps == 0 and global_step != 0) or step == total_steps-1):
+                # Log metrics
+                if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
+                    results = evaluate(args, model, tokenizer)
+                    if args.aux_eval_data_file is not None:
+                        aux_results = evaluate(args, model, tokenizer, aux=True)
+                        for key, value in aux_results.items():
+                            tb_writer.add_scalar('auxiliary_eval_{}'.format(key), value, global_step)
+                    if best_eval_perplexity > results['perplexity']:
+                        best_eval_perplexity = results['perplexity']
+                        if not os.path.exists(args.output_dir):
+                            os.makedirs(args.output_dir)
+                        logger.info("Saving new best model to %s", args.output_dir)
+                        # Save a trained model, configuration and tokenizer using `save_pretrained()`.
+                        # They can then be reloaded using `from_pretrained()`
+                        model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+                        model_to_save.save_pretrained(args.output_dir)
+                        tokenizer.save_pretrained(args.output_dir)
 
-                            # Good practice: save your training arguments together with the trained model
-                            torch.save(args, os.path.join(args.output_dir, 'training_args.bin'))
+                        # Good practice: save your training arguments together with the trained model
+                        torch.save(args, os.path.join(args.output_dir, 'training_args.bin'))
 
-                        for key, value in results.items():
-                            tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
-                    # TODO add generated text to tensorboard
-                    # tb_writer.add_text('eval/generated_text', gen_text, global_step)
-                    tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
-                    tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
-                    logging_loss = tr_loss
+                    for key, value in results.items():
+                        tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
+                # TODO add generated text to tensorboard
+                # tb_writer.add_text('eval/generated_text', gen_text, global_step)
+                tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
+                tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
+                logging_loss = tr_loss
 
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0 and args.save_total_limit > 0:
-                    checkpoint_prefix = 'checkpoint'
-                    # Save model checkpoint
-                    output_dir = os.path.join(args.output_dir, '{}-{}'.format(checkpoint_prefix, global_step))
-                    if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
-                    model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
-                    model_to_save.save_pretrained(output_dir)
-                    tokenizer.save_pretrained(output_dir)
+            if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0 and global_step != 0 and args.save_total_limit > 0:
+                checkpoint_prefix = 'checkpoint'
+                # Save model checkpoint
+                output_dir = os.path.join(args.output_dir, '{}-{}'.format(checkpoint_prefix, global_step))
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+                model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+                model_to_save.save_pretrained(output_dir)
+                tokenizer.save_pretrained(output_dir)
 
-                    torch.save(args, os.path.join(output_dir, 'training_args.bin'))
-                    logger.info("Saving model checkpoint to %s", output_dir)
+                torch.save(args, os.path.join(output_dir, 'training_args.bin'))
+                logger.info("Saving model checkpoint to %s", output_dir)
 
-                    _rotate_checkpoints(args, checkpoint_prefix)
+                _rotate_checkpoints(args, checkpoint_prefix)
 
-                    torch.save(optimizer.state_dict(), os.path.join(output_dir, 'optimizer.pt'))
-                    torch.save(scheduler.state_dict(), os.path.join(output_dir, 'scheduler.pt'))
-                    logger.info("Saving optimizer and scheduler states to %s", output_dir)
+                torch.save(optimizer.state_dict(), os.path.join(output_dir, 'optimizer.pt'))
+                torch.save(scheduler.state_dict(), os.path.join(output_dir, 'scheduler.pt'))
+                logger.info("Saving optimizer and scheduler states to %s", output_dir)
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
