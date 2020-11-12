@@ -43,7 +43,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         shuffle_and_repeat: if True, the order of returned examples are semi-shuffled, and there is no end to the iterator
         groups: used for sentence batching
         """
-        if groups == None:
+        if groups is None:
             groups = 1
         assert batch_size % groups == 0
         assert len(data_source) % groups == 0
