@@ -10,9 +10,10 @@ import shutil
 import six
 from six.moves.urllib.request import urlretrieve
 import torch
-from tqdm import tqdm
 import tarfile
+from tqdm import tqdm
 
+from .progbar import progress_bar
 from .hash_table import HashTable
 
 logger = logging.getLogger(__name__)
@@ -136,7 +137,7 @@ class Vectors(object):
             logger.info("Loading vectors from {}".format(path))
             vectors = None
             i = 0
-            for line in tqdm(lines, total=len(lines)):
+            for line in progress_bar(lines, total=len(lines)):
                 # Explicitly splitting on " " is important, so we don't
                 # get rid of Unicode non-breaking spaces in the vectors.
                 entries = line.rstrip().split(b" " if binary_lines else " ")

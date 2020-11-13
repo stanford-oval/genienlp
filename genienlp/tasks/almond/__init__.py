@@ -30,13 +30,13 @@
 import os
 import torch
 import logging
-from tqdm import tqdm
 from collections import defaultdict
 
 from ..base_task import BaseTask
 from ..registry import register_task
 from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
+from ...data_utils.progbar import progress_bar
 from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
 
 from ..base_dataset import Split
@@ -66,7 +66,7 @@ class AlmondDataset(CQA):
                     n += 1
 
             max_examples = min(n, subsample) if subsample is not None else n
-            for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
+            for i, line in progress_bar(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
                 parts = line.strip().split('\t')
                 examples.append(make_example(parts, dir_name, **kwargs))
                 if len(examples) >= max_examples:

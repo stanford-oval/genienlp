@@ -32,7 +32,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from tensorboardX import SummaryWriter
 
-from tqdm import tqdm, trange
+from ..data_utils.progbar import progress_bar, prange
 
 from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   BertConfig, BertForMaskedLM, BertTokenizer,
@@ -158,7 +158,7 @@ def train(args, train_dataset, model, tokenizer):
     model_to_resize.resize_token_embeddings(len(tokenizer))
 
     model.zero_grad()
-    train_iterator = trange(epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
+    train_iterator = prange(epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproducibility (even between python 2 and 3)
     best_eval_perplexity = float('Inf')
     for _ in train_iterator:
@@ -166,7 +166,7 @@ def train(args, train_dataset, model, tokenizer):
             total_steps = args.max_steps*args.gradient_accumulation_steps
         else:
             total_steps = len(train_dataloader)
-        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0], total=total_steps)
+        epoch_iterator = progress_bar(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0], total=total_steps)
         for step, batch in enumerate(epoch_iterator):
             
             # Skip past any already trained steps if resuming training
@@ -319,7 +319,7 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
     nb_eval_steps = 0
     model.eval()
 
-    for batch in tqdm(eval_dataloader, desc="Evaluating"):
+    for batch in progress_bar(eval_dataloader, desc="Evaluating"):
         inputs, labels, position_ids, segment_ids = batch
         if args.mlm:
             inputs, labels = mask_tokens(inputs, labels, tokenizer, args.mlm_probability, args.mlm_ignore_index)
