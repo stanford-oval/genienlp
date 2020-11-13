@@ -444,7 +444,6 @@ class BartNumericalizer(TransformerNumericalizer):
         minibatch: this method ignores the `mask` component of minibatch
         """
         assert isinstance(minibatch, list)
-        # print('minibatch = ', minibatch)
         batch_tokens = []
         for tokens, mask in minibatch:
             if len(tokens) == 0:

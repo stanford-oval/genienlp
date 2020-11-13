@@ -363,6 +363,4 @@ class Bart(torch.nn.Module):
                                      do_sample=do_sample,
                                     )
 
-        # print('generated = ', generated)
-        
         return generated

@@ -142,7 +142,6 @@ class TextDataset(Dataset):
 class LengthSortedSampler(torch.utils.data.Sampler):
 
     def __init__(self, data_source, batch_size, shuffle):
-        # print(data_source)
         self.data_source = data_source
         self.batch_size = batch_size
         self.shuffle = shuffle

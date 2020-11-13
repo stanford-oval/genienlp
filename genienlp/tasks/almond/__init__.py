@@ -34,7 +34,7 @@ from collections import defaultdict
 
 from ..base_task import BaseTask
 from ..registry import register_task
-from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
+from ..generic_dataset import CQA, context_question_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
 from ...data_utils.progbar import progress_bar
 from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
@@ -230,7 +230,6 @@ class NaturalSeq2Seq(BaseAlmondTask):
             _id = "id-null"
         else:
             _id, input_sequence, target_sequence = parts
-        # print('parts = ', parts)
         question = 'translate from input to output'
         context = input_sequence
         answer = target_sequence
@@ -437,7 +436,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
             sort_key_fn = process_id
             batch_size_fn = default_batch_fn
         else:
-            sort_key_fn = context_answer_len
+            sort_key_fn = context_question_len
             batch_size_fn = token_batch_fn
             
         groups = len(all_datasets) if kwargs.get('sentence_batching') else None

@@ -70,8 +70,10 @@ def parse_argv(parser):
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training',
                         required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
-    parser.add_argument('--train_batch_tokens', nargs='+', default=[9000], type=int,
-                        help='Number of tokens to use for dynamic batching, corresponding to tasks in train tasks')
+    #TODO rename to train_batch_size; keeping it for now for backward compatibility
+    parser.add_argument('--train_batch_tokens', nargs='+', default=[4000], type=int,
+                        help='Number of tokens to use for dynamic batching, corresponding to tasks in train tasks.'
+                        'If sentence_batching is used, this will be interpreted as number of examples.')
     parser.add_argument('--jump_start', default=0, type=int, help='number of iterations to give jump started tasks')
     parser.add_argument('--n_jump_start', default=0, type=int, help='how many tasks to jump start (presented in order)')
     parser.add_argument('--num_print', default=15, type=int,
@@ -92,8 +94,8 @@ def parse_argv(parser):
                         help='how often to run validation in # of iterations')
     parser.add_argument('--val_no_filter', action='store_false', dest='val_filter',
                         help='whether to allow filtering on the validation sets')
-    parser.add_argument('--val_batch_size', nargs='+', default=[256], type=int,
-                        help='Batch size for validation corresponding to tasks in val tasks')
+    parser.add_argument('--val_batch_size', nargs='+', default=[4000], type=int,
+                        help='Number of tokens in each batch for validation, corresponding to tasks in --val_tasks')
     
     parser.add_argument('--paired', action='store_true',
                         help='Pair related examples before numericalizing the input (e.g. training with synthetic and paraphrase '
@@ -103,8 +105,6 @@ def parse_argv(parser):
     
     parser.add_argument('--sentence_batching', action='store_true',
                         help='Batch same sentences together (used for multilingual tasks)')
-    parser.add_argument('--train_batch_size', type=int, default=0,
-                        help='Number of samples to use in each batch; will be used instead of train_batch_tokens when sentence_batching is on')
     parser.add_argument('--use_encoder_loss', action='store_true', help='Force encoded values for sentences in different languages to be the same')
     parser.add_argument('--encoder_loss_type', type=str, default='mean', choices=['mean', 'sum'],
                         help='Function to calculate encoder_loss_type from the context rnn hidden states')
@@ -189,8 +189,8 @@ def parse_argv(parser):
                         help='force subword tokenization of code tokens too')
     parser.add_argument('--append_question_to_context_too', action='store_true', default=False,
                         help='')
-    parser.add_argument('--override_question', default=None, help='Override the question for all tasks')
-    parser.add_argument('--override_context', default=None, help='Override the context for all tasks')
+    parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
+    parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--almond_preprocess_context', action='store_true', default=False, help='')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
@@ -253,10 +253,8 @@ def post_parse(args):
                 indices.append(i)
         return indices
     
-    if args.sentence_batching and args.train_batch_size == 0:
-        raise ValueError('You need to specify train_batch_size value when using sentence batching.')
-    #TODO relax the following assertions by dropping samples from batches in Iter
-    if args.sentence_batching and args.train_batch_size % len(args.train_languages.split('+')) != 0:
+    #TODO relax the following assertions by dropping samples from batches in Iterator
+    if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_languages.split('+')) != 0:
         raise ValueError('Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
     if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
         raise ValueError('Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
@@ -275,24 +273,20 @@ def post_parse(args):
         args.sentence_batching = True
         
 
-    args.train_batch_values = args.train_batch_tokens
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
             args.train_iterations = [1]
         if len(args.train_iterations) < len(args.train_task_names):
             args.train_iterations = len(args.train_task_names) * args.train_iterations
         if len(args.train_batch_tokens) < len(args.train_task_names):
-            args.train_batch_values = len(args.train_task_names) * args.train_batch_tokens
-    indices = indices_of_multilingual(args.train_task_names)
-    for i in indices:
-        if args.sentence_batching:
-            args.train_batch_values[i] = args.train_batch_size
-            if args.paired:
-                num_train_langs = len(args.train_languages.split('+'))
-                new_batch_size = int(args.train_batch_size * \
-                                 (1 + min(num_train_langs**2 - num_train_langs, args.max_pairs) / num_train_langs))
-                logger.warning('Using paired example training will increase effective batch size from {} to {}'.
-                               format(args.train_batch_size, new_batch_size))
+            args.train_batch_tokens = len(args.train_task_names) * args.train_batch_tokens
+    if args.sentence_batching:
+        if args.paired:
+            num_train_langs = len(args.train_languages.split('+'))
+            new_batch_size = int(args.train_batch_size * \
+                                (1 + min(num_train_langs**2 - num_train_langs, args.max_pairs) / num_train_langs))
+            logger.warning('Using paired example training will increase effective batch size from {} to {}'.
+                            format(args.train_batch_size, new_batch_size))
         
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size

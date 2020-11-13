@@ -38,9 +38,12 @@ import time
 import re
 import numpy as np
 import torch
+from tqdm import trange
 
-from .data_utils.example import Batch
-from .data_utils.iterator import Iterator
+from .data_utils.example import NumericalizedExamples
+from .data_utils.numericalizer.sequential_field import SequentialField
+from .data_utils.iterator import LengthSortedIterator
+
 
 logger = logging.getLogger(__name__)
 
@@ -444,21 +447,25 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
-                     valid=False, append_question_to_context_too=False, override_question=None, override_context=None):
+                     append_question_to_context_too=False, override_question=None, override_context=None):
     
-    iterator = Iterator(dataset,
-                        batch_size,
-                        shuffle=train,
-                        repeat=train,
-                        use_data_batch_fn=train,
-                        use_data_sort_key=train)
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer, device=device,
+                                  paired=paired and train, max_pairs=max_pairs, groups=dataset.groups,
+                                  append_question_to_context_too=append_question_to_context_too,
+                                  override_question=override_question, override_context=override_context)
+    all_f = []
+    for i in trange(len(all_features.example_id), desc='Converting dataset to features'):
+        all_f.append(NumericalizedExamples(example_id=[all_features.example_id[i]],
+                            context=SequentialField(value=all_features.context.value[i][:all_features.context.length[i]], length=all_features.context.length[i], limited=all_features.context.limited[i][:all_features.context.length[i]]),
+                            question=SequentialField(value=all_features.question.value[i][:all_features.question.length[i]], length=all_features.question.length[i], limited=all_features.question.limited[i][:all_features.question.length[i]]),
+                            answer=SequentialField(value=all_features.answer.value[i][:all_features.answer.length[i]], length=all_features.answer.length[i], limited=all_features.answer.limited[i][:all_features.answer.length[i]]),
+                            decoder_vocab=all_features.decoder_vocab))
     
-    collate_function = lambda minibatch: Batch.from_examples(minibatch, numericalizer, device=device,
-                                           paired=paired and train, max_pairs=max_pairs, groups=iterator.groups,
-                                           append_question_to_context_too=append_question_to_context_too,
-                                           override_question=override_question, override_context=override_context)
-        
-    return torch.utils.data.DataLoader(iterator, batch_size=None, collate_fn=collate_function)
+    sampler = LengthSortedIterator(all_f, batch_size=batch_size, sort=train, shuffle_and_repeat=train, sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
+    # get the sorted data_source
+    all_f = sampler.data_source
+    
+    return torch.utils.data.DataLoader(all_f, batch_sampler=sampler, collate_fn=NumericalizedExamples.collate_batches, num_workers=0)
 
 
 def pad(x, new_channel, dim, val=None):
