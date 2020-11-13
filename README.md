@@ -92,7 +92,6 @@ If you use the paraphrasing model (BART or GPT-2 fine-tuned on a paraphrasing da
     publisher = "Association for Computational Linguistics",
     url = "https://www.aclweb.org/anthology/2020.emnlp-main.31",
     pages = "422--434",
-   
 }
 ```
 
