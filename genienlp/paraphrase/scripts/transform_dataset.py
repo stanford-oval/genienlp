@@ -1,4 +1,3 @@
-from argparse import ArgumentParser
 import csv
 import re
 
@@ -26,9 +25,7 @@ def passes_heuristic_checks(row, args):
             return False
     return True
     
-
-def main():
-    parser = ArgumentParser()
+def parse_argv(parser):
     parser.add_argument('input', type=str,
                         help='The path to the input file.')
     parser.add_argument('output', type=str,
@@ -69,8 +66,8 @@ def main():
     # parser.add_argument('--no_duplication_columns', type=int, nargs='+', default=None,
     #                     help='The columns indices in the input file that determine whether two rows are duplicates of each other or not.')
 
-    args = parser.parse_args()
 
+def main(args):
     if args.task == 'almond':
         args.id_column = 0
         args.utterance_column = 1
@@ -196,6 +193,3 @@ def main():
         print('Removed %d duplicate rows' % duplicate_count)
         print('Removed %d rows because the thingtalk quote did not satisfy heuristic rules' % heuristic_count)
         print('Output size is %d rows' % written_count)
-
-if __name__ == '__main__':
-    main()

@@ -1,15 +1,12 @@
-from argparse import ArgumentParser
 import csv
 import sys
 import random
 import os
 import re
-import nltk
 
 from ...data_utils.progbar import progress_bar
 from ...util import detokenize
 
-nltk.download('averaged_perceptron_tagger')
 csv.field_size_limit(sys.maxsize)
 
 def is_english(s):
@@ -67,12 +64,15 @@ def normalized_levenshtein(s1, s2, mode='character'):
     return previous_row[-1] / max(len(s1), len(s2))
 
 def pos_tag_string(sentence: str):
+    # load NLTK lazily
+    import nltk
+    nltk.download('averaged_perceptron_tagger')
     tagged_tokens = nltk.pos_tag(nltk.word_tokenize(sentence))
     tags = [t[1] for t in tagged_tokens]
     return ' '.join(tags).lower()
 
-def main():
-    parser = ArgumentParser()
+
+def parse_argv(parser):
     parser.add_argument('input', type=str,
                         help='The path to the input .tsv file.')
     parser.add_argument('output_dir', type=str,
@@ -99,7 +99,7 @@ def main():
     parser.add_argument('--max_examples', type=int, default=1e10, help='Maximum number of examples in the output.')
 
 
-    args = parser.parse_args()
+def main(args):
     random.seed(args.seed)
 
     drop_count = 0
@@ -176,6 +176,3 @@ def main():
         import matplotlib.pyplot as plt
         _, _, _ = plt.hist(all_normalized_edit_distances, 20)
         plt.savefig(os.path.join(args.output_dir,'edit_distance_plot.png'))
-
-if __name__ == '__main__':
-    main()
