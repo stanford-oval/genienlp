@@ -558,17 +558,20 @@ def run_single_process_generation(args, config):
         calibration_training_file = args.calibrator_path + '.data.csv'
         with open(calibration_training_file, 'w') as calibration_file:
             for i, output in enumerate(all_outputs):
-                for j, text_confidences in enumerate(output):
-                    if isinstance(text_confidences, tuple):
-                        text, confidences = text_confidences
+                first_text, first_correct = None, None
+                confidences = []
+                for j, text_confidence in enumerate(output):
+                    if isinstance(text_confidence, tuple):
+                        text, confidence = text_confidence
                         correct = re.sub(r'\s+', '', text).lower() == re.sub(r'\s+', '', all_golds[i]).lower()
-
-                        if args.num_beams[0] == 1: #TODO: how to account for multiple beam size inputs?
-                            confidences = np.prod(confidences)
-                        else:
-                            confidences = ','.join([str(c) for c in confidences])
-                        
-                        calibration_file.write('{},{}\n'.format(int(correct), confidences))
+                        if first_text is None:
+                            first_text, first_correct = text, correct
+                        if args.num_beams[j] == 1:
+                            confidences.append(np.prod(confidence))
+                        else: # beam probabilities
+                            confidences.extend(confidence)
+                confidences = ','.join([str(c) for c in confidences])
+                calibration_file.write('{},{}\n'.format(int(correct), confidences))
 
         import xgboost as xgb
         logger.info('Training calibrator and saving model to file...')
@@ -577,7 +580,7 @@ def run_single_process_generation(args, config):
             'max_depth': 3,
             'subsample': 0.8,
             'objective': 'binary:logistic',
-        } # TODO: how to set number of trees?
+        }
         bst = xgb.train(params, dtrain)
         logger.info(bst.eval(dtrain, name='train'))
         logger.info('Calibrator training complete.')
@@ -588,7 +591,7 @@ def run_single_process_generation(args, config):
             all_golds,
             reduction=args.metric_reduction,
             output_reliability_diagrams=args.reliability_diagrams_output_file,
-            beam_search = (args.num_beams[0] > 1),
+            num_beams = args.num_beams,
             calibrator_path=(args.calibrator_path if args.calibration == 'eval' else None)
         )
     logger.info('Average BLEU score = %.2f', metrics['bleu'])

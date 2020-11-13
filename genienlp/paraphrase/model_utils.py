@@ -110,7 +110,7 @@ def compute_metrics(
     golds,
     reduction='average',
     output_reliability_diagrams = None,
-    beam_search = False,
+    num_beams = False,
     calibrator_path = None
 ):
     """
@@ -119,7 +119,7 @@ def compute_metrics(
         golds: a list of strings; golds[i] is the gold answer for example i
         reduction: how we should compute an example's metrics from its multiple generations
         output_reliability_diagrams: path prefix for reliability diagram output plots
-        beam_search: whether beam search was used (affect format of confidence scores)
+        num_beams: whether beam search was used (affects format of confidence scores)
         calibrator_path: if specified, file path of random forest calibrator to use instead of direct probabilities
     """
     calibrator = None
@@ -141,33 +141,47 @@ def compute_metrics(
         bleu_score = 0.0
         exact_match = 0.0
         sentence_confidence = 0.0
-        for sample in output:
-            if isinstance(sample, tuple):
-                sample, confidences = sample
-                confidence = np.max(confidences) if beam_search else np.prod(confidences)
-                if calibrator is not None:
-                    calibrator_input = np.atleast_2d(confidences if beam_search else confidence)
-                    confidence = calibrator.predict(xgb.DMatrix(calibrator_input))[0]
-                    # TODO: if we do other than using classifier/logisitc loss,
-                    # apply logistic function so the result is in [0,1]
-                    # confidence = 1 / (1 + np.exp(-confidence))
-                if reduction == 'average':
-                    sentence_confidence += confidence
+        if calibrator is not None:
+            # Special behavior for calibrator: concatenate confidences across
+            # all samples, and use them as input for calibrator to produce single
+            # confidence output; use first sample as sentence output.
+            # Ignores reduction parameter, since only one output is used.
+            confidences = []
+            sample = output[0][0]
+            for i, _conf in enumerate(output):
+                _, conf = _conf
+                if num_beams[i] == 1:
+                    confidences.append(np.prod(conf))
                 else:
-                    sentence_confidence = max(sentence_confidence, confidence)
-            if reduction == 'average':
-                bleu_score += computeBLEU([sample], [[golds[idx]]])
-            else:
-                bleu_score = max(bleu_score, computeBLEU([sample], [[golds[idx]]]))
+                    confidences.extend(conf)
+            calibrator_input = np.atleast_2d(confidences)
+            sentence_confidence = calibrator.predict(xgb.DMatrix(calibrator_input))[0]
+            bleu_score = computeBLEU([sample], [[golds[idx]]])
             if re.sub('\s+', '', sample).lower() == re.sub('\s+', '', golds[idx]).lower():
+                exact_match = 1
+        else:
+            for i, sample in enumerate(output):
+                if isinstance(sample, tuple):
+                    sample, confidences = sample
+                    confidence = np.max(confidences) if num_beams[i] > 1 else np.prod(confidences)
+                    if reduction == 'average':
+                        sentence_confidence += confidence
+                    else:
+                        sentence_confidence = max(sentence_confidence, confidence)
                 if reduction == 'average':
-                    exact_match += 1
+                    bleu_score += computeBLEU([sample], [[golds[idx]]])
                 else:
-                    exact_match = max(exact_match, 1)
-        if reduction == 'average':
+                    bleu_score = max(bleu_score, computeBLEU([sample], [[golds[idx]]]))
+                if re.sub('\s+', '', sample).lower() == re.sub('\s+', '', golds[idx]).lower():
+                    if reduction == 'average':
+                        exact_match += 1
+                    else:
+                        exact_match = max(exact_match, 1)
+        if reduction == 'average' and calibrator is None:
             bleu_score /= len(output)
             exact_match /= len(output)
             sentence_confidence /= len(output)
+
         for i, threshold in enumerate(thresholds):
             if sentence_confidence >= threshold:
                 if exact_match >= 0.5:
