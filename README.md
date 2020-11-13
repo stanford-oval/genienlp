@@ -89,3 +89,19 @@ If you use the paraphrasing model (BART or GPT-2 fine-tuned on a paraphrasing da
   year={2020}
 }
 ```
+
+If you use MarianMT/ mBART/ T5 for translation task, or XLMR-LSTM model for Seq2Seq tasks, please cite [Localizing Open-Ontology QA Semantic Parsers in a Day Using Machine Translation](https://arxiv.org/abs/2010.05106) and the original paper that introduced the model.
+
+```bibtex
+@inproceedings{moradshahi-etal-2020-localizing,
+    title = "Localizing Open-Ontology {QA} Semantic Parsers in a Day Using Machine Translation",
+    author = "Moradshahi, Mehrad and Campagna, Giovanni and Semnani, Sina and Xu, Silei and Lam, Monica",
+    booktitle = "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)",
+    month = November,
+    year = "2020",
+    address = "Online",
+    publisher = "Association for Computational Linguistics",
+    url = "https://www.aclweb.org/anthology/2020.emnlp-main.481",
+    pages = "5970--5983",
+}
+```
