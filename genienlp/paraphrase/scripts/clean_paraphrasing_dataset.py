@@ -1,4 +1,3 @@
-from argparse import ArgumentParser
 import csv
 import sys
 import random
@@ -177,6 +176,3 @@ def main(args):
         import matplotlib.pyplot as plt
         _, _, _ = plt.hist(all_normalized_edit_distances, 20)
         plt.savefig(os.path.join(args.output_dir,'edit_distance_plot.png'))
-
-if __name__ == '__main__':
-    main()

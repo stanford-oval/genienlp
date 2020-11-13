@@ -1,4 +1,3 @@
-from argparse import ArgumentParser
 import random
 
 from ...data_utils.progbar import progress_bar

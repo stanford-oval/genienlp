@@ -1,4 +1,3 @@
-from argparse import ArgumentParser
 import csv
 import re
 
@@ -194,6 +193,3 @@ def main(args):
         print('Removed %d duplicate rows' % duplicate_count)
         print('Removed %d rows because the thingtalk quote did not satisfy heuristic rules' % heuristic_count)
         print('Output size is %d rows' % written_count)
-
-if __name__ == '__main__':
-    main()

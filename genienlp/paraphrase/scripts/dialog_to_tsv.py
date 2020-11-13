@@ -1,4 +1,3 @@
-from argparse import ArgumentParser
 import csv
 
 
@@ -94,7 +93,3 @@ def main(args):
                     last_agent_utterance, user_utterance = all_prompts[dialog_index][utterance_index]
                 user_utterance = row[2]
                 output.write((last_agent_utterance+' '+user_utterance).strip()+'\t'+last_agent_utterance.strip()+'\t'+row[3]+'\t'+user_utterance+'\n')
-
-
-if __name__ == '__main__':
-    main()
