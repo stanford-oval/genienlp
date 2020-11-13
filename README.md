@@ -82,11 +82,17 @@ If you use the BERT-LSTM model (Identity encoder + MQAN decoder), please cite [S
 If you use the paraphrasing model (BART or GPT-2 fine-tuned on a paraphrasing dataset), please cite [AutoQA: From Databases to QA Semantic Parsers with Only Synthetic Training Data](https://arxiv.org/abs/2010.04806)
 
 ```bibtex
-@inproceedings{xu2020autoqa,
-  title={Auto{QA}: From Databases to {QA} Semantic Parsers with Only Synthetic Training Data},
-  author={Silei Xu and Sina J. Semnani  and Giovanni Campagna and Monica S. Lam},
-  booktitle={Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing},
-  year={2020}
+@inproceedings{xu-etal-2020-autoqa,
+    title = "{A}uto{QA}: From Databases to {QA} Semantic Parsers with Only Synthetic Training Data",
+    author = "Xu, Silei  and Semnani, Sina  and Campagna, Giovanni  and Lam, Monica",
+    booktitle = "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)",
+    month = nov,
+    year = "2020",
+    address = "Online",
+    publisher = "Association for Computational Linguistics",
+    url = "https://www.aclweb.org/anthology/2020.emnlp-main.31",
+    pages = "422--434",
+   
 }
 ```
 
