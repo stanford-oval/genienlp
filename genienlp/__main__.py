@@ -32,15 +32,23 @@ import argparse
 
 from . import arguments, train, predict, server, cache_embeddings, export
 from .paraphrase import run_lm_finetuning, run_generation
+from .paraphrase.scripts import split_dataset, dialog_to_tsv, clean_paraphrasing_dataset, transform_dataset
 
 subcommands = {
+    # main commands
     'train': ('Train a model', arguments.parse_argv, train.main),
     'export': ('Export a trained model for serving', export.parse_argv, export.main),
     'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.parse_argv, predict.main),
     'server': ('Export RPC interface to predict', server.parse_argv, server.main),
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
     'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.parse_argv, run_lm_finetuning.main),
-    'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main)
+    'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main),
+
+    # commands that work with datasets
+    'transform-dataset': ('Apply transformations to a tab-separated dataset', transform_dataset.parse_argv, transform_dataset.main),
+    'clean-paraphrasing-dataset': ('Select a clean subset from the ParaBank2 dataset', clean_paraphrasing_dataset.parse_argv, clean_paraphrasing_dataset.main),
+    'dialog-to-tsv': ('Convert a dialog dataset to a turn-by-turn tab-separated format', dialog_to_tsv.parse_argv, dialog_to_tsv.main),
+    'split-dataset': ('Split a dataset file into two files', split_dataset.parse_argv, split_dataset.main)
 }
 
 

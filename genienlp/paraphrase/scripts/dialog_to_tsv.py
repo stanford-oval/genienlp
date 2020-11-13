@@ -58,8 +58,8 @@ def read_dialog(lines: list, args):
 
     return dialog_index, prompts
 
-def main():
-    parser = ArgumentParser()
+
+def parse_argv(parser):
     parser.add_argument('input', type=str,
                         help='The path to the input file that has replaced parameters.')
     parser.add_argument('--dialog_file', type=str,
@@ -73,8 +73,8 @@ def main():
     parser.add_argument('--at_prefix', type=str, default='AT:', help='')
     parser.add_argument('--ut_prefix', type=str, default='UT:', help='')
 
-    args = parser.parse_args()
 
+def main(args):
     all_prompts = read_dialog_file(args.dialog_file, args)
     
     with open(args.input) as input:

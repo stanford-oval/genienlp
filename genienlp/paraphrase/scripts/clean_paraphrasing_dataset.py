@@ -71,8 +71,8 @@ def pos_tag_string(sentence: str):
     tags = [t[1] for t in tagged_tokens]
     return ' '.join(tags).lower()
 
-def main():
-    parser = ArgumentParser()
+
+def parse_argv(parser):
     parser.add_argument('input', type=str,
                         help='The path to the input .tsv file.')
     parser.add_argument('output_dir', type=str,
@@ -99,7 +99,7 @@ def main():
     parser.add_argument('--max_examples', type=int, default=1e10, help='Maximum number of examples in the output.')
 
 
-    args = parser.parse_args()
+def main(args):
     random.seed(args.seed)
 
     drop_count = 0

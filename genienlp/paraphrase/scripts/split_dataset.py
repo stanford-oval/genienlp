@@ -3,8 +3,8 @@ import random
 
 from ...data_utils.progbar import progress_bar
 
-def main():
-    parser = ArgumentParser()
+
+def parse_argv(parser):
     parser.add_argument('input', type=str,
                         help='The path to the input.')
     parser.add_argument('output1', type=str,
@@ -14,9 +14,9 @@ def main():
     parser.add_argument('--output1_ratio', type=float, required=True,
                         help='The ratio of input examples that go to output1')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    
 
-    args = parser.parse_args()
+
+def main(args):
     random.seed(args.seed)
 
     with open(args.input, 'r') as input_file, open(args.output1, 'w') as output_file1, open(args.output2, 'w') as output_file2:
@@ -26,7 +26,3 @@ def main():
                 output_file1.write(line)
             else:
                 output_file2.write(line)
-
-
-if __name__ == '__main__':
-    main()
