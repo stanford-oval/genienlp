@@ -45,11 +45,10 @@ import torch
 from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer
+from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer, BartTokenizer
 
-from transformers import BartForConditionalGeneration
-from .transformers_utils import MarianMTModel, T5ForConditionalGeneration, BartForConditionalGeneration as MBartForConditionalGeneration
-from .transformers_utils import BartTokenizer, MBartTokenizer
+from .transformers_utils import GenieMarianMTModel, GenieT5ForConditionalGeneration, GenieBartForConditionalGeneration, GenieMBartForConditionalGeneration
+from .transformers_utils import GenieMBartTokenizer
 
 
 from transformers import PretrainedConfig
@@ -69,10 +68,10 @@ ALL_MODELS = sum((tuple(map.keys()) for map in (GPT2_PRETRAINED_CONFIG_ARCHIVE_M
 
 MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'bos_token': '<unk>', 'sep_token': '<paraphrase>', 'eos_token': '</paraphrase>'}),
-    't5': (T5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'bart': (BartForConditionalGeneration, BartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'mbart': (MBartForConditionalGeneration, MBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'marian': (MarianMTModel, MarianTokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    't5': (GenieT5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'bart': (GenieBartForConditionalGeneration, BartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'mbart': (GenieMBartForConditionalGeneration, GenieMBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'marian': (GenieMarianMTModel, MarianTokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
 }
 
 
@@ -126,14 +125,17 @@ def parse_argv(parser):
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")
     
+    parser.add_argument('--pad_token', type=str, default='<pad>',
+                        help='The special token for padding, if tokenizer does not have that')
+    
     parser.add_argument('--cache_dir', default='.embeddings', type=str, help='where to save transforemrs cached models, configs, and tokenizers.')
     
     parser.add_argument('--trained_model_type', type=str, help='if provided we make sure the loaded model matches the model_type')
     
-    parser.add_argument('--src_lang', type=str, default='en', help='source language used for translation task')
+    parser.add_argument('--src_lang', type=str, help='source language used for translation task')
     parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
-    parser.add_argument('--return_attentions', action='store_true', help='return self and cross attention weights for seq2seq models')
-    parser.add_argument('--return_hidden_states', action='store_true', help='return all hidden states for seq2seq models')
+    parser.add_argument('--output_attentions', action='store_true', help='return self and cross attention weights for seq2seq models')
+    parser.add_argument('--output_hidden_states', action='store_true', help='return all hidden states for seq2seq models')
 
     parser.add_argument('--att_pooling', type=str, default='max', help='pooling used to calculate decoder-encoder attention values across different heads')
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot decoder-encoder attention heatmaps')
@@ -277,12 +279,12 @@ def run_multi_process_generation(args):
 def run_single_process_generation(args, config):
     model_class, tokenizer_class, special_tokens = MODEL_CLASSES[args.model_type]
     
-    return_attentions = args.return_attentions
-    return_hidden_states = args.return_hidden_states
+    output_attentions = args.output_attentions
+    output_hidden_states = args.output_hidden_states
     
     model = model_class.from_pretrained(args.model_name_or_path,
-                                        output_attentions=return_attentions,
-                                        output_hidden_states=return_hidden_states,
+                                        output_attentions=output_attentions,
+                                        output_hidden_states=output_hidden_states,
                                         cache_dir=args.cache_dir)
     model.to(args.device)
 
@@ -297,6 +299,11 @@ def run_single_process_generation(args, config):
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     eos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['eos_token'])
     sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
+    
+    if tokenizer.pad_token is None:
+        # this assigns pad token but doesn't add it to the vocabulary
+        tokenizer.pad_token = args.pad_token
+        
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
     
     if pad_token_id is None:
@@ -403,13 +410,12 @@ def run_single_process_generation(args, config):
                                  temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0, # if temperature==0, we do not sample
                                  eos_token_id=eos_token_id,
                                  pad_token_id=pad_token_id,
-                                 return_attentions=return_attentions,
-                                 return_hidden_states=return_hidden_states,
                                  use_cache=True,
+                                 output_attentions=output_attentions
                                 )
 
             # TODO fix the way output attention is handled. Some models do not support it.
-            if return_attentions:
+            if output_attentions:
                 decoded, all_encoder_attentions = outputs
             else:
                 decoded = outputs
@@ -434,7 +440,7 @@ def run_single_process_generation(args, config):
                 min_index = min_index + 1
                 out_cropped = out[:min_index]
             
-                if args.task == 'translate':
+                if args.task == 'translate' and output_attentions:
                     src_tokens = tokenizer.convert_ids_to_tokens(batch_context_tensor[sample_index])
                     tgt_tokens = tokenizer.convert_ids_to_tokens(out_cropped)
                     

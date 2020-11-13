@@ -67,12 +67,12 @@ def check_args(args):
     
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] not in MARIAN_GROUP_MEMBERS and args.tgt_lang:
         logger.warning('Target language should not be provided when using models with single language pairs,'
-                       'otherwise the translation outputs will be incorrect; thus we ignore the target language you provided...')
+                       ' otherwise the translation outputs will be incorrect; thus we ignore the target language you provided...')
         args.tgt_lang = None
     
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] not in MARIAN_GROUP_MEMBERS and args.src_lang:
         logger.warning('Source language should not be provided when using models with single language pairs,'
-                       'otherwise the translation outputs will be incorrect; thus we ignore the source language you provided...')
+                       ' otherwise the translation outputs will be incorrect; thus we ignore the source language you provided...')
         args.src_lang = None
     
     if args.model_type == 'mbart' and not (args.tgt_lang and args.src_lang):

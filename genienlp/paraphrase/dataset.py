@@ -168,11 +168,11 @@ class TextDataset(Dataset):
 
     def _add_marian_example(self, input_sequence, output_sequence):
     
-        model_inputs = self.tokenizer.prepare_translation_batch([input_sequence], [output_sequence])
+        model_inputs = self.tokenizer.prepare_seq2seq_batch([input_sequence], [output_sequence])
     
         encoded_input_ids = model_inputs['input_ids'].tolist()[0]
         encoded_attention_mask = model_inputs['attention_mask'].tolist()[0]
-        encoded_output_ids = model_inputs['decoder_input_ids'].tolist()[0]
+        encoded_output_ids = model_inputs['labels'].tolist()[0]
     
         self._update_seq2seq_example(encoded_input_ids, encoded_attention_mask, encoded_output_ids)
         
