@@ -4,12 +4,10 @@ import sys
 import random
 import os
 import re
-import nltk
 
 from ...data_utils.progbar import progress_bar
 from ...util import detokenize
 
-nltk.download('averaged_perceptron_tagger')
 csv.field_size_limit(sys.maxsize)
 
 def is_english(s):
@@ -67,6 +65,9 @@ def normalized_levenshtein(s1, s2, mode='character'):
     return previous_row[-1] / max(len(s1), len(s2))
 
 def pos_tag_string(sentence: str):
+    # load NLTK lazily
+    import nltk
+    nltk.download('averaged_perceptron_tagger')
     tagged_tokens = nltk.pos_tag(nltk.word_tokenize(sentence))
     tags = [t[1] for t in tagged_tokens]
     return ' '.join(tags).lower()
