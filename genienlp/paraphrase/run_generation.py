@@ -571,7 +571,7 @@ def run_single_process_generation(args, config):
                         else: # beam probabilities
                             confidences.extend(confidence)
                 confidences = ','.join([str(c) for c in confidences])
-                calibration_file.write('{},{}\n'.format(int(correct), confidences))
+                calibration_file.write('{},{}\n'.format(int(first_correct), confidences))
 
         import xgboost as xgb
         logger.info('Training calibrator and saving model to file...')
