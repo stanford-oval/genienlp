@@ -148,8 +148,9 @@ def parse_argv(parser):
     parser.add_argument('--fp16_opt_level', type=str, default='O1',
                         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
                              "See details at https://nvidia.github.io/apex/amp.html")
+
     parser.add_argument('--reliability_diagrams_output_path', type=str, help='Generate reliability diagram at this path')
-    parser.add_argument('--mc_dropout', action='store_true', help='Whether to apply MC Dropout')
+    parser.add_argument("--mc_dropout", type=int, nargs='+', choices=[0,1], default=[0], help="1=use MC dropout, 0=don't")
     parser.add_argument('--dropout_rate', type=float, default=0.1)
     parser.add_argument("--calibration", type=str, choices=['train', 'eval'], help="When specified, model probabilities for calibrator will be written in this file.")
     parser.add_argument("--calibrator_path", type=str, help="Where to save/load calibrator model if calibration set to train/eval; ignored otherwise.")
@@ -435,7 +436,7 @@ def run_single_process_generation(args, config):
                 #  for each beam from each output sentence.
                 confidences = confidences[:, :].tolist()
 
-            if args.mc_dropout:
+            if args.mc_dropout[hyperparameter_idx]:
                 from .transformers_utils import DecoderLayer
                 from transformers.modeling_bart import EncoderLayer, SelfAttention
                 def apply_dropout(m):
@@ -446,15 +447,18 @@ def run_single_process_generation(args, config):
                 T = 10
                 for _ in range(T):
                     uncertainty_sample_outputs = model_generate(hyperparameter_idx)
-                    _, probs = outputs
-                    import pdb; pdb.set_trace()
-                    sample_probs.append(probs)
-                sample_probs = torch.stack(sample_probs, 0).double().exp_()
+                    _, probs = uncertainty_sample_outputs
+                    sentence_probs = torch.prod(probs, 1)
+                    sample_probs.append(sentence_probs)
+                sample_probs = torch.stack(sample_probs, 0).double()
                 mean = sample_probs.mean(0)
                 var = sample_probs.var(0)
                 tau = (0.5) / (2. * T)
-                std = np.sqrt(var + 1. / tau)
-                import pdb; pdb.set_trace()
+                std = np.sqrt(var.cpu() + 1. / tau)
+                # TODO: if we want more then just variance:
+                # confidences = torch.stack([var, mean], 1)[:,:].tolist()
+                confidences = var.unsqueeze(1)[:,:].tolist()
+                model.eval()
 
 
             if not isinstance(decoded, list):
@@ -538,7 +542,7 @@ def run_single_process_generation(args, config):
                 else:
                     text, filtered_token_indices = tokenizer.decode(out_cropped, clean_up_tokenization_spaces=True, skip_special_tokens=True, return_indices=True)
                     sample_confidences = confidences[sample_index]
-                    if args.num_beams[hyperparameter_idx] == 1:
+                    if not args.mc_dropout[hyperparameter_idx] and args.num_beams[hyperparameter_idx] == 1:
                         sample_confidences = [sample_confidences[idx] for idx in filtered_token_indices]
 
                 text = re.sub('\s\s+', ' ', text)  # remove duplicate white spaces
@@ -582,9 +586,9 @@ def run_single_process_generation(args, config):
                         correct = re.sub(r'\s+', '', text).lower() == re.sub(r'\s+', '', all_golds[i]).lower()
                         if first_text is None:
                             first_text, first_correct = text, correct
-                        if args.num_beams[j] == 1:
+                        if not args.mc_dropout[j] and args.num_beams[j] == 1:
                             confidences.append(np.prod(confidence))
-                        else: # beam probabilities
+                        else: # beam probabilities or dropout summary statistics
                             confidences.extend(confidence)
                 confidences = ','.join([str(c) for c in confidences])
                 calibration_file.write('{},{}\n'.format(int(first_correct), confidences))
