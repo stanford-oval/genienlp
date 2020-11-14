@@ -38,12 +38,11 @@ import time
 import re
 import numpy as np
 import torch
-from tqdm import trange
 
 from .data_utils.example import NumericalizedExamples
 from .data_utils.numericalizer.sequential_field import SequentialField
 from .data_utils.iterator import LengthSortedIterator
-
+from .data_utils.progbar import prange
 
 logger = logging.getLogger(__name__)
 
@@ -454,7 +453,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                                   append_question_to_context_too=append_question_to_context_too,
                                   override_question=override_question, override_context=override_context)
     all_f = []
-    for i in trange(len(all_features.example_id), desc='Converting dataset to features'):
+    for i in prange(len(all_features.example_id), desc='Converting dataset to features'):
         all_f.append(NumericalizedExamples(example_id=[all_features.example_id[i]],
                             context=SequentialField(value=all_features.context.value[i][:all_features.context.length[i]], length=all_features.context.length[i], limited=all_features.context.limited[i][:all_features.context.length[i]]),
                             question=SequentialField(value=all_features.question.value[i][:all_features.question.length[i]], length=all_features.question.length[i], limited=all_features.question.limited[i][:all_features.question.length[i]]),

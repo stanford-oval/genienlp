@@ -130,12 +130,14 @@ class Seq2Seq(PreTrainedModel):
         self.encoder.set_train_context_embeddings(trainable)
 
     def add_new_vocab_from_data(self, splits):
-        logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens from training')
+        #logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens from training')
+        old_num_tokens = self.numericalizer.num_tokens
         new_words = []
         for task_splits in splits:
             for split in task_splits:
                 new_words += self.numericalizer.grow_vocab(split)
-                logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
+        if self.numericalizer.num_tokens > old_num_tokens:
+            logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
         for emb in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
             emb.grow_for_vocab(self.numericalizer.vocab, new_words)
 
