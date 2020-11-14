@@ -148,9 +148,9 @@ def parse_argv(parser):
     parser.add_argument('--fp16_opt_level', type=str, default='O1',
                         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
                              "See details at https://nvidia.github.io/apex/amp.html")
-    parser.add_argument('--reliability-diagrams-output-file', type=str, help='Generate reliability diagrams with given file prefix')
-    parser.add_argument('--mc-dropout', action='store_true', help='Whether to apply MC Dropout')
-    
+    parser.add_argument('--reliability_diagrams_output_path', type=str, help='Generate reliability diagram at this path')
+    parser.add_argument('--mc_dropout', action='store_true', help='Whether to apply MC Dropout')
+    parser.add_argument('--dropout_rate', type=float, default=0.1)
     parser.add_argument("--calibration", type=str, choices=['train', 'eval'], help="When specified, model probabilities for calibrator will be written in this file.")
     parser.add_argument("--calibrator_path", type=str, help="Where to save/load calibrator model if calibration set to train/eval; ignored otherwise.")
 
@@ -303,7 +303,11 @@ def run_single_process_generation(args, config):
     model = model_class.from_pretrained(args.model_name_or_path,
                                         output_attentions=return_attentions,
                                         output_hidden_states=return_hidden_states,
+                                        activation_dropout=args.dropout_rate,
+                                        attention_dropout=args.dropout_rate,
+                                        dropout=args.dropout_rate,
                                         cache_dir=args.cache_dir)
+
     model.to(args.device)
 
     if args.fp16:
@@ -314,13 +318,6 @@ def run_single_process_generation(args, config):
         model = amp.initialize(model, opt_level=args.fp16_opt_level)
 
     model.eval()
-
-    def apply_dropout(m):
-        if type(m) == torch.nn.Dropout:
-            m.train()
-    if args.mc_dropout:
-        raise NotImplementedError
-        model.apply(apply_dropout)
 
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     eos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['eos_token'])
@@ -404,30 +401,29 @@ def run_single_process_generation(args, config):
 
         all_encoder_attentions = None
         batch_outputs = [[] for _ in range(batch_size)]
-        for hyperparameter_idx in range(len(args.temperature)):
-            outputs = model.generate(input_ids=batch_context_tensor,
-                                 bad_words_ids=None,
-                                 attention_mask=attention_mask,
-                                 decoder_start_token_id=decoder_start_token_id,
-                                 min_length=args.min_output_length,
-                                 max_length=max_length,
-                                 num_beams=args.num_beams[hyperparameter_idx],
-                                 top_k=args.top_k[hyperparameter_idx],
-                                 top_p=args.top_p[hyperparameter_idx],
-                                 early_stopping=True,
-                                 num_return_sequences=args.num_samples[hyperparameter_idx],
-                                 repetition_penalty=args.repetition_penalty[hyperparameter_idx],
-                                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
-                                 do_sample=args.temperature[hyperparameter_idx]!=0,
-                                 temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0, # if temperature==0, we do not sample
-                                 eos_token_id=eos_token_id,
-                                 pad_token_id=pad_token_id,
-                                 return_attentions=return_attentions,
-                                 return_hidden_states=return_hidden_states,
-                                 use_cache=True,
-                                 mc_dropout=args.mc_dropout
-                                )
+        model_generate = lambda hyperparameter_idx: model.generate(input_ids=batch_context_tensor,
+                                                bad_words_ids=None,
+                                                attention_mask=attention_mask,
+                                                decoder_start_token_id=decoder_start_token_id,
+                                                min_length=args.min_output_length,
+                                                max_length=max_length,
+                                                num_beams=args.num_beams[hyperparameter_idx],
+                                                top_k=args.top_k[hyperparameter_idx],
+                                                top_p=args.top_p[hyperparameter_idx],
+                                                early_stopping=True,
+                                                num_return_sequences=args.num_samples[hyperparameter_idx],
+                                                repetition_penalty=args.repetition_penalty[hyperparameter_idx],
+                                                no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
+                                                do_sample=args.temperature[hyperparameter_idx]!=0,
+                                                temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0, # if temperature==0, we do not sample
+                                                eos_token_id=eos_token_id,
+                                                pad_token_id=pad_token_id,
+                                                return_attentions=return_attentions,
+                                                return_hidden_states=return_hidden_states,
+                                                use_cache=True)
 
+        for hyperparameter_idx in range(len(args.temperature)):
+            outputs = model_generate(hyperparameter_idx)
             # TODO fix the way output attention is handled. Some models do not support it.
             if return_attentions and args.task == 'translate':
                 decoded, all_encoder_attentions = outputs
@@ -437,9 +433,29 @@ def run_single_process_generation(args, config):
                 #  for each token in each output sentence.
                 # If beam search on, confidences is list of sentence-level probabilities
                 #  for each beam from each output sentence.
-                # TODO: we probably would like to get token-level probabilities for
-                # each beam for comparability.
                 confidences = confidences[:, :].tolist()
+
+            if args.mc_dropout:
+                from .transformers_utils import DecoderLayer
+                from transformers.modeling_bart import EncoderLayer, SelfAttention
+                def apply_dropout(m):
+                    if isinstance(m, DecoderLayer) or isinstance(m, EncoderLayer):
+                        m.train()
+                model.apply(apply_dropout)
+                sample_probs = []
+                T = 10
+                for _ in range(T):
+                    uncertainty_sample_outputs = model_generate(hyperparameter_idx)
+                    _, probs = outputs
+                    import pdb; pdb.set_trace()
+                    sample_probs.append(probs)
+                sample_probs = torch.stack(sample_probs, 0).double().exp_()
+                mean = sample_probs.mean(0)
+                var = sample_probs.var(0)
+                tau = (0.5) / (2. * T)
+                std = np.sqrt(var + 1. / tau)
+                import pdb; pdb.set_trace()
+
 
             if not isinstance(decoded, list):
                 decoded = decoded[:, :].tolist()
@@ -585,12 +601,12 @@ def run_single_process_generation(args, config):
         logger.info(bst.eval(dtrain, name='train'))
         logger.info('Calibrator training complete.')
         bst.save_model(args.calibrator_path)
-    
+
     metrics = compute_metrics(
             all_outputs,
             all_golds,
             reduction=args.metric_reduction,
-            output_reliability_diagrams=args.reliability_diagrams_output_file,
+            output_reliability_diagrams=args.reliability_diagrams_output_path,
             num_beams = args.num_beams,
             calibrator_path=(args.calibrator_path if args.calibration == 'eval' else None)
         )
@@ -611,4 +627,3 @@ def run_single_process_generation(args, config):
             metrics['prediction_metrics']['F1'][best_threshold],
             metrics['prediction_metrics']['included'][best_threshold],
         )
-    
