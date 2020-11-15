@@ -78,6 +78,7 @@ class NumericalizedExamples(NamedTuple):
     question: SequentialField
     answer: SequentialField
     decoder_vocab: object
+    device: object
     
     @staticmethod
     def from_examples(examples, numericalizer, device=None, paired=False, max_pairs=None, groups=None,
@@ -186,40 +187,33 @@ class NumericalizedExamples(NamedTuple):
                      all_context_inputs,
                      all_question_inputs,
                      all_answer_inputs,
-                     decoder_vocab)
+                     decoder_vocab,
+                     device)
 
     @staticmethod
     def collate_batches(batches):
+        # print('batches = ', batches)
         example_id = []
         context_values, context_lengths, context_limiteds = [], [], []
         question_values, question_lengths, question_limiteds = [], [], []
         answer_values, answer_lengths, answer_limiteds = [], [], []
         decoder_vocab = None
 
-        max_context_length = 0
-        max_question_length = 0
-        max_answer_length = 0
-        min_context_length = 1000000
         for batch in batches:
             example_id.append(batch.example_id[0])
-            context_values.append(batch.context.value)
-            context_lengths.append(batch.context.length)
-            context_limiteds.append(batch.context.limited)
-            max_context_length = max(max_context_length, batch.context.length)
-            min_context_length = min(min_context_length, batch.context.length)
+            context_values.append(torch.tensor(batch.context.value, device=batch.device))
+            context_lengths.append(torch.tensor(batch.context.length, device=batch.device))
+            context_limiteds.append(torch.tensor(batch.context.limited, device=batch.device))
 
-            question_values.append(batch.question.value)
-            question_lengths.append(batch.question.length)
-            question_limiteds.append(batch.question.limited)
-            max_question_length = max(max_question_length, batch.question.length)
+            question_values.append(torch.tensor(batch.question.value, device=batch.device))
+            question_lengths.append(torch.tensor(batch.question.length, device=batch.device))
+            question_limiteds.append(torch.tensor(batch.question.limited, device=batch.device))
 
-            answer_values.append(batch.answer.value)
-            answer_lengths.append(batch.answer.length)
-            answer_limiteds.append(batch.answer.limited)
-            max_answer_length = max(max_answer_length, batch.answer.length)
+            answer_values.append(torch.tensor(batch.answer.value, device=batch.device))
+            answer_lengths.append(torch.tensor(batch.answer.length, device=batch.device))
+            answer_limiteds.append(torch.tensor(batch.answer.limited, device=batch.device))
 
             decoder_vocab = batch.decoder_vocab
-
 
         context_values = pad_sequence(context_values, padding_value=0, batch_first=True)
         context_limiteds = pad_sequence(context_limiteds, padding_value=0, batch_first=True)
@@ -244,4 +238,4 @@ class NumericalizedExamples(NamedTuple):
                                  limited=answer_limiteds)
 
 
-        return NumericalizedExamples(example_id=example_id, context=context, question=question, answer=answer, decoder_vocab=decoder_vocab)
+        return NumericalizedExamples(example_id=example_id, context=context, question=question, answer=answer, decoder_vocab=decoder_vocab, device=None)

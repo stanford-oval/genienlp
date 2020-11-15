@@ -27,14 +27,15 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import NamedTuple
+from typing import List, NamedTuple
 import torch
+from torch import tensor
 
 
 class SequentialField(NamedTuple):
-    value: torch.tensor
-    length: torch.tensor
-    limited: torch.tensor
+    value: List
+    length: List
+    limited: List
     
     @staticmethod
     def from_tensors(tensor_list):
