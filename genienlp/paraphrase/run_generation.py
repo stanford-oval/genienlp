@@ -209,14 +209,6 @@ def run_multi_process_generation(args):
     # get model type from saved config
     if hasattr(config, 'model_type'):
         args.model_type = getattr(config, 'model_type')
-        # bart and mbart share the same config
-        # check which model we are actually using
-        if args.model_type == 'bart':
-            try:
-                if config.normalize_before and config.add_final_layer_norm and config.scale_embedding:
-                    args.model_type = 'mbart'
-            except AttributeError as e:
-                args.model_type = 'bart'
     else:
         raise ValueError('Model should be either GPT2, BART, MBART, or Marian')
     
