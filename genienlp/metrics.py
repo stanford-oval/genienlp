@@ -232,6 +232,43 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
     return max(scores_for_ground_truths)
 
 
+# https://martin-thoma.com/word-error-rate-calculation/
+def pairwise_SER(prediction, ground_truth):
+    """
+    O(nm) time and space complexity.
+
+    Returns # of substitutions + insertions + deletions
+    """
+    prediction_tokens = prediction.split()
+    ground_truth_tokens = ground_truth.split()
+
+    n = len(prediction_tokens)
+    m = len(ground_truth_tokens)
+
+    d = np.zeros((n + 1) * (m + 1), dtype=np.uint16)
+    d = d.reshape((n + 1, m + 1))
+
+    for i in range(n + 1):
+        for j in range(m + 1):
+            if i == 0:
+                d[0][j] = j
+            elif j == 0:
+                d[i][0] = i
+
+    # computation
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            if prediction_tokens[i - 1] == ground_truth_tokens[j - 1]:
+                d[i][j] = d[i - 1][j - 1]
+            else:
+                substitution = d[i - 1][j - 1] + 1
+                insertion = d[i][j - 1] + 1
+                deletion = d[i - 1][j] + 1
+                d[i][j] = min(substitution, insertion, deletion)
+
+    return d[n][m]
+
+
 def computeF1(outputs, targets):
     return sum([metric_max_over_ground_truths(f1_score, o, t) for o, t in zip(outputs, targets)]) / len(outputs) * 100
 
@@ -249,6 +286,10 @@ def computeBLEU(outputs, targets):
     targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
     return corpus_bleu(outputs, targets, lowercase=True).score
 
+def computeSER(outputs, targets):
+    n_modifications = sum([pairwise_SER(o, t) for o, t in zip(outputs, targets)])
+    n_words = sum([len(t.split()) for t in targets])
+    return n_modifications / n_words
 
 class Rouge(Rouge155):
     """Rouge calculator class with custom command-line options."""
@@ -472,6 +513,11 @@ def compute_metrics(greedy, answer, requested_metrics, batch_mode=True):
         corpus_f1, precision, recall = computeCF1(norm_greedy, norm_answer)
         metric_keys += ['corpus_f1', 'precision', 'recall']
         metric_values += [corpus_f1, precision, recall]
+
+    if 'ser' in requested_metrics:
+        ser = computeSER(norm_greedy, norm_answer)
+        metric_keys.append('ser')
+        metric_values.append(ser)
 
     metric_dict = dict(zip(metric_keys, metric_values))
     metric_dict = collections.OrderedDict((key, metric_dict[key]) for key in requested_metrics)
