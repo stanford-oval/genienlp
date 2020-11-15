@@ -66,13 +66,13 @@ class IdentityEncoder(nn.Module):
         pass
 
     def forward(self, batch):
-        context, context_lengths = batch.context.value, batch.context.length
+        context, context_lengths, context_segments = batch.context.value, batch.context.length, batch.context.segments
         question, question_lengths = batch.question.value, batch.question.length
 
         context_padding = context.data == self.pad_idx
         question_padding = question.data == self.pad_idx
 
-        context_embedded = self.encoder_embeddings(context, padding=context_padding)
+        context_embedded = self.encoder_embeddings(context, context_segments, padding=context_padding)
         question_embedded = self.encoder_embeddings(question, padding=question_padding)
 
         # pick the top-most N transformer layers to pass to the decoder for cross-attention

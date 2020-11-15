@@ -397,7 +397,7 @@ class BertNumericalizer(TransformerNumericalizer):
         length = torch.tensor(lengths, dtype=torch.int32, device=device)
         numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
         decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-        segment_ids = torch.tensor(segment_ids, dtype=torch.int32, device=device)
+        segment_ids = torch.tensor(segment_ids, dtype=torch.long, device=device)
 
         return SequentialField(length=length, value=numerical, limited=decoder_numerical, segments=segment_ids)
 
