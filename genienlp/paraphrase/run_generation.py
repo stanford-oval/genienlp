@@ -158,7 +158,7 @@ def parse_argv(parser):
 
 
 def main(args):
-    hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
+    hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size', 'mc_dropout']
     max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])
     valid_len = [1, max_hyperparameter_len]
     for h in hyperparameters:
@@ -597,7 +597,7 @@ def run_single_process_generation(args, config):
         logger.info('Training calibrator and saving model to file...')
         dtrain = xgb.DMatrix('{}?format=csv&label_column=0'.format(calibration_training_file))
         params = {
-            'max_depth': 3,
+            'max_depth': 5,
             'subsample': 0.8,
             'objective': 'binary:logistic',
         }
@@ -621,7 +621,7 @@ def run_single_process_generation(args, config):
     best_threshold = np.argmax(metrics['prediction_metrics']['F1'])
     logger.info('Best threshold by F1 score is %.2f',
         metrics['prediction_metrics']['thresholds'][best_threshold])
-    logger.info('Prediction accuracy = %.2f', metrics['prediction_metrics']['precision'][best_threshold])
+    logger.info('Prediction accuracy (above threshold) = %.2f', metrics['prediction_metrics']['precision'][best_threshold])
     logger.info(
             'TP = %d; TN = %d; FP = %d; FN = %d; F1 = %.2f; included = %.2f',
             metrics['prediction_metrics']['tp'][best_threshold],
