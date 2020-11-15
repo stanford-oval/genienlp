@@ -47,8 +47,6 @@ class Example(NamedTuple):
     question_word_mask: List[bool]
     answer: List[str]
     answer_word_mask: List[bool]
-    context_plus_question: List[str]
-    context_plus_question_word_mask: List[bool]
 
     vocab_fields = ['context', 'question', 'answer']
 
@@ -64,10 +62,6 @@ class Example(NamedTuple):
                 words = [word.lower() for word in words]
             args.append(words)
             args.append(mask)
-        
-        # create context_plus_question field by appending context and question words and words_masks
-        args.append(args[1] + args[3])
-        args.append(args[2] + args[4])
         
         return Example(*args)
 
@@ -156,7 +150,7 @@ class NumericalizedExamples(NamedTuple):
             question_inputs = [(ex.question, ex.question_word_mask) for ex in examples]
 
         if append_question_to_context_too:
-            context_inputs = [(ex.context_plus_question, ex.context_plus_question_word_mask) for ex in examples]
+            context_inputs = [((ex.context, ex.context_word_mask), (ex.question, ex.question_word_mask)) for ex in examples]
         elif override_context:
             context_inputs = [(override_context, override_context_mask) for _ in examples]
         else:
@@ -165,7 +159,10 @@ class NumericalizedExamples(NamedTuple):
         answer_inputs = [(ex.answer, ex.answer_word_mask) for ex in examples]
         
         all_example_ids_single = example_ids
-        all_context_inputs_single = numericalizer.encode_single(context_inputs, decoder_vocab,
+        if append_question_to_context_too:
+            all_context_inputs_single = numericalizer.encode_pair(context_inputs, decoder_vocab, device=device)
+        else:
+            all_context_inputs_single = numericalizer.encode_single(context_inputs, decoder_vocab,
                                                                 device=device, max_length=max_context_len-2)
         all_question_inputs_single = numericalizer.encode_single(question_inputs, decoder_vocab,
                                                                  device=device, max_length=max_question_len-2)
@@ -182,16 +179,17 @@ class NumericalizedExamples(NamedTuple):
             all_context_inputs = all_context_inputs_single
             all_question_inputs = all_question_inputs_single
             all_answer_inputs = all_answer_inputs_single
-        return NumericalizedExamples(all_example_ids,
+        ret =  NumericalizedExamples(all_example_ids,
                      all_context_inputs,
                      all_question_inputs,
                      all_answer_inputs,
                      decoder_vocab)
+        return ret
 
     @staticmethod
     def collate_batches(batches):
         example_id = []
-        context_values, context_lengths, context_limiteds = [], [], []
+        context_values, context_lengths, context_limiteds, context_segments = [], [], [], []
         question_values, question_lengths, question_limiteds = [], [], []
         answer_values, answer_lengths, answer_limiteds = [], [], []
         decoder_vocab = None
@@ -205,6 +203,7 @@ class NumericalizedExamples(NamedTuple):
             context_values.append(batch.context.value)
             context_lengths.append(batch.context.length)
             context_limiteds.append(batch.context.limited)
+            context_segments.append(batch.context.segments)
             max_context_length = max(max_context_length, batch.context.length)
             min_context_length = min(min_context_length, batch.context.length)
 
@@ -223,6 +222,7 @@ class NumericalizedExamples(NamedTuple):
 
         context_values = pad_sequence(context_values, padding_value=0, batch_first=True)
         context_limiteds = pad_sequence(context_limiteds, padding_value=0, batch_first=True)
+        context_segments = pad_sequence(context_segments, padding_value=1, batch_first=True)
         context_lengths = torch.stack(context_lengths, dim=0)
         question_values = pad_sequence(question_values, padding_value=0, batch_first=True)
         question_limiteds = pad_sequence(question_limiteds, padding_value=0, batch_first=True)
@@ -233,7 +233,8 @@ class NumericalizedExamples(NamedTuple):
 
         context = SequentialField(value=context_values,
                                   length=context_lengths,
-                                  limited=context_limiteds)
+                                  limited=context_limiteds,
+                                  segments=context_segments)
 
         question = SequentialField(value=question_values,
                                    length=question_lengths,

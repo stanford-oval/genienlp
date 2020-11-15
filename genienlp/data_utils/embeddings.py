@@ -114,8 +114,8 @@ class TransformerEmbedding(torch.nn.Module):
     def grow_for_vocab(self, vocab, new_words):
         self.model.resize_token_embeddings(len(vocab))
 
-    def forward(self, input: torch.Tensor, padding=None):
-        last_hidden_state, _pooled, hidden_states = self.model(input, attention_mask=(~padding).to(dtype=torch.float))
+    def forward(self, input: torch.Tensor, segment_id: torch.tensor=None, padding=None):
+        last_hidden_state, _pooled, hidden_states = self.model(input_ids=input, token_type_ids=segment_id, attention_mask=(~padding).to(dtype=torch.float))
 
         return EmbeddingOutput(all_layers=hidden_states, last_layer=last_hidden_state)
 

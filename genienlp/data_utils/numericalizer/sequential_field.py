@@ -27,14 +27,16 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import NamedTuple
 import torch
 
 
-class SequentialField(NamedTuple):
-    value: torch.tensor
-    length: torch.tensor
-    limited: torch.tensor
+class SequentialField():
+
+    def __init__(self, value:torch.tensor, length:torch.tensor, limited:torch.tensor, segments:torch.tensor=None):
+        self.value = value
+        self.length = length
+        self.limited = limited
+        self.segments = segments
     
     @staticmethod
     def from_tensors(tensor_list):
@@ -42,5 +44,9 @@ class SequentialField(NamedTuple):
         value = torch.cat([data.value for data in tensor_list], dim=0)
         length = torch.cat([data.length for data in tensor_list], dim=0)
         limited = torch.cat([data.limited for data in tensor_list], dim=0)
+        segments = torch.cat([data.segments for data in tensor_list], dim=0)
         
-        return SequentialField(value, length, limited)
+        return SequentialField(value, length, limited, segments)
+
+    def __repr__(self) -> str:
+        return 'value=' + str(self.value) + ', length=' + str(self.length) + ', limited=' + str(self.limited)+ ', segments=' + str(self.segments)

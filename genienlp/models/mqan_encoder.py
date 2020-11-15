@@ -80,13 +80,13 @@ class MQANEncoder(nn.Module):
         pass
 
     def forward(self, batch):
-        context, context_lengths = batch.context.value, batch.context.length
+        context, context_lengths, context_segment_ids = batch.context.value, batch.context.length, batch.context.segments
         question, question_lengths = batch.question.value, batch.question.length
 
         context_padding = context.data == self.pad_idx
         question_padding = question.data == self.pad_idx
 
-        context_embedded = self.encoder_embeddings(context, padding=context_padding).last_layer
+        context_embedded = self.encoder_embeddings(context, context_segment_ids, padding=context_padding).last_layer
         question_embedded = self.encoder_embeddings(question, padding=question_padding).last_layer
 
         context_encoded = self.bilstm_before_coattention(context_embedded, context_lengths)[0]

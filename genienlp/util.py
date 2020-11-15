@@ -456,7 +456,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
     all_f = []
     for i in trange(len(all_features.example_id), desc='Converting dataset to features'):
         all_f.append(NumericalizedExamples(example_id=[all_features.example_id[i]],
-                            context=SequentialField(value=all_features.context.value[i][:all_features.context.length[i]], length=all_features.context.length[i], limited=all_features.context.limited[i][:all_features.context.length[i]]),
+                            context=SequentialField(value=all_features.context.value[i][:all_features.context.length[i]], length=all_features.context.length[i], limited=all_features.context.limited[i][:all_features.context.length[i]], segments=all_features.context.segments[i][:all_features.context.length[i]]),
                             question=SequentialField(value=all_features.question.value[i][:all_features.question.length[i]], length=all_features.question.length[i], limited=all_features.question.limited[i][:all_features.question.length[i]]),
                             answer=SequentialField(value=all_features.answer.value[i][:all_features.answer.length[i]], length=all_features.answer.length[i], limited=all_features.answer.limited[i][:all_features.answer.length[i]]),
                             decoder_vocab=all_features.decoder_vocab))

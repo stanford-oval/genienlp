@@ -349,6 +349,10 @@ class BertNumericalizer(TransformerNumericalizer):
         self._init()
 
     def encode_pair(self, minibatch, decoder_vocab, device=None):
+        """
+        minibatch: List of tuple of tupe of list: [((tokens_a, mask_a), (tokens_b, mask_b)), ...] where tokens_ is a list of strings and mask_ is a list of booleans
+        """
+
         # apply word-piece tokenization to everything first
         wp_tokenized_a = []
         wp_tokenized_b = []
@@ -364,6 +368,7 @@ class BertNumericalizer(TransformerNumericalizer):
         padded = []
         lengths = []
         numerical = []
+        segment_ids = []
         decoder_numerical = []
         for (wp_tokens_a, _), (wp_tokens_b, _) in minibatch:
             if self.pad_first:
@@ -384,6 +389,7 @@ class BertNumericalizer(TransformerNumericalizer):
 
             padded.append(padded_example)
             lengths.append(len(padded_example) - max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b)))
+            segment_ids.append([0]*(len(wp_tokens_a[:max_len]) + 2) + [1]*(len(padded_example)-(len(wp_tokens_a[:max_len]) + 2)))
 
             numerical.append(self._tokenizer.convert_tokens_to_ids(padded_example))
             decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
@@ -391,8 +397,9 @@ class BertNumericalizer(TransformerNumericalizer):
         length = torch.tensor(lengths, dtype=torch.int32, device=device)
         numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
         decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
+        segment_ids = torch.tensor(segment_ids, dtype=torch.int32, device=device)
 
-        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
+        return SequentialField(length=length, value=numerical, limited=decoder_numerical, segments=segment_ids)
 
     def reverse(self, batch, detokenize, field_name=None):
         with torch.cuda.device_of(batch):
