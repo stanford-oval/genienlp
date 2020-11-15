@@ -56,12 +56,8 @@ class TextDataset(Dataset):
                             break
                         
                         parts[args.input_column] = args.model_input_prefix + parts[args.input_column]
-                        if args.model_type == 'bart':
-                            self._add_bart_example(parts[args.input_column], None)
-                        elif args.model_type == 'mbart':
-                            self._add_mbart_example(parts[args.input_column], None, args)
-                        elif args.model_type == 'marian':
-                            self._add_marian_example(parts[args.input_column], None)
+                        if args.model_type in ['bart', 'mbart', 'marian']:
+                            self._add_seq2seq_example(parts[args.input_column], None, args)
                         else:
                             self._add_example(parts[args.input_column], None, args)
 
@@ -76,12 +72,8 @@ class TextDataset(Dataset):
                         break
                         
                     parts[args.input_column] = args.model_input_prefix + parts[args.input_column]
-                    if args.model_type == 'bart':
-                        self._add_bart_example(parts[args.input_column], parts[args.gold_column])
-                    elif args.model_type == 'mbart':
-                        self._add_mbart_example(parts[args.input_column], parts[args.gold_column], args)
-                    elif args.model_type == 'marian':
-                        self._add_marian_example(parts[args.input_column], parts[args.gold_column])
+                    if args.model_type in ['bart', 'mbart', 'marian']:
+                        self._add_seq2seq_example(parts[args.input_column], parts[args.gold_column], args)
                     else:
                         self._add_example(parts[args.input_column], parts[args.gold_column], args)
             if args.sort_by_length:
@@ -133,48 +125,27 @@ class TextDataset(Dataset):
         
         # ignored
         self.attention_mask.append([1]*len(input_ids))
+
+    def _add_seq2seq_example(self, input_sequence, output_sequence, args):
         
-        
-    def _update_seq2seq_example(self, encoded_input_ids, encoded_attention_mask, encoded_output_ids):
+        if args.model_type == 'mbart':
+            model_inputs = self.tokenizer.prepare_seq2seq_batch([input_sequence], args.src_lang, [output_sequence], args.tgt_lang)
+        else:
+            model_inputs = self.tokenizer.prepare_seq2seq_batch([input_sequence], [output_sequence], return_tensors='pt')
+
+        encoded_input_ids = model_inputs['input_ids'].tolist()[0]
+        encoded_attention_mask = model_inputs['attention_mask'].tolist()[0]
+        encoded_output_ids = model_inputs['labels'].tolist()[0]
+
         self.max_input_length = max(self.max_input_length, len(encoded_input_ids))
         self.max_output_length = max(self.max_output_length, len(encoded_output_ids))
-    
+
         self.input_ids.append(encoded_input_ids)
         self.attention_mask.append(encoded_attention_mask)
         self.position_ids.append(list(range(len(encoded_input_ids))))
         self.segment_ids.append([self.segment1_id] * len(encoded_input_ids))
-    
+
         self.labels.append(encoded_output_ids)
-        
-
-    def _add_bart_example(self, input_sequence, output_sequence):
-        
-        encoded_input_ids = self.tokenizer.encode_plus(input_sequence)['input_ids']
-        encoded_attention_mask = self.tokenizer.encode_plus(input_sequence)['attention_mask']
-        encoded_output_ids = self.tokenizer.encode_plus(output_sequence)['input_ids']
-        
-        self._update_seq2seq_example(encoded_input_ids, encoded_attention_mask, encoded_output_ids)
-        
-
-    def _add_mbart_example(self, input_sequence, output_sequence, args):
-    
-        model_inputs = self.tokenizer.prepare_seq2seq_batch([input_sequence], args.src_lang, [output_sequence], args.tgt_lang)
-    
-        encoded_input_ids = model_inputs['input_ids'].tolist()[0]
-        encoded_attention_mask = model_inputs['attention_mask'].tolist()[0]
-        encoded_output_ids = model_inputs['labels'].tolist()[0]
-    
-        self._update_seq2seq_example(encoded_input_ids, encoded_attention_mask, encoded_output_ids)
-
-    def _add_marian_example(self, input_sequence, output_sequence):
-    
-        model_inputs = self.tokenizer.prepare_seq2seq_batch([input_sequence], [output_sequence])
-    
-        encoded_input_ids = model_inputs['input_ids'].tolist()[0]
-        encoded_attention_mask = model_inputs['attention_mask'].tolist()[0]
-        encoded_output_ids = model_inputs['labels'].tolist()[0]
-    
-        self._update_seq2seq_example(encoded_input_ids, encoded_attention_mask, encoded_output_ids)
         
     def __len__(self):
         return len(self.input_ids)
