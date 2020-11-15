@@ -370,7 +370,7 @@ class BertNumericalizer(TransformerNumericalizer):
         numerical = []
         segment_ids = []
         decoder_numerical = []
-        for (wp_tokens_a, _), (wp_tokens_b, _) in minibatch:
+        for wp_tokens_a, wp_tokens_b in zip(wp_tokenized_a, wp_tokenized_b):
             if self.pad_first:
                 padded_example = [self.pad_token] * max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b)) + \
                                  [self.init_token] + \
