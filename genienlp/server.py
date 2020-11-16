@@ -39,6 +39,7 @@ import torch
 
 from . import models
 from .data_utils.example import NumericalizedExamples
+from .data_utils.numericalizer.sequential_field import SequentialField
 from .tasks.generic_dataset import Example
 from .tasks.registry import get_tasks
 from .util import set_seed, init_devices, load_config_json, log_model_size
@@ -59,11 +60,20 @@ class Server:
     def numericalize_example(self, ex):
         self.model.add_new_vocab_from_data([[[ex]]])
 
-        # batch of size 1
-        return NumericalizedExamples.from_examples([ex], self.numericalizer, device=self.device,
+        all_features = NumericalizedExamples.from_examples([ex], self.numericalizer, device=self.device,
                                    append_question_to_context_too=self.args.append_question_to_context_too,
                                    override_question=self.args.override_question,
                                    override_context=self.args.override_context)
+        all_f = []
+        for i in range(len(all_features.example_id)):
+            all_f.append(NumericalizedExamples(example_id=[all_features.example_id[i]],
+                                context=SequentialField(value=all_features.context.value[i], length=all_features.context.length[i], limited=all_features.context.limited[i]),
+                                question=SequentialField(value=all_features.question.value[i], length=all_features.question.length[i], limited=all_features.question.limited[i]),
+                                answer=SequentialField(value=all_features.answer.value[i], length=all_features.answer.length[i], limited=all_features.answer.limited[i]),
+                                decoder_vocab=all_features.decoder_vocab, device=self.device))
+
+        # batch of size 1
+        return NumericalizedExamples.collate_batches(all_f)
 
     def handle_request(self, line):
         request = json.loads(line)
