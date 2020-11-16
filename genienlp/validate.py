@@ -121,7 +121,7 @@ def print_results(keys, values, num_print=1):
         print()
 
 
-def validate(task, val_iter, model, logger, numericalizer, iteration, args, num_print=10):
+def validate(task, val_iter, model, numericalizer, args, num_print=10):
     with torch.no_grad():
         model.eval()
         names = ['beam search', 'answer', 'context', 'question']
