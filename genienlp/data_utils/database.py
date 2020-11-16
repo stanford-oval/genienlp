@@ -75,7 +75,7 @@ def is_special_case(key):
 class Database(object):
     def __init__(self, items):
         self.data = Trie(items)
-        self.unk_type = 'unk'
+        self.unk_type = self.unk_type
         self.type2id = {self.unk_type:  0}
         self.type2id.update({type: i + 1 for i, type in enumerate(TYPES)})
     
@@ -89,7 +89,7 @@ class Database(object):
                 self.type2id[type] = len(self.type2id)
             else:
                 # type is unknown
-                new_items_processed[token] = 'unk'
+                new_items_processed[token] = self.unk_type
         
         self.data = Trie(new_items_processed)
         
@@ -125,7 +125,7 @@ class Database(object):
                     break
         
             if not found:
-                tokens_type_ids.append(self.type2id['unk'])
+                tokens_type_ids.append(self.type2id[self.unk_type])
                 i += 1
                 
         return tokens_type_ids
@@ -149,7 +149,7 @@ class Database(object):
                 else:
                     end -= 1
             if not found:
-                tokens_type_ids.append(self.type2id['unk'])
+                tokens_type_ids.append(self.type2id[self.unk_type])
                 i += 1
             found = False
 
@@ -247,7 +247,7 @@ class ElasticDatabase(object):
             
                 match = match[0]
                 canonical = match['_source']['canonical']
-                type = match['_source']['type']
+                type = match['_source']['type'][len('org.wikidata:'):]
                 if not is_special_case(canonical) and canonical == batch_to_lookup[i]:
                     all_tokens_type_ids[i].extend([self.type2id[type] for _ in range(all_currs[i], all_ends[i])])
                     all_currs[i] = all_ends[i]
@@ -257,7 +257,7 @@ class ElasticDatabase(object):
             for j in range(length):
                 # no matches were found for the span starting from current index
                 if all_currs[j] == all_ends[j] and not all_currs[j] >= all_lengths[j]:
-                    all_tokens_type_ids[j].append(self.type2id['unk'])
+                    all_tokens_type_ids[j].append(self.type2id[self.unk_type])
                     all_currs[j] += 1
                     all_ends[j] = all_lengths[j]
 
