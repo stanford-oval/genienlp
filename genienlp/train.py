@@ -511,6 +511,8 @@ def main(args):
     else:
         logger.info(f'Initializing a new {model_name}')
         model = model_class(args=args, vocab_sets=train_sets+val_sets)
+    
+    model.add_new_vocab_from_data(train_sets+val_sets)
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
 
