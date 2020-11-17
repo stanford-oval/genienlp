@@ -7,6 +7,7 @@ import logging
 import shutil
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from operator import mul
 
@@ -127,7 +128,7 @@ def compute_metrics(
         import xgboost as xgb
         calibrator = xgb.Booster()
         calibrator.load_model(calibrator_path)
-    
+
     # Store prediction metrics for thresholds at percent-increments to plot later
     thresholds = np.arange(0, 1, 0.01)
     prediction_metrics = {'thresholds': thresholds}
@@ -196,6 +197,9 @@ def compute_metrics(
         all_bleu.append(bleu_score)
         all_exact_matches.append(exact_match)
         sentence_confidences.append(sentence_confidence)
+
+    df = pd.DataFrame({'exact_matches': all_exact_matches, 'confidences': sentence_confidences})
+    df.to_csv(f'{output_reliability_diagrams}_raw.csv', index=False)
 
     # compute_uncertainty_metrics()
     total_bleu = sum(all_bleu)
