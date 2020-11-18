@@ -70,7 +70,7 @@ class Server:
                                 context=SequentialField(value=all_features.context.value[i], length=all_features.context.length[i], limited=all_features.context.limited[i]),
                                 question=SequentialField(value=all_features.question.value[i], length=all_features.question.length[i], limited=all_features.question.limited[i]),
                                 answer=SequentialField(value=all_features.answer.value[i], length=all_features.answer.length[i], limited=all_features.answer.limited[i]),
-                                decoder_vocab=all_features.decoder_vocab, device=self.device))
+                                decoder_vocab=all_features.decoder_vocab, device=self.device, padding_function=self.numericalizer.pad))
 
         # batch of size 1
         return NumericalizedExamples.collate_batches(all_f)

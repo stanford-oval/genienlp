@@ -29,6 +29,7 @@
 
 import os
 import torch
+from torch.nn.utils.rnn import pad_sequence
 
 from .vocab import Vocab
 from .sequential_field import SequentialField
@@ -59,6 +60,13 @@ class SimpleNumericalizer(object):
 
     def save(self, save_dir):
         torch.save(self.vocab, os.path.join(save_dir, 'vocab.pth'))
+
+    def pad(self, batch):
+        """
+        batch: a List of List of integers
+        """
+        #TODO account for left padding models
+        return pad_sequence(batch, padding_value=self.pad_id, batch_first=True)
 
     def build_vocab(self, vocab_fields, vocab_sets):
         self.vocab = Vocab.build_from_data(vocab_fields, *vocab_sets,
@@ -120,33 +128,22 @@ class SimpleNumericalizer(object):
             max_len = max(len(x[0]) for x in minibatch)
         else:
             max_len = self.fix_length
-        padded = []
+        examples = []
         lengths = []
         numerical = []
         decoder_numerical = []
         for tokens, _mask in minibatch:
-            if self.pad_first:
-                padded_example = [self.pad_token] * max(0, max_len - len(tokens)) + \
-                                 [self.init_token] + \
-                                 list(tokens[:max_len]) + \
-                                 [self.eos_token]
-            else:
-                padded_example = [self.init_token] + \
-                                 list(tokens[:max_len]) + \
-                                 [self.eos_token] + \
-                                 [self.pad_token] * max(0, max_len - len(tokens))
+            example = [self.init_token] + \
+                                list(tokens[:max_len]) + \
+                                [self.eos_token]
 
-            padded.append(padded_example)
-            lengths.append(len(padded_example) - max(0, max_len - len(tokens)))
+            examples.append(example)
+            lengths.append(len(example))
 
-            numerical.append([self.vocab.stoi[word] for word in padded_example])
-            decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
+            numerical.append([self.vocab.stoi[word] for word in example])
+            decoder_numerical.append([decoder_vocab.encode(word) for word in example])
 
-        length = torch.tensor(lengths, dtype=torch.int32, device=device)
-        numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
-        decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-
-        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
+        return SequentialField(length=lengths, value=numerical, limited=decoder_numerical)
 
 
     def encode_pair(self, minibatch, decoder_vocab, device=None):
