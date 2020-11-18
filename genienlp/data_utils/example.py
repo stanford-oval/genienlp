@@ -79,6 +79,7 @@ class NumericalizedExamples(NamedTuple):
     answer: SequentialField
     decoder_vocab: object
     device: object
+    padding_function: object
     
     @staticmethod
     def from_examples(examples, numericalizer, device=None, paired=False, max_pairs=None, groups=None,
@@ -188,16 +189,16 @@ class NumericalizedExamples(NamedTuple):
                      all_question_inputs,
                      all_answer_inputs,
                      decoder_vocab,
-                     device)
+                     device, padding_function=numericalizer.pad)
 
     @staticmethod
     def collate_batches(batches):
-        # print('batches = ', batches)
         example_id = []
         context_values, context_lengths, context_limiteds = [], [], []
         question_values, question_lengths, question_limiteds = [], [], []
         answer_values, answer_lengths, answer_limiteds = [], [], []
         decoder_vocab = None
+        
 
         for batch in batches:
             example_id.append(batch.example_id[0])
@@ -214,15 +215,16 @@ class NumericalizedExamples(NamedTuple):
             answer_limiteds.append(torch.tensor(batch.answer.limited, device=batch.device))
 
             decoder_vocab = batch.decoder_vocab
+            padding_function = batch.padding_function
 
-        context_values = pad_sequence(context_values, padding_value=0, batch_first=True)
-        context_limiteds = pad_sequence(context_limiteds, padding_value=0, batch_first=True)
+        context_values = padding_function(context_values)
+        context_limiteds = padding_function(context_limiteds)
         context_lengths = torch.stack(context_lengths, dim=0)
-        question_values = pad_sequence(question_values, padding_value=0, batch_first=True)
-        question_limiteds = pad_sequence(question_limiteds, padding_value=0, batch_first=True)
+        question_values = padding_function(question_values)
+        question_limiteds = padding_function(question_limiteds)
         question_lengths = torch.stack(question_lengths, dim=0)
-        answer_values = pad_sequence(answer_values, padding_value=0, batch_first=True)
-        answer_limiteds = pad_sequence(answer_limiteds, padding_value=0, batch_first=True)
+        answer_values = padding_function(answer_values)
+        answer_limiteds = padding_function(answer_limiteds)
         answer_lengths = torch.stack(answer_lengths, dim=0)
 
         context = SequentialField(value=context_values,
@@ -238,4 +240,4 @@ class NumericalizedExamples(NamedTuple):
                                  limited=answer_limiteds)
 
 
-        return NumericalizedExamples(example_id=example_id, context=context, question=question, answer=answer, decoder_vocab=decoder_vocab, device=None)
+        return NumericalizedExamples(example_id=example_id, context=context, question=question, answer=answer, decoder_vocab=decoder_vocab, device=None, padding_function=padding_function)

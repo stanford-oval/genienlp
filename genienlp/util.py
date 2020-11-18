@@ -459,7 +459,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                             context=SequentialField(value=all_features.context.value[i], length=all_features.context.length[i], limited=all_features.context.limited[i]),
                             question=SequentialField(value=all_features.question.value[i], length=all_features.question.length[i], limited=all_features.question.limited[i]),
                             answer=SequentialField(value=all_features.answer.value[i], length=all_features.answer.length[i], limited=all_features.answer.limited[i]),
-                            decoder_vocab=all_features.decoder_vocab, device=device))
+                            decoder_vocab=all_features.decoder_vocab, device=device, padding_function=numericalizer.pad))
     
     del all_features
     sampler = LengthSortedIterator(all_f, batch_size=batch_size, sort=train, shuffle_and_repeat=train, sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)

@@ -30,6 +30,7 @@
 import collections
 import os
 import torch
+from torch.nn.utils.rnn import pad_sequence
 
 from .decoder_vocab import DecoderVocabulary
 from .masked_tokenizer import MaskedBertTokenizer, MaskedXLMRobertaTokenizer
@@ -60,6 +61,13 @@ class TransformerNumericalizer(object):
 
     def load(self, save_dir):
         raise NotImplementedError()
+
+    def pad(self, batch):
+        """
+        batch: a List of List of integers
+        """
+        #TODO account for left padding models
+        return pad_sequence(batch, padding_value=self.pad_id, batch_first=True)
 
     def save(self, save_dir):
         self._tokenizer.save_pretrained(save_dir)
@@ -423,6 +431,10 @@ class BartNumericalizer(TransformerNumericalizer):
         self._tokenizer = BartTokenizer.from_pretrained(save_dir)
         self.decoder_vocab = DecoderVocabulary(self._tokenizer.decoder.values(), None, pad_token=self._tokenizer.pad_token, eos_token=self._tokenizer.eos_token)
 
+    @property
+    def pad_id(self):
+        return self._tokenizer.pad_token_id
+
     def save(self, save_dir):
         self._tokenizer.save_pretrained(save_dir)
 
@@ -440,10 +452,9 @@ class BartNumericalizer(TransformerNumericalizer):
                 batch_tokens.append(' ')
             else:
                 batch_tokens.append(' '.join(tokens))
-        
-        encoded_batch = self._tokenizer.batch_encode_plus(batch_tokens, add_special_tokens=True, pad_to_max_length=True, return_attention_masks=True)
-        length = torch.sum(torch.tensor(encoded_batch['attention_mask'], dtype=torch.int32, device=device), dim=1)
-        numerical = torch.tensor(encoded_batch['input_ids'], dtype=torch.int64, device=device)
+        encoded_batch = self._tokenizer.batch_encode_plus(batch_tokens, add_special_tokens=True, pad_to_max_length=False, return_attention_masks=False)
+        numerical = encoded_batch['input_ids']
+        length = [len(a) for a in encoded_batch['input_ids']]
 
         decoder_numerical = numerical
 
