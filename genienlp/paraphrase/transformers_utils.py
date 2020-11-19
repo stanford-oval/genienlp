@@ -5,10 +5,8 @@ from typing import List, Optional
 
 
 from transformers import LogitsProcessorList
-from transformers.models.marian.modeling_marian import MarianMTModel
-from transformers.models.bart.modeling_bart import BartForConditionalGeneration
-from transformers.models.mbart.modeling_mbart import MBartForConditionalGeneration
-from transformers.models.t5.modeling_t5 import T5ForConditionalGeneration
+from transformers import MarianMTModel, BartForConditionalGeneration, MBartForConditionalGeneration,\
+    T5ForConditionalGeneration, MT5ForConditionalGeneration
 from transformers.modeling_utils import PreTrainedModel
 
 from transformers.models.mbart.tokenization_mbart import MBartTokenizer, _all_mbart_models, SPM_URL
@@ -337,5 +335,9 @@ class GenieMBartForConditionalGeneration(MBartForConditionalGeneration, GeniePre
         super().__init__(config)
 
 class GenieT5ForConditionalGeneration(T5ForConditionalGeneration, GeniePreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+class GenieMT5ForConditionalGeneration(MT5ForConditionalGeneration, GeniePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

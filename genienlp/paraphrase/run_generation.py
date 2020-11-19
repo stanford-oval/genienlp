@@ -47,7 +47,8 @@ from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETR
 
 from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer, BartTokenizer
 
-from .transformers_utils import GenieMarianMTModel, GenieT5ForConditionalGeneration, GenieBartForConditionalGeneration, GenieMBartForConditionalGeneration
+from .transformers_utils import GenieMarianMTModel, GenieBartForConditionalGeneration, GenieMBartForConditionalGeneration,\
+    GenieT5ForConditionalGeneration, GenieMT5ForConditionalGeneration
 from .transformers_utils import GenieMBartTokenizer
 
 
@@ -69,6 +70,7 @@ ALL_MODELS = sum((tuple(map.keys()) for map in (GPT2_PRETRAINED_CONFIG_ARCHIVE_M
 MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'bos_token': '<unk>', 'sep_token': '<paraphrase>', 'eos_token': '</paraphrase>'}),
     't5': (GenieT5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'mt5': (GenieMT5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
     'bart': (GenieBartForConditionalGeneration, BartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
     'mbart': (GenieMBartForConditionalGeneration, GenieMBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
     'marian': (GenieMarianMTModel, MarianTokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
