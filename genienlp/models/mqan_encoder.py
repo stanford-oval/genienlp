@@ -86,8 +86,8 @@ class MQANEncoder(nn.Module):
         context_padding = context.data == self.pad_idx
         question_padding = question.data == self.pad_idx
 
-        context_embedded = self.encoder_embeddings(context, padding=context_padding).last_layer
-        question_embedded = self.encoder_embeddings(question, padding=question_padding).last_layer
+        context_embedded = self.encoder_embeddings(context, padding=context_padding).last_hidden_state
+        question_embedded = self.encoder_embeddings(question, padding=question_padding).last_hidden_state
 
         context_encoded = self.bilstm_before_coattention(context_embedded, context_lengths)[0]
         question_encoded = self.bilstm_before_coattention(question_embedded, question_lengths)[0]

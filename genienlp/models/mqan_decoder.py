@@ -97,7 +97,7 @@ class MQANDecoder(nn.Module):
 
             answer_padding = (answer.data == self.pad_idx)[:, :-1]
 
-            answer_embedded = self.decoder_embeddings(answer[:, :-1], padding=answer_padding).last_layer
+            answer_embedded = self.decoder_embeddings(answer[:, :-1], padding=answer_padding).last_hidden_state
 
             if self.args.transformer_layers > 0:
                 self_attended_decoded = self.self_attentive_decoder(answer_embedded,
@@ -289,7 +289,7 @@ class MQANDecoderWrapper(object):
         if self.mqan_decoder.args.transformer_layers > 0:
             self.hiddens = [self.self_attended_context[0].new_zeros((self.batch_size*expansion_factor, self.max_decoder_time, self.mqan_decoder.args.dimension))
                     for l in range(len(self.mqan_decoder.self_attentive_decoder.layers) + 1)]
-            self.hiddens[0] =  self.hiddens[0] + positional_encodings_like(self.hiddens[0])
+            self.hiddens[0] = self.hiddens[0] + positional_encodings_like(self.hiddens[0])
 
     
     def reorder(self, new_order):
@@ -311,7 +311,7 @@ class MQANDecoderWrapper(object):
 
 
     def next_token_probs(self, current_token_id):
-        embedding = self.mqan_decoder.decoder_embeddings(current_token_id).last_layer
+        embedding = self.mqan_decoder.decoder_embeddings(current_token_id).last_hidden_state
 
         if self.mqan_decoder.args.transformer_layers > 0:
             self.hiddens[0][:, self.time] = self.hiddens[0][:, self.time] + \
