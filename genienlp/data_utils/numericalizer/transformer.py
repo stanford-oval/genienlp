@@ -36,7 +36,7 @@ from .decoder_vocab import DecoderVocabulary
 from .masked_tokenizer import MaskedBertTokenizer, MaskedXLMRobertaTokenizer
 from transformers import BartTokenizer
 from .sequential_field import SequentialField
-from transformers.tokenization_xlnet import SPIECE_UNDERLINE
+from transformers.file_utils import SPIECE_UNDERLINE
 
 class TransformerNumericalizer(object):
     """

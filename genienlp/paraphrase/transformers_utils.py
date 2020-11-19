@@ -3,14 +3,15 @@ import torch
 import torch.nn.functional as F
 from typing import List, Optional
 
-from transformers.generation_utils import LogitsProcessorList
-from transformers.modeling_marian import MarianMTModel
-from transformers.modeling_bart import BartForConditionalGeneration
-from transformers.modeling_mbart import MBartForConditionalGeneration
-from transformers.modeling_t5 import T5ForConditionalGeneration
+
+from transformers import LogitsProcessorList
+from transformers.models.marian.modeling_marian import MarianMTModel
+from transformers.models.bart.modeling_bart import BartForConditionalGeneration
+from transformers.models.mbart.modeling_mbart import MBartForConditionalGeneration
+from transformers.models.t5.modeling_t5 import T5ForConditionalGeneration
 from transformers.modeling_utils import PreTrainedModel
 
-from transformers.tokenization_mbart import MBartTokenizer, _all_mbart_models, SPM_URL
+from transformers.models.mbart.tokenization_mbart import MBartTokenizer, _all_mbart_models, SPM_URL
 
 SPIECE_UNDERLINE = "▁"
 
