@@ -398,6 +398,16 @@ class CombinedEmbedding(nn.Module):
     def set_trainable(self, trainable):
         self.pretrained_embeddings.requires_grad_(trainable)
 
+    def resize_embedding(self, new_vocab_size):
+        dimensions = self.trained_embeddings.weight.shape
+        if new_vocab_size == dimensions[0]:
+            return
+        assert new_vocab_size > dimensions[0], 'Cannot shrink the embedding matrix'
+        resized_embeddings = nn.Embedding(new_vocab_size, dimensions[1])
+        resized_embeddings.weight.data[0:dimensions[0], :] = self.trained_embeddings.weight.data
+        self.trained_embeddings = resized_embeddings
+
+
     def _combine_embeddings(self, embeddings):
         if len(embeddings) == 1:
             all_layers = embeddings[0].all_layers

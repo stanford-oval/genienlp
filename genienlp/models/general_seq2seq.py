@@ -129,7 +129,10 @@ class Seq2Seq(PreTrainedModel):
     def set_train_context_embeddings(self, trainable):
         self.encoder.set_train_context_embeddings(trainable)
 
-    def add_new_vocab_from_data(self, splits):
+    def add_new_vocab_from_data(self, splits, resize_decoder=False):
+        """
+        resize_decoder: if True, will actually resize the embedding matrix of the decoder
+        """
         #logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens from training')
         old_num_tokens = self.numericalizer.num_tokens
         new_words = []
@@ -143,6 +146,8 @@ class Seq2Seq(PreTrainedModel):
             logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
         for emb in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
             emb.grow_for_vocab(self.numericalizer.vocab, new_words)
+        if resize_decoder:
+            self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
 
     def _init_embeddings_from_data(self, args, vocab_sets, is_loading):
         numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
@@ -151,7 +156,6 @@ class Seq2Seq(PreTrainedModel):
                         args.question_embeddings,
                         args.decoder_embeddings,
                         args.max_generative_vocab)
-
         if not is_loading:
             logger.info(f'Building vocabulary')
             numericalizer.build_vocab(Example.vocab_fields, vocab_sets)
@@ -332,7 +336,7 @@ class Bart(torch.nn.Module):
         #TODO
         pass
 
-    def add_new_vocab_from_data(self, splits):
+    def add_new_vocab_from_data(self, splits, resize_decoder=False):
         pass
 
     def generate(self,
