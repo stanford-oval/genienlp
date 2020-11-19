@@ -77,9 +77,9 @@ class IdentityEncoder(nn.Module):
 
         # pick the top-most N transformer layers to pass to the decoder for cross-attention
         # (add 1 to account for the embedding layer - the decoder will drop it later)
-        self_attended_context = context_embedded.all_layers[-(self.args.transformer_layers + 1):]
-        final_context = context_embedded.last_layer
-        final_question = question_embedded.last_layer
+        self_attended_context = context_embedded.hidden_states[-(self.args.transformer_layers + 1):]
+        final_context = context_embedded.last_hidden_state
+        final_question = question_embedded.last_hidden_state
 
         if self.projection is not None:
             final_context = self.dropout(final_context)
@@ -100,10 +100,10 @@ class IdentityEncoder(nn.Module):
                 question_rnn_state = (zero, zero)
             else:
                 if self.args.rnn_zero_state == 'cls':
-                    packed_rnn_state = self.norm(self.pool(context_embedded.last_layer[:, 0, :]))
+                    packed_rnn_state = self.norm(self.pool(context_embedded.last_hidden_state[:, 0, :]))
 
                 elif self.args.rnn_zero_state == 'average':
-                    masked_final_context = context_embedded.last_layer.masked_fill(context_padding.unsqueeze(2), 0)
+                    masked_final_context = context_embedded.last_hidden_state.masked_fill(context_padding.unsqueeze(2), 0)
                     summed_context = torch.sum(masked_final_context, dim=1)
                     average_context = summed_context / context_lengths.unsqueeze(1)
 
