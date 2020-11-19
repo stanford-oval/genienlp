@@ -134,7 +134,7 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
                                                iteration > train_question_embeddings_after)
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
-    loss = model(batch, pretraining=pretraining)[0]
+    loss = model(batch, pretraining=pretraining).loss
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
     if len(devices) > 1:

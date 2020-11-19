@@ -214,7 +214,7 @@ def train(args, train_dataset, model, tokenizer, input_file_name=None, multiple_
                 model_inputs.update({'position_ids': position_ids, 'token_type_ids': segment_ids})
 
             outputs = model(**model_inputs)
-            lm_logits = outputs[0].contiguous()
+            lm_logits = outputs.logits.contiguous()
             assert lm_logits.shape[-1] == model.config.vocab_size
             
             # CrossEntropyLoss ignore_index defaults to -100
@@ -367,7 +367,7 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
                 model_inputs.update({'position_ids': position_ids, 'token_type_ids': segment_ids})
 
             outputs = model(**model_inputs)
-            lm_logits = outputs[0]
+            lm_logits = outputs.logits
             
             # debugging
             if args.debug:
