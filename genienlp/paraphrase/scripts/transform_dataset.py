@@ -1,8 +1,7 @@
 import csv
 import re
 
-from ...util import tokenize, lower_case
-from ..data_utils import remove_thingtalk_quotes
+from ...util import tokenize, lower_case, remove_thingtalk_quotes
 from ...data_utils.progbar import progress_bar
 
 def is_subset(set1, set2):

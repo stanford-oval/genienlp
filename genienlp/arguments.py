@@ -192,6 +192,8 @@ def parse_argv(parser):
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--almond_preprocess_context', action='store_true', default=False, help='')
+    parser.add_argument('--almond_dataset_specific_preprocess', type=str, default='none', choices=['none', 'multiwoz'],
+                        help='Applies dataset-sepcific preprocessing to context and answer fields, and postprocesses the model outputs back to the original form.')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
 

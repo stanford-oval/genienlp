@@ -30,9 +30,10 @@
 
 
 import torch
+from collections import OrderedDict
 
 from .metrics import compute_metrics
-from collections import OrderedDict
+from .util import multiwoz_specific_postprocess
 
 
 def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False):
@@ -63,11 +64,15 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
                                                 do_sample=args.temperature[hyperparameter_idx]!=0  # if temperature==0, we do not sample
                                                 )
             partial_batch_prediction = numericalizer.reverse(partial_batch_prediction, detokenize=task.detokenize, field_name='answer')
+            if args.almond_dataset_specific_preprocess == 'multiwoz':
+                partial_batch_prediction = [multiwoz_specific_postprocess(a) for a in partial_batch_prediction]
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
         
         if not output_predictions_only:
             batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
+            if args.almond_dataset_specific_preprocess == 'multiwoz':
+                batch_answer = [multiwoz_specific_postprocess(a) for a in batch_answer]
             answers += batch_answer
             batch_question = numericalizer.reverse(batch.question.value.data, detokenize=task.detokenize, field_name='question')
             questions += batch_question
