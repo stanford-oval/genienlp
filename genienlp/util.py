@@ -125,8 +125,11 @@ multiwoz_domain_names = ['Attraction', 'Hotel', 'Restaurant', 'Taxi', 'Train']
 multiwoz_action_names = ['make_booking', 'make_reservation']
 
 def multiwoz_specific_preprocess(thingtalk: str):
+    thingtalk = thingtalk.strip()
+    thingtalk, quote_values = remove_thingtalk_quotes(thingtalk)
+    if quote_values is None:
+        quote_values = []
     thingtalk = ' ' + thingtalk + ' '
-    # thingtalk = thingtalk.replace('@org.thingpedia.dialogue.transaction.sys_', '')
     thingtalk = thingtalk.replace('@org.thingpedia.dialogue.transaction.', '')
     thingtalk = thingtalk.replace('$dialogue', '')
     thingtalk = thingtalk.replace('^^uk.ac.cam.multiwoz.', '')
@@ -136,11 +139,15 @@ def multiwoz_specific_preprocess(thingtalk: str):
     thingtalk = thingtalk.replace('GENERIC_ENTITY_uk.ac.cam.multiwoz.', '')
     thingtalk = thingtalk.replace('QUOTED_', '')
     thingtalk = thingtalk.replace('#[', '[')
-    # thingtalk = thingtalk.replace('=> notify ;', '')
     thingtalk = thingtalk.replace('now => ;', '')
     thingtalk = thingtalk.replace('_', ' ')
     for a, b in [(d+'.make', d+' make') for d in multiwoz_domain_names]:
         thingtalk = thingtalk.replace(' '+a+' ', ' '+b+' ')
+
+    # put the strings in quotes back
+    for v in quote_values:
+        thingtalk = thingtalk.replace('""', '" ' + v + ' "', 1)
+
     thingtalk = thingtalk.strip()
     return thingtalk
 
