@@ -53,9 +53,9 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         self.groups = groups
         
         if sort:
-            self.data_source = list(sorted(data_source, key=self.sort_key))
+            self.data_source, self.original_order = tuple(zip(*sorted(list(zip(data_source, range(len(data_source)))), key=lambda x: self.sort_key(x[0]))))
         else:
-            self.data_source = data_source
+            self.data_source, self.original_order = data_source, list(range(len(data_source)))
         self.batch_size = batch_size # number of examples or number of tokens
         self.shuffle_and_repeat = shuffle_and_repeat
         self.last_batch_start_index = 0

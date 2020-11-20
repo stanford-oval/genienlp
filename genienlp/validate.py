@@ -37,18 +37,19 @@ from .util import multiwoz_specific_postprocess
 from .data_utils.progbar import progress_bar
 
 
-def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False):
+def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False, original_order=None):
     """
+    original_order: List of indices. If provided, we will sort the results according to this order
     """
     if isinstance(model, torch.nn.DataParallel):
         # get rid of the DataParallel wrapper
         model = model.module
     predictions = []
+    example_ids = []
     answers = []
     contexts = []
     questions = []
-    if prediction_file_name is not None:
-        prediction_file = open(prediction_file_name, 'w' + ('' if args.overwrite else 'x'))
+    
     for batch in progress_bar(data_iterator, desc="Batches", disable=(len(data_iterator)==1)):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
@@ -74,17 +75,22 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
             batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
             if args.almond_dataset_specific_preprocess == 'multiwoz':
                 batch_answer = [multiwoz_specific_postprocess(a) for a in batch_answer]
+            example_ids += batch.example_id
             answers += batch_answer
             batch_question = numericalizer.reverse(batch.question.value.data, detokenize=task.detokenize, field_name='question')
             questions += batch_question
             batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize, field_name='context')
             contexts += batch_context
         predictions += batch_prediction
-        if prediction_file_name is not None:
-            for i, example_id in enumerate(batch.example_id):
-                prediction_file.write(example_id + '\t' + '\t'.join(batch_prediction[i]) + '\n') # write all outputs in the prediction file, separated by \t
+    
+    if original_order is not None:
+        # sort back to the original order
+        original_order, example_ids, predictions, answers, contexts, questions = tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, questions)))))
+
     if prediction_file_name is not None:
-        prediction_file.close()
+        with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
+            for i in range(len(example_ids)):
+                prediction_file.write(example_ids[i] + '\t' + '\t'.join(predictions[i]) + '\n') # write all outputs in the prediction file, separated by \t
     
     if output_predictions_only:
         return predictions

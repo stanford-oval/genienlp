@@ -582,7 +582,7 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
-                     append_question_to_context_too=False, override_question=None, override_context=None):
+                     append_question_to_context_too=False, override_question=None, override_context=None, return_original_order=False):
     
     all_features = NumericalizedExamples.from_examples(dataset, numericalizer, device=device,
                                   paired=paired and train, max_pairs=max_pairs, groups=dataset.groups,
@@ -598,11 +598,15 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                             decoder_vocab=all_features.decoder_vocab, device=device, padding_function=numericalizer.pad))
     
     del all_features
-    sampler = LengthSortedIterator(all_f, batch_size=batch_size, sort=train, shuffle_and_repeat=train, sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
+    sampler = LengthSortedIterator(all_f, batch_size=batch_size, sort=True, shuffle_and_repeat=train, sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
     # get the sorted data_source
     all_f = sampler.data_source
+    data_loader = torch.utils.data.DataLoader(all_f, batch_sampler=sampler, collate_fn=NumericalizedExamples.collate_batches, num_workers=0)
     
-    return torch.utils.data.DataLoader(all_f, batch_sampler=sampler, collate_fn=NumericalizedExamples.collate_batches, num_workers=0)
+    if return_original_order:
+        return data_loader, sampler.original_order
+    else:
+        return data_loader
 
 
 def pad(x, new_channel, dim, val=None):
