@@ -34,6 +34,7 @@ from collections import OrderedDict
 
 from .metrics import compute_metrics
 from .util import multiwoz_specific_postprocess
+from .data_utils.progbar import progress_bar
 
 
 def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False):
@@ -48,7 +49,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
     questions = []
     if prediction_file_name is not None:
         prediction_file = open(prediction_file_name, 'w' + ('' if args.overwrite else 'x'))
-    for batch in data_iterator:
+    for batch in progress_bar(data_iterator, desc="Batches", disable=(len(data_iterator)==1)):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
         for hyperparameter_idx in range(len(args.temperature)):
