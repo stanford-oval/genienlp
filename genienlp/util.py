@@ -146,39 +146,90 @@ def multiwoz_specific_preprocess(thingtalk: str):
 
 def multiwoz_specific_postprocess(thingtalk: str):
     thingtalk = thingtalk.strip()
+
+    # replace string in quotes so that they don't accidentally change
     thingtalk, quote_values = remove_thingtalk_quotes(thingtalk)
     if quote_values is None:
         # The ThingTalk is not syntactically correct
         quote_values = []
     thingtalk = ' ' + thingtalk + ' '
-    for a, b in [('price range', 'price_range'), ('entrance fee', 'entrance_fee'), ('action question', 'action_question'), \
-                 ('reference number', 'reference_number'), ('arrive by', 'arrive_by'), ('sys learn more', 'sys_learn_more'), ('learn more', 'learn_more'),\
-                 ('sys recommend one', 'sys_recommend_one'), ('sys execute', 'sys_execute'), ('ask recommend', 'ask_recommend'), \
-                 ('ask recommend', 'ask_recommend'), ('in array~', 'in_array~'), ('guest house', 'guest_house'), \
-                 ('book people', 'book_people'), ('book stay', 'book_stay'), ('make booking', 'make_booking'), ('book day', 'book_day'), ('book time', 'book_time'), \
-                 ('make reservation', 'make_reservation'), ('leave at', 'leave_at')] +\
-                [('STRING '+str(i), 'QUOTED_STRING_'+str(i)) for i in range(0, 10)] +\
-                [('TIME '+str(i), 'TIME_'+str(i)) for i in range(0, 10)] +\
-                [('NUMBER '+str(i), 'NUMBER_'+str(i)) for i in range(0, 10)] +\
-                [(d+':'+d+' '+str(i), 'GENERIC_ENTITY_uk.ac.cam.multiwoz.'+d+':'+d+'_'+str(i)) for i in range(0, 10) for d in multiwoz_domain_names] +\
-                [(d+':'+d, '^^uk.ac.cam.multiwoz.'+d+':'+d) for d in multiwoz_domain_names] +\
-                [('type == hotel', 'type == enum:hotel')]:
-        thingtalk = thingtalk.replace(' '+a+' ', ' '+b+' ')
-    for a in ['execute', 'sys_execute', 'cancel', 'end', 'invalid', 'greet', 'goodbye', 'success', 'ask_recommend', 'action_question', 'insist', 'learn_more', 'sys_learn_more', 'sys_generic_search_question', 'sys_recommend_one', 'sys_recommend_two', 'sys_recommend_three',  'sys_anything_else', 'sys_generic_search_question', 'sys_empty_search_question', 'sys_action_success', 'sys_empty_search']:
-        thingtalk = thingtalk.replace(' '+a+' ', ' $dialogue @org.thingpedia.dialogue.transaction.'+a+' ')
-    for a, b in [(d+' '+action, d+'.'+action) for d in multiwoz_domain_names for action in multiwoz_action_names]:
-        thingtalk = thingtalk.replace(' '+a+' ', ' '+b+' ')
-    for a in [d+'.'+d for d in multiwoz_domain_names] + [d+'.'+action for d in multiwoz_domain_names for action in multiwoz_action_names]:
-        thingtalk = thingtalk.replace(' '+a+' ', ' @uk.ac.cam.multiwoz.'+a+' ')
-    for a in ['centre', 'west', 'east', 'north', 'south', 'guest_house', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'expensive', 'cheap', 'moderate', 'free']:
-        thingtalk = thingtalk.replace(' '+a+' ', ' enum:'+a+' ')
-    for a in ['area', 'price_range', 'address', 'parking', 'internet', 'type', 'postcode', 'entrance_fee', \
-            'phone', 'id', 'stars', 'book_day', 'book_people', 'book_stay', 'hotel', 'reference_number', \
-            'book_time', 'food', 'restaurant', 'leave_at', 'destination', 'departure', 'arrive_by', 'car', 'day', 'train', 'price', 'duration', 'openhours']:
-        thingtalk = thingtalk.replace(' '+a+' ', ' param:'+a+' ')
 
+    for a, b in [
+        # recover parameter names that have underscore
+        ('price range', 'price_range'),
+        ('entrance fee', 'entrance_fee'),
+        ('reference number', 'reference_number'),
+        ('contact number', 'contact_number'),
+        ('arrive by', 'arrive_by'),
+        ('book day', 'book_day'),
+        ('book stay', 'book_stay'),
+        ('book people', 'book_people'),
+        ('book time', 'book_time'),
+        ('leave at', 'leave_at'),
+
+        # recover enums that have underscore
+        ('guest house', 'guest_house'),
+
+        # recover system acts with underscore
+        ('sys learn more', 'sys_learn_more'),
+        ('sys propose refined query', 'sys_propose_refined_query'),
+        ('sys recommend one', 'sys_recommend_one'),
+        ('sys execute', 'sys_execute'),
+
+        # recover user acts with underscore
+        ('action question', 'action_question'),
+        ('ask recommendation', 'ask_recommendation'),
+        ('learn more', 'learn_more'),
+        ('ask recommend', 'ask_recommend'),
+        ('ask recommend', 'ask_recommend'),
+
+        # recover actions with underscore
+        ('make booking', 'make_booking'),
+        ('make reservation', 'make_reservation'),
+
+        ('in array~', 'in_array~'),
+        ('in array', 'in_array'),
+    ] +\
+        [('STRING '+str(i), 'QUOTED_STRING_'+str(i)) for i in range(0, 15)] +\
+        [('TIME '+str(i), 'TIME_'+str(i)) for i in range(0, 15)] +\
+        [('NUMBER '+str(i), 'NUMBER_'+str(i)) for i in range(0, 15)] +\
+        [(d + ':' + d + ' ' + str(i), 'GENERIC_ENTITY_uk.ac.cam.multiwoz.' + d + ':' + d + '_' + str(i)) for i in range(0, 15) for d in multiwoz_domain_names] +\
+            [(d + ':' + d, '^^uk.ac.cam.multiwoz.' + d + ':' + d) for d in multiwoz_domain_names]:
+        thingtalk = thingtalk.replace(' ' + a + ' ', ' ' + b + ' ')
+
+    # replace 'hotel' wherever it is an enum
+    for a, b in [('type == hotel', 'type == enum:hotel'), ('[ hotel', '[ enum:hotel')]:
+        thingtalk = thingtalk.replace(' ' + a + ' ', ' ' + b + ' ')
+
+    # Add the prefix for system and user acts
+    for a in ['execute',  'ask_recommendation', 'cancel', 'end', 'invalid', 'greet', 'goodbye', 'success', 'ask_recommend', 'action_question', 'insist', 'learn_more', 'sys_execute', 'sys_learn_more', 'sys_generic_search_question', 'sys_recommend_one', 'sys_recommend_two', 'sys_recommend_three',  'sys_anything_else', 'sys_generic_search_question', 'sys_empty_search_question', 'sys_action_success', 'sys_empty_search', 'sys_propose_refined_query']:
+        thingtalk = thingtalk.replace(
+            ' ' + a + ' ', ' $dialogue @org.thingpedia.dialogue.transaction.' + a + ' ')
+
+    # First, connect domain name and action name with a dot to get e.g. Hotel.Hotel and Hotel.make_booking
+    for a, b in [(d + ' ' + action, d + '.' + action) for d in multiwoz_domain_names for action in multiwoz_action_names]:
+        thingtalk = thingtalk.replace(' ' + a + ' ', ' ' + b + ' ')
+    # Second, add the prefix
+    for a in [d+'.'+d for d in multiwoz_domain_names] + [d+'.'+action for d in multiwoz_domain_names for action in multiwoz_action_names]:
+        thingtalk = thingtalk.replace(' ' + a + ' ', ' @uk.ac.cam.multiwoz.' + a + ' ')
+
+    # Prepend enum: to enums
+    for a in ['centre', 'west', 'east', 'north', 'south',
+              'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+              'expensive', 'cheap', 'moderate', 'free',
+              'guest_house']:
+        thingtalk = thingtalk.replace(' ' + a + ' ', ' enum:' + a + ' ')
+
+    # Prepend param: to parameter names. Note that any remaining 'hotel' is a parameter name
+    for a in ['area', 'price_range', 'address', 'parking', 'internet', 'type', 'postcode', 'entrance_fee',
+              'phone', 'id', 'stars', 'book_day', 'book_people', 'book_stay', 'hotel', 'reference_number',
+              'book_time', 'food', 'restaurant', 'leave_at', 'destination', 'departure', 'arrive_by', 'car',
+              'day', 'train', 'price', 'duration', 'openhours', 'contact_number']:
+        thingtalk = thingtalk.replace(' ' + a + ' ', ' param:' + a + ' ')
+
+    # put the strings in quotes back
     for v in quote_values:
-        thingtalk = thingtalk.replace('""', '" '+v+' "', 1)
+        thingtalk = thingtalk.replace('""', '" ' + v + ' "', 1)
     thingtalk = thingtalk.strip()
     return thingtalk
 
