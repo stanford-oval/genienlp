@@ -15,6 +15,8 @@ local_files
 local_scripts/*
 dataset/*
 generated/*
+results_temp
+bootleg_material
 
 .DS_Store
 .idea/
