@@ -50,7 +50,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
     contexts = []
     questions = []
     
-    for batch in progress_bar(data_iterator, desc="Batches", disable=(len(data_iterator)==1)):
+    for batch in data_iterator:
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
         for hyperparameter_idx in range(len(args.temperature)):
