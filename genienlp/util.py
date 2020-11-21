@@ -160,6 +160,7 @@ def multiwoz_specific_postprocess(thingtalk: str):
         # The ThingTalk is not syntactically correct
         quote_values = []
     thingtalk = ' ' + thingtalk + ' '
+    thingtalk = re.sub('(\S),', '\\1 ,', thingtalk)
 
     for a, b in [
         # recover parameter names that have underscore
