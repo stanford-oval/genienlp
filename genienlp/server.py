@@ -57,10 +57,10 @@ class Server:
 
         self._cached_tasks = dict()
 
-    def numericalize_example(self, ex):
-        self.model.add_new_vocab_from_data([[[ex]]])
+    def numericalize_examples(self, ex):
+        self.model.add_new_vocab_from_data([[ex]])
 
-        all_features = NumericalizedExamples.from_examples([ex], self.numericalizer, device=self.device,
+        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer, device=self.device,
                                    append_question_to_context_too=self.args.append_question_to_context_too,
                                    override_question=self.args.override_question,
                                    override_context=self.args.override_context)
@@ -85,22 +85,41 @@ class Server:
             task = list(get_tasks([task_name], self.args).values())[0]
             self._cached_tasks[task_name] = task
 
-        context = request['context']
-        if not context:
-            context = task.default_context
-        question = request['question']
-        if not question:
-            question = task.default_question
-        answer = ''
+        if 'instances' in request:
+            examples = []
+            # request['instances'] is an array of {context, question, answer, example_id}
+            for instance in request['instances']:
+                example_id, context, question, answer = instance.get('example_id', ''), instance['context'], instance['question'], instance.get('answer', '')
+                if not context:
+                    context = task.default_context
+                if not question:
+                    question = task.default_question
 
-        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize,
-                              lower=self.args.lower)
+                ex = Example.from_raw(str(example_id), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
+                examples.append(ex)
 
-        batch = self.numericalize_example(ex)
-        predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
+            batch = self.numericalize_examples(examples)
+            # it is a single batch, so wrap it in []
+            predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
 
-        response = json.dumps(dict(id=request['id'], answer=predictions[0][0]))
-        return response + '\n'
+            response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0] } for p in predictions] })
+            return response + '\n'
+        else:
+            context = request['context']
+            if not context:
+                context = task.default_context
+            question = request['question']
+            if not question:
+                question = task.default_question
+            answer = ''
+
+            ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
+
+            batch = self.numericalize_examples([ex])
+            predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
+
+            response = json.dumps(dict(id=request['id'], answer=predictions[0][0]))
+            return response + '\n'
 
     async def handle_client(self, client_reader, client_writer):
         try:
