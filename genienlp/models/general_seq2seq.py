@@ -34,14 +34,15 @@ import os
 
 from .coatt_encoder import CoattentionEncoder
 from ..data_utils.embeddings import load_embeddings
-from ..data_utils.numericalizer.transformer import BartNumericalizer, MT5Numericalizer
+from ..data_utils.numericalizer.transformer import BartNumericalizer, MBartNumericalizer, MT5Numericalizer
 from ..data_utils.example import Example
 from .lstm_encoder import BiLSTMEncoder
 from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
 from .common import mask_tokens
-from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration, MT5ForConditionalGeneration
+from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration, MBartForConditionalGeneration, \
+    MT5ForConditionalGeneration
 
 ENCODERS = {
     'MQANEncoder': MQANEncoder,
@@ -385,6 +386,18 @@ class Bart(Transformer2TransformerModel):
         self.base_model = BartForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder,
                                                                        cache_dir=self.args.embeddings)
         self.numericalizer = BartNumericalizer(self.args.seq2seq_decoder)
+
+
+class MBart(Transformer2TransformerModel):
+    
+    def __init__(self, config=None, *inputs, **kwargs):
+        super().__init__()
+        assert 'args' in kwargs
+        self.args = kwargs['args']
+        self.base_model = MBartForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder,
+                                                                        cache_dir=self.args.embeddings)
+        self.numericalizer = MBartNumericalizer(self.args.seq2seq_decoder)
+
 
 class MT5(Transformer2TransformerModel):
 

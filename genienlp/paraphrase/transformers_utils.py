@@ -37,6 +37,14 @@ MBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "sshleifer/tiny-mbart": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/tiny-mbart/config.json"
 }
 
+MT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {'google/mt5-{}'.format(v): "https://s3.amazonaws.com/models.huggingface.co/bert/google/mt5-{}/config.json".format(v)
+                                     for v in ['small', 'base', 'large', 'xl', 'xxl']}
+
+
+BART_MODEL_LIST = list(BART_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
+MBART_MODEL_LIST = list(MBART_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
+MT5_MODEL_LIST = list(MT5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
+
 
 MARIAN_SUPPORTED_LANGUAGES = ['https://huggingface.co/Helsinki-NLP']
 
