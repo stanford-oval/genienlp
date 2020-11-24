@@ -44,6 +44,9 @@ from .pretrained_lstm_lm import PretrainedLTSMLM
 
 logger = logging.getLogger(__name__)
 
+XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST.extend(['sentence-transformers/xlm-r-100langs-bert-base-nli-mean-tokens',
+                                                 'sentence-transformers/xlm-r-100langs-bert-base-nli-stsb-mean-tokens'])
+
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP = dict()
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: BertNumericalizer for embedding in BERT_PRETRAINED_MODEL_ARCHIVE_LIST})
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: XLMRobertaNumericalizer for embedding in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST})
