@@ -1,25 +1,17 @@
 import torch
-import argparse
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import paired_cosine_distances
 
 def parse_argv(parser):
-    
-    # parser = argparse.ArgumentParser()
     
     parser.add_argument('--input_file', type=str)
     parser.add_argument('--output_file', type=str)
     parser.add_argument('--batch_size', type=int, default=250)
     parser.add_argument('--subsample', type=int, default=-1)
     parser.add_argument('--device', type=str, default='cuda')
-    
-    args = parser.parse_args()
-    
-    # return args
+
 
 def main(args):
-    
-    # args = parse_argv()
     
     model = SentenceTransformer("xlm-r-distilroberta-base-paraphrase-v1")
     

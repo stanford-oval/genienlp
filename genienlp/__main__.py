@@ -52,6 +52,7 @@ subcommands = {
     'split-dataset': ('Split a dataset file into two files', split_dataset.parse_argv, split_dataset.main)
     
     'filter': ('Filter paraphrases using semantic similarity', calculate_sts.parse_argv, calculate_sts.main)
+    'calculate-paraphrase-sts': ('Calculate semantic similarity scores between a dataset and its paraphrase', calculate_sts.parse_argv, calculate_sts.main),
 }
 
 
