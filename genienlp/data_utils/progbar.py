@@ -57,6 +57,8 @@ class LogFriendlyProgressBar:
             self._progress = progress
         return value
 
+    def close(self):
+        return
 
 def progress_bar(iterable, desc=None, total=None, disable=False):
     if disable:
