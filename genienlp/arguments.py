@@ -36,6 +36,8 @@ import subprocess
 
 from .tasks.registry import get_tasks
 from .util import have_multilingual
+from transformers.modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_LIST
+BART_MODEL_LIST = BART_PRETRAINED_MODEL_ARCHIVE_LIST + ['sshleifer/bart-tiny-random']
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +144,7 @@ def parse_argv(parser):
     parser.add_argument('--model', type=str, choices=['Seq2Seq', 'Bart'], default='Seq2Seq', help='which model to import')
     parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity', 'Coattention'],
                         default='MQANEncoder', help='which encoder to use for the Seq2Seq model')
-    parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder', 'facebook/bart-large'], default='MQANDecoder',
+    parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'] + BART_MODEL_LIST, default='MQANDecoder',
                         help='which decoder to use for the Seq2Seq model')
     parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers')
