@@ -51,6 +51,7 @@ from transformers import BartForConditionalGeneration
 from .transformers_utils import MarianMTModel, T5ForConditionalGeneration, BartForConditionalGeneration as MBartForConditionalGeneration
 from .transformers_utils import BartTokenizer, MBartTokenizer
 
+
 from transformers import PretrainedConfig
 from ..util import set_seed, combine_files_on_disk, split_file_on_disk, get_part_path
 from .GPT2Seq2Seq import GPT2Seq2Seq
@@ -217,6 +218,7 @@ def run_multi_process_generation(args):
     else:
         raise ValueError('Model should be either GPT2, BART, MBART, or Marian')
     
+    # check arguments validity
     check_args(args)
 
     if sum([args.mask_tokens, args.delete_tokens, args.infill_text, args.permute_sentences, args.rotate_sentence]) >= 2:

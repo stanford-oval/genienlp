@@ -8,6 +8,7 @@ import shutil
 import numpy as np
 
 from .transformers_utils import SPIECE_UNDERLINE, MARIAN_GROUP_MEMBERS
+from .transformers_utils import FAIRSEQ_LANGUAGE_CODES
 
 from genienlp.metrics import computeBLEU
 
@@ -77,6 +78,16 @@ def check_args(args):
     if args.model_type == 'mbart' and not (args.tgt_lang and args.src_lang):
         raise ValueError('Source and Target language should be provided when using mBART cc25 model')
 
+    # adjust language ids for mbart models
+    if args.model_type == 'mbart':
+        if args.src_lang not in FAIRSEQ_LANGUAGE_CODES:
+            for lang in FAIRSEQ_LANGUAGE_CODES:
+                if lang.startswith(args.src_lang):
+                    args.src_lang = lang
+        if args.tgt_lang not in FAIRSEQ_LANGUAGE_CODES:
+            for lang in FAIRSEQ_LANGUAGE_CODES:
+                if lang.startswith(args.tgt_lang):
+                    args.tgt_lang = lang
 
 def sort_checkpoints(output_dir):
     return list(sorted(glob.glob(os.path.join(output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
