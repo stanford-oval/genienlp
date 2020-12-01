@@ -53,7 +53,6 @@ from .validate import generate_with_model, calculate_and_reduce_metrics
 
 logger = logging.getLogger(__name__)
 
-
 def get_all_splits(args):
     splits = []
     if len(args.pred_languages) == 1 and len(args.tasks) > 1:

@@ -229,10 +229,9 @@ def split_folder_on_disk(folder_path, num_splits):
     return new_folder_paths
 
 
-def split_file_on_disk(file_path, num_splits, output_paths=None):
+def split_file_on_disk(file_path, num_splits, output_paths=None, delete=False):
     """
     """
-    number_of_lines = get_number_of_lines(file_path)
 
     all_output_paths = []
     all_output_files = []
@@ -253,6 +252,9 @@ def split_file_on_disk(file_path, num_splits, output_paths=None):
 
     for f in all_output_files:
         f.close()
+        
+    if delete:
+        os.remove(file_path)
 
     return all_output_paths
 
