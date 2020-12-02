@@ -29,7 +29,6 @@
 
 from typing import List, NamedTuple
 import torch
-from torch import tensor
 
 
 class SequentialField(NamedTuple):

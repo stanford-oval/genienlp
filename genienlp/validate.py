@@ -34,7 +34,6 @@ from collections import OrderedDict
 
 from .metrics import compute_metrics
 from .util import multiwoz_specific_postprocess
-from .data_utils.progbar import progress_bar
 
 
 def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False, original_order=None):

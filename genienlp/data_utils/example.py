@@ -33,7 +33,6 @@ import random
 import torch
 
 from .numericalizer.sequential_field import SequentialField
-from torch.nn.utils.rnn import pad_sequence
 
 
 class Example(NamedTuple):
