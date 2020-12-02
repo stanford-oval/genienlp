@@ -399,6 +399,9 @@ class CombinedEmbedding(nn.Module):
         self.pretrained_embeddings.requires_grad_(trainable)
 
     def resize_embedding(self, new_vocab_size):
+        if self.trained_embeddings is None:
+            # we are not training embeddings at all
+            return
         dimensions = self.trained_embeddings.weight.shape
         if new_vocab_size == dimensions[0]:
             return
