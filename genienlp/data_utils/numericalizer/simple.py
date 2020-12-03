@@ -119,7 +119,7 @@ class SimpleNumericalizer(object):
         return list(map(lambda x: 1 if x in special_tokens_tuple else 0, tensor))
 
 
-    def encode_single(self, minibatch, decoder_vocab, device=None, max_length=-1):
+    def encode_single(self, minibatch, decoder_vocab, max_length=-1):
         assert isinstance(minibatch, list)
         
         if max_length > -1:
@@ -146,7 +146,7 @@ class SimpleNumericalizer(object):
         return SequentialField(length=lengths, value=numerical, limited=decoder_numerical)
 
 
-    def encode_pair(self, minibatch, decoder_vocab, device=None):
+    def encode_pair(self, minibatch, decoder_vocab):
         assert isinstance(minibatch, list)
         if self.fix_length is None:
             max_len = max(len(x[0][0]) + len(x[1][0]) for x in minibatch)

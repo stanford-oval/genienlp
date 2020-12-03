@@ -142,9 +142,9 @@ class NumericalizedExamples(NamedTuple):
                              for ex_a, ex_b in example_pairs]
 
             all_example_ids_pair = example_ids
-            all_context_inputs_pair = numericalizer.encode_pair(context_inputs, decoder_vocab, device=device)
-            all_question_inputs_pair = numericalizer.encode_pair(question_inputs, decoder_vocab, device=device)
-            all_answer_inputs_pair = numericalizer.encode_pair(answer_inputs, decoder_vocab, device=device)
+            all_context_inputs_pair = numericalizer.encode_pair(context_inputs, decoder_vocab)
+            all_question_inputs_pair = numericalizer.encode_pair(question_inputs, decoder_vocab)
+            all_answer_inputs_pair = numericalizer.encode_pair(answer_inputs, decoder_vocab)
 
             max_context_len = max(all_context_inputs_pair.length)
             max_question_len = max(all_question_inputs_pair.length)
@@ -168,11 +168,11 @@ class NumericalizedExamples(NamedTuple):
         
         all_example_ids_single = example_ids
         all_context_inputs_single = numericalizer.encode_single(context_inputs, decoder_vocab,
-                                                                device=device, max_length=max_context_len-2)
+                                                                max_length=max_context_len-2)
         all_question_inputs_single = numericalizer.encode_single(question_inputs, decoder_vocab,
-                                                                 device=device, max_length=max_question_len-2)
+                                                                 max_length=max_question_len-2)
         all_answer_inputs_single = numericalizer.encode_single(answer_inputs, decoder_vocab,
-                                                               device=device, max_length=max_answer_len-2)
+                                                               max_length=max_answer_len-2)
     
         if paired:
             all_example_ids = all_example_ids_single + all_example_ids_pair

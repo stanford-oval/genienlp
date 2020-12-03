@@ -115,7 +115,7 @@ class TransformerNumericalizer(object):
         self.decoder_vocab = DecoderVocabulary(self._decoder_words, self._tokenizer,
                                                pad_token=self.pad_token, eos_token=self.eos_token)
 
-    def encode_single(self, minibatch, decoder_vocab, device=None, max_length=-1):
+    def encode_single(self, minibatch, decoder_vocab, max_length=-1):
         assert isinstance(minibatch, list)
 
         # apply word-piece tokenization to everything first
@@ -202,7 +202,7 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
 
         self._init()
 
-    def encode_pair(self, minibatch, decoder_vocab, device=None):
+    def encode_pair(self, minibatch, decoder_vocab):
         # apply word-piece tokenization to everything first
         wp_tokenized_a = []
         wp_tokenized_b = []
@@ -331,7 +331,7 @@ class BertNumericalizer(TransformerNumericalizer):
 
         self._init()
 
-    def encode_pair(self, minibatch, decoder_vocab, device=None):
+    def encode_pair(self, minibatch, decoder_vocab):
         # apply word-piece tokenization to everything first
         wp_tokenized_a = []
         wp_tokenized_b = []
@@ -412,7 +412,7 @@ class BartNumericalizer(TransformerNumericalizer):
     def build_vocab(self, vocab_fields, vocab_sets):
         raise NotImplementedError
 
-    def encode_single(self, minibatch, decoder_vocab, device=None, max_length=-1):
+    def encode_single(self, minibatch, decoder_vocab, max_length=-1):
         """
         minibatch: this method ignores the `mask` component of minibatch
         """
@@ -431,7 +431,7 @@ class BartNumericalizer(TransformerNumericalizer):
 
         return SequentialField(length=length, value=numerical, limited=decoder_numerical)
 
-    def encode_pair(self, minibatch, decoder_vocab, device=None):
+    def encode_pair(self, minibatch, decoder_vocab):
         # TODO
         raise NotImplementedError
 
