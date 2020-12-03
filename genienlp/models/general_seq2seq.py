@@ -138,9 +138,6 @@ class Seq2Seq(PreTrainedModel):
         new_words = []
         for task_splits in splits:
             for split in task_splits:
-                if isinstance(split, Example):
-                    # single Example
-                    split = [split]
                 new_words += self.numericalizer.grow_vocab(split)
         if self.numericalizer.num_tokens > old_num_tokens:
             logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
