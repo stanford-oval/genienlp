@@ -38,6 +38,7 @@ from ..generic_dataset import CQA, context_question_len, token_batch_fn, default
 from ...data_utils.example import Example
 from ...data_utils.progbar import progress_bar
 from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
+from ...util import multiwoz_specific_preprocess, multiwoz_specific_postprocess
 
 from ..base_dataset import Split
 
@@ -116,6 +117,7 @@ class BaseAlmondTask(BaseTask):
     def __init__(self, name, args):
         super().__init__(name, args)
         self._preprocess_context = args.almond_preprocess_context
+        self._dataset_specific_preprocess = args.almond_dataset_specific_preprocess
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
 
     @property
@@ -154,24 +156,29 @@ class BaseAlmondTask(BaseTask):
         
         sentence = self._detokenize_cjk_chars(sentence)
         
-        tokens = [t for t in sentence.split(' ') if len(t) > 0]
-        if self._preprocess_context and field_name in ('context'):
-            preprocessed_context = []
-            for token in sentence.split(' '):
-                if len(token) == 0:
-                    continue
-                if token.startswith('@') and '.' in token:
-                    word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
-                    preprocessed_context += word.split('_')
-                elif token.startswith('param:'):
-                    word = token[len('param:'):]
-                    preprocessed_context += word.split('_')
-                elif token.startswith('enum:'):
-                    word = token[len('enum:'):]
-                    preprocessed_context += word.split('_')
-                else:
-                    preprocessed_context.append(token)
-            tokens = preprocessed_context
+        if self._dataset_specific_preprocess == 'multiwoz' and self._is_program_field(field_name):
+            sentence = multiwoz_specific_preprocess(sentence)
+            tokens = [t for t in sentence.split(' ') if len(t) > 0]
+        else:
+            # apply the default preprocessing of context
+            tokens = [t for t in sentence.split(' ') if len(t) > 0]
+            if self._preprocess_context and field_name in ('context'):
+                preprocessed_context = []
+                for token in sentence.split(' '):
+                    if len(token) == 0:
+                        continue
+                    if token.startswith('@') and '.' in token:
+                        word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
+                        preprocessed_context += word.split('_')
+                    elif token.startswith('param:'):
+                        word = token[len('param:'):]
+                        preprocessed_context += word.split('_')
+                    elif token.startswith('enum:'):
+                        word = token[len('enum:'):]
+                        preprocessed_context += word.split('_')
+                    else:
+                        preprocessed_context.append(token)
+                tokens = preprocessed_context
 
         if self._is_program_field(field_name):
             mask = []

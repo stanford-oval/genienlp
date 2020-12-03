@@ -100,16 +100,16 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
             for index, set_ in enumerate(val_set):
-                loader = make_data_loader(set_, numericalizer, bs, device, train=False,
+                loader, original_order = make_data_loader(set_, numericalizer, bs, device, train=False,
                                           append_question_to_context_too=args.append_question_to_context_too,
-                                          override_question=args.override_question, override_context=args.override_context)
-                task_iter.append((task, task_languages[index], loader))
+                                          override_question=args.override_question, override_context=args.override_context, return_original_order=True)
+                task_iter.append((task, task_languages[index], loader, original_order))
         # single language task or no separate eval
         else:
-           loader = make_data_loader(val_set[0], numericalizer, bs, device, train=False,
+           loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device, train=False,
                                      append_question_to_context_too=args.append_question_to_context_too,
-                                     override_question=args.override_question, override_context=args.override_context)
-           task_iter.append((task, task_languages, loader))
+                                     override_question=args.override_question, override_context=args.override_context, return_original_order=True)
+           task_iter.append((task, task_languages, loader, original_order))
 
         iters.extend(task_iter)
         task_index += 1
@@ -126,6 +126,8 @@ def run(args, device):
 
     val_sets = get_all_splits(args)
     model.add_new_vocab_from_data(val_sets)
+    if args.half_precision:
+        model.half()
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
 
@@ -140,7 +142,7 @@ def run(args, device):
     os.makedirs(eval_dir, exist_ok=True)
 
     with torch.no_grad():
-        for task, language, it in iters:
+        for task, language, it, original_order in iters:
             logger.info(task.name)
             # single language task
             if language is None:
@@ -161,7 +163,7 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            _, predictions, answers, contexts, _ = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name)
+            _, predictions, answers, contexts, _ = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name, original_order=original_order)
                 
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
@@ -243,6 +245,7 @@ def parse_argv(parser):
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
+    parser.add_argument("--half_precision", action='store_true', help='If True, will use half precision on all tensors and calculations.')
 
 
 def adjust_multilingual_eval(args):

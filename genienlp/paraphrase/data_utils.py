@@ -7,7 +7,7 @@ import logging
 import numpy as np
 
 from ..data_utils.progbar import progress_bar
-from ..util import detokenize, tokenize, lower_case, SpecialTokenMap
+from ..util import detokenize, tokenize, lower_case, SpecialTokenMap, remove_thingtalk_quotes
 
 from genienlp.util import get_number_of_lines
 from ..tasks.almond.utils import is_entity, quoted_pattern_maybe_space, device_pattern
@@ -81,23 +81,6 @@ def mask_tokens(inputs, labels, tokenizer, mlm_probability, mlm_ignore_index):
     # The rest of the time (10% of the time) we keep the masked input tokens unchanged
     return inputs, labels
 
-
-def remove_thingtalk_quotes(thingtalk):
-    quote_values = []
-    while True:
-        # print('before: ', thingtalk)
-        l1 = thingtalk.find('"')
-        if l1 < 0:
-            break
-        l2 = thingtalk.find('"', l1+1)
-        if l2 < 0:
-            # ThingTalk code is not syntactic
-            return thingtalk, None
-        quote_values.append(thingtalk[l1+1: l2].strip())
-        thingtalk = thingtalk[:l1] + '<temp>' + thingtalk[l2+1:]
-        # print('after: ', thingtalk)
-    thingtalk = thingtalk.replace('<temp>', '""')
-    return thingtalk, quote_values
 
 
 def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=None):

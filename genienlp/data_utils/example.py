@@ -31,9 +31,9 @@ from typing import NamedTuple, List
 import itertools
 import random
 import torch
+from typing import Callable
 
 from .numericalizer.sequential_field import SequentialField
-from torch.nn.utils.rnn import pad_sequence
 
 
 class Example(NamedTuple):
@@ -78,6 +78,8 @@ class NumericalizedExamples(NamedTuple):
     question: SequentialField
     answer: SequentialField
     decoder_vocab: object
+    device: torch.device
+    padding_function: Callable
     
     @staticmethod
     def from_examples(examples, numericalizer, device=None, paired=False, max_pairs=None, groups=None,
@@ -140,13 +142,13 @@ class NumericalizedExamples(NamedTuple):
                              for ex_a, ex_b in example_pairs]
 
             all_example_ids_pair = example_ids
-            all_context_inputs_pair = numericalizer.encode_pair(context_inputs, decoder_vocab, device=device)
-            all_question_inputs_pair = numericalizer.encode_pair(question_inputs, decoder_vocab, device=device)
-            all_answer_inputs_pair = numericalizer.encode_pair(answer_inputs, decoder_vocab, device=device)
+            all_context_inputs_pair = numericalizer.encode_pair(context_inputs, decoder_vocab)
+            all_question_inputs_pair = numericalizer.encode_pair(question_inputs, decoder_vocab)
+            all_answer_inputs_pair = numericalizer.encode_pair(answer_inputs, decoder_vocab)
 
-            max_context_len = all_context_inputs_pair.value.size(1)
-            max_question_len = all_question_inputs_pair.value.size(1)
-            max_answer_len = all_answer_inputs_pair.value.size(1)
+            max_context_len = max(all_context_inputs_pair.length)
+            max_question_len = max(all_question_inputs_pair.length)
+            max_answer_len = max(all_answer_inputs_pair.length)
 
         # process single examples
         example_ids = [ex.example_id for ex in examples]
@@ -166,17 +168,17 @@ class NumericalizedExamples(NamedTuple):
         
         all_example_ids_single = example_ids
         all_context_inputs_single = numericalizer.encode_single(context_inputs, decoder_vocab,
-                                                                device=device, max_length=max_context_len-2)
+                                                                max_length=max_context_len-2)
         all_question_inputs_single = numericalizer.encode_single(question_inputs, decoder_vocab,
-                                                                 device=device, max_length=max_question_len-2)
+                                                                 max_length=max_question_len-2)
         all_answer_inputs_single = numericalizer.encode_single(answer_inputs, decoder_vocab,
-                                                               device=device, max_length=max_answer_len-2)
+                                                               max_length=max_answer_len-2)
     
         if paired:
             all_example_ids = all_example_ids_single + all_example_ids_pair
-            all_context_inputs = SequentialField.from_tensors([all_context_inputs_single, all_context_inputs_pair])
-            all_question_inputs = SequentialField.from_tensors([all_question_inputs_single, all_question_inputs_pair])
-            all_answer_inputs = SequentialField.from_tensors([all_answer_inputs_single, all_answer_inputs_pair])
+            all_context_inputs = SequentialField.merge([all_context_inputs_single, all_context_inputs_pair])
+            all_question_inputs = SequentialField.merge([all_question_inputs_single, all_question_inputs_pair])
+            all_answer_inputs = SequentialField.merge([all_answer_inputs_single, all_answer_inputs_pair])
         else:
             all_example_ids = all_example_ids_single
             all_context_inputs = all_context_inputs_single
@@ -186,7 +188,8 @@ class NumericalizedExamples(NamedTuple):
                      all_context_inputs,
                      all_question_inputs,
                      all_answer_inputs,
-                     decoder_vocab)
+                     decoder_vocab,
+                     device, padding_function=numericalizer.pad)
 
     @staticmethod
     def collate_batches(batches):
@@ -195,40 +198,33 @@ class NumericalizedExamples(NamedTuple):
         question_values, question_lengths, question_limiteds = [], [], []
         answer_values, answer_lengths, answer_limiteds = [], [], []
         decoder_vocab = None
+        
 
-        max_context_length = 0
-        max_question_length = 0
-        max_answer_length = 0
-        min_context_length = 1000000
         for batch in batches:
             example_id.append(batch.example_id[0])
-            context_values.append(batch.context.value)
-            context_lengths.append(batch.context.length)
-            context_limiteds.append(batch.context.limited)
-            max_context_length = max(max_context_length, batch.context.length)
-            min_context_length = min(min_context_length, batch.context.length)
+            context_values.append(torch.tensor(batch.context.value, device=batch.device))
+            context_lengths.append(torch.tensor(batch.context.length, device=batch.device))
+            context_limiteds.append(torch.tensor(batch.context.limited, device=batch.device))
 
-            question_values.append(batch.question.value)
-            question_lengths.append(batch.question.length)
-            question_limiteds.append(batch.question.limited)
-            max_question_length = max(max_question_length, batch.question.length)
+            question_values.append(torch.tensor(batch.question.value, device=batch.device))
+            question_lengths.append(torch.tensor(batch.question.length, device=batch.device))
+            question_limiteds.append(torch.tensor(batch.question.limited, device=batch.device))
 
-            answer_values.append(batch.answer.value)
-            answer_lengths.append(batch.answer.length)
-            answer_limiteds.append(batch.answer.limited)
-            max_answer_length = max(max_answer_length, batch.answer.length)
+            answer_values.append(torch.tensor(batch.answer.value, device=batch.device))
+            answer_lengths.append(torch.tensor(batch.answer.length, device=batch.device))
+            answer_limiteds.append(torch.tensor(batch.answer.limited, device=batch.device))
 
             decoder_vocab = batch.decoder_vocab
+            padding_function = batch.padding_function
 
-
-        context_values = pad_sequence(context_values, padding_value=0, batch_first=True)
-        context_limiteds = pad_sequence(context_limiteds, padding_value=0, batch_first=True)
+        context_values = padding_function(context_values)
+        context_limiteds = padding_function(context_limiteds)
         context_lengths = torch.stack(context_lengths, dim=0)
-        question_values = pad_sequence(question_values, padding_value=0, batch_first=True)
-        question_limiteds = pad_sequence(question_limiteds, padding_value=0, batch_first=True)
+        question_values = padding_function(question_values)
+        question_limiteds = padding_function(question_limiteds)
         question_lengths = torch.stack(question_lengths, dim=0)
-        answer_values = pad_sequence(answer_values, padding_value=0, batch_first=True)
-        answer_limiteds = pad_sequence(answer_limiteds, padding_value=0, batch_first=True)
+        answer_values = padding_function(answer_values)
+        answer_limiteds = padding_function(answer_limiteds)
         answer_lengths = torch.stack(answer_lengths, dim=0)
 
         context = SequentialField(value=context_values,
@@ -244,4 +240,4 @@ class NumericalizedExamples(NamedTuple):
                                  limited=answer_limiteds)
 
 
-        return NumericalizedExamples(example_id=example_id, context=context, question=question, answer=answer, decoder_vocab=decoder_vocab)
+        return NumericalizedExamples(example_id=example_id, context=context, question=question, answer=answer, decoder_vocab=decoder_vocab, device=None, padding_function=padding_function)

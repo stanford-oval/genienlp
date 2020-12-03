@@ -194,6 +194,8 @@ def parse_argv(parser):
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--almond_preprocess_context', action='store_true', default=False, help='')
+    parser.add_argument('--almond_dataset_specific_preprocess', type=str, default='none', choices=['none', 'multiwoz'],
+                        help='Applies dataset-sepcific preprocessing to context and answer fields, and postprocesses the model outputs back to the original form.')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
 
@@ -284,11 +286,13 @@ def post_parse(args):
             args.train_batch_tokens = len(args.train_task_names) * args.train_batch_tokens
     if args.sentence_batching:
         if args.paired:
+            # TODO unify train_batch_tokens and train_batch_size
+            train_batch_size = int(args.train_batch_tokens[0])
             num_train_langs = len(args.train_languages.split('+'))
-            new_batch_size = int(args.train_batch_size * \
-                                (1 + min(num_train_langs**2 - num_train_langs, args.max_pairs) / num_train_langs))
+            new_batch_size = int(train_batch_size *
+                                 (1 + min(num_train_langs**2 - num_train_langs, args.max_pairs) / num_train_langs))
             logger.warning('Using paired example training will increase effective batch size from {} to {}'.
-                            format(args.train_batch_size, new_batch_size))
+                            format(train_batch_size, new_batch_size))
         
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size

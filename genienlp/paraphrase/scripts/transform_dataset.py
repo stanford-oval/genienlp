@@ -1,8 +1,7 @@
 import csv
 import re
 
-from ...util import tokenize, lower_case
-from ..data_utils import remove_thingtalk_quotes
+from ...util import tokenize, lower_case, remove_thingtalk_quotes
 from ...data_utils.progbar import progress_bar
 
 def is_subset(set1, set2):
@@ -52,7 +51,7 @@ def parse_argv(parser):
                         help='Remove examples if the values inside quotations in ThingTalk have changed or special words like NUMBER_0 cannot be found in TT anymore.')
     parser.add_argument('--replace_with_gold', action='store_true', help='Instead of the original ThingTalk, output what the parser said is gold.')
 
-    parser.add_argument('--task', type=str, required=True, choices=['almond', 'almond_dialogue_nlu'],
+    parser.add_argument('--task', type=str, required=True, choices=['almond', 'almond_dialogue_nlu', 'almond_dialogue_nlu_agent'],
                         help='Specifies the meaning of columns in the input file and the ones that should go to the output')
 
     # parser.add_argument('--output_columns', type=int, nargs='+', default=None,
@@ -76,7 +75,7 @@ def main(args):
         args.no_duplication_columns = [1]
         args.input_columns = [1]
 
-    elif args.task == 'almond_dialogue_nlu':
+    elif args.task == 'almond_dialogue_nlu' or 'almond_dialogue_nlu_agent':
         args.id_column = 0
         # column 1 is ontext (ThingTalk)
         args.utterance_column = 2
