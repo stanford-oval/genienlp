@@ -146,9 +146,9 @@ class NumericalizedExamples(NamedTuple):
             all_question_inputs_pair = numericalizer.encode_pair(question_inputs, decoder_vocab, device=device)
             all_answer_inputs_pair = numericalizer.encode_pair(answer_inputs, decoder_vocab, device=device)
 
-            max_context_len = all_context_inputs_pair.value.size(1)
-            max_question_len = all_question_inputs_pair.value.size(1)
-            max_answer_len = all_answer_inputs_pair.value.size(1)
+            max_context_len = max(all_context_inputs_pair.length)
+            max_question_len = max(all_question_inputs_pair.length)
+            max_answer_len = max(all_answer_inputs_pair.length)
 
         # process single examples
         example_ids = [ex.example_id for ex in examples]
