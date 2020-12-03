@@ -220,9 +220,10 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
         numerical = []
         decoder_numerical = []
         for (wp_tokens_a, _), (wp_tokens_b, _) in minibatch:
+            # XLM-R uses two sep tokens
             example = [self.init_token] + \
                             list(wp_tokens_a[:max_len]) + \
-                            [self.sep_token] + \
+                            [self.sep_token] + [self.sep_token] + \
                             list(wp_tokens_b[:max_len]) + \
                             [self.eos_token]
 
