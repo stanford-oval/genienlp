@@ -158,33 +158,19 @@ class SimpleNumericalizer(object):
         numerical = []
         decoder_numerical = []
         for (tokens_a, _), (tokens_b, _)  in minibatch:
-            if self.pad_first:
-                padded_example = [self.pad_token] * max(0, 2 * max_len - len(tokens_a) - len(tokens_b)) + \
-                                 [self.init_token] + \
-                                 list(tokens_a[:max_len]) + \
-                                 [self.sep_token] + \
-                                 list(tokens_b[:max_len]) + \
-                                 [self.eos_token]
-                    
-            else:
-                padded_example = [self.init_token] + \
-                                 list(tokens_a[:max_len]) + \
-                                 [self.sep_token] + \
-                                 list(tokens_b[:max_len]) + \
-                                 [self.eos_token] + \
-                                 [self.pad_token] * max(0, 2 * max_len - len(tokens_a) - len(tokens_b))
+            example = [self.init_token] + \
+                                list(tokens_a[:max_len]) + \
+                                [self.sep_token] + \
+                                list(tokens_b[:max_len]) + \
+                                [self.eos_token]
 
-            padded.append(padded_example)
-            lengths.append(len(padded_example) - max(0, 2 * max_len - len(tokens_a) - len(tokens_b)))
+            padded.append(example)
+            lengths.append(len(example))
 
-            numerical.append([self.vocab.stoi[word] for word in padded_example])
-            decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
+            numerical.append([self.vocab.stoi[word] for word in example])
+            decoder_numerical.append([decoder_vocab.encode(word) for word in example])
 
-        length = torch.tensor(lengths, dtype=torch.int32, device=device)
-        numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
-        decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-
-        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
+        return SequentialField(length=lengths, value=numerical, limited=decoder_numerical)
   
 
     def decode(self, tensor):

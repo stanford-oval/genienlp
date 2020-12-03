@@ -32,15 +32,19 @@ import torch
 
 
 class SequentialField(NamedTuple):
-    value: List
-    length: List
-    limited: List
-    
+    value: List[int]
+    length: List[int]
+    limited: List[int]
+
     @staticmethod
-    def from_tensors(tensor_list):
-        
-        value = torch.cat([data.value for data in tensor_list], dim=0)
-        length = torch.cat([data.length for data in tensor_list], dim=0)
-        limited = torch.cat([data.limited for data in tensor_list], dim=0)
-        
-        return SequentialField(value, length, limited)
+    def merge(sequential_fields: List):
+
+        values = []
+        lengths = []
+        limiteds = []
+        for sf in sequential_fields:
+            values.extend(sf.value)
+            lengths.extend(sf.length)
+            limiteds.extend(sf.limited)
+
+        return SequentialField(values, lengths, limiteds)

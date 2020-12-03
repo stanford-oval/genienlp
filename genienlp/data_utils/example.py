@@ -31,6 +31,7 @@ from typing import NamedTuple, List
 import itertools
 import random
 import torch
+from typing import Callable
 
 from .numericalizer.sequential_field import SequentialField
 
@@ -77,8 +78,8 @@ class NumericalizedExamples(NamedTuple):
     question: SequentialField
     answer: SequentialField
     decoder_vocab: object
-    device: object
-    padding_function: object
+    device: torch.device
+    padding_function: Callable
     
     @staticmethod
     def from_examples(examples, numericalizer, device=None, paired=False, max_pairs=None, groups=None,
@@ -175,9 +176,9 @@ class NumericalizedExamples(NamedTuple):
     
         if paired:
             all_example_ids = all_example_ids_single + all_example_ids_pair
-            all_context_inputs = SequentialField.from_tensors([all_context_inputs_single, all_context_inputs_pair])
-            all_question_inputs = SequentialField.from_tensors([all_question_inputs_single, all_question_inputs_pair])
-            all_answer_inputs = SequentialField.from_tensors([all_answer_inputs_single, all_answer_inputs_pair])
+            all_context_inputs = SequentialField.merge([all_context_inputs_single, all_context_inputs_pair])
+            all_question_inputs = SequentialField.merge([all_question_inputs_single, all_question_inputs_pair])
+            all_answer_inputs = SequentialField.merge([all_answer_inputs_single, all_answer_inputs_pair])
         else:
             all_example_ids = all_example_ids_single
             all_context_inputs = all_context_inputs_single
