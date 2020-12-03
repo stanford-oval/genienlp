@@ -73,6 +73,9 @@ MARIAN_GROUP_MEMBERS = {
 ###############
 
 class GenieMBartTokenizer(MBartTokenizer):
+    '''
+    MBartTokenizer with the temporary fix for off-by-one error during generation: https://github.com/huggingface/transformers/issues/5755
+    '''
     vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
@@ -99,6 +102,9 @@ class GenieMBartTokenizer(MBartTokenizer):
 
 
 class GeniePreTrainedModel(PreTrainedModel):
+    '''
+    General class for PreTrainedModel which can output cross-attention weights during generation
+    '''
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
     
