@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from typing import List, Optional
 
-from transformers import LogitsProcessorList
+from transformers.generation_utils import LogitsProcessorList
 from transformers.modeling_marian import MarianMTModel
 from transformers.modeling_bart import BartForConditionalGeneration
 from transformers.modeling_mbart import MBartForConditionalGeneration
@@ -126,7 +126,7 @@ class GeniePreTrainedModel(PreTrainedModel):
     def greedy_search(
             self,
             input_ids: torch.LongTensor,
-            logits_processor: Optional[LogitsProcessorList] = None,
+            logits_processor=None,
             max_length: Optional[int] = None,
             pad_token_id: Optional[int] = None,
             eos_token_id: Optional[int] = None,
@@ -224,8 +224,8 @@ class GeniePreTrainedModel(PreTrainedModel):
     def sample(
         self,
         input_ids: torch.LongTensor,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        logits_warper: Optional[LogitsProcessorList] = None,
+        logits_processor=None,
+        logits_warper=None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
