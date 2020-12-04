@@ -438,7 +438,7 @@ def run_single_process_generation(args, config):
 
             if args.mc_dropout[hyperparameter_idx]:
                 from .transformers_utils import DecoderLayer
-                from transformers.modeling_bart import EncoderLayer, SelfAttention
+                from transformers.modeling_bart import EncoderLayer
                 def apply_dropout(m):
                     if isinstance(m, DecoderLayer) or isinstance(m, EncoderLayer):
                         m.train()
@@ -446,15 +446,21 @@ def run_single_process_generation(args, config):
                 sample_probs = []
                 T = 10
                 for _ in range(T):
-                    uncertainty_sample_outputs = model_generate(hyperparameter_idx)
-                    _, probs = uncertainty_sample_outputs
+                    _, probs = model_generate(hyperparameter_idx)
+                    print('probs = ', probs)
                     sentence_probs = torch.prod(probs, 1)
                     sample_probs.append(sentence_probs)
-                sample_probs = torch.stack(sample_probs, 0).double()
-                mean = sample_probs.mean(0)
-                var = sample_probs.var(0)
+                sample_probs = torch.stack(sample_probs, dim=0).double()
+                mean = sample_probs.mean(dim=0)
+                var = sample_probs.var(dim=0)
                 tau = (0.5) / (2. * T)
                 std = np.sqrt(var.cpu() + 1. / tau)
+                cv = np.sqrt(var.cpu()) / mean.cpu()
+                id = var.cpu() / mean.cpu()
+                print('mean = ', mean)
+                print('var = ', var)
+                print('cv = ', cv)
+                print('id = ', id)
                 # TODO: if we want more then just variance:
                 # confidences = torch.stack([var, mean], 1)[:,:].tolist()
                 confidences = var.unsqueeze(1)[:,:].tolist()
