@@ -16,17 +16,32 @@ SPIECE_UNDERLINE = "▁"
 
 language_code_re = re.compile(">>.+<<")
 
-MARIAN_SUPPORTED_LANGUAGES = ['https://huggingface.co/Helsinki-NLP']
 
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    # official models
+    "facebook/bart-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-base/config.json",
     "facebook/bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json",
     "facebook/bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",
     "facebook/bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
     "facebook/bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
-    "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
-    "facebook/mbart-large-cc25": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-cc25/config.json",
+    
+    # community models; see https://huggingface.co/models?filter=bart for more
+    "sshleifer/bart-tiny-random": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/bart-tiny-random/config.json"
 }
 
+MBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    # official models
+    "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
+    "facebook/mbart-large-cc25": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-cc25/config.json",
+    
+    # community models; see https://huggingface.co/models?filter=mbart for more
+    "sshleifer/tiny-mbart": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/tiny-mbart/config.json"
+}
+
+
+MARIAN_SUPPORTED_LANGUAGES = ['https://huggingface.co/Helsinki-NLP']
+
+# all MarianMT models use the same config
 MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "Helsinki-NLP/opus-mt-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/config.json",
 }
@@ -306,6 +321,7 @@ class GeniePreTrainedModel(PreTrainedModel):
         else:
             return input_ids
 
+###############
 
 class GenieMarianMTModel(MarianMTModel, GeniePreTrainedModel):
     def __init__(self, config):
