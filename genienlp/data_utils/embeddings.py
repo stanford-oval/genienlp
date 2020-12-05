@@ -34,7 +34,6 @@ from collections import defaultdict
 import logging
 from transformers import AutoTokenizer, AutoModel, AutoConfig, \
     BERT_PRETRAINED_MODEL_ARCHIVE_LIST, XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
-from typing import NamedTuple, List
 
 from .numericalizer.simple import SimpleNumericalizer
 from .numericalizer.transformer import BertNumericalizer, XLMRobertaNumericalizer
@@ -50,10 +49,6 @@ EMBEDDING_NAME_TO_NUMERICALIZER_MAP = dict()
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: BertNumericalizer for embedding in BERT_PRETRAINED_MODEL_ARCHIVE_LIST})
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: XLMRobertaNumericalizer for embedding in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST})
 
-
-class EmbeddingOutput(NamedTuple):
-    hidden_states: List[torch.Tensor]
-    last_hidden_state: torch.Tensor
 
 class WordVectorEmbedding(torch.nn.Module):
     def __init__(self, vec_collection):
@@ -91,7 +86,7 @@ class WordVectorEmbedding(torch.nn.Module):
 
     def forward(self, input: torch.Tensor, padding=None):
         last_hidden_state = self.embedding[0](input.cpu()).to(input.device)
-        return EmbeddingOutput(hidden_states=[last_hidden_state], last_hidden_state=last_hidden_state)
+        return EmbeddingOutput(hidden_states=(last_hidden_state,), last_hidden_state=last_hidden_state)
 
     def to(self, *args, **kwargs):
         # ignore attempts to move the word embedding, which should stay on CPU
@@ -118,9 +113,7 @@ class TransformerEmbedding(torch.nn.Module):
 
     def forward(self, input: torch.Tensor, padding=None):
         return self.model(input, attention_mask=(~padding).to(dtype=torch.float))
-        # last_hidden_state, _pooled, hidden_states =
-        #
-        # return EmbeddingOutput(hidden_states=hidden_states, last_hidden_state=last_hidden_state)
+
 
 class PretrainedLMEmbedding(torch.nn.Module):
     def __init__(self, model_name, cachedir):
@@ -160,7 +153,7 @@ class PretrainedLMEmbedding(torch.nn.Module):
     def forward(self, input: torch.Tensor, padding=None):
         pretrained_indices = torch.gather(self.vocab_to_pretrained, dim=0, index=input)
         rnn_output = self.model(pretrained_indices)
-        return EmbeddingOutput(hidden_states=[rnn_output], last_hidden_state=rnn_output)
+        return EmbeddingOutput(hidden_states=(rnn_output,), last_hidden_state=rnn_output)
 
 def _name_to_vector(emb_name, cachedir):
     if emb_name == 'glove':

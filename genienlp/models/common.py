@@ -29,7 +29,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import math
-from typing import NamedTuple, List
 
 import torch
 import torch.nn as nn
@@ -431,10 +430,10 @@ class CombinedEmbedding(nn.Module):
         last_hidden_state = torch.cat(last_hidden_state, dim=2)
         if self.project:
             last_hidden_state = self.projection(last_hidden_state)
-        return EmbeddingOutput(hidden_states=hidden_states, last_hidden_state=last_hidden_state)
+        return EmbeddingOutput(hidden_states=tuple(hidden_states), last_hidden_state=last_hidden_state)
 
     def forward(self, x, padding=None):
-        embedded: List[EmbeddingOutput] = []
+        embedded = []
         if self.pretrained_embeddings is not None:
             embedded += [emb(x, padding=padding) for emb in self.pretrained_embeddings]
 
@@ -443,7 +442,7 @@ class CombinedEmbedding(nn.Module):
             valid_x = torch.lt(x, trained_vocabulary_size)
             masked_x = torch.where(valid_x, x, torch.zeros_like(x))
             output = self.trained_embeddings(masked_x)
-            embedded.append(EmbeddingOutput(hidden_states=[output], last_hidden_state=output))
+            embedded.append(EmbeddingOutput(hidden_states=(output,), last_hidden_state=output))
 
         return self._combine_embeddings(embedded)
 

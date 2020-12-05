@@ -396,7 +396,10 @@ class Seq2SeqNumericalizer(TransformerNumericalizer):
     
     def __init__(self, pretrained_tokenizer=None, config=None, max_generative_vocab=None, cache=None, fix_length=None):
         super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
-        self.load(pretrained_tokenizer, config)
+        
+    @property
+    def pad_id(self):
+        return self._tokenizer.pad_token_id
     
     def load(self, save_dir, config=None):
         raise NotImplementedError
@@ -441,12 +444,20 @@ class Seq2SeqNumericalizer(TransformerNumericalizer):
 
 class BartNumericalizer(Seq2SeqNumericalizer):
     
+    def __init__(self, pretrained_tokenizer=None, config=None, max_generative_vocab=None, cache=None, fix_length=None):
+        super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
+        self.load(pretrained_tokenizer, config)
+        
     def load(self, save_dir, config=None):
         self._tokenizer = BartTokenizer.from_pretrained(save_dir)
         self.decoder_vocab = DecoderVocabulary(self._tokenizer.decoder.values(), None,
                                                pad_token=self._tokenizer.pad_token, eos_token=self._tokenizer.eos_token)
 
 class MBartNumericalizer(Seq2SeqNumericalizer):
+    
+    def __init__(self, pretrained_tokenizer=None, config=None, max_generative_vocab=None, cache=None, fix_length=None):
+        super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
+        self.load(pretrained_tokenizer, config)
     
     def load(self, save_dir, config=None):
         self._tokenizer = MBartTokenizer.from_pretrained(save_dir, config=config)
@@ -457,8 +468,12 @@ class MBartNumericalizer(Seq2SeqNumericalizer):
 
 class MT5Numericalizer(Seq2SeqNumericalizer):
     
+    def __init__(self, pretrained_tokenizer=None, config=None, max_generative_vocab=None, cache=None, fix_length=None):
+        super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
+        self.load(pretrained_tokenizer, config)
+        
     def load(self, save_dir, config=None):
-        self._tokenizer = T5Tokenizer.from_pretrained(pretrained_tokenizer, config=config)
+        self._tokenizer = T5Tokenizer.from_pretrained(save_dir, config=config)
         vocabs = [self._tokenizer.sp_model.id_to_piece(i) for i in range(self._tokenizer.sp_model.get_piece_size())]
         self.decoder_vocab = DecoderVocabulary(vocabs, None, pad_token=self._tokenizer.pad_token,
                                                eos_token=self._tokenizer.eos_token)
