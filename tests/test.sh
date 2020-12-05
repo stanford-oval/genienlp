@@ -16,12 +16,6 @@ if test -d $(dirname ${SRCDIR})/.embeddings; then
 else
   mkdir -p $SRCDIR/embeddings
   embedding_dir="$SRCDIR/embeddings"
-
-  for v in glove.6B.50d charNgram ; do
-      for f in vectors itos table ; do
-          wget -c "https://parmesan.stanford.edu/glove/${v}.txt.${f}.npy" -O $SRCDIR/embeddings/${v}.txt.${f}.npy
-      done
-  done
 fi
 
 TMPDIR=`pwd`
@@ -32,7 +26,6 @@ trap on_error ERR INT TERM
 i=0
 for hparams in \
       "--seq2seq_decoder sshleifer/bart-tiny-random --model Bart" \
-      "--encoder_embeddings=small_glove+char --decoder_embeddings=small_glove+char" \
       "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
       "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder MQANEncoder" \
       "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \

@@ -157,7 +157,7 @@ def parse_argv(parser):
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
 
     parser.add_argument('--encoder_embeddings', default=None,
-                        help='which word embedding to use on the encoder side; use `glove+char`, a bert-* model for pretrained BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
+                        help='which word embedding to use on the encoder side; use a bert-* model for pretrained BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
                              'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
     parser.add_argument('--context_embeddings', default=None,
                         help='which word embedding to use for the context; use a bert-* pretrained model for BERT; '
