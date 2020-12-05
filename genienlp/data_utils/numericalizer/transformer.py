@@ -34,9 +34,10 @@ from torch.nn.utils.rnn import pad_sequence
 
 from .decoder_vocab import DecoderVocabulary
 from .masked_tokenizer import MaskedBertTokenizer, MaskedXLMRobertaTokenizer
-from transformers import BartTokenizer
+from transformers import BartTokenizer, T5Tokenizer
 from .sequential_field import SequentialField
 from transformers.file_utils import SPIECE_UNDERLINE
+
 
 class TransformerNumericalizer(object):
     """
@@ -152,6 +153,7 @@ class TransformerNumericalizer(object):
 
     def reverse(self, batch, detokenize, field_name=None):
         raise NotImplementedError()
+
 
 class XLMRobertaNumericalizer(TransformerNumericalizer):
 
@@ -280,6 +282,7 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
 
         return [reverse_one(tensor, field_name) for tensor in batch]
 
+
 class BertNumericalizer(TransformerNumericalizer):
     """
     Numericalizer that uses BertTokenizer from huggingface's transformers library.
@@ -395,12 +398,13 @@ class BartNumericalizer(TransformerNumericalizer):
     def __init__(self, pretrained_tokenizer=None, config=None, max_generative_vocab=None, cache=None, fix_length=None):
         super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
         self._tokenizer = BartTokenizer.from_pretrained(pretrained_tokenizer, config=config)
-        self.decoder_vocab = DecoderVocabulary(self._tokenizer.decoder.values(), None, pad_token=self._tokenizer.pad_token, eos_token=self._tokenizer.eos_token)
-
+        self.decoder_vocab = DecoderVocabulary(self._tokenizer.decoder.values(), None,
+                                               pad_token=self._tokenizer.pad_token, eos_token=self._tokenizer.eos_token)
 
     def load(self, save_dir):
         self._tokenizer = BartTokenizer.from_pretrained(save_dir)
-        self.decoder_vocab = DecoderVocabulary(self._tokenizer.decoder.values(), None, pad_token=self._tokenizer.pad_token, eos_token=self._tokenizer.eos_token)
+        self.decoder_vocab = DecoderVocabulary(self._tokenizer.decoder.values(), None,
+                                               pad_token=self._tokenizer.pad_token, eos_token=self._tokenizer.eos_token)
 
     @property
     def pad_id(self):
@@ -442,4 +446,55 @@ class BartNumericalizer(TransformerNumericalizer):
 
     def decode(self, tensor):
         return self._tokenizer.convert_ids_to_tokens(tensor)
+
+
+class MT5Numericalizer(TransformerNumericalizer):
+    
+    def __init__(self, pretrained_tokenizer=None, config=None, max_generative_vocab=None, cache=None, fix_length=None):
+        super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
+        self._tokenizer = T5Tokenizer.from_pretrained(pretrained_tokenizer, config=config)
         
+        vocabs = [self._tokenizer.sp_model.id_to_piece(i) for i in range(self._tokenizer.sp_model.get_piece_size())]
+        self.decoder_vocab = DecoderVocabulary(vocabs, None, pad_token=self._tokenizer.pad_token,
+                                               eos_token=self._tokenizer.eos_token)
+    
+    def load(self, save_dir):
+        self._tokenizer = T5Tokenizer.from_pretrained(save_dir)
+        self.decoder_vocab = DecoderVocabulary(self._tokenizer.decoder.values(), None,
+                                               pad_token=self._tokenizer.pad_token, eos_token=self._tokenizer.eos_token)
+    
+    def save(self, save_dir):
+        self._tokenizer.save_pretrained(save_dir)
+    
+    def build_vocab(self, vocab_fields, vocab_sets):
+        raise NotImplementedError
+    
+    def encode_single(self, minibatch, decoder_vocab, device=None, max_length=-1):
+        """
+		minibatch: this method ignores the `mask` component of minibatch
+		"""
+        assert isinstance(minibatch, list)
+        batch_tokens = []
+        for tokens, mask in minibatch:
+            if len(tokens) == 0:
+                batch_tokens.append(' ')
+            else:
+                batch_tokens.append(' '.join(tokens))
+        
+        encoded_batch = self._tokenizer.batch_encode_plus(batch_tokens, add_special_tokens=True, padding=False, return_attention_mask=True)
+        length = torch.sum(torch.tensor(encoded_batch['attention_mask'], dtype=torch.int32, device=device), dim=1)
+        numerical = torch.tensor(encoded_batch['input_ids'], dtype=torch.int64, device=device)
+        
+        decoder_numerical = numerical
+        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
+    
+    def encode_pair(self, minibatch, decoder_vocab, device=None):
+        # TODO
+        raise NotImplementedError
+    
+    def reverse(self, batch, detokenize, field_name=None):
+        _reversed = self._tokenizer.batch_decode(batch, skip_special_tokens=True)
+        return _reversed
+    
+    def decode(self, tensor):
+        return self._tokenizer.convert_ids_to_tokens(tensor)
