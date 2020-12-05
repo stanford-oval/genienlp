@@ -57,7 +57,7 @@ DECODERS = {
 
 logger = logging.getLogger(__name__)
 
-class Transformer2LSTMModel(PreTrainedModel):
+class Transformer2LSTM(PreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -295,7 +295,7 @@ class Transformer2LSTMModel(PreTrainedModel):
 
         return generated
         
-class Transformer2TransformerModel(torch.nn.Module):
+class Transformer2Transformer(torch.nn.Module):
 
     def __init__(self, **kwargs):
         super().__init__()
@@ -377,7 +377,7 @@ class Transformer2TransformerModel(torch.nn.Module):
 
         return generated
 
-class Bart(Transformer2TransformerModel):
+class Bart(Transformer2Transformer):
 
     def __init__(self, config=None, *inputs, **kwargs):
         super().__init__()
@@ -388,7 +388,7 @@ class Bart(Transformer2TransformerModel):
         self.numericalizer = BartNumericalizer(self.args.seq2seq_decoder)
 
 
-class MBart(Transformer2TransformerModel):
+class MBart(Transformer2Transformer):
     
     def __init__(self, config=None, *inputs, **kwargs):
         super().__init__()
@@ -399,7 +399,7 @@ class MBart(Transformer2TransformerModel):
         self.numericalizer = MBartNumericalizer(self.args.seq2seq_decoder)
 
 
-class MT5(Transformer2TransformerModel):
+class MT5(Transformer2Transformer):
 
     def __init__(self, config=None, *inputs, **kwargs):
         super().__init__()
