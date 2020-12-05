@@ -281,7 +281,6 @@ def check_and_update_generation_args(args):
         setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
 
     logger.info('Will output %d sequences for each input.', sum(args.num_outputs))
-    # logger.info('Effective batch size for each GPU is %d', args.batch_size * max(args.num_outputs))
 
 def main(args):
     load_config_json(args)

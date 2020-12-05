@@ -43,10 +43,10 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer,
                                   CamembertConfig, CamembertForMaskedLM, CamembertTokenizer,
                                   BartConfig, BartForConditionalGeneration, BartTokenizer,
-                                  MarianConfig, MarianTokenizer)
+                                  MBartConfig, MBartForConditionalGeneration,
+                                  MarianConfig, MarianMTModel, MarianTokenizer)
 
-from .transformers_utils import BartForConditionalGeneration as MBartForConditionalGeneration
-from .transformers_utils import MBartTokenizer, MarianMTModel
+from .transformers_utils import GenieMBartTokenizer
 
 from genienlp.util import set_seed, split_file_on_disk
 from genienlp.paraphrase.data_utils import mask_tokens, add_special_tokens
@@ -66,7 +66,7 @@ MODEL_CLASSES = {
     'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer),
     'camembert': (CamembertConfig, CamembertForMaskedLM, CamembertTokenizer),
     'bart': (BartConfig, BartForConditionalGeneration, BartTokenizer),
-    'mbart': (BartConfig, MBartForConditionalGeneration, MBartTokenizer),
+    'mbart': (MBartConfig, MBartForConditionalGeneration, GenieMBartTokenizer),
     'marian': (MarianConfig, MarianMTModel, MarianTokenizer)
 }
 
@@ -184,7 +184,7 @@ def train(args, train_dataset, model, tokenizer, input_file_name=None, multiple_
                 steps_trained_in_current_epoch -= 1
                 continue
 
-            inputs, attention_mask, labels, position_ids, segment_ids = batch # batch is a tuple (input, labels, position_ids, segment_ids)
+            inputs, attention_mask, labels, position_ids, segment_ids = batch
             
             if args.mlm:
                 inputs, labels = mask_tokens(inputs, labels, tokenizer, args.mlm_probability, args.mlm_ignore_index)
@@ -195,7 +195,7 @@ def train(args, train_dataset, model, tokenizer, input_file_name=None, multiple_
             segment_ids = segment_ids.to(args.device)
             model.train()
             
-            model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids}
+            model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids, 'use_cache': False}
             
             # prepare inputs for mbart, and marian
             if args.model_type in ['mbart', 'marian']:
@@ -349,7 +349,7 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
         segment_ids = segment_ids.to(args.device)
 
         with torch.no_grad():
-            model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids}
+            model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids, 'use_cache': False}
             
             if args.model_type in ['mbart', 'marian']:
                 model_inputs['attention_mask'] = attention_mask

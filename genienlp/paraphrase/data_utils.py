@@ -308,7 +308,7 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
 
 
 def is_question(sentence: str):
-    question_words = ['which', 'what', 'where', 'how', 'who', 'when', 'is', 'are', 'am', \
+    question_words = ['which', 'what', 'where', 'how', 'who', 'when', 'is', 'are', 'am',
                       'can', 'could', 'would', 'will', 'have', 'did', 'do', 'does', 'no is', 'yes is']
     for w in question_words:
         if sentence.startswith(w+' '):

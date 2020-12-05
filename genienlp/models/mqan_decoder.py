@@ -32,6 +32,7 @@ import math
 import torch
 from torch import nn
 from torch.nn import functional as F
+from transformers.modeling_outputs import Seq2SeqLMOutput
 
 from .common import CombinedEmbedding, TransformerDecoder, LSTMDecoderAttention, Feedforward, \
     mask, positional_encodings_like, EPSILON, MultiLSTMCell
@@ -134,7 +135,8 @@ class MQANDecoder(nn.Module):
             loss = F.nll_loss(probs.log(), targets)
             if encoder_loss is not None:
                 loss += self.args.encoder_loss_weight * encoder_loss
-            return (loss, )
+            
+            return Seq2SeqLMOutput(loss=loss)
         else:
             if decoder_wrapper is None:
                 decoder_wrapper = self.decoder_wrapper(self_attended_context, final_context, context_padding, final_question, question_padding,
@@ -144,7 +146,7 @@ class MQANDecoder(nn.Module):
                 current_token_id = current_token_id.clone().cpu().apply_(self.map_to_full).to(current_token_id.device)
             # (next_token_logits, past) where `past` includes all the states needed to continue generation
             logits = torch.log(decoder_wrapper.next_token_probs(current_token_id))
-            return logits, decoder_wrapper
+            return Seq2SeqLMOutput(logits=logits, past_key_values=decoder_wrapper)
 
     def probs(self, outputs, vocab_pointer_switches, context_question_switches,
               context_attention, question_attention,

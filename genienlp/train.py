@@ -194,7 +194,7 @@ def do_validate(iteration, args, model, numericalizer, val_iters, *,
                 train_task, round_progress, task_progress, writer, logger):
     deca_score = 0
     for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-        val_loss, metric_dict = validate(val_task, val_iter, model, logger, numericalizer, iteration, args, num_print=args.num_print)
+        val_loss, metric_dict = validate(val_task, val_iter, model, numericalizer, args, num_print=args.num_print)
         if val_loss is not None:
             log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss{val_loss.item():.4f}:'
             writer.add_scalar(f'loss/{val_task.name}/val', val_loss.item(), iteration)

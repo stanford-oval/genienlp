@@ -178,7 +178,7 @@ class Seq2Seq(PreTrainedModel):
         loss = torch.nn.functional.cross_entropy(context_logits, masked_labels, ignore_index=self.numericalizer.pad_id)
         return (loss, )
 
-    def _normal_forward(self, batch, current_token_id, past=None, expansion_factor=1, generation_dict=None, encoder_output=None):
+    def _normal_forward(self, batch, current_token_id, past_key_values=None, expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
         if encoder_output is None:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
         else:
@@ -186,19 +186,20 @@ class Seq2Seq(PreTrainedModel):
         encoder_loss = None
         if self.training and getattr(self.args, 'use_encoder_loss', None):
             encoder_loss = self.get_encoder_loss(context_rnn_state)
+            
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
-                            final_question, question_rnn_state, encoder_loss, current_token_id, decoder_wrapper=past,
+                            final_question, question_rnn_state, encoder_loss, current_token_id, decoder_wrapper=past_key_values,
                             expansion_factor=expansion_factor, generation_dict=generation_dict)
 
-    def forward(self, batch, pretraining=False, current_token_id=None, past=None,
-                expansion_factor=1, generation_dict=None, encoder_output=None):
+    def forward(self, batch, pretraining=False, current_token_id=None, past_key_values=None,
+                expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
         """
-        When training or pretraining, forward() always returns a tuple where the first element is `loss`
+        When training or pretraining, forward() always returns a Seq2SeqLMOutput instance
         """
         if pretraining:
             return self._pretrain_forward(batch)
         else:
-            return self._normal_forward(batch, current_token_id, past, expansion_factor, generation_dict, encoder_output)
+            return self._normal_forward(batch, current_token_id, past_key_values, expansion_factor, generation_dict, encoder_output, return_dict)
         
         
     def get_encoder_loss(self, context_rnn_state):
@@ -232,9 +233,9 @@ class Seq2Seq(PreTrainedModel):
     def get_output_embeddings(self):
         return self.decoder.decoder_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, batch, generation_dict, encoder_output):
+    def prepare_inputs_for_generation(self, input_ids, attention_mask, use_cache, batch, generation_dict, encoder_output, past=None):
         expansion_factor = input_ids.shape[0] // len(batch.example_id)
-        return {"batch": batch, "past": past, "current_token_id": input_ids[:,-1:], "expansion_factor": expansion_factor, "generation_dict": generation_dict, "encoder_output": encoder_output}
+        return {"batch": batch, "past_key_values": past, "current_token_id": input_ids[:,-1:], "expansion_factor": expansion_factor, "generation_dict": generation_dict, "encoder_output": encoder_output}
 
     def _reorder_cache(self, past, beam_idx):
         past.reorder(beam_idx)
@@ -292,7 +293,6 @@ class Bart(torch.nn.Module):
         model_checkpoint_file = kwargs.pop("model_checkpoint_file", None)
         args = kwargs.pop("args", None)
         device = kwargs.pop("device", None)
-        # vocab_sets = kwargs.pop("vocab_sets", None)
 
         full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
         logger.info(f'Loading the model from {full_checkpoint_path}')
@@ -304,9 +304,10 @@ class Bart(torch.nn.Module):
 
 
     def __init__(self, config=None, *inputs, **kwargs):
-        self.args = kwargs.pop("args", None)
         super().__init__()
-        self.bart = BartForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder)
+        assert 'args' in kwargs
+        self.args = kwargs['args']
+        self.bart = BartForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder, cache_dir=self.args.embeddings)
         self.numericalizer = BartNumericalizer(self.args.seq2seq_decoder)
 
     def forward(self, *input, **kwargs):
@@ -318,9 +319,9 @@ class Bart(torch.nn.Module):
             pad = self.numericalizer._tokenizer.pad_token_id
             source_ids, source_mask, y = batch.context.value, batch.context.value!=pad, batch.answer.value
             y_ids = y[:, :-1].contiguous()
-            lm_labels = y[:, 1:].clone()
-            lm_labels[y[:, 1:] == pad] = -100
-            return self.bart.forward(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels)
+            labels = y[:, 1:].clone()
+            labels[y[:, 1:] == pad] = -100
+            return self.bart.forward(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, labels=labels)
 
         else:
             return self.bart.forward(**kwargs)
@@ -350,7 +351,6 @@ class Bart(torch.nn.Module):
                  ):
 
         input_ids = batch.context.value
-        # print('input_ids = ', input_ids)
         # TODO attention_mask
         generated = self.bart.generate(input_ids=input_ids,
                                      max_length=max_output_length,

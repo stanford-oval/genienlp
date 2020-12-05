@@ -36,8 +36,8 @@ import subprocess
 
 from .tasks.registry import get_tasks
 from .util import have_multilingual
-from transformers.modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_LIST
-BART_MODEL_LIST = BART_PRETRAINED_MODEL_ARCHIVE_LIST + ['sshleifer/bart-tiny-random']
+from .paraphrase.transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP
+BART_MODEL_LIST = list(BART_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
 
 logger = logging.getLogger(__name__)
 
