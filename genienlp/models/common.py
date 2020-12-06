@@ -372,7 +372,6 @@ class CombinedEmbedding(nn.Module):
 
     def __init__(self, numericalizer, pretrained_embeddings,
                  output_dimension,
-                 finetune_pretrained=False,
                  trained_dimension=0,
                  project=True):
         super().__init__()
@@ -382,7 +381,6 @@ class CombinedEmbedding(nn.Module):
         dimension = 0
         for idx, embedding in enumerate(self.pretrained_embeddings):
             dimension += embedding.dim
-        self.set_trainable(finetune_pretrained)
 
         if trained_dimension > 0:
             self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
@@ -394,9 +392,6 @@ class CombinedEmbedding(nn.Module):
         else:
             assert dimension == output_dimension, (dimension, output_dimension)
         self.dimension = output_dimension
-
-    def set_trainable(self, trainable):
-        self.pretrained_embeddings.requires_grad_(trainable)
 
     def resize_embedding(self, new_vocab_size):
         if self.trained_embeddings is None:

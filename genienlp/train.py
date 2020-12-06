@@ -122,16 +122,11 @@ def prepare_data(args, logger):
 accumulated_batch_lengths = 0
 
 def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None, pretraining=False,
-               train_context_embeddings_after=None, train_question_embeddings_after=None,
                gradient_accumulation_steps=1):
     # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of
     # the total batch size
     global accumulated_batch_lengths
     model.train()
-    model.module.set_train_context_embeddings(train_context_embeddings_after is not None and
-                                              iteration > train_context_embeddings_after)
-    model.module.set_train_question_embeddings(train_question_embeddings_after is not None and
-                                               iteration > train_question_embeddings_after)
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
     loss = model(batch, pretraining=pretraining)[0]
@@ -383,11 +378,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             # param update
             loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
                                          grad_clip=args.grad_clip, pretraining=pretraining,
-                                         gradient_accumulation_steps=args.gradient_accumulation_steps,
-                                         train_context_embeddings_after=args.train_context_embeddings_after if
-                                                                        args.train_context_embeddings else None,
-                                         train_question_embeddings_after=args.train_question_embeddings_after if
-                                                                         args.train_question_embeddings else None)
+                                         gradient_accumulation_steps=args.gradient_accumulation_steps)
             if loss is None:
                 logger.info(
                     'Encountered NAN loss during training... Continue training ignoring the current batch')

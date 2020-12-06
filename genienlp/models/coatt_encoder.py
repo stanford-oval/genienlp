@@ -40,13 +40,11 @@ class CoattentionEncoder(nn.Module):
 
         self.context_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
                                                     trained_dimension=args.trainable_encoder_embeddings,
-                                                    project=True,
-                                                    finetune_pretrained=args.train_context_embeddings)
+                                                    project=True)
 
         self.question_embeddings = CombinedEmbedding(numericalizer, question_embeddings, args.dimension,
                                                      trained_dimension=0,
-                                                     project=True,
-                                                     finetune_pretrained=args.train_question_embeddings)
+                                                     project=True)
 
         self.dropout = nn.Dropout(args.dropout_ratio)
 
@@ -63,12 +61,6 @@ class CoattentionEncoder(nn.Module):
         self.bilstm_context = PackedLSTM(2 * args.dimension, args.rnn_dimension,
                                          batch_first=True, bidirectional=True, num_layers=args.rnn_layers,
                                          dropout=dp(args))
-
-    def set_train_context_embeddings(self, trainable):
-        self.context_embeddings.set_trainable(trainable)
-
-    def set_train_question_embeddings(self, trainable):
-        self.question_embeddings.set_trainable(trainable)
 
     def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length

@@ -42,8 +42,7 @@ class MQANEncoder(nn.Module):
 
         self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
                                                     trained_dimension=0,
-                                                    project=True,
-                                                    finetune_pretrained=args.train_encoder_embeddings)
+                                                    project=True)
 
         def dp(args):
             return args.dropout_ratio if args.rnn_layers > 1 else 0.
@@ -72,12 +71,6 @@ class MQANEncoder(nn.Module):
         self.bilstm_question = PackedLSTM(args.dimension, args.dimension,
                                           batch_first=True, dropout=dp(args), bidirectional=True,
                                           num_layers=args.rnn_layers)
-
-    def set_train_context_embeddings(self, trainable):
-        self.encoder_embeddings.set_trainable(trainable)
-
-    def set_train_question_embeddings(self, trainable):
-        pass
 
     def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length

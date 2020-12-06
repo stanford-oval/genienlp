@@ -165,18 +165,6 @@ def parse_argv(parser):
     parser.add_argument('--question_embeddings', default=None,
                         help='which word embedding to use for the question; use a bert-* pretrained model for BERT; '
                              'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
-    parser.add_argument('--train_encoder_embeddings', action='store_true', default=False,
-                        help='back propagate into pretrained encoder embedding (recommended for BERT and XLM-RoBERTa)')
-    parser.add_argument('--train_context_embeddings', action='store_true', default=None,
-                        help='back propagate into pretrained context embedding (recommended for BERT and XLM-RoBERTa)')
-    parser.add_argument('--train_context_embeddings_after', type=int, default=0,
-                        help='back propagate into pretrained context embedding after the given iteration (default: '
-                             'immediately)')
-    parser.add_argument('--train_question_embeddings', action='store_true', default=None,
-                        help='back propagate into pretrained question embedding (recommended for BERT)')
-    parser.add_argument('--train_question_embeddings_after', type=int, default=0,
-                        help='back propagate into pretrained context embedding after the given iteration (default: '
-                             'immediately)')
     parser.add_argument('--decoder_embeddings', default='glove+char',
                         help='which pretrained word embedding to use on the decoder side')
     parser.add_argument('--trainable_encoder_embeddings', default=0, type=int,
@@ -310,10 +298,6 @@ def post_parse(args):
         args.context_embeddings = args.encoder_embeddings
     if args.question_embeddings is None:
         args.question_embeddings = args.context_embeddings
-    if args.train_context_embeddings is None:
-        args.train_context_embeddings = args.train_encoder_embeddings
-    if args.train_question_embeddings is None:
-        args.train_question_embeddings = args.train_encoder_embeddings
 
     args.log_dir = args.save
     if args.tensorboard_dir is None:

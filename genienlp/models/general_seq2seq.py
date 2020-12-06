@@ -132,9 +132,6 @@ class Seq2Seq(GenieModel):
         if self.args.pretrain_context > 0:
             self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, self.numericalizer.num_tokens)
 
-    def set_train_context_embeddings(self, trainable):
-        self.encoder.set_train_context_embeddings(trainable)
-
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         """
         resize_decoder: if True, will actually resize the embedding matrix of the decoder
@@ -297,14 +294,6 @@ class Bart(GenieModel):
         else:
             return self.bart.forward(**kwargs)
         
-    def set_train_context_embeddings(self, trainable):
-        #TODO
-        pass
-
-    def set_train_question_embeddings(self, trainable):
-        #TODO
-        pass
-
     def generate(self,
                  batch,
                  max_output_length,
