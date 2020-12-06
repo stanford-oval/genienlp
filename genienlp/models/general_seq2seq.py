@@ -69,24 +69,8 @@ class Seq2Seq(PreTrainedModel):
         self.args = args
         self.numericalizer = numericalizer
         self.encoder = ENCODERS[args.seq2seq_encoder](numericalizer, args, context_embeddings, question_embeddings)
-
-        decoder_type_embeddings = None
-        if self.args.do_ner and self.args.have_decoder_type_embeddings:
-                # if encode decoder outputs are tied chances are dimensions are different
-                # so concat embeddings and project to decoder dimension
-            if self.args.tie_encoder_decoder_type_embeds:
-                encoder_type_embeddings = self.encoder.encoder_embeddings.pretrained_embeddings[0].model.embeddings.entity_type_embeddings
-                decoder_type_embeddings = torch.nn.Embedding(*encoder_type_embeddings.weight.size(), padding_idx=encoder_type_embeddings.padding_idx)
-                decoder_type_embeddings.weight = encoder_type_embeddings.weight
-            else:
-                # if not tied the decoder dimension would be used for all embeddings
-                # so we can sum up the embeddings similar to how BERT aggregates its input embeddings
-                decoder_type_embeddings = torch.nn.Embedding(self.args.num_db_types, self.args.trainable_decoder_embeddings, padding_idx=int(self.args.features_default_val[0]))
         
-        if decoder_type_embeddings and not isinstance(decoder_type_embeddings, list):
-            decoder_type_embeddings = [decoder_type_embeddings]
-        
-        self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings, entity_embeddings=decoder_type_embeddings)
+        self.decoder = DECODERS[args.seq2seq_decoder](numericalizer, args, decoder_embeddings)
 
         if self.args.pretrain_context > 0:
             self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, numericalizer.num_tokens)

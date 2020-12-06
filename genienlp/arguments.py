@@ -175,7 +175,9 @@ def parse_argv(parser):
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
     
     parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
+    parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
+    parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4, help='Number of kg encoder layers for BootlegBertEncoder model')
     parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_embs', help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
     parser.add_argument('--bootleg_load_prepped_data', action='store_true', help='Load bootleg dumped features')
     parser.add_argument('--bootleg_batch_size', type=int, default=30, help='Batch size used for inference using bootleg')
@@ -184,7 +186,6 @@ def parse_argv(parser):
     
     parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], default='average', help='Method used to aggregate several type embeddings for a single mention')
 
-    
     parser.add_argument('--retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
                         help='how to retrieve types for entity tokens (bootleg option is wip')
     
@@ -198,10 +199,6 @@ def parse_argv(parser):
                                                                         ' Order is important')
     parser.add_argument('--features_size', nargs='+', type=int, default=[1, 1], help='Max length of each feature vector. All features are padded up to this length')
     parser.add_argument('--features_default_val', nargs='+', type=float, default=[0, 1.0], help='Max length of each feature vector. All features are padded up to this length')
-
-    parser.add_argument('--have_decoder_type_embeddings', action='store_true', help='')
-    parser.add_argument('--tie_encoder_decoder_type_embeds', action='store_true', help='')
-    parser.add_argument('--decoder_embed_comb_method', choices=['cat', 'sum'], default='cat', help='')
 
     parser.add_argument('--encoder_embeddings', default='glove+char',
                         help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '

@@ -31,18 +31,26 @@ import torch
 from torch import nn
 
 from .common import CombinedEmbedding, LayerNorm, LinearFeedforward
+from transformers.modeling_bert import BertConfig
+from ..paraphrase.transformers_utils import BootlegBertEncoder
+
+from typing import NamedTuple, List
+
+class EmbeddingOutput(NamedTuple):
+    name: str
+    all_layers: List[torch.Tensor]
+    last_layer: torch.Tensor
 
 
 class IdentityEncoder(nn.Module):
-    def __init__(self, numericalizer, args, context_embeddings, question_embeddings, embed_comb_method='cat'):
+    def __init__(self, numericalizer, args, context_embeddings, question_embeddings):
         super().__init__()
         self.args = args
         self.pad_idx = numericalizer.pad_id
 
         self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
                                                     finetune_pretrained=args.train_context_embeddings,
-                                                    trained_dimension=0, project=False,
-                                                    embed_comb_method=embed_comb_method)
+                                                    trained_dimension=0, project=False)
         if self.args.rnn_layers > 0 and self.args.rnn_dimension != self.args.dimension:
             self.dropout = nn.Dropout(args.dropout_ratio)
             self.projection = nn.Linear(self.encoder_embeddings.dimension, self.args.rnn_dimension, bias=False)
@@ -58,6 +66,15 @@ class IdentityEncoder(nn.Module):
             self.pool = None
             self.norm = None
 
+        if self.args.retrieve_method == 'bootleg' and self.args.bootleg_integration == 2:
+            config = BertConfig.from_pretrained('bert-base-uncased', cache_dir=self.args.embeddings)
+            config.num_hidden_layers = self.args.bootleg_kg_encoder_layer
+            
+            self.context_BootlegBertEncoder = BootlegBertEncoder(config, self.encoder_embeddings.dimension, self.args.rnn_dimension,
+                                                         ent_emb_file=f'{self.args.bootleg_output_dir}/bootleg/eval/{self.args.bootleg_model}/ent_embedding.npy')
+            self.question_BootlegBertEncoder = BootlegBertEncoder(config, self.encoder_embeddings.dimension, self.args.rnn_dimension,
+                                                         ent_emb_file=f'{self.args.bootleg_output_dir}/bootleg/eval/{self.args.bootleg_model}/ent_embedding.npy')
+
     def set_train_context_embeddings(self, trainable):
         self.encoder_embeddings.set_trainable(trainable)
 
@@ -69,9 +86,24 @@ class IdentityEncoder(nn.Module):
                                  context_entity_masking=None, question_entity_masking=None,
                                  context_entity_probs=None, question_entity_probs=None,
                                  mask_entities=True):
+                
         
-        context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking, entity_probs=context_entity_probs, mask_entities=mask_entities, padding=context_padding)
-        question_embedded = self.encoder_embeddings(question, entity_ids=question_entity_ids, entity_masking=question_entity_masking, entity_probs=question_entity_probs, mask_entities=mask_entities, padding=question_padding,)
+        if self.args.retrieve_method == 'bootleg' and self.args.bootleg_integration == 2:
+            # do not embed type_ids yet; in level 2 they are aggregated after contextual embeddings are formed
+            # still pass entity_masking and mask_entities so that encoder loss would work (if used)
+            context_embedded = self.encoder_embeddings(context, entity_masking=context_entity_masking, mask_entities=mask_entities, padding=context_padding)
+            question_embedded = self.encoder_embeddings(question, entity_masking=question_entity_masking, mask_entities=mask_entities, padding=question_padding)
+
+            context_embedded_last_layer, _pooled, context_embedded_all_layers = self.context_BootlegBertEncoder(inputs_embeds=context_embedded.last_layer, input_ent_ids=context_entity_ids)
+            question_embedded_last_layer, _pooled, question_embedded_all_layers = self.question_BootlegBertEncoder(inputs_embeds=question_embedded.last_layer, input_ent_ids=question_entity_ids)
+
+            context_embedded = EmbeddingOutput(name='Bootleg+Contextual', all_layers=context_embedded_all_layers, last_layer=context_embedded_last_layer)
+            question_embedded = EmbeddingOutput(name='Bootleg+Contextual', all_layers=question_embedded_all_layers, last_layer=question_embedded_last_layer)
+
+        
+        else:
+            context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking, entity_probs=context_entity_probs, mask_entities=mask_entities, padding=context_padding)
+            question_embedded = self.encoder_embeddings(question, entity_ids=question_entity_ids, entity_masking=question_entity_masking, entity_probs=question_entity_probs, mask_entities=mask_entities, padding=question_padding,)
         
         # pick the top-most N transformer layers to pass to the decoder for cross-attention
         # (add 1 to account for the embedding layer - the decoder will drop it later)

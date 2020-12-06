@@ -69,9 +69,10 @@ def parse_argv(parser):
                         help='Maximum length for entities when ngrams lookup_method is used ')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
     
-    parser.add_argument('--bootleg_input_dir', type=str,
-                        help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
+    parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
+    parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
+    parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4, help='Number of kg encoder layers for BootlegBertEncoder model')
     parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_embs',
                         help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
     parser.add_argument('--bootleg_batch_size', type=int, default=30,

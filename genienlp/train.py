@@ -140,6 +140,13 @@ def prepare_data(args, logger):
         if args.vocab_tasks is not None and task.name in args.vocab_tasks:
             vocab_sets.extend(split)
 
+        if hasattr(task, 'bootleg'):
+            if task.bootleg.bootleg_load_prepped_data:
+                emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
+                if args.use_curriculum:
+                    emb_file_list += ['aux']
+                task.bootleg.merge_embeds(emb_file_list)
+
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
         load_embeddings(args.embeddings,
                         args.context_embeddings,

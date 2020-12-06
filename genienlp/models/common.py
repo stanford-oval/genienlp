@@ -376,105 +376,27 @@ class Feedforward(nn.Module):
     def forward(self, x):
         return self.activation(self.linear(self.dropout(x)))
 
-class BertCombinerHead(nn.Module):
-    
-    def __init__(self, args, input_dim, output_dim, tanh=False, norm=False, freeze=True):
-        super().__init__()
-        ENT_BERT_ENCODER_CONFIG = {
-            "attention_probs_dropout_prob": 0.1,
-            "directionality": "bidi",
-            "hidden_act": "gelu",
-            "hidden_dropout_prob": 0.1,
-            "hidden_size": 1024,
-            "initializer_range": 0.02,
-            "intermediate_size": 4096,
-            "max_position_embeddings": 512,
-            "num_attention_heads": 16,
-            "num_hidden_layers": 4,
-            "output_hidden_states": True
-        }
-        config = ENT_BERT_ENCODER_CONFIG
-        config["num_hidden_layers"] = args.kg_encoder_layer
-        config = BertConfig.from_dict(config)
-        self.model = BertModelV2(config, num_db_types=0)
-        
-        if tanh is True:
-            self.proj_activation = nn.Tanh()
-        else:
-            self.proj_activation = None
-
-        self.norm = norm
-        if self.norm is True:
-            self.LayerNorm = BertLayerNorm(config.hidden_size, eps=1e-12)
-            self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        
-    def forward(self, emb_output):
-        if self.proj_activation:
-            emb_output = self.proj_activation(emb_output)
-            
-        if self.norm:
-            emb_output = self.LayerNorm(emb_output)
-            emb_output = self.dropout(emb_output)
-            
-        last_hidden_state, _pooled, hidden_states = self.model(embedding_output=emb_output)
-        
-        return EmbeddingOutput(name='combine', all_layers=hidden_states, last_layer=last_hidden_state)
-
 
 class CombinedEmbedding(nn.Module):
     project: Final[bool]
     dimension: Final[int]
 
     def __init__(self, numericalizer, pretrained_embeddings, output_dimension, finetune_pretrained=False,
-                 trained_dimension=0, project=True, entity_embeddings=None, embed_comb_method='cat'):
+                 trained_dimension=0, project=True):
         super().__init__()
         self.project = project
         self.pretrained_embeddings = nn.ModuleList(pretrained_embeddings)
-        self.entity_embeddings = nn.ModuleList(entity_embeddings)
-        self.embed_comb_method = embed_comb_method
-        self.sum_after_projection = False
 
-        if embed_comb_method == 'cat':
-            dimension = 0
-            for embedding in self.pretrained_embeddings:
-                dimension += embedding.dim
-            self.set_trainable(finetune_pretrained)
+        dimension = 0
+        for embedding in self.pretrained_embeddings:
+            dimension += embedding.dim
+        self.set_trainable(finetune_pretrained)
 
-            if trained_dimension > 0:
-                self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
-                dimension += trained_dimension
-            else:
-                self.trained_embeddings = None
-                
-            if self.entity_embeddings:
-                for embedding in self.entity_embeddings:
-                    dimension += embedding.weight.size()[1]
-
-        elif embed_comb_method == 'sum':
-            dimension = 0
-            for embedding in self.pretrained_embeddings:
-                if dimension == 0:
-                    dimension = embedding.dim
-                elif embedding.dim != dimension:
-                    raise ValueError('Pretrained Embeddings should have the same size when embed_comb_method is "sum"')
-            self.set_trainable(finetune_pretrained)
-
-            if trained_dimension > 0:
-                if dimension == 0:
-                    dimension = trained_dimension
-                elif trained_dimension != dimension:
-                    assert project
-                    self.sum_after_projection = True
-                self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
-            else:
-                self.trained_embeddings = None
-                
-            for embedding in self.entity_embeddings:
-                if dimension == 0:
-                    dimension = embedding.weight.size()[1]
-                elif embedding.weight.size()[1] != dimension:
-                    assert project
-                    self.sum_after_projection = True
+        if trained_dimension > 0:
+            self.trained_embeddings = nn.Embedding(numericalizer.num_tokens, trained_dimension)
+            dimension += trained_dimension
+        else:
+            self.trained_embeddings = None
 
         if self.project:
             self.projection = Feedforward(dimension, output_dimension)
@@ -507,64 +429,17 @@ class CombinedEmbedding(nn.Module):
             last_layer.append(emb.last_layer)
             names.append(emb.name)
         
-        if self.embed_comb_method == 'cat':
-            new_all_layers = [torch.cat(layer_list, dim=2) for layer_list in all_layers]
-            new_last_layer = torch.cat(last_layer, dim=2)
-            if self.project:
-                new_last_layer = self.projection(new_last_layer)
-        elif self.embed_comb_method == 'sum':
-            new_all_layers = []
-            new_last_layer = []
-            if self.sum_after_projection:
-                for layer in last_layer:
-                    if layer.shape[-1] != self.dimension:
-                        new_last_layer.append(self.projection(layer))
-                    else:
-                        new_last_layer.append(layer)
-                        
-                for layer_list in all_layers:
-                    new_layer_list = []
-                    for layer in layer_list:
-                        if layer.shape[-1] != self.dimension:
-                            new_layer_list.append(self.projection(layer))
-                        else:
-                            new_layer_list.append(layer)
-
-                    new_all_layers.append(new_layer_list)
-
-                new_all_layers = [sum(layer_list) for layer_list in new_all_layers]
-                new_last_layer = sum(new_last_layer)
-
-            else:
-                new_all_layers = [sum(layer_list) for layer_list in all_layers]
-                new_last_layer = sum(last_layer)
-
-                if self.project:
-                    new_last_layer = self.projection(new_last_layer)
-
+        new_all_layers = [torch.cat(layer_list, dim=2) for layer_list in all_layers]
+        new_last_layer = torch.cat(last_layer, dim=2)
+        if self.project:
+            new_last_layer = self.projection(new_last_layer)
+        
         return EmbeddingOutput(name='combined', all_layers=new_all_layers, last_layer=new_last_layer)
 
     def forward(self, x, entity_ids=None, entity_masking=None, entity_probs=None, mask_entities=None, padding=None):
         embedded: List[EmbeddingOutput] = []
         if len(self.pretrained_embeddings):
             embedded += [emb(x, entity_ids, entity_masking, entity_probs, mask_entities, padding) for emb in self.pretrained_embeddings]
-        
-        if len(self.entity_embeddings):
-            for embedding in self.entity_embeddings:
-                # average embedding of different types
-                # size (batch, length, num_types, emb_dim)
-                type_lengths = entity_masking.sum(-1)
-                type_lengths[type_lengths == 0] = 1
-
-                entity_type_embeddings = embedding(entity_ids)
-
-                # weighted average
-                if entity_probs is not None:
-                    entity_type_embeddings = entity_type_embeddings * entity_probs.unsqueeze(-1)
-
-                entity_type_embeddings = entity_type_embeddings.sum(-2) / type_lengths.unsqueeze(-1)
-
-                embedded.append(EmbeddingOutput(name='entity', all_layers=[entity_type_embeddings], last_layer=entity_type_embeddings))
 
         if self.trained_embeddings is not None:
             trained_vocabulary_size = self.trained_embeddings.weight.size()[0]

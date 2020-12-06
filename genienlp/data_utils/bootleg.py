@@ -9,9 +9,10 @@ from ..util import reverse_bisect_left
 
 class Bootleg(object):
     
-    def __init__(self, bootleg_input_dir, bootleg_model, unk_id, num_workers, is_contextual,
+    def __init__(self, bootleg_input_dir, bootleg_output_dir, bootleg_model, unk_id, num_workers, is_contextual,
                  bootleg_load_prepped_data, bootleg_dump_mode, bootleg_batch_size, bootleg_integration):
         self.bootleg_input_dir = bootleg_input_dir
+        self.bootleg_output_dir = bootleg_output_dir
         self.bootleg_model = bootleg_model
         self.unk_id = int(unk_id)
         self.num_workers = num_workers
@@ -35,13 +36,14 @@ class Bootleg(object):
             self.type2id = ujson.load(fin)
             
         self.pretrained_bert = f'{bootleg_input_dir}/emb_data/pretrained_bert_models'
+        
+        self.cur_entity_embed_size = 0
 
-        self.output_dir = 'results_temp'
         
         self.fixed_overrides = [
              "--data_config.entity_dir", self.entity_dir,
              "--run_config.eval_batch_size", str(self.bootleg_batch_size),
-             "--run_config.save_dir", self.output_dir,
+             "--run_config.save_dir", self.bootleg_output_dir,
              "--run_config.init_checkpoint", self.model,
              "--run_config.loglevel", 'debug',
              "--train_config.load_optimizer_from_ckpt", 'False',
@@ -89,7 +91,7 @@ class Bootleg(object):
         
         threshold = 0.3
 
-        with open(f'{self.output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}/bootleg_labels.jsonl', 'r') as fin:
+        with open(f'{self.bootleg_output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}/bootleg_labels.jsonl', 'r') as fin:
             for i, line in enumerate(fin):
                 line = ujson.loads(line)
                 tokenized = line['sentence'].split(' ')
@@ -103,6 +105,9 @@ class Bootleg(object):
                         
                         # account for padding and UNK id added to embedding matrix
                         ctx_emb_id += 2
+                        
+                        # account for shift in embedding idx when we merge embeddings for all data splits
+                        ctx_emb_id += self.cur_entity_embed_size
                         
                         type_ids = [ctx_emb_id]
                         type_probs = [prob]
@@ -142,20 +147,29 @@ class Bootleg(object):
                         
                 all_tokens_type_ids.append(tokens_type_ids)
                 all_tokens_type_probs.append(tokens_type_probs)
+
+        if self.bootleg_load_prepped_data:
+            with open(f'{self.bootleg_output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}/bootleg_embs.npy', 'rb') as fin:
+                emb_data = np.load(fin)
+                self.cur_entity_embed_size += emb_data.shape[0]
                 
         return all_tokens_type_ids, all_tokens_type_probs
     
     
-    def expand_emb(self, file_name):
-        dir = f'{self.output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}'
-        with open(f'{dir}/bootleg_embs.npy', 'rb') as fin:
-            emb_data = np.load(fin)
-            
-            # add embeddings for the padding and unknown special tokens
-            new_emb = np.concatenate([np.zeros([2, emb_data.shape[1]], dtype='float'), emb_data], axis=0)
-            with open(f'{dir}/ent_embedding.npy', 'wb') as fout:
-                np.save(fout, new_emb)
+    def merge_embeds(self, file_list):
+        all_emb_data = []
+        for file_name in file_list:
+            emb_dir = f'{self.bootleg_output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}'
+            with open(f'{emb_dir}/bootleg_embs.npy', 'rb') as fin:
+                emb_data = np.load(fin)
+                all_emb_data.append(emb_data)
 
-            # v = [i - 2 for i in range(new_emb.shape[0])]
-            # with open(f'{dir}/ent_vocab.pkl', 'wb') as fout:
-            #     pickle.dump(v, fout)
+        all_emb_data = np.concatenate(all_emb_data, axis=0)
+        
+        # add embeddings for the padding and unknown special tokens
+        new_emb = np.concatenate([np.zeros([2, all_emb_data.shape[1]], dtype='float'), all_emb_data], axis=0)
+        
+        import os
+        os.makedirs(f'{self.bootleg_output_dir}/bootleg/eval/{self.bootleg_model}', exist_ok=True)
+        np.save(f'{self.bootleg_output_dir}/bootleg/eval/{self.bootleg_model}/ent_embedding.npy', new_emb)
+

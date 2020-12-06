@@ -22,13 +22,17 @@ import copy
 import re
 import logging
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 import math
 import random
 from typing import List, Optional
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+import numpy as np
+
+from transformers.modeling_bert import BertEncoder, BertLayerNorm, BertPooler, BertPreTrainedModel
 
 from transformers import XLMRobertaConfig
 from transformers.modeling_bart import LayerNorm, LearnedPositionalEmbedding, BartEncoder, SelfAttention, invert_mask, \
@@ -972,7 +976,7 @@ class BertEmbeddingsV2(BertEmbeddings):
 
         embeddings = inputs_embeds + position_embeddings + token_type_embeddings
         
-        if self.num_db_types > 0:
+        if self.num_db_types > 0 and entity_ids is not None:
             # average embedding of different types
             # size (batch, length, num_types, emb_dim)
             type_lengths = entity_masking.sum(-1)
@@ -1149,3 +1153,211 @@ class XLMRobertaModelV2(BertModelV2):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
+        
+
+class BootlegBertEncoder(BertPreTrainedModel):
+    def __init__(
+        self,
+        config,
+        input_dim,
+        output_dim,
+        ent_emb_file=None,
+        static_ent_emb_file=None,
+        type_ent_emb_file=None,
+        rel_ent_emb_file=None,
+        tanh=False,
+        norm=False,
+        freeze=True,
+    ):
+        super(BootlegBertEncoder, self).__init__(config)
+        self.encoder = BertEncoder(config)
+        self.pooler = BertPooler(config)
+
+        self.apply(self._init_weights)
+
+        if ent_emb_file is not None:
+            ent_emb_matrix = torch.from_numpy(np.load(ent_emb_file))
+            self.ent_embeddings = nn.Embedding(
+                ent_emb_matrix.size()[0], ent_emb_matrix.size()[1], padding_idx=0
+            )
+            self.ent_embeddings.weight.data.copy_(ent_emb_matrix)
+            input_dim += ent_emb_matrix.size()[1]
+            if freeze:
+                for param in self.ent_embeddings.parameters():
+                    param.requires_grad = False
+        else:
+            self.ent_embeddings = None
+
+        if static_ent_emb_file is not None:
+            static_ent_emb_matrix = torch.from_numpy(np.load(static_ent_emb_file))
+            self.static_ent_embeddings = nn.Embedding(
+                static_ent_emb_matrix.size()[0],
+                static_ent_emb_matrix.size()[1],
+                padding_idx=0,
+            )
+            self.static_ent_embeddings.weight.data.copy_(static_ent_emb_matrix)
+            input_dim += static_ent_emb_matrix.size()[1]
+            if freeze:
+                for param in self.static_ent_embeddings.parameters():
+                    param.requires_grad = False
+        else:
+            self.static_ent_embeddings = None
+
+        if type_ent_emb_file is not None:
+            type_ent_emb_matrix = torch.from_numpy(np.load(type_ent_emb_file))
+            self.type_ent_embeddings = nn.Embedding(
+                type_ent_emb_matrix.size()[0],
+                type_ent_emb_matrix.size()[1],
+                padding_idx=0,
+            )
+            self.type_ent_embeddings.weight.data.copy_(type_ent_emb_matrix)
+            input_dim += type_ent_emb_matrix.size()[1]
+            if freeze:
+                for param in self.type_ent_embeddings.parameters():
+                    param.requires_grad = False
+        else:
+            self.type_ent_embeddings = None
+
+        if rel_ent_emb_file is not None:
+            rel_ent_emb_matrix = torch.from_numpy(np.load(rel_ent_emb_file))
+            self.rel_ent_embeddings = nn.Embedding(
+                rel_ent_emb_matrix.size()[0],
+                rel_ent_emb_matrix.size()[1],
+                padding_idx=0,
+            )
+            self.rel_ent_embeddings.weight.data.copy_(rel_ent_emb_matrix)
+            input_dim += rel_ent_emb_matrix.size()[1]
+            if freeze:
+                for param in self.rel_ent_embeddings.parameters():
+                    param.requires_grad = False
+        else:
+            self.rel_ent_embeddings = None
+
+        self.proj = nn.Linear(input_dim, output_dim)
+
+        if tanh is True:
+            self.proj_activation = nn.Tanh()
+        else:
+            self.proj_activation = None
+
+        self.norm = norm
+        if self.norm is True:
+            self.LayerNorm = BertLayerNorm(config.hidden_size, eps=1e-12)
+            self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(
+        self,
+        inputs_embeds,
+        input_ids=None,
+        input_ent_ids=None,
+        input_static_ent_ids=None,
+        input_type_ent_ids=None,
+        input_rel_ent_ids=None,
+        token_type_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=True,
+    ):
+    
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+    
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+    
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+    
+        if attention_mask is None:
+            attention_mask = torch.ones(input_shape, device=device)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+    
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+    
+        # If a 2D ou 3D attention mask is provided for the cross-attention
+        # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+        if self.config.is_decoder and encoder_hidden_states is not None:
+            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            if encoder_attention_mask is None:
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        else:
+            encoder_extended_attention_mask = None
+    
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        
+        embedding_output = [inputs_embeds]
+
+        ents_embeddings = None
+        if self.ent_embeddings is not None:
+            # input_ent_ids of size (batch, length, num_ids)
+            ents_embeddings = self.ent_embeddings(input_ent_ids)
+            
+            # average them
+            ents_embeddings = ents_embeddings.mean(-2)
+            
+            embedding_output.append(ents_embeddings)
+
+        static_ents_embeddings = None
+        if self.static_ent_embeddings is not None:
+            static_ents_embeddings = self.static_ent_embeddings(input_static_ent_ids)
+            embedding_output.append(static_ents_embeddings)
+
+        type_ents_embeddings = None
+        if self.type_ent_embeddings is not None:
+            type_ents_embeddings = self.type_ent_embeddings(input_type_ent_ids)
+            embedding_output.append(type_ents_embeddings)
+
+        rel_ents_embeddings = None
+        if self.rel_ent_embeddings is not None:
+            rel_ents_embeddings = self.rel_ent_embeddings(input_rel_ent_ids)
+            embedding_output.append(rel_ents_embeddings)
+
+        embedding_output = torch.cat(embedding_output, dim=-1)
+        embedding_output = self.proj(embedding_output)
+
+        if self.proj_activation:
+            embedding_output = self.proj_activation(embedding_output)
+
+        if self.norm:
+            embedding_output = self.LayerNorm(embedding_output)
+            embedding_output = self.dropout(embedding_output)
+    
+    
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states
+        )
+        sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output)
+    
+        outputs = (sequence_output, pooled_output,) + encoder_outputs[
+                                                      1:
+                                                      ]  # add hidden_states and attentions if they are here
+
+        
+        return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
