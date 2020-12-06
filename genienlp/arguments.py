@@ -141,11 +141,7 @@ def parse_argv(parser):
 
     parser.add_argument("--almond_has_multiple_programs", action='store_true', help='Indicate if almond dataset has multiple programs for each sentence')
 
-    parser.add_argument('--model', type=str, choices=['Seq2Seq', 'Bart'], default='Seq2Seq', help='which model to import')
-    parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity', 'Coattention'],
-                        default='MQANEncoder', help='which encoder to use for the Seq2Seq model')
-    parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'] + BART_MODEL_LIST, default='MQANDecoder',
-                        help='which decoder to use for the Seq2Seq model')
+    parser.add_argument('--model', type=str, choices=['BertLSTM', 'Bart'], default='BertLSTM', help='which model to import')
     parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules')

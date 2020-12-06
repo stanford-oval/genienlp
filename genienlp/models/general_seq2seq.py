@@ -32,25 +32,13 @@ import torch
 import logging
 import os
 
-from .coatt_encoder import CoattentionEncoder
 from ..data_utils.embeddings import load_embeddings
 from ..data_utils.numericalizer.transformer import TransformerNumericalizer
-from .lstm_encoder import BiLSTMEncoder
-from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
 from .common import mask_tokens
 from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration, AutoConfig
 
-ENCODERS = {
-    'MQANEncoder': MQANEncoder,
-    'BiLSTM': BiLSTMEncoder,
-    'Identity': IdentityEncoder,
-    'Coattention': CoattentionEncoder,
-}
-DECODERS = {
-    'MQANDecoder': MQANDecoder
-}
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +79,7 @@ class GenieModel(PreTrainedModel):
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
 
 
-class Seq2Seq(GenieModel):
+class BertLSTM(GenieModel):
     def __init__(self, config=None, *inputs, args, vocab_sets, tasks, save_directory=None, **kwargs):
         """
         Relevant inputs should be provided using kwargs. This method is defined this way to match parent's and siblings' method signatures.
@@ -126,8 +114,8 @@ class Seq2Seq(GenieModel):
         logger.debug(f'The first 200 tokens:')
         logger.debug(self.numericalizer.vocab.itos[:200])
 
-        self.encoder = ENCODERS[args.seq2seq_encoder](self.numericalizer, args, self.context_embeddings, self.question_embeddings)
-        self.decoder = DECODERS[args.seq2seq_decoder](self.numericalizer, args, self.decoder_embeddings)
+        self.encoder = IdentityEncoder(self.numericalizer, args, self.context_embeddings, self.question_embeddings)
+        self.decoder = MQANDecoder(self.numericalizer, args, self.decoder_embeddings)
 
         if self.args.pretrain_context > 0:
             self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, self.numericalizer.num_tokens)
