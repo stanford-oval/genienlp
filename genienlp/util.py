@@ -624,24 +624,11 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=False, max_pairs=None, train=False,
-                     append_question_to_context_too=False, override_question=None, override_context=None, return_original_order=False):
+def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer, device=device)
     
-    all_features = NumericalizedExamples.from_examples(dataset, numericalizer, device=device,
-                                  paired=paired and train, max_pairs=max_pairs, groups=dataset.groups,
-                                  append_question_to_context_too=append_question_to_context_too,
-                                  override_question=override_question, override_context=override_context)
-
-    all_f = []
-    for i in prange(len(all_features.example_id), desc='Converting dataset to features'):
-        all_f.append(NumericalizedExamples(example_id=[all_features.example_id[i]],
-                            context=SequentialField(value=all_features.context.value[i], length=all_features.context.length[i], limited=all_features.context.limited[i]),
-                            question=SequentialField(value=all_features.question.value[i], length=all_features.question.length[i], limited=all_features.question.limited[i]),
-                            answer=SequentialField(value=all_features.answer.value[i], length=all_features.answer.length[i], limited=all_features.answer.limited[i]),
-                            decoder_vocab=all_features.decoder_vocab, device=device, padding_function=numericalizer.pad))
-    
-    del all_features
-    sampler = LengthSortedIterator(all_f, batch_size=batch_size, sort=True, shuffle_and_repeat=train, sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
+    sampler = LengthSortedIterator(all_features, batch_size=batch_size, sort=True, shuffle_and_repeat=train,
+                                   sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
     # get the sorted data_source
     all_f = sampler.data_source
     data_loader = torch.utils.data.DataLoader(all_f, batch_sampler=sampler, collate_fn=NumericalizedExamples.collate_batches, num_workers=0)
@@ -678,9 +665,7 @@ def load_config_json(args):
                     'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower',
                     'encoder_embeddings', 'context_embeddings', 'question_embeddings', 'decoder_embeddings',
                     'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'locale', 'use_pretrained_bert',
-                    'force_subword_tokenize',
-                    'append_question_to_context_too', 'almond_preprocess_context', 'almond_dataset_specific_preprocess', 'almond_lang_as_question',
-                    'override_question', 'override_context', 'almond_has_multiple_programs']
+                    'override_question', 'almond_has_multiple_programs']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):

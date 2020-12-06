@@ -167,15 +167,7 @@ def parse_argv(parser):
                         help='size of trainable portion of encoder embedding (only for Coattention encoder)')
     parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
                         help='size of trainable portion of decoder embedding (0 or omit to disable)')
-    parser.add_argument('--force_subword_tokenize', action='store_true', default=False,
-                        help='force subword tokenization of code tokens too')
-    parser.add_argument('--append_question_to_context_too', action='store_true', default=False,
-                        help='')
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
-    parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
-    parser.add_argument('--almond_preprocess_context', action='store_true', default=False, help='')
-    parser.add_argument('--almond_dataset_specific_preprocess', type=str, default='none', choices=['none', 'multiwoz'],
-                        help='Applies dataset-sepcific preprocessing to context and answer fields, and postprocesses the model outputs back to the original form.')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
 
@@ -248,9 +240,6 @@ def post_parse(args):
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1) :
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
 
-    if args.override_context and args.append_question_to_context_too:
-        raise ValueError('You cannot use append_question_to_context_too when overriding context')
-    
     if args.paired and not args.sentence_batching:
         logger.warning('Paired training only works if sentence_batching is used as well.'
                         'Activating sentence_batching...')

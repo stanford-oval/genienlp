@@ -157,36 +157,23 @@ class TransformerNumericalizer(object):
             self.generative_vocab_size = len(self._tokenizer)
             self.decoder_vocab = None
 
-    def encode_single(self, minibatch, decoder_vocab, max_length=-1):
-        assert isinstance(minibatch, list)
-
-        # apply word-piece tokenization to everything first
-        wp_tokenized = []
-        for field in minibatch:
-            wp_tokenized.append(self._tokenizer.tokenize(field))
+    def encode_single(self, sentence, decoder_vocab, max_length=-1):
+        wp_tokenized = self._tokenizer.tokenize(sentence)
 
         if max_length > -1:
             max_len = max_length
         elif self.fix_length is None:
-            max_len = max(len(x) for x in wp_tokenized)
+            max_len = len(wp_tokenized)
         else:
             max_len = self.fix_length
 
-        examples = []
-        lengths = []
-        numerical = []
-        decoder_numerical = []
-        for wp_tokens in wp_tokenized:
-            example = [self.init_token] + list(wp_tokens[:max_len]) + [self.eos_token]
+        example = [self.init_token] + list(wp_tokenized[:max_len]) + [self.eos_token]
+        length = len(example)
+        numerical = self._tokenizer.convert_tokens_to_ids(example)
+        decoder_numerical = [decoder_vocab.encode(word) for word in example]
 
-            examples.append(example)
-            lengths.append(len(example))
-
-            numerical.append(self._tokenizer.convert_tokens_to_ids(example))
-            if decoder_vocab is not None:
-                decoder_numerical.append([decoder_vocab.encode(word) for word in example])
-
-        return SequentialField(length=lengths, value=numerical, limited=decoder_numerical)
+        # minibatch with one element
+        return SequentialField(length=[length], value=[numerical], limited=[decoder_numerical])
 
     def decode(self, tensor):
         return self._tokenizer.convert_ids_to_tokens(tensor)

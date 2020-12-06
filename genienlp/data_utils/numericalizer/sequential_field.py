@@ -27,13 +27,14 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import List, NamedTuple
+import torch
+from typing import Union, List, NamedTuple
 
 
 class SequentialField(NamedTuple):
-    value: List[List[int]]
-    length: List[int]
-    limited: List[List[int]]
+    value: Union[torch.tensor, List[List[int]]]
+    length: Union[torch.tensor, List[int]]
+    limited: Union[torch.tensor, List[List[int]]]
 
     @staticmethod
     def merge(sequential_fields: List):

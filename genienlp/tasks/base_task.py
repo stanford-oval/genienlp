@@ -42,8 +42,6 @@ class BaseTask:
 
     def __init__(self, name, args):
         self.name = name
-        self.append_question_to_context_too = args.append_question_to_context_too
-
         # special task-specific tokens that should not be subword tokenized
         self.special_tokens = set()
 
