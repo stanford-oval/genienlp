@@ -34,14 +34,13 @@ import os
 
 from .coatt_encoder import CoattentionEncoder
 from ..data_utils.embeddings import load_embeddings
-from ..data_utils.numericalizer.transformer import BartNumericalizer
-from ..data_utils.example import Example
+from ..data_utils.numericalizer.transformer import TransformerNumericalizer
 from .lstm_encoder import BiLSTMEncoder
 from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
 from .common import mask_tokens
-from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration
+from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration, AutoConfig
 
 ENCODERS = {
     'MQANEncoder': MQANEncoder,
@@ -56,39 +55,44 @@ DECODERS = {
 logger = logging.getLogger(__name__)
 
 
-class Seq2Seq(PreTrainedModel):
-
+class GenieModel(PreTrainedModel):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        """
-        Inputs:
-            pretrained_model_name_or_path: is the path to the directory where the model is saved.
-                                           Is named this way to match the parent's and siblings' method signatures
-            args
-            device
-            vocab_sets
-        
-        Outputs:
-            model: the loaded model
-            best_decascore: the best deca score when the training of this model was finished
-        """
-
-        # obtain function arguments from **kwargs
         save_directory = pretrained_model_name_or_path
         model_checkpoint_file = kwargs.pop("model_checkpoint_file", None)
         args = kwargs.pop("args", None)
         device = kwargs.pop("device", None)
+        tasks = kwargs.pop("tasks", None)
         vocab_sets = kwargs.pop("vocab_sets", None)
 
         full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
         logger.info(f'Loading the model from {full_checkpoint_path}')
-        model = Seq2Seq(args=args, vocab_sets=vocab_sets, is_loading=True, save_directory=save_directory)
+        model = cls(args=args, tasks=tasks, vocab_sets=vocab_sets, save_directory=save_directory)
         save_dict = torch.load(full_checkpoint_path, map_location=device)
         model.load_state_dict(save_dict['model_state_dict'])
 
         return model, save_dict.get('best_decascore')
 
-    def __init__(self, config=None, *inputs, **kwargs):
+    def init_vocab_from_data(self, vocab_sets, tasks, save_directory=None):
+        if save_directory is not None:
+            logger.info(f'Loading the accompanying numericalizer from {save_directory}')
+            self.numericalizer.load(save_directory)
+        else:
+            logger.info(f'Building vocabulary')
+            self.numericalizer.build_vocab(vocab_sets, tasks)
+
+    def add_new_vocab_from_data(self, tasks, resize_decoder=False):
+        old_num_tokens = self.numericalizer.num_tokens
+        self.numericalizer.grow_vocab(tasks)
+        if self.numericalizer.num_tokens > old_num_tokens:
+            logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
+        self.bart.resize_token_embeddings(self.numericalizer.num_tokens)
+        if resize_decoder:
+            self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
+
+
+class Seq2Seq(GenieModel):
+    def __init__(self, config=None, *inputs, args, vocab_sets, tasks, save_directory=None, **kwargs):
         """
         Relevant inputs should be provided using kwargs. This method is defined this way to match parent's and siblings' method signatures.
         Inputs:
@@ -98,21 +102,23 @@ class Seq2Seq(PreTrainedModel):
             save_directory: The directory where numericalizer can be loaded from. Should be provided whenever `is_loading` is True
         """
         super().__init__(PretrainedConfig()) # dummy PretrainedConfig
-        # obtain function arguments from **kwargs
-        args = kwargs.pop("args", None)
-        vocab_sets = kwargs.pop("vocab_sets", None)
-        is_loading = kwargs.pop("is_loading", False)
-        save_directory = kwargs.pop("save_directory", None)
-
-        self.numericalizer, self.context_embeddings, self.question_embeddings, self.decoder_embeddings = \
-            self._init_embeddings_from_data(args, vocab_sets, is_loading)
         self.args = args
 
-        if is_loading:
-            logger.info(f'Loading the accompanying numericalizer from {save_directory}')
-            self.numericalizer.load(save_directory)
+        encoder_embeddings = args.context_embeddings
+        config = AutoConfig.from_pretrained(encoder_embeddings, cache_dir=args.embeddings)
+        self.numericalizer = TransformerNumericalizer(encoder_embeddings, config=config,
+                                                      max_generative_vocab=args.max_generative_vocab,
+                                                      cache=encoder_embeddings)
+        self.init_vocab_from_data(vocab_sets, tasks, save_directory)
 
         logger.info(f'Initializing encoder and decoder embeddings')
+        self.context_embeddings, self.question_embeddings, self.decoder_embeddings = \
+            load_embeddings(args.embeddings,
+                            args.context_embeddings,
+                            args.question_embeddings,
+                            args.decoder_embeddings,
+                            args.max_generative_vocab)
+
         for vec in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
             vec.init_for_vocab(self.numericalizer.vocab)
         
@@ -129,37 +135,19 @@ class Seq2Seq(PreTrainedModel):
     def set_train_context_embeddings(self, trainable):
         self.encoder.set_train_context_embeddings(trainable)
 
-    def add_new_vocab_from_data(self, splits, resize_decoder=False):
+    def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         """
         resize_decoder: if True, will actually resize the embedding matrix of the decoder
         """
         #logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens from training')
         old_num_tokens = self.numericalizer.num_tokens
-        new_words = []
-        for task_splits in splits:
-            for split in task_splits:
-                new_words += self.numericalizer.grow_vocab(split)
+        self.numericalizer.grow_vocab(tasks)
         if self.numericalizer.num_tokens > old_num_tokens:
             logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
         for emb in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
-            emb.grow_for_vocab(self.numericalizer.vocab, new_words)
+            emb.grow_for_vocab(self.numericalizer.vocab)
         if resize_decoder:
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
-
-    def _init_embeddings_from_data(self, args, vocab_sets, is_loading):
-        numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
-        load_embeddings(args.embeddings,
-                        args.context_embeddings,
-                        args.question_embeddings,
-                        args.decoder_embeddings,
-                        args.max_generative_vocab)
-        if not is_loading:
-            logger.info(f'Building vocabulary')
-            numericalizer.build_vocab(Example.vocab_fields, vocab_sets)
-        else:
-            pass # numericalizer is going to be loaded from a file, so no need to do anything
-
-        return numericalizer, context_embeddings, question_embeddings, decoder_embeddings
 
     def set_train_question_embeddings(self, trainable):
         self.encoder.set_train_question_embeddings(trainable)
@@ -200,7 +188,6 @@ class Seq2Seq(PreTrainedModel):
             return self._pretrain_forward(batch)
         else:
             return self._normal_forward(batch, current_token_id, past_key_values, expansion_factor, generation_dict, encoder_output, return_dict)
-        
         
     def get_encoder_loss(self, context_rnn_state):
         
@@ -282,33 +269,17 @@ class Seq2Seq(PreTrainedModel):
         generated = torch.cat((generated[:, 0:1], generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)), dim=1) # map everything to full vocabulary except BOS which already is in full vocabulary
 
         return generated
-        
 
            
-class Bart(torch.nn.Module):
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        save_directory = pretrained_model_name_or_path
-        model_checkpoint_file = kwargs.pop("model_checkpoint_file", None)
-        args = kwargs.pop("args", None)
-        device = kwargs.pop("device", None)
-
-        full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
-        logger.info(f'Loading the model from {full_checkpoint_path}')
-        model = Bart(args=args)
-        save_dict = torch.load(full_checkpoint_path, map_location=device)
-        model.load_state_dict(save_dict['model_state_dict'])
-
-        return model, save_dict.get('best_decascore')
-
-
-    def __init__(self, config=None, *inputs, **kwargs):
-        super().__init__()
-        assert 'args' in kwargs
-        self.args = kwargs['args']
+class Bart(GenieModel):
+    def __init__(self, config=None, *inputs, args, tasks, vocab_sets, save_directory=None, **kwargs):
+        config = AutoConfig.from_pretrained(args.seq2seq_decoder, cache_dir=self.args.embeddings)
+        super().__init__(config)
+        self.args = args
         self.bart = BartForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder, cache_dir=self.args.embeddings)
-        self.numericalizer = BartNumericalizer(self.args.seq2seq_decoder)
+        self.numericalizer = TransformerNumericalizer(self.args.seq2seq_decoder, config, max_generative_vocab=None)
+        self.init_vocab_from_data(vocab_sets, tasks, save_directory)
+        self.bart.resize_token_embeddings(self.numericalizer.num_tokens)
 
     def forward(self, *input, **kwargs):
         #TODO pretraining
@@ -332,9 +303,6 @@ class Bart(torch.nn.Module):
 
     def set_train_question_embeddings(self, trainable):
         #TODO
-        pass
-
-    def add_new_vocab_from_data(self, splits, resize_decoder=False):
         pass
 
     def generate(self,

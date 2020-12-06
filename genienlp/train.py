@@ -492,6 +492,7 @@ def main(args):
     model_name = args.model
     model_class = getattr(models, model_name)
 
+    tasks = set(args.train_tasks) | set(args.val_tasks)
     train_sets, val_sets, aux_sets = prepare_data(args, logger)
 
     if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets) > 0):
@@ -507,12 +508,13 @@ def main(args):
                                                             args=args,
                                                             model_checkpoint_file=args.load,
                                                             vocab_sets=train_sets+val_sets,
+                                                            tasks=tasks,
                                                             device=devices[0])
+        model.add_new_vocab_from_data(tasks=tasks, resize_decoder=True)
     else:
         logger.info(f'Initializing a new {model_name}')
-        model = model_class(args=args, vocab_sets=train_sets+val_sets)
-    
-    model.add_new_vocab_from_data([train_sets+val_sets], resize_decoder=True)
+        model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks)
+
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
 

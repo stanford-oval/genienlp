@@ -31,9 +31,9 @@ from typing import List, NamedTuple
 
 
 class SequentialField(NamedTuple):
-    value: List[int]
+    value: List[List[int]]
     length: List[int]
-    limited: List[int]
+    limited: List[List[int]]
 
     @staticmethod
     def merge(sequential_fields: List):

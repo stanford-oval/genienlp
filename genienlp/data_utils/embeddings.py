@@ -30,17 +30,10 @@
 
 import torch
 import logging
-from transformers import AutoTokenizer, AutoModel, AutoConfig, \
-    BERT_PRETRAINED_MODEL_ARCHIVE_LIST, XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
+from transformers import AutoTokenizer, AutoModel, AutoConfig
 from typing import NamedTuple, List
 
-from .numericalizer.transformer import BertNumericalizer, XLMRobertaNumericalizer
-
 logger = logging.getLogger(__name__)
-
-EMBEDDING_NAME_TO_NUMERICALIZER_MAP = dict()
-EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: BertNumericalizer for embedding in BERT_PRETRAINED_MODEL_ARCHIVE_LIST})
-EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: XLMRobertaNumericalizer for embedding in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST})
 
 
 class EmbeddingOutput(NamedTuple):
@@ -59,7 +52,7 @@ class TransformerEmbedding(torch.nn.Module):
     def init_for_vocab(self, vocab):
         self.model.resize_token_embeddings(len(vocab))
 
-    def grow_for_vocab(self, vocab, new_words):
+    def grow_for_vocab(self, vocab):
         self.model.resize_token_embeddings(len(vocab))
 
     def forward(self, input: torch.Tensor, padding=None):
@@ -88,8 +81,6 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
     question_vectors = []
     decoder_vectors = []
 
-    numericalizer = None
-    numericalizer_type = None
     for emb_name in context_emb_names:
         if not emb_name:
             continue
@@ -98,16 +89,8 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             continue
 
         emb_type = get_embedding_type(emb_name)
-        if numericalizer is not None and numericalizer_type != emb_type and not cache_only:
-            raise ValueError('Cannot specify multiple Transformer embeddings')
-
         config = AutoConfig.from_pretrained(emb_type, cache_dir=cachedir)
         config.output_hidden_states = True
-        if numericalizer is None:
-            numericalizer = EMBEDDING_NAME_TO_NUMERICALIZER_MAP[emb_type](emb_type, config=config,
-                                              max_generative_vocab=max_generative_vocab,
-                                              cache=cachedir)
-            numericalizer_type = emb_type
 
         # load the tokenizer once to ensure all files are downloaded
         AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
@@ -123,17 +106,9 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             continue
 
         emb_type = get_embedding_type(emb_name)
-        if numericalizer is not None and numericalizer_type != emb_type:
-            raise ValueError('Cannot specify multiple Transformer embeddings')
 
         config = AutoConfig.from_pretrained(emb_type, cache_dir=cachedir)
         config.output_hidden_states = True
-        if numericalizer is None:
-            numericalizer = EMBEDDING_NAME_TO_NUMERICALIZER_MAP[emb_type](emb_type, config=config,
-                                              max_generative_vocab=max_generative_vocab,
-                                              cache=cachedir)
-
-            numericalizer_type = emb_type
 
         # load the tokenizer once to ensure all files are downloaded
         AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
@@ -144,8 +119,6 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
     for emb_name in decoder_emb_names:
         if not emb_name:
             continue
-        emb_type = get_embedding_type(emb_name)
-        if emb_type in EMBEDDING_NAME_TO_NUMERICALIZER_MAP:
-            raise ValueError('Transformer embeddings cannot be specified in the decoder')
+        raise ValueError('Transformer embeddings cannot be specified in the decoder')
 
-    return numericalizer, context_vectors, question_vectors, decoder_vectors
+    return context_vectors, question_vectors, decoder_vectors

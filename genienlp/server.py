@@ -58,7 +58,6 @@ class Server:
         self._cached_tasks = dict()
 
     def numericalize_examples(self, ex):
-        self.model.add_new_vocab_from_data([[ex]])
 
         all_features = NumericalizedExamples.from_examples(ex, self.numericalizer, device=self.device,
                                    append_question_to_context_too=self.args.append_question_to_context_too,
@@ -95,9 +94,10 @@ class Server:
                 if not question:
                     question = task.default_question
 
-                ex = Example.from_raw(str(example_id), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
+                ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
                 examples.append(ex)
 
+            self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples(examples)
             # it is a single batch, so wrap it in []
             predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
@@ -115,6 +115,7 @@ class Server:
 
             ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
 
+            self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples([ex])
             predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
 

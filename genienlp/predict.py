@@ -121,11 +121,12 @@ def run(args, device):
     model, _ = Model.from_pretrained(args.path,
                                      model_checkpoint_file=args.checkpoint_name,
                                      args=args,
-                                     device=device
+                                     device=device,
+                                     tasks=args.tasks,
                                     )
 
     val_sets = get_all_splits(args)
-    model.add_new_vocab_from_data(val_sets)
+    model.add_new_vocab_from_data(args.tasks)
     if args.half_precision:
         model.half()
 

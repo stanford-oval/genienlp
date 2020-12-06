@@ -42,8 +42,10 @@ class BaseTask:
 
     def __init__(self, name, args):
         self.name = name
-        self.force_subword_tokenize = args.force_subword_tokenize
         self.append_question_to_context_too = args.append_question_to_context_too
+
+        # special task-specific tokens that should not be subword tokenized
+        self.special_tokens = set()
 
     @property
     def default_question(self):
@@ -52,14 +54,6 @@ class BaseTask:
     @property
     def default_context(self):
         return ''
-
-    def tokenize(self, sentence, field_name=None):
-        if not sentence:
-            return [], None
-        return revtok.tokenize(sentence), None
-
-    def detokenize(self, tokenized, field_name=None):
-        return revtok.detokenize(tokenized)
 
     def get_splits(self, root, **kwargs):
         """
@@ -70,7 +64,10 @@ class BaseTask:
         :param kwargs: other arguments to pass to the Dataset
         :return: a list of text.Dataset
         """
-        return generic_dataset.JSON.splits(root=root, name=self.name, tokenize=self.tokenize, **kwargs)
+        return generic_dataset.JSON.splits(root=root, name=self.name, **kwargs)
+
+    def preprocess_field(self, sentence, field_name=None):
+        return sentence
 
     def preprocess_example(self, ex, train=False, max_context_length=None):
         """

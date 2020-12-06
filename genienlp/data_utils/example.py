@@ -27,7 +27,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import NamedTuple, List
+from typing import NamedTuple, List, Set
 import itertools
 import random
 import torch
@@ -36,39 +36,32 @@ from typing import Callable
 from .numericalizer.sequential_field import SequentialField
 
 
+def identity(x, **kw):
+    return x
+
+
 class Example(NamedTuple):
     example_id: str
-    # for each field in the example, we store the tokenized sentence, and a boolean mask
-    # indicating whether the token is a real word (subject to word-piece tokenization)
-    # or it should be treated as an opaque symbol
-    context: List[str]
-    context_word_mask: List[bool]
-    question: List[str]
-    question_word_mask: List[bool]
-    answer: List[str]
-    answer_word_mask: List[bool]
+    context: str
+    question: str
+    answer: str
     context_plus_question: List[str]
-    context_plus_question_word_mask: List[bool]
 
     vocab_fields = ['context', 'question', 'answer']
 
     @staticmethod
-    def from_raw(example_id: str, context: str, question: str, answer: str, tokenize, lower=False):
+    def from_raw(example_id: str, context: str, question: str, answer: str, preprocess = identity, lower=False):
         args = [example_id]
 
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
-            words, mask = tokenize(arg.rstrip('\n'), field_name=argname)
-            if mask is None:
-                mask = [True for _ in words]
+            field = preprocess(arg.rstrip('\n'), field_name=argname)
             if lower:
-                words = [word.lower() for word in words]
-            args.append(words)
-            args.append(mask)
-        
-        # create context_plus_question field by appending context and question words and words_masks
-        args.append(args[1] + args[3])
-        args.append(args[2] + args[4])
-        
+                field = field.lower()
+            args.append(field)
+
+        # create context_plus_question field by appending context and question words
+        args.append(args[1] + ' ' + args[2])
+
         return Example(*args)
 
 
