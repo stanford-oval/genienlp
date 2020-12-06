@@ -72,17 +72,6 @@ class BaseTask:
             return self.override_question
         return sentence
 
-    def preprocess_example(self, ex, train=False, max_context_length=None):
-        """
-        Preprocess a given example, in a task specific way.
-
-        Returns the modified example, or None if the example should be dropped from the dataset
-
-        :param ex: the text.Example to preprocess
-        :return: a new Example or None
-        """
-        return ex
-
     @property
     def metrics(self):
         """

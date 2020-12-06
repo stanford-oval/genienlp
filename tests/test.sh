@@ -25,14 +25,11 @@ trap on_error ERR INT TERM
 
 i=0
 for hparams in \
-      "--seq2seq_decoder sshleifer/bart-tiny-random --model Bart" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder MQANEncoder" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=BiLSTM --dimension=768" \
-      "--encoder_embeddings=xlm-roberta-base --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --eval_set_name aux" ;
-do
+      "--model Bart --pretrained_model sshleifer/bart-tiny-random" \
+      "--model BertLSTM --pretrained_model bert-base-multilingual-uncased --trainable_decoder_embeddings=50" \
+      "--model BertLSTM --pretrained_model bert-base-uncased --trainable_decoder_embeddings=50" \
+      "--model BertLSTM --pretrained_model xlm-roberta-base --trainable_decoder_embeddings=50" \
+      "--model BertLSTM --pretrained_model bert-base-uncased --trainable_decoder_embeddings=50 --eval_set_name aux" ; do
 
     # train
     pipenv run python3 -m genienlp train --train_tasks almond  --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
@@ -58,10 +55,10 @@ done
 
 # test almond_multilingual task
 for hparams in \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --sentence_batching --train_batch_tokens 4 --val_batch_size 4 --use_encoder_loss" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --sentence_batching --train_batch_tokens 4 --val_batch_size 4 --use_encoder_loss --paired" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --rnn_zero_state cls --almond_lang_as_question" ;
+      "--model BertLSTM --pretrained_model bert-base-multilingual-uncased --trainable_decoder_embeddings=50" \
+      "--model BertLSTM --pretrained_model bert-base-multilingual-uncased --trainable_decoder_embeddings=50 --sentence_batching --train_batch_tokens 4 --val_batch_size 4 --use_encoder_loss" \
+      "--model BertLSTM --pretrained_model bert-base-multilingual-uncased --trainable_decoder_embeddings=50 --sentence_batching --train_batch_tokens 4 --val_batch_size 4 --use_encoder_loss --paired" \
+      "--model BertLSTM --pretrained_model bert-base-multilingual-uncased --trainable_decoder_embeddings=50 --rnn_zero_state cls --almond_lang_as_question" ;
 
 do
 

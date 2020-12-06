@@ -44,7 +44,7 @@ from tensorboardX import SummaryWriter
 
 from . import arguments
 from . import models
-from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader,\
+from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader,\
     log_model_size, init_devices
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
@@ -109,17 +109,11 @@ def prepare_data(args, logger):
         logger.info(f'{task.name} has {len(split.eval)} validation examples')
         val_sets.append(split.eval)
 
-    if args.use_curriculum:
-        logger.info('Preprocessing auxiliary data for curriculum')
-        preprocess_examples(args, args.train_tasks, aux_sets, logger, train=True)
-    logger.info('Preprocessing training data')
-    preprocess_examples(args, args.train_tasks, train_sets, logger, train=True)
-    logger.info('Preprocessing validation data')
-    preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
-
     return train_sets, val_sets, aux_sets
 
+
 accumulated_batch_lengths = 0
+
 
 def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None,
                gradient_accumulation_steps=1):

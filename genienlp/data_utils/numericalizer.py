@@ -30,18 +30,17 @@
 import collections
 import os
 from torch.nn.utils.rnn import pad_sequence
+from transformers import AutoTokenizer
 
 from .decoder_vocab import DecoderVocabulary
-from transformers import AutoTokenizer
-from .sequential_field import SequentialField
+from .example import SequentialField
 
 class TransformerNumericalizer(object):
     """
     Numericalizer that uses Tokenizers from huggingface's transformers library.
     """
 
-    def __init__(self, pretrained_tokenizer, config, max_generative_vocab, cache=None, fix_length=None):
-        self.config = config
+    def __init__(self, pretrained_tokenizer, max_generative_vocab, cache=None, fix_length=None):
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
         self._cache = cache
@@ -57,9 +56,7 @@ class TransformerNumericalizer(object):
         return len(self._tokenizer)
 
     def load(self, save_dir):
-        self._tokenizer = AutoTokenizer.from_pretrained(save_dir, config=self.config, cache_dir=self._cache)
-        # HACK we cannot save the tokenizer without this
-        del self._tokenizer.init_kwargs['config']
+        self._tokenizer = AutoTokenizer.from_pretrained(save_dir, cache_dir=self._cache)
 
         if self.max_generative_vocab is not None:
             with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'r') as fp:
@@ -82,10 +79,7 @@ class TransformerNumericalizer(object):
                     fp.write(word + '\n')
 
     def build_vocab(self, vocab_sets, tasks):
-        self._tokenizer = AutoTokenizer.from_pretrained(self._pretrained_name, config=self.config,
-                                                        cache_dir=self._cache)
-        # HACK we cannot save the tokenizer without this
-        del self._tokenizer.init_kwargs['config']
+        self._tokenizer = AutoTokenizer.from_pretrained(self._pretrained_name, cache_dir=self._cache)
 
         # ensure that init, eos, unk and pad are set
         # this method has no effect if the tokens are already set according to the tokenizer class
@@ -157,7 +151,7 @@ class TransformerNumericalizer(object):
             self.generative_vocab_size = len(self._tokenizer)
             self.decoder_vocab = None
 
-    def encode_single(self, sentence, decoder_vocab, max_length=-1):
+    def encode_single(self, sentence, max_length=-1):
         wp_tokenized = self._tokenizer.tokenize(sentence)
 
         if max_length > -1:
@@ -170,7 +164,10 @@ class TransformerNumericalizer(object):
         example = [self.init_token] + list(wp_tokenized[:max_len]) + [self.eos_token]
         length = len(example)
         numerical = self._tokenizer.convert_tokens_to_ids(example)
-        decoder_numerical = [decoder_vocab.encode(word) for word in example]
+        if self.decoder_vocab:
+            decoder_numerical = [self.decoder_vocab.encode(word) for word in example]
+        else:
+            decoder_numerical = []
 
         # minibatch with one element
         return SequentialField(length=[length], value=[numerical], limited=[decoder_numerical])

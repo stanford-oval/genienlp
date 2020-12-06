@@ -40,9 +40,7 @@ import numpy as np
 import torch
 
 from .data_utils.example import NumericalizedExamples
-from .data_utils.numericalizer.sequential_field import SequentialField
 from .data_utils.iterator import LengthSortedIterator
-from .data_utils.progbar import prange
 
 logger = logging.getLogger(__name__)
 
@@ -534,56 +532,6 @@ def map_filter(callable, iterable):
     return output
 
 
-def preprocess_examples(args, tasks, splits, logger=None, train=True):
-    min_length = 1
-    max_context_length = args.max_train_context_length if train else args.max_val_context_length
-    is_too_long = lambda ex: (len(ex.answer) > args.max_answer_length or
-                              len(ex.context) > max_context_length)
-    is_too_short = lambda ex: (len(ex.answer) < min_length or
-                               len(ex.context) < min_length)
-
-    for task, s in zip(tasks, splits):
-        if logger is not None:
-            logger.info(f'{task.name} has {len(s.examples)} examples')
-
-        l = len(s.examples)
-        s.examples = map_filter(
-            lambda ex: task.preprocess_example(ex, train=train, max_context_length=max_context_length),
-            s.examples)
-
-        if train:
-            l = len(s.examples)
-            s.examples = [ex for ex in s.examples if not is_too_long(ex)]
-            if len(s.examples) < l:
-                if logger is not None:
-                    logger.info(f'Filtering out long {task.name} examples: {l} -> {len(s.examples)}')
-
-            l = len(s.examples)
-            s.examples = [ex for ex in s.examples if not is_too_short(ex)]
-            if len(s.examples) < l:
-                if logger is not None:
-                    logger.info(f'Filtering out short {task.name} examples: {l} -> {len(s.examples)}')
-
-        if logger is not None:
-            context_lengths = [len(ex.context) for ex in s.examples]
-            question_lengths = [len(ex.question) for ex in s.examples]
-            answer_lengths = [len(ex.answer) for ex in s.examples]
-
-            logger.info(
-                f'{task.name} context lengths (min, mean, max): {np.min(context_lengths)}, {int(np.mean(context_lengths))}, {np.max(context_lengths)}')
-            logger.info(
-                f'{task.name} question lengths (min, mean, max): {np.min(question_lengths)}, {int(np.mean(question_lengths))}, {np.max(question_lengths)}')
-            logger.info(
-                f'{task.name} answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}')
-
-        if logger is not None:
-            logger.info('Tokenized examples:')
-            for ex in s.examples[:10]:
-                logger.info('Context: ' + ' '.join([token.strip() for token in ex.context]))
-                logger.info('Question: ' + ' '.join([token.strip() for token in ex.question]))
-                logger.info('Answer: ' + ' '.join([token.strip() for token in ex.answer]))
-
-
 def init_devices(args, devices=None):
     if not torch.cuda.is_available():
         return [torch.device('cpu')]
@@ -625,7 +573,7 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
-    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer, device=device)
+    all_features = list(NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer, device=device))
     
     sampler = LengthSortedIterator(all_features, batch_size=batch_size, sort=True, shuffle_and_repeat=train,
                                    sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
@@ -660,11 +608,10 @@ def load_config_json(args):
     args.almond_type_embeddings = False
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
-        retrieve = ['model', 'transformer_layers', 'rnn_layers', 'rnn_zero_state',
-                    'transformer_hidden', 'dimension', 'rnn_dimension', 'load', 'max_val_context_length',
-                    'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower',
-                    'encoder_embeddings', 'decoder_embeddings',
-                    'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'locale', 'use_pretrained_bert',
+        retrieve = ['model', 'rnn_layers', 'rnn_zero_state',
+                    'dimension', 'rnn_dimension', 'load', 'max_val_context_length',
+                    'max_output_length', 'max_generative_vocab', 'lower',
+                    'trainable_decoder_embeddings', 'locale', 'use_pretrained_bert',
                     'override_question', 'almond_has_multiple_programs']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
@@ -686,7 +633,7 @@ def load_config_json(args):
                 setattr(args, r, False)
             elif r == 'locale':
                 setattr(args, r, 'en')
-            elif r in ('trainable_decoder_embedding', 'trainable_encoder_embeddings'):
+            elif r == 'trainable_decoder_embedding':
                 setattr(args, r, 0)
             elif r == 'pretrain_mlm_probability':
                 setattr(args, r, 0.15)
@@ -696,10 +643,6 @@ def load_config_json(args):
                 setattr(args, r, 'zero')
             elif r == 'use_pretrained_bert':
                 setattr(args, r, True)
-            elif r in ('append_question_to_context_too', 'almond_preprocess_context'):
-                setattr(args, r, False)
-            elif r == 'almond_dataset_specific_preprocess':
-                setattr(args, r, 'none')
             elif r == 'num_beams':
                 setattr(args, r, [1])
             elif r == 'num_outputs':

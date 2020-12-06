@@ -34,16 +34,19 @@ from .common import CombinedEmbedding, LayerNorm, LinearFeedforward
 
 
 class IdentityEncoder(nn.Module):
-    def __init__(self, numericalizer, args, context_embeddings, question_embeddings):
+    def __init__(self, numericalizer, args, config, context_embeddings):
         super().__init__()
         self.args = args
         self.pad_idx = numericalizer.pad_id
 
-        self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
+        if args.rnn_dimension is None:
+            args.rnn_dimension = config.hidden_size
+
+        self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, config.hidden_size,
                                                     trained_dimension=0,
                                                     project=False)
 
-        if self.args.rnn_layers > 0 and self.args.rnn_dimension != self.args.dimension:
+        if self.args.rnn_layers > 0 and self.args.rnn_dimension != config.hidden_size:
             self.dropout = nn.Dropout(args.dropout_ratio)
             self.projection = nn.Linear(self.encoder_embeddings.dimension, self.args.rnn_dimension, bias=False)
         else:
@@ -51,7 +54,7 @@ class IdentityEncoder(nn.Module):
             self.projection = None
 
         if self.args.rnn_layers > 0 and self.args.rnn_zero_state in ['average', 'cls']:
-            self.pool = LinearFeedforward(args.dimension, args.dimension, 2 * args.rnn_dimension * args.rnn_layers,
+            self.pool = LinearFeedforward(config.hidden_size, config.hidden_size, 2 * args.rnn_dimension * args.rnn_layers,
                                           dropout=args.dropout_ratio)
             self.norm = LayerNorm(2 * args.rnn_dimension * args.rnn_layers)
         else:
@@ -60,18 +63,12 @@ class IdentityEncoder(nn.Module):
 
     def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length
-
         context_padding = context.data == self.pad_idx
 
         context_embedded = self.encoder_embeddings(context, padding=context_padding)
 
-        # pick the top-most N transformer layers to pass to the decoder for cross-attention
-        # (add 1 to account for the embedding layer - the decoder will drop it later)
-        self_attended_context = context_embedded.all_layers[-(self.args.transformer_layers + 1):]
-        final_context = context_embedded.last_layer
-
         if self.projection is not None:
-            final_context = self.dropout(final_context)
+            final_context = self.dropout(context_embedded)
             final_context = self.projection(final_context)
 
         context_rnn_state = None
@@ -104,4 +101,4 @@ class IdentityEncoder(nn.Module):
                 packed_rnn_state = packed_rnn_state.chunk(2, dim=0)
                 context_rnn_state = (packed_rnn_state[0].squeeze(0), packed_rnn_state[1].squeeze(0))
 
-        return self_attended_context, final_context, context_rnn_state
+        return final_context, context_rnn_state

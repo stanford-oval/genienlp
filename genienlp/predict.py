@@ -47,7 +47,7 @@ import torch
 
 from . import models
 from .tasks.registry import get_tasks
-from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
+from .util import set_seed, load_config_json, make_data_loader, log_model_size, init_devices, \
     have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
 from .validate import generate_with_model, calculate_and_reduce_metrics
 
@@ -82,10 +82,10 @@ def get_all_splits(args):
         for split in task_splits:
             assert (split.eval or split.test) and not split.train and not split.aux
             split = split.eval if split.eval else split.test
-            preprocess_examples(args, [task], [split], train=False)
             task_split_processed.append(split)
         splits.append(task_split_processed)
     return splits
+
 
 def prepare_data_iterators(args, val_sets, numericalizer, device):
     logger.info(f'Preparing data iterators')
@@ -111,6 +111,7 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
         task_index += 1
 
     return iters
+
 
 def run(args, device):
     Model = getattr(models, args.model)

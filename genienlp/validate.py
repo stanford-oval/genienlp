@@ -94,6 +94,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
     loss = None
     return loss, predictions, answers, contexts
 
+
 def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args):
     metrics = OrderedDict()
     for i in range(len(predictions[0])):
@@ -104,6 +105,7 @@ def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args)
             else:
                 raise ValueError('Invalid reduce_metrics argument')
     return metrics
+
 
 def print_results(keys, values, num_print=1):
     print()

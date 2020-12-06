@@ -30,53 +30,33 @@
 
 import torch
 import logging
-import os
+from typing import NamedTuple, List
+from transformers import AutoModel, PretrainedConfig, AutoConfig
 
-from ..data_utils.embeddings import load_embeddings
-from ..data_utils.numericalizer.transformer import TransformerNumericalizer
+from ..data_utils.numericalizer import TransformerNumericalizer
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
-from .common import mask_tokens
-from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration, AutoConfig
-
+from .base import GenieModel
 
 logger = logging.getLogger(__name__)
 
 
-class GenieModel(PreTrainedModel):
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        save_directory = pretrained_model_name_or_path
-        model_checkpoint_file = kwargs.pop("model_checkpoint_file", None)
-        args = kwargs.pop("args", None)
-        device = kwargs.pop("device", None)
-        tasks = kwargs.pop("tasks", None)
-        vocab_sets = kwargs.pop("vocab_sets", None)
+class TransformerEmbedding(torch.nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        model.config.output_hidden_states = True
+        self.dim = model.config.hidden_size
+        self.num_layers = model.config.num_hidden_layers
+        self.model = model
 
-        full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
-        logger.info(f'Loading the model from {full_checkpoint_path}')
-        model = cls(args=args, tasks=tasks, vocab_sets=vocab_sets, save_directory=save_directory)
-        save_dict = torch.load(full_checkpoint_path, map_location=device)
-        model.load_state_dict(save_dict['model_state_dict'])
+    def init_for_vocab(self, vocab):
+        self.model.resize_token_embeddings(len(vocab))
 
-        return model, save_dict.get('best_decascore')
+    def grow_for_vocab(self, vocab):
+        self.model.resize_token_embeddings(len(vocab))
 
-    def init_vocab_from_data(self, vocab_sets, tasks, save_directory=None):
-        if save_directory is not None:
-            logger.info(f'Loading the accompanying numericalizer from {save_directory}')
-            self.numericalizer.load(save_directory)
-        else:
-            logger.info(f'Building vocabulary')
-            self.numericalizer.build_vocab(vocab_sets, tasks)
-
-    def add_new_vocab_from_data(self, tasks, resize_decoder=False):
-        old_num_tokens = self.numericalizer.num_tokens
-        self.numericalizer.grow_vocab(tasks)
-        if self.numericalizer.num_tokens > old_num_tokens:
-            logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
-        self.bart.resize_token_embeddings(self.numericalizer.num_tokens)
-        if resize_decoder:
-            self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
+    def forward(self, input: torch.Tensor, padding=None):
+        return self.model(input, attention_mask=(~padding).to(dtype=torch.float))
 
 
 class BertLSTM(GenieModel):
@@ -92,30 +72,29 @@ class BertLSTM(GenieModel):
         super().__init__(PretrainedConfig()) # dummy PretrainedConfig
         self.args = args
 
-        encoder_embeddings = args.context_embeddings
+        encoder_embeddings = args.pretrained_model
         config = AutoConfig.from_pretrained(encoder_embeddings, cache_dir=args.embeddings)
-        self.numericalizer = TransformerNumericalizer(encoder_embeddings, config=config,
+        args.dimension = config.hidden_size
+        self.numericalizer = TransformerNumericalizer(encoder_embeddings,
                                                       max_generative_vocab=args.max_generative_vocab,
-                                                      cache=encoder_embeddings)
+                                                      cache=args.embeddings)
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
 
         logger.info(f'Initializing encoder and decoder embeddings')
-        self.context_embeddings, self.question_embeddings, self.decoder_embeddings = \
-            load_embeddings(args.embeddings,
-                            args.context_embeddings,
-                            args.question_embeddings,
-                            args.decoder_embeddings,
-                            args.max_generative_vocab)
-
-        for vec in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
-            vec.init_for_vocab(self.numericalizer.vocab)
+        self.encoder_embeddings = AutoModel.from_pretrained(encoder_embeddings, config=config, cache_dir=args.embeddings)
+        self.encoder_embeddings.init_for_vocab(self.numericalizer.vocab)
         
         logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens')
         logger.debug(f'The first 200 tokens:')
         logger.debug(self.numericalizer.vocab.itos[:200])
 
-        self.encoder = IdentityEncoder(self.numericalizer, args, self.context_embeddings, self.question_embeddings)
-        self.decoder = MQANDecoder(self.numericalizer, args, self.decoder_embeddings)
+        self.encoder = IdentityEncoder(self.numericalizer, args, config, self.encoder_embeddings)
+        self.decoder = MQANDecoder(self.numericalizer, args)
+
+    def add_new_vocab_from_data(self, tasks, resize_decoder=False):
+        super().add_new_vocab_from_data(tasks, resize_decoder=resize_decoder)
+        if resize_decoder:
+            self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
 
     def forward(self, batch, current_token_id=None, past_key_values=None,
                 expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
@@ -209,66 +188,5 @@ class BertLSTM(GenieModel):
                                      encoder_output=encoder_output
                                     )
         generated = torch.cat((generated[:, 0:1], generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)), dim=1) # map everything to full vocabulary except BOS which already is in full vocabulary
-
-        return generated
-
-           
-class Bart(GenieModel):
-    def __init__(self, config=None, *inputs, args, tasks, vocab_sets, save_directory=None, **kwargs):
-        config = AutoConfig.from_pretrained(args.seq2seq_decoder, cache_dir=self.args.embeddings)
-        super().__init__(config)
-        self.args = args
-        self.bart = BartForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder, cache_dir=self.args.embeddings)
-        self.numericalizer = TransformerNumericalizer(self.args.seq2seq_decoder, config, max_generative_vocab=None)
-        self.init_vocab_from_data(vocab_sets, tasks, save_directory)
-        self.bart.resize_token_embeddings(self.numericalizer.num_tokens)
-
-    def forward(self, *input, **kwargs):
-        #TODO pretraining
-        if self.training:
-            batch = input[0]
-            pretraining = kwargs.pop("pretraining", None)
-
-            pad = self.numericalizer._tokenizer.pad_token_id
-            source_ids, source_mask, y = batch.context.value, batch.context.value!=pad, batch.answer.value
-            y_ids = y[:, :-1].contiguous()
-            labels = y[:, 1:].clone()
-            labels[y[:, 1:] == pad] = -100
-            return self.bart.forward(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, labels=labels)
-
-        else:
-            return self.bart.forward(**kwargs)
-        
-    def generate(self,
-                 batch,
-                 max_output_length,
-                 num_outputs,
-                 temperature,
-                 repetition_penalty,
-                 top_k,
-                 top_p,
-                 num_beams,
-                 no_repeat_ngram_size,
-                 do_sample
-                 ):
-
-        input_ids = batch.context.value
-        # TODO attention_mask
-        generated = self.bart.generate(input_ids=input_ids,
-                                     max_length=max_output_length,
-                                     min_length=2, # generate at least one token after BOS
-                                     bos_token_id=self.numericalizer._tokenizer.bos_token_id,
-                                     pad_token_id=self.numericalizer._tokenizer.pad_token_id,
-                                     early_stopping=True,
-                                     num_return_sequences=num_outputs,
-                                     repetition_penalty=repetition_penalty,
-                                     temperature=temperature,
-                                     eos_token_id=self.numericalizer._tokenizer.eos_token_id,
-                                     top_k=top_k,
-                                     top_p=top_p,
-                                     num_beams=num_beams,
-                                     no_repeat_ngram_size=no_repeat_ngram_size,
-                                     do_sample=do_sample,
-                                    )
 
         return generated

@@ -99,9 +99,6 @@ def parse_argv(parser):
     parser.add_argument('--val_batch_size', nargs='+', default=[4000], type=int,
                         help='Number of tokens in each batch for validation, corresponding to tasks in --val_tasks')
     
-    parser.add_argument('--paired', action='store_true',
-                        help='Pair related examples before numericalizing the input (e.g. training with synthetic and paraphrase '
-                             'sentence pairs for almond task)')
     parser.add_argument('--max_pairs', type=int, default=1000000,
                         help='Maximum number of pairs to make for each example group')
     
@@ -117,12 +114,6 @@ def parse_argv(parser):
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
     parser.add_argument('--max_generative_vocab', default=50000, type=int,
                         help='max vocabulary for the generative softmax')
-    parser.add_argument('--max_train_context_length', default=500, type=int,
-                        help='maximum length of the contexts during training')
-    parser.add_argument('--max_val_context_length', default=500, type=int,
-                        help='maximum length of the contexts during validation')
-    parser.add_argument('--max_answer_length', default=50, type=int,
-                        help='maximum length of answers during training and validation')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument('--preserve_case', action='store_false', dest='lower',
                         help='whether to preserve casing for all text')
@@ -139,29 +130,20 @@ def parse_argv(parser):
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
-    parser.add_argument("--almond_has_multiple_programs", action='store_true', help='Indicate if almond dataset has multiple programs for each sentence')
-
     parser.add_argument('--model', type=str, choices=['BertLSTM', 'Bart'], default='BertLSTM', help='which model to import')
-    parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
-    parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers')
-    parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules')
-    parser.add_argument('--rnn_zero_state', default='zero', choices=['zero', 'average', 'cls'],
-                        help='how to construct RNN zero state (for Identity encoder)')
-    parser.add_argument('--transformer_layers', default=2, type=int, help='number of layers for transformer modules')
-    parser.add_argument('--transformer_hidden', default=150, type=int, help='hidden size of the transformer modules')
-    parser.add_argument('--transformer_heads', default=3, type=int, help='number of heads for transformer modules')
-    parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
+    parser.add_argument('--pretrained_model', default=None,
+                        help='which pretrained model to use on the encoder side; choose a name from Huggingface models')
 
-    parser.add_argument('--encoder_embeddings', default=None,
-                        help='which word embedding to use on the encoder side; use a bert-* model for pretrained BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
-                             'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
-    parser.add_argument('--decoder_embeddings', default='glove+char',
-                        help='which pretrained word embedding to use on the decoder side')
-    parser.add_argument('--trainable_encoder_embeddings', default=0, type=int,
-                        help='size of trainable portion of encoder embedding (only for Coattention encoder)')
+    parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers (for BertLSTM)')
+    parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules ')
+    parser.add_argument('--rnn_zero_state', default='zero', choices=['zero', 'average', 'cls'],
+                        help='how to construct RNN zero state (for BertLSTM)')
     parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
-                        help='size of trainable portion of decoder embedding (0 or omit to disable)')
+                        help='size of decoder embedding (for BertLSTM)')
+
+    parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
+    parser.add_argument("--almond_has_multiple_programs", action='store_true', help='Indicate if almond dataset has multiple programs for each sentence')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
 
@@ -234,12 +216,6 @@ def post_parse(args):
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1) :
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
 
-    if args.paired and not args.sentence_batching:
-        logger.warning('Paired training only works if sentence_batching is used as well.'
-                        'Activating sentence_batching...')
-        args.sentence_batching = True
-        
-
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
             args.train_iterations = [1]
@@ -247,16 +223,7 @@ def post_parse(args):
             args.train_iterations = len(args.train_task_names) * args.train_iterations
         if len(args.train_batch_tokens) < len(args.train_task_names):
             args.train_batch_tokens = len(args.train_task_names) * args.train_batch_tokens
-    if args.sentence_batching:
-        if args.paired:
-            # TODO unify train_batch_tokens and train_batch_size
-            train_batch_size = int(args.train_batch_tokens[0])
-            num_train_langs = len(args.train_languages.split('+'))
-            new_batch_size = int(train_batch_size *
-                                 (1 + min(num_train_langs**2 - num_train_langs, args.max_pairs) / num_train_langs))
-            logger.warning('Using paired example training will increase effective batch size from {} to {}'.
-                            format(train_batch_size, new_batch_size))
-        
+
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
 
@@ -265,9 +232,6 @@ def post_parse(args):
         args.commit = get_commit()
     else:
         args.commit = ''
-
-    if args.rnn_dimension is None:
-        args.rnn_dimension = args.dimension
 
     args.log_dir = args.save
     if args.tensorboard_dir is None:

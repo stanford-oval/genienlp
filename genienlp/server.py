@@ -38,9 +38,7 @@ from pprint import pformat
 import torch
 
 from . import models
-from .data_utils.example import NumericalizedExamples
-from .data_utils.numericalizer.sequential_field import SequentialField
-from .tasks.generic_dataset import Example
+from .data_utils.example import Example, NumericalizedExamples
 from .tasks.registry import get_tasks
 from .util import set_seed, init_devices, load_config_json, log_model_size
 from .validate import generate_with_model

@@ -30,8 +30,9 @@
 import logging
 import os
 import shutil
+from transformers import AutoConfig
 
-from .data_utils.embeddings import load_embeddings
+from .data_utils.numericalizer import TransformerNumericalizer
 from .util import load_config_json
 
 logger = logging.getLogger(__name__)
@@ -51,14 +52,11 @@ def main(args):
     os.makedirs(args.output, exist_ok=True)
     load_config_json(args)
 
-    # we need to load the embeddings to get to the correct numericalizer class
-    # this is somewhat unfortunate but acceptable
-    numericalizer, _, _, _ = load_embeddings(args.embeddings,
-                                             args.context_embeddings,
-                                             args.question_embeddings,
-                                             args.decoder_embeddings,
-                                             args.max_generative_vocab,
-                                             logger)
+    config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
+    config.output_hidden_states = True
+    numericalizer = TransformerNumericalizer(args.pretrained_model, config=config,
+                                             max_generative_vocab=args.max_generative_vocab,
+                                             cache=args.embeddings)
 
     # load the numericalizer from the model training directory, and immediately save it in the export directory
     # this will copy over all the necessary vocabulary and config files that the numericalizer needs

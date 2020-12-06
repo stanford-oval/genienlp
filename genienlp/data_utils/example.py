@@ -31,11 +31,28 @@ from typing import NamedTuple, List, Union
 import torch
 from typing import Callable
 
-from .numericalizer.sequential_field import SequentialField
-
 
 def identity(x, **kw):
     return x
+
+
+class SequentialField(NamedTuple):
+    value: Union[torch.tensor, List[List[int]]]
+    length: Union[torch.tensor, List[int]]
+    limited: Union[torch.tensor, List[List[int]]]
+
+    @staticmethod
+    def merge(sequential_fields: List):
+
+        values = []
+        lengths = []
+        limiteds = []
+        for sf in sequential_fields:
+            values.extend(sf.value)
+            lengths.extend(sf.length)
+            limiteds.extend(sf.limited)
+
+        return SequentialField(values, lengths, limiteds)
 
 
 class Example(NamedTuple):
@@ -67,30 +84,24 @@ class NumericalizedExamples(NamedTuple):
     example_id: List[str]
     context: SequentialField
     answer: SequentialField
-    decoder_vocab: object
     device: Union[torch.device, None]
     padding_function: Callable
     
     @staticmethod
     def from_examples(examples, numericalizer, device):
         assert all(isinstance(ex.example_id, str) for ex in examples)
-        decoder_vocab = numericalizer.decoder_vocab.clone()
-        max_context_len, max_question_len, max_answer_len = -1, -1, -1
 
         for ex in examples:
             yield NumericalizedExamples(ex.example_id,
-                                        numericalizer.encode_single(ex.context_plus_question, decoder_vocab,
-                                                                    max_length=max_context_len - 2),
-                                        numericalizer.encode_single(ex.answer, decoder_vocab,
-                                                                    max_length=max_answer_len - 2),
-                                        decoder_vocab, device=device, padding_function=numericalizer.pad)
+                                        numericalizer.encode_single(ex.context_plus_question),
+                                        numericalizer.encode_single(ex.answer),
+                                        device=device, padding_function=numericalizer.pad)
 
     @staticmethod
     def collate_batches(batches):
         example_id = []
         context_values, context_lengths, context_limiteds = [], [], []
         answer_values, answer_lengths, answer_limiteds = [], [], []
-        decoder_vocab = None
 
         for batch in batches:
             example_id.append(batch.example_id[0])
@@ -101,8 +112,6 @@ class NumericalizedExamples(NamedTuple):
             answer_values.append(torch.tensor(batch.answer.value, device=batch.device))
             answer_lengths.append(torch.tensor(batch.answer.length, device=batch.device))
             answer_limiteds.append(torch.tensor(batch.answer.limited, device=batch.device))
-
-            decoder_vocab = batch.decoder_vocab
             padding_function = batch.padding_function
 
         context_values = padding_function(context_values)
@@ -124,6 +133,5 @@ class NumericalizedExamples(NamedTuple):
         return NumericalizedExamples(example_id=example_id,
                                      context=context,
                                      answer=answer,
-                                     decoder_vocab=decoder_vocab,
                                      device=None,
                                      padding_function=padding_function)
