@@ -29,7 +29,6 @@
 
 
 from . import generic_dataset
-import revtok
 
 
 class BaseTask:

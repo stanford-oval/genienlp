@@ -50,7 +50,6 @@ setuptools.setup(
         'numpy>=1.14.5',
         'python-dateutil>=2.7.3',
         'torch~=1.6',
-        'revtok==0.0.3',
         'tqdm~=4.0',
         'tensorboardX==2.0.*',
         'pyrouge>=0.1.3',
