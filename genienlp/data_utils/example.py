@@ -52,7 +52,7 @@ class Example(NamedTuple):
         args = [example_id]
 
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
-            field = preprocess(arg.rstrip('\n'), field_name=argname)
+            field = preprocess(arg.rstrip('\n'), field_name=argname).strip()
             if lower:
                 field = field.lower()
             args.append(field)
@@ -66,7 +66,6 @@ class Example(NamedTuple):
 class NumericalizedExamples(NamedTuple):
     example_id: List[str]
     context: SequentialField
-    question: SequentialField
     answer: SequentialField
     decoder_vocab: object
     device: Union[torch.device, None]
@@ -80,9 +79,7 @@ class NumericalizedExamples(NamedTuple):
 
         for ex in examples:
             yield NumericalizedExamples(ex.example_id,
-                                        numericalizer.encode_single(ex.context, decoder_vocab,
-                                                                    max_length=max_context_len - 2),
-                                        numericalizer.encode_single(ex.question, decoder_vocab,
+                                        numericalizer.encode_single(ex.context_plus_question, decoder_vocab,
                                                                     max_length=max_context_len - 2),
                                         numericalizer.encode_single(ex.answer, decoder_vocab,
                                                                     max_length=max_answer_len - 2),
@@ -92,7 +89,6 @@ class NumericalizedExamples(NamedTuple):
     def collate_batches(batches):
         example_id = []
         context_values, context_lengths, context_limiteds = [], [], []
-        question_values, question_lengths, question_limiteds = [], [], []
         answer_values, answer_lengths, answer_limiteds = [], [], []
         decoder_vocab = None
 
@@ -101,10 +97,6 @@ class NumericalizedExamples(NamedTuple):
             context_values.append(torch.tensor(batch.context.value, device=batch.device))
             context_lengths.append(torch.tensor(batch.context.length, device=batch.device))
             context_limiteds.append(torch.tensor(batch.context.limited, device=batch.device))
-
-            question_values.append(torch.tensor(batch.question.value, device=batch.device))
-            question_lengths.append(torch.tensor(batch.question.length, device=batch.device))
-            question_limiteds.append(torch.tensor(batch.question.limited, device=batch.device))
 
             answer_values.append(torch.tensor(batch.answer.value, device=batch.device))
             answer_lengths.append(torch.tensor(batch.answer.length, device=batch.device))
@@ -116,9 +108,6 @@ class NumericalizedExamples(NamedTuple):
         context_values = padding_function(context_values)
         context_limiteds = padding_function(context_limiteds)
         context_lengths = torch.stack(context_lengths, dim=0)
-        question_values = padding_function(question_values)
-        question_limiteds = padding_function(question_limiteds)
-        question_lengths = torch.stack(question_lengths, dim=0)
         answer_values = padding_function(answer_values)
         answer_limiteds = padding_function(answer_limiteds)
         answer_lengths = torch.stack(answer_lengths, dim=0)
@@ -127,10 +116,6 @@ class NumericalizedExamples(NamedTuple):
                                   length=context_lengths,
                                   limited=context_limiteds)
 
-        question = SequentialField(value=question_values,
-                                   length=question_lengths,
-                                   limited=question_limiteds)
-
         answer = SequentialField(value=answer_values,
                                  length=answer_lengths,
                                  limited=answer_limiteds)
@@ -138,7 +123,6 @@ class NumericalizedExamples(NamedTuple):
 
         return NumericalizedExamples(example_id=example_id,
                                      context=context,
-                                     question=question,
                                      answer=answer,
                                      decoder_vocab=decoder_vocab,
                                      device=None,

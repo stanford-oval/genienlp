@@ -663,7 +663,7 @@ def load_config_json(args):
         retrieve = ['model', 'transformer_layers', 'rnn_layers', 'rnn_zero_state',
                     'transformer_hidden', 'dimension', 'rnn_dimension', 'load', 'max_val_context_length',
                     'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower',
-                    'encoder_embeddings', 'context_embeddings', 'question_embeddings', 'decoder_embeddings',
+                    'encoder_embeddings', 'decoder_embeddings',
                     'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'locale', 'use_pretrained_bert',
                     'override_question', 'almond_has_multiple_programs']
 
@@ -690,13 +690,6 @@ def load_config_json(args):
                 setattr(args, r, 0)
             elif r == 'pretrain_mlm_probability':
                 setattr(args, r, 0.15)
-            elif r == 'context_embeddings':
-                if args.seq2seq_encoder == 'Coattention':
-                    setattr(args, r, '')
-                else:
-                    setattr(args, r, args.encoder_embeddings)
-            elif r == 'question_embeddings':
-                setattr(args, r, args.encoder_embeddings)
             elif r == 'rnn_dimension':
                 setattr(args, r, args.dimension)
             elif r == 'rnn_zero_state':

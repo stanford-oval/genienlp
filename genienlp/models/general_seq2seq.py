@@ -120,15 +120,15 @@ class BertLSTM(GenieModel):
     def forward(self, batch, current_token_id=None, past_key_values=None,
                 expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
         if encoder_output is None:
-            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
+            self_attended_context, final_context, context_rnn_state = self.encoder(batch)
         else:
-            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = encoder_output
+            self_attended_context, final_context, context_rnn_state = encoder_output
         encoder_loss = None
         if self.training and getattr(self.args, 'use_encoder_loss', None):
             encoder_loss = self.get_encoder_loss(context_rnn_state)
             
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
-                            final_question, question_rnn_state, encoder_loss, current_token_id, decoder_wrapper=past_key_values,
+                            encoder_loss, current_token_id, decoder_wrapper=past_key_values,
                             expansion_factor=expansion_factor, generation_dict=generation_dict)
 
     def get_encoder_loss(self, context_rnn_state):

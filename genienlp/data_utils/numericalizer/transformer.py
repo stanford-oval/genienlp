@@ -111,9 +111,9 @@ class TransformerNumericalizer(object):
             decoder_words = collections.Counter()
             for dataset in vocab_sets:
                 for example in dataset:
-                    decoder_words.update(self._tokenizer.tokenize(example.context, example.context_word_mask))
-                    decoder_words.update(self._tokenizer.tokenize(example.question, example.question_word_mask))
-                    decoder_words.update(self._tokenizer.tokenize(example.answer, example.answer_word_mask))
+                    decoder_words.update(self._tokenizer.tokenize(example.context))
+                    decoder_words.update(self._tokenizer.tokenize(example.question))
+                    decoder_words.update(self._tokenizer.tokenize(example.answer))
 
             self._decoder_words = [self._tokenizer.bos_token, self._tokenizer.eos_token, self._tokenizer.pad_token,
                                    self._tokenizer.unk_token, self._tokenizer.mask_token] + \

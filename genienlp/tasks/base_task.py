@@ -44,6 +44,8 @@ class BaseTask:
         self.name = name
         # special task-specific tokens that should not be subword tokenized
         self.special_tokens = set()
+        self.override_context = args.override_context
+        self.override_question = args.override_question
 
     @property
     def default_question(self):
@@ -65,6 +67,10 @@ class BaseTask:
         return generic_dataset.JSON.splits(root=root, name=self.name, **kwargs)
 
     def preprocess_field(self, sentence, field_name=None):
+        if self.override_context and field_name == 'context':
+            return self.override_context
+        if self.override_question and field_name == 'question':
+            return self.override_question
         return sentence
 
     def preprocess_example(self, ex, train=False, max_context_length=None):

@@ -47,8 +47,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
     example_ids = []
     answers = []
     contexts = []
-    questions = []
-    
+
     for batch in data_iterator:
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
@@ -76,8 +75,6 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
                 batch_answer = [multiwoz_specific_postprocess(a) for a in batch_answer]
             example_ids += batch.example_id
             answers += batch_answer
-            batch_question = numericalizer.reverse(batch.question.value.data, detokenize=task.detokenize, field_name='question')
-            questions += batch_question
             batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize, field_name='context')
             contexts += batch_context
         predictions += batch_prediction
@@ -95,7 +92,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
         return predictions
     # TODO calculate and return loss
     loss = None
-    return loss, predictions, answers, contexts, questions
+    return loss, predictions, answers, contexts
 
 def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args):
     metrics = OrderedDict()
@@ -124,8 +121,8 @@ def print_results(keys, values, num_print=1):
 def validate(task, val_iter, model, numericalizer, args, num_print=10):
     with torch.no_grad():
         model.eval()
-        names = ['beam search', 'answer', 'context', 'question']
-        loss, predictions, answers, contexts, questions = generate_with_model(model, val_iter, numericalizer, task, args, prediction_file_name=None)
+        names = ['beam search', 'answer', 'context']
+        loss, predictions, answers, contexts = generate_with_model(model, val_iter, numericalizer, task, args, prediction_file_name=None)
 
         # predictions is a list of lists
         for i in range(len(predictions)):
@@ -133,7 +130,7 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
                 predictions[i][j] = predictions[i][j].replace('UNK', 'OOV')
 
         metrics = calculate_and_reduce_metrics(predictions, answers, task.metrics, args)
-        results = [predictions, answers, contexts, questions]
+        results = [predictions, answers, contexts]
         print_results(names, results, num_print=num_print)
 
         return loss, metrics
