@@ -678,7 +678,7 @@ def load_config_json(args):
                     'transformer_heads', 'max_output_length', 'max_generative_vocab', 'lower',
                     'encoder_embeddings', 'context_embeddings', 'question_embeddings', 'decoder_embeddings',
                     'trainable_decoder_embeddings', 'trainable_encoder_embeddings', 'locale', 'use_pretrained_bert',
-                    'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize',
+                    'force_subword_tokenize',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_dataset_specific_preprocess', 'almond_lang_as_question',
                     'override_question', 'override_context', 'almond_has_multiple_programs']
 
@@ -701,7 +701,7 @@ def load_config_json(args):
                 setattr(args, r, False)
             elif r == 'locale':
                 setattr(args, r, 'en')
-            elif r in ('trainable_decoder_embedding', 'trainable_encoder_embeddings', 'pretrain_context'):
+            elif r in ('trainable_decoder_embedding', 'trainable_encoder_embeddings'):
                 setattr(args, r, 0)
             elif r == 'pretrain_mlm_probability':
                 setattr(args, r, 0.15)

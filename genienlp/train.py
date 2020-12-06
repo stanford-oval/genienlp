@@ -121,7 +121,7 @@ def prepare_data(args, logger):
 
 accumulated_batch_lengths = 0
 
-def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None, pretraining=False,
+def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None,
                gradient_accumulation_steps=1):
     # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of
     # the total batch size
@@ -129,7 +129,7 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
     model.train()
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
-    loss = model(batch, pretraining=pretraining)[0]
+    loss = model(batch)[0]
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
     if len(devices) > 1:
@@ -288,7 +288,7 @@ def get_next_batch(train_iter, aux_iters, *, task, task_idx, task_fraction, use_
 
 def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations, numericalizer, *,
           log_every, val_every, save_every, rounds, val_sets, aux_sets, writer, logger, log_prefix,
-          start_iteration=1, rnd=1, best_decascore, use_curriculum, pretraining):
+          start_iteration=1, rnd=1, best_decascore, use_curriculum):
     """main training function"""
     local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, start_iteration
 
@@ -377,7 +377,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
             # param update
             loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
-                                         grad_clip=args.grad_clip, pretraining=pretraining,
+                                         grad_clip=args.grad_clip,
                                          gradient_accumulation_steps=args.gradient_accumulation_steps)
             if loss is None:
                 logger.info(
@@ -530,18 +530,8 @@ def main(args):
     else:
         writer = None
 
-    if not args.resume and args.pretrain_context > 0:
-        pretrain_opt, pretrain_lr_scheduler = init_opt(args, model, logger)
-        train_iterations = [args.pretrain_context for _ in args.train_tasks]
-        train(args, devices, model, pretrain_opt, pretrain_lr_scheduler, train_sets,
-              train_iterations, model.module.numericalizer, val_sets=[], aux_sets=[], logger=logger, writer=writer,
-              log_every=args.log_every, val_every=None, save_every=None, use_curriculum=False,
-              rounds=len(train_sets) > 1, start_iteration=start_iteration, best_decascore=0,
-              pretraining=True, log_prefix='pretrain')
-
     train(args, devices, model, opt, lr_scheduler, train_sets,
           args.train_iterations, model.module.numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
           log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
           rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
-          best_decascore=best_decascore,
-          pretraining=False, log_prefix='training')
+          best_decascore=best_decascore, log_prefix='training')

@@ -117,41 +117,8 @@ class BertLSTM(GenieModel):
         self.encoder = IdentityEncoder(self.numericalizer, args, self.context_embeddings, self.question_embeddings)
         self.decoder = MQANDecoder(self.numericalizer, args, self.decoder_embeddings)
 
-        if self.args.pretrain_context > 0:
-            self.context_pretrain_lm_head = torch.nn.Linear(self.args.dimension, self.numericalizer.num_tokens)
-
-    def add_new_vocab_from_data(self, tasks, resize_decoder=False):
-        """
-        resize_decoder: if True, will actually resize the embedding matrix of the decoder
-        """
-        #logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens from training')
-        old_num_tokens = self.numericalizer.num_tokens
-        self.numericalizer.grow_vocab(tasks)
-        if self.numericalizer.num_tokens > old_num_tokens:
-            logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
-        for emb in set(self.context_embeddings + self.question_embeddings + self.decoder_embeddings):
-            emb.grow_for_vocab(self.numericalizer.vocab)
-        if resize_decoder:
-            self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
-
-    def set_train_question_embeddings(self, trainable):
-        self.encoder.set_train_question_embeddings(trainable)
-
-    def _pretrain_forward(self, batch):
-        masked_input, masked_labels = mask_tokens(batch.context.value, self.numericalizer,
-                                                  self.args.pretrain_mlm_probability)
-        masked_batch = batch._replace(context=batch.context._replace(value=masked_input))
-
-        self_attended_context, _final_context, _context_rnn_state, _final_question, _question_rnn_state = \
-            self.encoder(masked_batch)
-        context_logits = self.context_pretrain_lm_head(self_attended_context[-1])
-
-        context_logits = context_logits.view(-1, self.numericalizer.num_tokens)
-        masked_labels = masked_labels.view(-1)
-        loss = torch.nn.functional.cross_entropy(context_logits, masked_labels, ignore_index=self.numericalizer.pad_id)
-        return (loss, )
-
-    def _normal_forward(self, batch, current_token_id, past_key_values=None, expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
+    def forward(self, batch, current_token_id=None, past_key_values=None,
+                expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
         if encoder_output is None:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
         else:
@@ -164,16 +131,6 @@ class BertLSTM(GenieModel):
                             final_question, question_rnn_state, encoder_loss, current_token_id, decoder_wrapper=past_key_values,
                             expansion_factor=expansion_factor, generation_dict=generation_dict)
 
-    def forward(self, batch, pretraining=False, current_token_id=None, past_key_values=None,
-                expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
-        """
-        When training or pretraining, forward() always returns a Seq2SeqLMOutput instance
-        """
-        if pretraining:
-            return self._pretrain_forward(batch)
-        else:
-            return self._normal_forward(batch, current_token_id, past_key_values, expansion_factor, generation_dict, encoder_output, return_dict)
-        
     def get_encoder_loss(self, context_rnn_state):
         
         # concat hidden and cell state
