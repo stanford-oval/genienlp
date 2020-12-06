@@ -256,7 +256,7 @@ class BaseAlmondTask(BaseTask):
     def _init_bootleg(self):
         self.bootleg = Bootleg(self.args.bootleg_input_dir, self.args.bootleg_model, self.unk_id,
                                self.args.num_workers, self.is_contextual(),
-                               self.args.bootleg_skip_feature_creation, self.args.bootleg_dump_mode,
+                               self.args.bootleg_load_prepped_data, self.args.bootleg_dump_mode,
                                self.args.bootleg_batch_size, self.args.bootleg_integration)
 
     def is_contextual(self):

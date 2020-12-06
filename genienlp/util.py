@@ -297,6 +297,21 @@ def map_filter(callable, iterable):
     return output
 
 
+def reverse_bisect_left(a, x, lo=0, hi=None):
+    """Insert item x in list a, and keep it reverse-sorted assuming a
+    is reverse-sorted.
+    """
+    if hi is None:
+        hi = len(a)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if x > a[mid]:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
+
+
 def preprocess_examples(args, tasks, splits, logger=None, train=True):
     min_length = 1
     max_context_length = args.max_train_context_length if train else args.max_val_context_length

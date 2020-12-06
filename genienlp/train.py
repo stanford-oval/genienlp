@@ -559,7 +559,8 @@ def init_opt(args, model, logger):
 
 
 def main(args):
-    args = arguments.post_parse(args)
+    args = arguments.post_parse_general(args)
+    args = arguments.post_parse_train_specific(args)
     if args is None:
         return
 
@@ -575,48 +576,43 @@ def main(args):
     numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets = \
         prepare_data(args, logger)
 
-    if args.bootleg_dump_features:
-        logger.info('Created bootleg features for provided dataset')
-        logger.info('with subsampling: {}'.format(args.subsample))
-        logger.info('Exiting code now...')
         
+    if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):
+        logging.error('sth unpleasant is happening with curriculum')
+
+    logger.info(f'Processing')
+    logger.start = time.time()
+
+    model = init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings,
+                       devices, logger, save_dict)
+    opt, lr_scheduler = init_opt(args, model, logger)
+    start_iteration = 1
+
+    if save_dict is not None and args.resume:
+        logger.info(f'Resuming Training from {os.path.splitext(args.load)[0]}_optim.pth')
+        opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'))
+        start_iteration = opt_state_dict.pop('start_iteration')
+        logger.info(f'Starting iteration is {start_iteration}')
+        opt.load_state_dict(opt_state_dict)
+
+    if hasattr(args, 'tensorboard') and args.tensorboard:
+        logger.info(f'Initializing Writer')
+        writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration)
     else:
-        if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):
-            logging.error('sth unpleasant is happening with curriculum')
-    
-        logger.info(f'Processing')
-        logger.start = time.time()
-    
-        model = init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings,
-                           devices, logger, save_dict)
-        opt, lr_scheduler = init_opt(args, model, logger)
-        start_iteration = 1
-    
-        if save_dict is not None and args.resume:
-            logger.info(f'Resuming Training from {os.path.splitext(args.load)[0]}_optim.pth')
-            opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'))
-            start_iteration = opt_state_dict.pop('start_iteration')
-            logger.info(f'Starting iteration is {start_iteration}')
-            opt.load_state_dict(opt_state_dict)
-    
-        if hasattr(args, 'tensorboard') and args.tensorboard:
-            logger.info(f'Initializing Writer')
-            writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration)
-        else:
-            writer = None
-    
-        if not args.resume and args.pretrain_context > 0:
-            pretrain_opt, pretrain_lr_scheduler = init_opt(args, model, logger)
-            train_iterations = [args.pretrain_context for _ in args.train_tasks]
-            train(args, devices, model, pretrain_opt, pretrain_lr_scheduler, train_sets,
-                  train_iterations, numericalizer, val_sets=[], aux_sets=[], logger=logger, writer=writer,
-                  log_every=args.log_every, val_every=None, save_every=None, use_curriculum=False,
-                  rounds=len(train_sets) > 1, start_iteration=start_iteration, best_decascore=0,
-                  pretraining=True, log_prefix='pretrain', db_unk_id=args.db_unk_id)
-    
-        train(args, devices, model, opt, lr_scheduler, train_sets,
-              args.train_iterations, numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
-              log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
-              rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
-              best_decascore=save_dict.get('best_decascore') if save_dict is not None else None,
-              pretraining=False, log_prefix='training', db_unk_id=args.db_unk_id)
+        writer = None
+
+    if not args.resume and args.pretrain_context > 0:
+        pretrain_opt, pretrain_lr_scheduler = init_opt(args, model, logger)
+        train_iterations = [args.pretrain_context for _ in args.train_tasks]
+        train(args, devices, model, pretrain_opt, pretrain_lr_scheduler, train_sets,
+              train_iterations, numericalizer, val_sets=[], aux_sets=[], logger=logger, writer=writer,
+              log_every=args.log_every, val_every=None, save_every=None, use_curriculum=False,
+              rounds=len(train_sets) > 1, start_iteration=start_iteration, best_decascore=0,
+              pretraining=True, log_prefix='pretrain', db_unk_id=args.db_unk_id)
+
+    train(args, devices, model, opt, lr_scheduler, train_sets,
+          args.train_iterations, numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
+          log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
+          rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
+          best_decascore=save_dict.get('best_decascore') if save_dict is not None else None,
+          pretraining=False, log_prefix='training', db_unk_id=args.db_unk_id)

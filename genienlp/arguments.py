@@ -176,9 +176,8 @@ def parse_argv(parser):
     
     parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
-    parser.add_argument('--bootleg_dump_features', action='store_true', help='Just dump bootleg features and exit code')
     parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_embs', help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
-    parser.add_argument('--bootleg_skip_feature_creation', action='store_true', help='Skip creating features and use dumped features')
+    parser.add_argument('--bootleg_load_prepped_data', action='store_true', help='Load bootleg dumped features')
     parser.add_argument('--bootleg_batch_size', type=int, default=30, help='Batch size used for inference using bootleg')
     parser.add_argument('--bootleg_integration', type=int, choices=[1, 2], help='In level 1 we extract types for top Qid candidates and feed it to the bottom of Encoder using an entity embedding layer'
                                                                                 'In level 2 we use bootleg entity embeddings directly by concatenating it with Encoder output representations')
@@ -283,11 +282,10 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'],
                         help='growth strategy for curriculum')
+
+
+def post_parse_general(args):
     
-
-
-
-def post_parse(args):
     if args.val_task_names is None:
         args.val_task_names = []
         for t in args.train_task_names:
@@ -295,7 +293,7 @@ def post_parse(args):
                 args.val_task_names.append(t)
     if 'imdb' in args.val_task_names:
         args.val_task_names.remove('imdb')
-
+    
     args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
     
     def indices_of_multilingual(train_task_names):
@@ -307,30 +305,28 @@ def post_parse(args):
     
     if args.sentence_batching and args.train_batch_size == 0:
         raise ValueError('You need to specify train_batch_size value when using sentence batching.')
-    #TODO relax the following assertions by dropping samples from batches in Iter
+    # TODO relax the following assertions by dropping samples from batches in Iter
     if args.sentence_batching and args.train_batch_size % len(args.train_languages.split('+')) != 0:
-        raise ValueError('Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
+        raise ValueError(
+            'Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
     if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
-        raise ValueError('Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
-    
-    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
-        raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
+        raise ValueError(
+            'Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
     
     if len(args.features) != len(args.features_size):
         raise ValueError('You should specify max feature size for each feature you provided')
-
+    
     if args.override_context and args.append_question_to_context_too:
         raise ValueError('You cannot use append_question_to_context_too when overriding context')
     
     if args.paired and not args.sentence_batching:
         logger.warning('Paired training only works if sentence_batching is used as well.'
-                        'Activating sentence_batching...')
+                       'Activating sentence_batching...')
         args.sentence_batching = True
-        
+    
     if args.min_entity_len <= 0:
         logger.warning('min_entity_len should be equal to or greater than 1')
-        
-
+    
     args.train_batch_values = args.train_batch_tokens
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
@@ -346,18 +342,50 @@ def post_parse(args):
             if args.paired:
                 num_train_langs = len(args.train_languages.split('+'))
                 new_batch_size = int(args.train_batch_size * \
-                                 (1 + min(num_train_langs**2 - num_train_langs, args.max_pairs) / num_train_langs))
+                                     (1 + min(num_train_langs ** 2 - num_train_langs,
+                                              args.max_pairs) / num_train_langs))
                 logger.warning('Using paired example training will increase effective batch size from {} to {}'.
                                format(args.train_batch_size, new_batch_size))
-        
+    
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
-
+    
     # postprocess arguments
     if args.commit:
         args.commit = get_commit()
     else:
         args.commit = ''
+    
+    if have_multilingual(args.train_task_names) and (args.train_languages is None or args.eval_languages is None):
+        raise ValueError('You have to define training and evaluation languages when you have a multilingual task')
+    
+    args.log_dir = args.save
+    args.dist_sync_file = os.path.join(args.log_dir, 'distributed_sync_file')
+    
+    for x in ['data', 'save', 'log_dir', 'dist_sync_file']:
+        setattr(args, x, os.path.join(args.root, getattr(args, x)))
+    
+    args.num_features = len(args.features)
+    
+    # tasks with the same name share the same task object
+    train_tasks_dict = get_tasks(args.train_task_names, args)
+    args.train_tasks = list(train_tasks_dict.values())
+    val_task_dict = get_tasks(args.val_task_names, args, available_tasks=train_tasks_dict)
+    args.val_tasks = list(val_task_dict.values())
+    
+    save_args(args)
+    
+    return args
+
+
+def post_parse_train_specific(args):
+
+    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
+        raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
+    
+    if len(args.features) != len(args.features_size):
+        raise ValueError('You should specify max feature size for each feature you provided')
+
 
     if args.rnn_dimension is None:
         args.rnn_dimension = args.dimension
@@ -371,25 +399,14 @@ def post_parse(args):
     if args.train_question_embeddings is None:
         args.train_question_embeddings = args.train_encoder_embeddings
 
-    args.log_dir = args.save
     if args.tensorboard_dir is None:
         args.tensorboard_dir = args.log_dir
-    args.dist_sync_file = os.path.join(args.log_dir, 'distributed_sync_file')
     
-    if have_multilingual(args.train_task_names) and (args.train_languages is None or args.eval_languages is None):
-        raise ValueError('You have to define training and evaluation languages when you have a multilingual task')
-    
-    for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
+    for x in ['embeddings']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
 
     args.num_features = len(args.features)
 
-    # tasks with the same name share the same task object
-    train_tasks_dict = get_tasks(args.train_task_names, args)
-    args.train_tasks = list(train_tasks_dict.values())
-    val_task_dict = get_tasks(args.val_task_names, args, available_tasks=train_tasks_dict)
-    args.val_tasks = list(val_task_dict.values())
-    
-    save_args(args)
+    save_args(args, force_overwrite=True)
     
     return args

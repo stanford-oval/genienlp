@@ -1,14 +1,10 @@
 import os
-import datetime
-from pprint import pformat
 import logging
-
-from .arguments import save_args, get_commit
-from .tasks.registry import get_tasks
-
-from .train import initialize_logger
-from .util import set_seed, have_multilingual
 import time
+
+from .arguments import save_args, post_parse_general
+from .util import set_seed
+
 
 logger = logging.getLogger(__name__)
 
@@ -191,106 +187,13 @@ def dump_bootleg_features(args, logger):
     logger.info('Created bootleg features for provided datasets with subsampling: {}'.format(args.subsample))
 
 
-def post_parse(args):
-    
-    args.bootleg_dump_features = True
-    args.retrieve_method = 'bootleg'
-    args.do_ner = True
-    
-    if args.val_task_names is None:
-        args.val_task_names = []
-        for t in args.train_task_names:
-            if t not in args.val_task_names:
-                args.val_task_names.append(t)
-    if 'imdb' in args.val_task_names:
-        args.val_task_names.remove('imdb')
-    
-    args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
-    
-    def indices_of_multilingual(train_task_names):
-        indices = []
-        for i, task in enumerate(train_task_names):
-            if 'multilingual' in task:
-                indices.append(i)
-        return indices
-    
-    if args.sentence_batching and args.train_batch_size == 0:
-        raise ValueError('You need to specify train_batch_size value when using sentence batching.')
-    # TODO relax the following assertions by dropping samples from batches in Iter
-    if args.sentence_batching and args.train_batch_size % len(args.train_languages.split('+')) != 0:
-        raise ValueError(
-            'Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
-    if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
-        raise ValueError(
-            'Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
-    
-    if len(args.features) != len(args.features_size):
-        raise ValueError('You should specify max feature size for each feature you provided')
-    
-    if args.override_context and args.append_question_to_context_too:
-        raise ValueError('You cannot use append_question_to_context_too when overriding context')
-    
-    if args.paired and not args.sentence_batching:
-        logger.warning('Paired training only works if sentence_batching is used as well.'
-                       'Activating sentence_batching...')
-        args.sentence_batching = True
-    
-    if args.min_entity_len <= 0:
-        logger.warning('min_entity_len should be equal to or greater than 1')
-    
-    args.train_batch_values = args.train_batch_tokens
-    if len(args.train_task_names) > 1:
-        if args.train_iterations is None:
-            args.train_iterations = [1]
-        if len(args.train_iterations) < len(args.train_task_names):
-            args.train_iterations = len(args.train_task_names) * args.train_iterations
-        if len(args.train_batch_tokens) < len(args.train_task_names):
-            args.train_batch_values = len(args.train_task_names) * args.train_batch_tokens
-    indices = indices_of_multilingual(args.train_task_names)
-    for i in indices:
-        if args.sentence_batching:
-            args.train_batch_values[i] = args.train_batch_size
-            if args.paired:
-                num_train_langs = len(args.train_languages.split('+'))
-                new_batch_size = int(args.train_batch_size * \
-                                     (1 + min(num_train_langs ** 2 - num_train_langs,
-                                              args.max_pairs) / num_train_langs))
-                logger.warning('Using paired example training will increase effective batch size from {} to {}'.
-                               format(args.train_batch_size, new_batch_size))
-    
-    if len(args.val_batch_size) < len(args.val_task_names):
-        args.val_batch_size = len(args.val_task_names) * args.val_batch_size
-    
-    # postprocess arguments
-    if args.commit:
-        args.commit = get_commit()
-    else:
-        args.commit = ''
-    
-    if have_multilingual(args.train_task_names) and (args.train_languages is None or args.eval_languages is None):
-        raise ValueError('You have to define training and evaluation languages when you have a multilingual task')
-    
-    args.log_dir = args.save
-    args.dist_sync_file = os.path.join(args.log_dir, 'distributed_sync_file')
-    
-    for x in ['data', 'log_dir', 'dist_sync_file']:
-        setattr(args, x, os.path.join(args.root, getattr(args, x)))
-    
-    args.num_features = len(args.features)
-    
-    # tasks with the same name share the same task object
-    train_tasks_dict = get_tasks(args.train_task_names, args)
-    args.train_tasks = list(train_tasks_dict.values())
-    val_task_dict = get_tasks(args.val_task_names, args, available_tasks=train_tasks_dict)
-    args.val_tasks = list(val_task_dict.values())
-    
-    save_args(args)
-    
-    return args
-
-
 def main(args):
-    args = post_parse(args)
+    
+    args.do_ner = True
+    args.retrieve_method = 'bootleg'
+    args.bootleg_load_prepped_data = False
+
+    args = post_parse_general(args)
     set_seed(args)
 
     dump_bootleg_features(args, logger)

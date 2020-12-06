@@ -4,17 +4,19 @@ from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
 from bootleg import run
 
+from ..util import reverse_bisect_left
+
 
 class Bootleg(object):
     
     def __init__(self, bootleg_input_dir, bootleg_model, unk_id, num_workers, is_contextual,
-                 bootleg_skip_feature_creation, bootleg_dump_mode, bootleg_batch_size, bootleg_integration):
+                 bootleg_load_prepped_data, bootleg_dump_mode, bootleg_batch_size, bootleg_integration):
         self.bootleg_input_dir = bootleg_input_dir
         self.bootleg_model = bootleg_model
         self.unk_id = int(unk_id)
         self.num_workers = num_workers
         self.is_contextual = is_contextual
-        self.bootleg_skip_feature_creation = bootleg_skip_feature_creation
+        self.bootleg_load_prepped_data = bootleg_load_prepped_data
         self.bootleg_dump_mode = bootleg_dump_mode
         self.bootleg_batch_size = bootleg_batch_size
         self.bootleg_integration = bootleg_integration
@@ -68,7 +70,7 @@ class Bootleg(object):
     def extract_mentions(self, input_path):
         jsonl_input_path = input_path.rsplit('.', 1)[0] + '.jsonl'
         jsonl_output_path = input_path.rsplit('.', 1)[0] + '_bootleg.jsonl'
-        if not self.bootleg_skip_feature_creation:
+        if not self.bootleg_load_prepped_data:
             extract_mentions(in_filepath=jsonl_input_path, out_filepath=jsonl_output_path, cand_map_file=self.cand_map, num_workers=self.num_workers)
     
     def pad_features(self, tokens, max_size, pad_id):
@@ -79,7 +81,7 @@ class Bootleg(object):
         return tokens
     
     def disambiguate_mentions(self, config_args, file_name, type_size, type_default_val):
-        if not self.bootleg_skip_feature_creation:
+        if not self.bootleg_load_prepped_data:
             run.main(config_args, self.bootleg_dump_mode)
         
         all_tokens_type_ids = []
@@ -87,30 +89,14 @@ class Bootleg(object):
         
         threshold = 0.3
 
-        def reverse_bisect_left(a, x, lo=0, hi=None):
-            """Insert item x in list a, and keep it reverse-sorted assuming a
-            is reverse-sorted.
-            """
-            if hi is None:
-                hi = len(a)
-            while lo < hi:
-                mid = (lo + hi) // 2
-                if x > a[mid]:
-                    hi = mid
-                else:
-                    lo = mid + 1
-            return lo
+        with open(f'{self.output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}/bootleg_labels.jsonl', 'r') as fin:
+            for i, line in enumerate(fin):
+                line = ujson.loads(line)
+                tokenized = line['sentence'].split(' ')
+                tokens_type_ids = [[self.unk_id] * type_size for _ in range(len(tokenized))]
+                tokens_type_probs = [[0.0] * type_size for _ in range(len(tokenized))]
         
-        if self.bootleg_integration == 2:
-            # return tokens_type_ids
-            with open(f'{self.output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}/bootleg_labels.jsonl', 'r') as fin:
-                for i, line in enumerate(fin):
-                    line = ujson.loads(line)
-                    tokenized = line['sentence'].split(' ')
-                    tokens_type_ids = [[self.unk_id] * type_size for _ in range(len(tokenized))]
-                    tokens_type_probs = [[0.0] * type_size for _ in range(len(tokenized))]
-                    
-                    
+                if self.bootleg_integration == 2:
                     # we only have ctx_emb_ids for top candidates
                     # TODO  output ctx_emb_ids for all 30 candidates
                     for ctx_emb_id, prob, span in zip(line['ctx_emb_ids'], line['probs'], line['spans']):
@@ -127,19 +113,8 @@ class Bootleg(object):
                         tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
                         tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
             
-                    all_tokens_type_ids.append(tokens_type_ids)
-                    all_tokens_type_probs.append(tokens_type_probs)
-            
-        else:
-            # return tokens_type_ids
-            with open(f'{self.output_dir}/{file_name}_bootleg/eval/{self.bootleg_model}/bootleg_labels.jsonl', 'r') as fin:
-                for i, line in enumerate(fin):
-                    line = ujson.loads(line)
-                    tokenized = line['sentence'].split(' ')
-                    tokens_type_ids = [[self.unk_id] * type_size for _ in range(len(tokenized))]
-                    tokens_type_probs = [[0.0] * type_size for _ in range(len(tokenized))]
+                else:
                     for all_qids, all_probs, span in zip(line['cand_qids'], line['cand_probs'], line['spans']):
-                        
                         # filter qids with confidence lower than a threshold
                         idx = reverse_bisect_left(all_probs, threshold, lo=0)
                         all_qids = all_qids[:idx]
@@ -165,9 +140,9 @@ class Bootleg(object):
                         tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
                         tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
                         
-                    all_tokens_type_ids.append(tokens_type_ids)
-                    all_tokens_type_probs.append(tokens_type_probs)
-                    
+                all_tokens_type_ids.append(tokens_type_ids)
+                all_tokens_type_probs.append(tokens_type_probs)
+                
         return all_tokens_type_ids, all_tokens_type_probs
     
     
