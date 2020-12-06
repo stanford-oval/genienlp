@@ -173,7 +173,6 @@ def prepare_data(args, logger):
     logger.info('Preprocessing validation data')
     preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
 
-
     return numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
 
 accumulated_batch_lengths = 0

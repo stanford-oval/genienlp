@@ -1,6 +1,5 @@
 import ujson
 import numpy as np
-import pickle
 from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
 from bootleg import run
