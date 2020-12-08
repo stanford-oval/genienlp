@@ -41,25 +41,7 @@ from .base import GenieModel
 logger = logging.getLogger(__name__)
 
 
-class TransformerEmbedding(torch.nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        model.config.output_hidden_states = True
-        self.dim = model.config.hidden_size
-        self.num_layers = model.config.num_hidden_layers
-        self.model = model
-
-    def init_for_vocab(self, vocab):
-        self.model.resize_token_embeddings(len(vocab))
-
-    def grow_for_vocab(self, vocab):
-        self.model.resize_token_embeddings(len(vocab))
-
-    def forward(self, input: torch.Tensor, padding=None):
-        return self.model(input, attention_mask=(~padding).to(dtype=torch.float))
-
-
-class BertLSTM(GenieModel):
+class TransformerLSTM(GenieModel):
     def __init__(self, config=None, *inputs, args, vocab_sets, tasks, save_directory=None, **kwargs):
         """
         Relevant inputs should be provided using kwargs. This method is defined this way to match parent's and siblings' method signatures.
@@ -82,31 +64,30 @@ class BertLSTM(GenieModel):
 
         logger.info(f'Initializing encoder and decoder embeddings')
         self.encoder_embeddings = AutoModel.from_pretrained(encoder_embeddings, config=config, cache_dir=args.embeddings)
-        self.encoder_embeddings.init_for_vocab(self.numericalizer.vocab)
+        self.encoder_embeddings.resize_token_embeddings(self.numericalizer.num_tokens)
         
         logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens')
-        logger.debug(f'The first 200 tokens:')
-        logger.debug(self.numericalizer.vocab.itos[:200])
 
         self.encoder = IdentityEncoder(self.numericalizer, args, config, self.encoder_embeddings)
         self.decoder = MQANDecoder(self.numericalizer, args)
 
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder=resize_decoder)
+        self.encoder_embeddings.resize_token_embeddings(self.numericalizer.num_tokens)
         if resize_decoder:
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
 
     def forward(self, batch, current_token_id=None, past_key_values=None,
                 expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
         if encoder_output is None:
-            self_attended_context, final_context, context_rnn_state = self.encoder(batch)
+            final_context, context_rnn_state = self.encoder(batch)
         else:
-            self_attended_context, final_context, context_rnn_state = encoder_output
+            final_context, context_rnn_state = encoder_output
         encoder_loss = None
-        if self.training and getattr(self.args, 'use_encoder_loss', None):
+        if getattr(self.args, 'use_encoder_loss', None):
             encoder_loss = self.get_encoder_loss(context_rnn_state)
             
-        return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
+        return self.decoder(batch, final_context, context_rnn_state,
                             encoder_loss, current_token_id, decoder_wrapper=past_key_values,
                             expansion_factor=expansion_factor, generation_dict=generation_dict)
 
@@ -163,7 +144,7 @@ class BertLSTM(GenieModel):
                  ):
 
         encoder_output = self.encoder(batch)
-        self.config.vocab_size = len(batch.decoder_vocab)
+        self.config.vocab_size = len(self.numericalizer.decoder_vocab)
         self.config.is_encoder_decoder = False # in order to make it work with `transformers` generation code, we should treat this as a decoder-only model
         batch_size = len(batch.example_id)
         input_ids = torch.full((batch_size, 1), self.decoder.init_idx, dtype=torch.long, device=batch.context.value.device)
@@ -173,12 +154,12 @@ class BertLSTM(GenieModel):
                                      max_length=max_output_length,
                                      min_length=2, # generate at least one token after BOS
                                      bos_token_id=self.decoder.init_idx,
-                                     pad_token_id=batch.decoder_vocab.pad_idx,
+                                     pad_token_id=self.numericalizer.decoder_vocab.pad_idx,
                                      early_stopping=True,
                                      num_return_sequences=num_outputs,
                                      repetition_penalty=repetition_penalty,
                                      temperature=temperature,
-                                     eos_token_id=batch.decoder_vocab.eos_idx,
+                                     eos_token_id=self.numericalizer.decoder_vocab.eos_idx,
                                      top_k=top_k,
                                      top_p=top_p,
                                      num_beams=num_beams,

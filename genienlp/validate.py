@@ -33,7 +33,6 @@ import torch
 from collections import OrderedDict
 
 from .metrics import compute_metrics
-from .util import multiwoz_specific_postprocess
 
 
 def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False, original_order=None):
@@ -63,25 +62,21 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
                                                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                                                 do_sample=args.temperature[hyperparameter_idx]!=0  # if temperature==0, we do not sample
                                                 )
-            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction, detokenize=task.detokenize, field_name='answer')
-            if args.almond_dataset_specific_preprocess == 'multiwoz':
-                partial_batch_prediction = [multiwoz_specific_postprocess(a) for a in partial_batch_prediction]
+            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction, field_name='answer')
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
         
         if not output_predictions_only:
-            batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
-            if args.almond_dataset_specific_preprocess == 'multiwoz':
-                batch_answer = [multiwoz_specific_postprocess(a) for a in batch_answer]
+            batch_answer = numericalizer.reverse(batch.answer.value.data, field_name='answer')
             example_ids += batch.example_id
             answers += batch_answer
-            batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize, field_name='context')
+            batch_context = numericalizer.reverse(batch.context.value.data, field_name='context')
             contexts += batch_context
         predictions += batch_prediction
     
     if original_order is not None:
         # sort back to the original order
-        original_order, example_ids, predictions, answers, contexts, questions = tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, questions)))))
+        original_order, example_ids, predictions, answers, contexts = tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))
 
     if prediction_file_name is not None:
         with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:

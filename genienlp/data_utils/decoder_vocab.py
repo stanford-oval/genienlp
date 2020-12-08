@@ -27,49 +27,29 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 class DecoderVocabulary(object):
     def __init__(self, words, full_vocab, pad_token, eos_token):
         self.full_vocab = full_vocab
         self.pad_token = pad_token
         self.eos_token = eos_token
-        if words is not None:
-            self.itos = words
-            self.stoi = {word: idx for idx, word in enumerate(words)}
-            self.pad_idx = self.stoi[pad_token]
-            self.eos_idx = self.stoi[eos_token]
-        else:
-            self.itos = []
-            self.stoi = dict()
-            self.pad_idx = -1
-            self.eos_idx = -1
-        self.oov_itos = []
-        self.oov_stoi = dict()
-
-    def clone(self):
-        new_subset = DecoderVocabulary(None, self.full_vocab, self.pad_token, self.eos_token)
-        new_subset.itos = self.itos
-        new_subset.stoi = self.stoi
-        new_subset.pad_idx = self.stoi[self.pad_token]
-        new_subset.eos_idx = self.stoi[self.eos_token]
-        return new_subset
+        self.itos = words
+        self.stoi = {word: idx for idx, (word, full_idx) in enumerate(words)}
+        self.limited_to_full = {self.stoi[word]: full_idx for word, full_idx in words}
+        self.pad_idx = self.stoi[pad_token]
+        self.eos_idx = self.stoi[eos_token]
 
     def __len__(self):
-        return len(self.itos) + len(self.oov_itos)
+        return len(self.itos)
 
-    def encode(self, word):
+    def encode(self, word, full_idx):
         if word in self.stoi:
             lim_idx = self.stoi[word]
-        elif word in self.oov_stoi:
-            lim_idx = self.oov_stoi[word]
         else:
             lim_idx = len(self)
-            self.oov_itos.append(word)
-            self.oov_stoi[word] = lim_idx
+            self.itos.append(word)
+            self.stoi[word] = lim_idx
+            self.limited_to_full[lim_idx] = full_idx
         return lim_idx
 
     def decode(self, lim_idx):
-        if lim_idx < len(self.itos):
-            return self.full_vocab.stoi[self.itos[lim_idx]]
-        else:
-            return self.full_vocab.stoi[self.oov_itos[lim_idx - len(self.itos)]]
+        return self.limited_to_full[lim_idx]

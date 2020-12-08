@@ -161,7 +161,7 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            _, predictions, answers, contexts, _ = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name, original_order=original_order)
+            _, predictions, answers, contexts = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name, original_order=original_order)
                 
             if len(answers) > 0:
                 metrics_to_compute = task.metrics

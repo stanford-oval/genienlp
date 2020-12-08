@@ -52,9 +52,7 @@ def main(args):
     os.makedirs(args.output, exist_ok=True)
     load_config_json(args)
 
-    config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
-    config.output_hidden_states = True
-    numericalizer = TransformerNumericalizer(args.pretrained_model, config=config,
+    numericalizer = TransformerNumericalizer(args.pretrained_model,
                                              max_generative_vocab=args.max_generative_vocab,
                                              cache=args.embeddings)
 

@@ -56,9 +56,9 @@ class Server:
         self._cached_tasks = dict()
 
     def numericalize_examples(self, ex):
-        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer, device=self.device)
+        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer)
         # make a single batch with all examples
-        return NumericalizedExamples.collate_batches(all_features)
+        return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
 
     def handle_request(self, line):
         request = json.loads(line)

@@ -94,13 +94,8 @@ def parse_argv(parser):
                         help='tasks to collect evaluation metrics for')
     parser.add_argument('--val_every', default=int(1e3), type=int,
                         help='how often to run validation in # of iterations')
-    parser.add_argument('--val_no_filter', action='store_false', dest='val_filter',
-                        help='whether to allow filtering on the validation sets')
     parser.add_argument('--val_batch_size', nargs='+', default=[4000], type=int,
                         help='Number of tokens in each batch for validation, corresponding to tasks in --val_tasks')
-    
-    parser.add_argument('--max_pairs', type=int, default=1000000,
-                        help='Maximum number of pairs to make for each example group')
     
     parser.add_argument('--sentence_batching', action='store_true',
                         help='Batch same sentences together (used for multilingual tasks)')
@@ -130,22 +125,25 @@ def parse_argv(parser):
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
-    parser.add_argument('--model', type=str, choices=['BertLSTM', 'Bart'], default='BertLSTM', help='which model to import')
+    parser.add_argument('--model', type=str, choices=['TransformerLSTM', 'TransformerSeq2Seq'], default='TransformerLSTM', help='which model to import')
     parser.add_argument('--pretrained_model', default=None,
                         help='which pretrained model to use on the encoder side; choose a name from Huggingface models')
 
-    parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers (for BertLSTM)')
+    parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers (for TransformerLSTM)')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules ')
     parser.add_argument('--rnn_zero_state', default='zero', choices=['zero', 'average', 'cls'],
-                        help='how to construct RNN zero state (for BertLSTM)')
+                        help='how to construct RNN zero state (for TransformerLSTM)')
     parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
-                        help='size of decoder embedding (for BertLSTM)')
+                        help='size of decoder embedding (for TransformerLSTM)')
+    parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model (for TransformerLSTM)')
 
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
     parser.add_argument("--almond_has_multiple_programs", action='store_true', help='Indicate if almond dataset has multiple programs for each sentence')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
+    parser.add_argument('--almond_detokenize_sentence', action='store_true',
+                        help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
 
     parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')

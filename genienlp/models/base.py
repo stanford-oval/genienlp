@@ -32,11 +32,14 @@ import logging
 import os
 
 from transformers import PreTrainedModel
+from ..data_utils.numericalizer import TransformerNumericalizer
 
 logger = logging.getLogger(__name__)
 
 
 class GenieModel(PreTrainedModel):
+    numericalizer: TransformerNumericalizer
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         save_directory = pretrained_model_name_or_path
@@ -67,6 +70,3 @@ class GenieModel(PreTrainedModel):
         self.numericalizer.grow_vocab(tasks)
         if self.numericalizer.num_tokens > old_num_tokens:
             logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
-        self.bart.resize_token_embeddings(self.numericalizer.num_tokens)
-        if resize_decoder:
-            self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)

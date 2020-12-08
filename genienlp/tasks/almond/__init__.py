@@ -37,7 +37,7 @@ from ..registry import register_task
 from ..generic_dataset import CQA, context_question_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
 from ...data_utils.progbar import progress_bar
-from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
+from .utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, is_cjk_char
 
 from ..base_dataset import Split
 
@@ -116,6 +116,7 @@ class BaseAlmondTask(BaseTask):
     def __init__(self, name, args):
         super().__init__(name, args)
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
+        self._almond_detokenize_sentence = args.almond_detokenize_sentence
 
     @property
     def metrics(self):
@@ -130,20 +131,6 @@ class BaseAlmondTask(BaseTask):
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
     
-    def _detokenize_cjk_chars(self, sentence):
-        output = []
-        i = 0
-        while i < len(sentence):
-            output.append(sentence[i])
-            # skip space after cjk chars only if followed by another cjk char
-            if is_cjk_char(ord(sentence[i])) and \
-                    i+1 < len(sentence) and sentence[i+1] == ' ' and \
-                    i+2 < len(sentence) and is_cjk_char(ord(sentence[i+2])):
-                i += 2
-            else:
-                i += 1
-        return "".join(output)
-
     def preprocess_field(self, sentence, field_name=None):
         if self.override_context and field_name == 'context':
             return self.override_context
@@ -152,11 +139,31 @@ class BaseAlmondTask(BaseTask):
         if not sentence:
             return ''
 
-        sentence = self._detokenize_cjk_chars(sentence)
-        for token in sentence.split(' '):
-            if is_entity(token) or (self._is_program_field(field_name) and is_device(token)):
+        tokens = sentence.split(' ')
+        is_program = self._is_program_field(field_name)
+        for token in tokens:
+            if is_entity(token) or (is_program and (is_device(token) or is_entity_marker(token))):
                 self.special_tokens.add(token)
-        return sentence
+
+        new_sentence = sentence
+        if self._almond_detokenize_sentence:
+            new_sentence = ''
+            in_string = False
+            for token in tokens:
+                if is_program:
+                    if token == '"':
+                        in_string = not in_string
+                    if not in_string:
+                        new_sentence += ' ' + token
+                        continue
+                if token in (',', '.', '?', '!', ':', ')', ']', '}') or \
+                        (len(token) == 1 and is_cjk_char(ord(token))) or \
+                        token.startswith("'"):
+                    new_sentence += token
+                else:
+                    new_sentence += ' ' + token
+
+        return new_sentence
 
 
 @register_task('almond')
@@ -408,7 +415,10 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
 
 @register_task('almond_multilingual')
 class AlmondMultiLingual(BaseAlmondMultiLingualTask):
-    
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self.lang_as_question = args.almond_lang_as_question
+
     def _is_program_field(self, field_name):
         return field_name == 'answer'
     
@@ -422,7 +432,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
         else:
             _id, sentence, target_code = parts
         language = ISO_to_LANG.get(dir_name, 'English').lower()
-        if kwargs.get('lang_as_question'):
+        if self.lang_as_question:
             question = 'translate from {} to thingtalk'.format(language)
         else:
             question = 'translate from english to thingtalk'

@@ -42,13 +42,11 @@ class IdentityEncoder(nn.Module):
         if args.rnn_dimension is None:
             args.rnn_dimension = config.hidden_size
 
-        self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, config.hidden_size,
-                                                    trained_dimension=0,
-                                                    project=False)
+        self.encoder_embeddings = context_embeddings
 
         if self.args.rnn_layers > 0 and self.args.rnn_dimension != config.hidden_size:
             self.dropout = nn.Dropout(args.dropout_ratio)
-            self.projection = nn.Linear(self.encoder_embeddings.dimension, self.args.rnn_dimension, bias=False)
+            self.projection = nn.Linear(config.hidden_size, self.args.rnn_dimension, bias=False)
         else:
             self.dropout = None
             self.projection = None
@@ -63,12 +61,12 @@ class IdentityEncoder(nn.Module):
 
     def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length
-        context_padding = context.data == self.pad_idx
+        context_padding = torch.eq(context.data, self.pad_idx)
 
-        context_embedded = self.encoder_embeddings(context, padding=context_padding)
+        final_context = self.encoder_embeddings(context, attention_mask=(~context_padding).to(dtype=torch.float))[0]
 
         if self.projection is not None:
-            final_context = self.dropout(context_embedded)
+            final_context = self.dropout(final_context)
             final_context = self.projection(final_context)
 
         context_rnn_state = None
@@ -81,10 +79,11 @@ class IdentityEncoder(nn.Module):
                 context_rnn_state = (zero, zero)
             else:
                 if self.args.rnn_zero_state == 'cls':
-                    packed_rnn_state = self.norm(self.pool(context_embedded.last_layer[:, 0, :]))
+                    packed_rnn_state = self.norm(self.pool(final_context[:, 0, :]))
 
-                elif self.args.rnn_zero_state == 'average':
-                    masked_final_context = context_embedded.last_layer.masked_fill(context_padding.unsqueeze(2), 0)
+                else:
+                    assert self.args.rnn_zero_state == 'average'
+                    masked_final_context = final_context.masked_fill(context_padding.unsqueeze(2), 0)
                     summed_context = torch.sum(masked_final_context, dim=1)
                     average_context = summed_context / context_lengths.unsqueeze(1)
 

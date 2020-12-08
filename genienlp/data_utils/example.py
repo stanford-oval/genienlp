@@ -27,9 +27,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import NamedTuple, List, Union
+import unicodedata
+from typing import NamedTuple, List, Union, Iterable
 import torch
-from typing import Callable
 
 
 def identity(x, **kw):
@@ -37,22 +37,9 @@ def identity(x, **kw):
 
 
 class SequentialField(NamedTuple):
-    value: Union[torch.tensor, List[List[int]]]
-    length: Union[torch.tensor, List[int]]
-    limited: Union[torch.tensor, List[List[int]]]
-
-    @staticmethod
-    def merge(sequential_fields: List):
-
-        values = []
-        lengths = []
-        limiteds = []
-        for sf in sequential_fields:
-            values.extend(sf.value)
-            lengths.extend(sf.length)
-            limiteds.extend(sf.limited)
-
-        return SequentialField(values, lengths, limiteds)
+    value: Union[torch.tensor, List[int]]
+    length: Union[torch.tensor, int]
+    limited: Union[torch.tensor, List[int]]
 
 
 class Example(NamedTuple):
@@ -69,6 +56,7 @@ class Example(NamedTuple):
         args = [example_id]
 
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
+            arg = unicodedata.normalize('NFD', arg)
             field = preprocess(arg.rstrip('\n'), field_name=argname).strip()
             if lower:
                 field = field.lower()
@@ -84,41 +72,37 @@ class NumericalizedExamples(NamedTuple):
     example_id: List[str]
     context: SequentialField
     answer: SequentialField
-    device: Union[torch.device, None]
-    padding_function: Callable
     
     @staticmethod
-    def from_examples(examples, numericalizer, device):
+    def from_examples(examples, numericalizer):
         assert all(isinstance(ex.example_id, str) for ex in examples)
 
         for ex in examples:
             yield NumericalizedExamples(ex.example_id,
                                         numericalizer.encode_single(ex.context_plus_question),
-                                        numericalizer.encode_single(ex.answer),
-                                        device=device, padding_function=numericalizer.pad)
+                                        numericalizer.encode_single(ex.answer))
 
     @staticmethod
-    def collate_batches(batches):
+    def collate_batches(batches : Iterable['NumericalizedExamples'], numericalizer, device):
         example_id = []
         context_values, context_lengths, context_limiteds = [], [], []
         answer_values, answer_lengths, answer_limiteds = [], [], []
 
         for batch in batches:
             example_id.append(batch.example_id[0])
-            context_values.append(torch.tensor(batch.context.value, device=batch.device))
-            context_lengths.append(torch.tensor(batch.context.length, device=batch.device))
-            context_limiteds.append(torch.tensor(batch.context.limited, device=batch.device))
+            context_values.append(torch.tensor(batch.context.value, device=device))
+            context_lengths.append(torch.tensor(batch.context.length, device=device))
+            context_limiteds.append(torch.tensor(batch.context.limited, device=device))
 
-            answer_values.append(torch.tensor(batch.answer.value, device=batch.device))
-            answer_lengths.append(torch.tensor(batch.answer.length, device=batch.device))
-            answer_limiteds.append(torch.tensor(batch.answer.limited, device=batch.device))
-            padding_function = batch.padding_function
+            answer_values.append(torch.tensor(batch.answer.value, device=device))
+            answer_lengths.append(torch.tensor(batch.answer.length, device=device))
+            answer_limiteds.append(torch.tensor(batch.answer.limited, device=device))
 
-        context_values = padding_function(context_values)
-        context_limiteds = padding_function(context_limiteds)
+        context_values = numericalizer.pad(context_values, pad_id=numericalizer.pad_id)
+        context_limiteds = numericalizer.pad(context_limiteds, pad_id=numericalizer.decoder_pad_id)
         context_lengths = torch.stack(context_lengths, dim=0)
-        answer_values = padding_function(answer_values)
-        answer_limiteds = padding_function(answer_limiteds)
+        answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
+        answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)
         answer_lengths = torch.stack(answer_lengths, dim=0)
 
         context = SequentialField(value=context_values,
@@ -132,6 +116,4 @@ class NumericalizedExamples(NamedTuple):
 
         return NumericalizedExamples(example_id=example_id,
                                      context=context,
-                                     answer=answer,
-                                     device=None,
-                                     padding_function=padding_function)
+                                     answer=answer)

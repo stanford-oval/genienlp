@@ -27,5 +27,5 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from .bert_lstm import BertLSTM
-from .bart import Bart
+from .transformer_lstm import TransformerLSTM
+from .transformer_seq2seq import TransformerSeq2Seq

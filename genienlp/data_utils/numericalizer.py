@@ -30,7 +30,7 @@
 import collections
 import os
 from torch.nn.utils.rnn import pad_sequence
-from transformers import AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer
 
 from .decoder_vocab import DecoderVocabulary
 from .example import SequentialField
@@ -55,31 +55,47 @@ class TransformerNumericalizer(object):
     def num_tokens(self):
         return len(self._tokenizer)
 
+    @property
+    def decoder_pad_id(self):
+        if self.max_generative_vocab is not None:
+            return self.decoder_vocab.pad_idx
+        else:
+            return self.pad_id
+
     def load(self, save_dir):
-        self._tokenizer = AutoTokenizer.from_pretrained(save_dir, cache_dir=self._cache)
+        config = AutoConfig.from_pretrained(self._pretrained_name)
+        self._tokenizer = AutoTokenizer.from_pretrained(save_dir,
+                                                        do_lower_case=False,
+                                                        do_basic_tokenize=False,
+                                                        config=config,
+                                                        cache_dir=self._cache)
 
         if self.max_generative_vocab is not None:
             with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'r') as fp:
-                self._decoder_words = [line.rstrip('\n') for line in fp]
+                self._decoder_words = [(line.rstrip('\n'), self._tokenizer.convert_tokens_to_ids(line.rstrip('\n')))
+                                        for line in fp]
 
         self._init()
 
-    def pad(self, batch):
+    def pad(self, batch, pad_id):
         """
         batch: a List of List of integers
         """
         #TODO account for left padding models
-        return pad_sequence(batch, padding_value=self.pad_id, batch_first=True)
+        return pad_sequence(batch, padding_value=pad_id, batch_first=True)
 
     def save(self, save_dir):
         self._tokenizer.save_pretrained(save_dir)
         if self.max_generative_vocab is not None:
             with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'w') as fp:
-                for word in self._decoder_words:
+                for word, _full_idx in self._decoder_words:
                     fp.write(word + '\n')
 
     def build_vocab(self, vocab_sets, tasks):
-        self._tokenizer = AutoTokenizer.from_pretrained(self._pretrained_name, cache_dir=self._cache)
+        self._tokenizer = AutoTokenizer.from_pretrained(self._pretrained_name,
+                                                        do_lower_case=False,
+                                                        do_basic_tokenize=False,
+                                                        cache_dir=self._cache)
 
         # ensure that init, eos, unk and pad are set
         # this method has no effect if the tokens are already set according to the tokenizer class
@@ -95,7 +111,7 @@ class TransformerNumericalizer(object):
 
         # add the special tokens from the task
         for task in tasks:
-            self._tokenizer.add_tokens(task.special_tokens)
+            self._tokenizer.add_tokens(list(task.special_tokens))
 
         if self.max_generative_vocab is not None:
             # do a pass over all the data in the dataset
@@ -109,16 +125,20 @@ class TransformerNumericalizer(object):
                     decoder_words.update(self._tokenizer.tokenize(example.question))
                     decoder_words.update(self._tokenizer.tokenize(example.answer))
 
-            self._decoder_words = [self._tokenizer.bos_token, self._tokenizer.eos_token, self._tokenizer.pad_token,
-                                   self._tokenizer.unk_token, self._tokenizer.mask_token] + \
-                                  [word for word, _freq in decoder_words.most_common(self.max_generative_vocab)]
+            self._decoder_words = [(self._tokenizer.bos_token, self._tokenizer.bos_token_id),
+                                   (self._tokenizer.eos_token, self._tokenizer.eos_token_id),
+                                   (self._tokenizer.pad_token, self._tokenizer.pad_token_id),
+                                   (self._tokenizer.unk_token, self._tokenizer.unk_token_id),
+                                   (self._tokenizer.mask_token, self._tokenizer.mask_token_id)] + \
+                                  [(word, self._tokenizer.convert_tokens_to_ids(word)) for word, _freq
+                                   in decoder_words.most_common(self.max_generative_vocab)]
 
         self._init()
 
     def grow_vocab(self, tasks):
         # add the new special tokens from the task
         for task in tasks:
-            self._tokenizer.add_tokens(task.special_tokens)
+            self._tokenizer.add_tokens(list(task.special_tokens))
 
     def get_special_token_mask(self, token_ids):
         special_tokens_tuple = (self.init_id, self.eos_id, self.pad_id, self.mask_id)
@@ -165,15 +185,17 @@ class TransformerNumericalizer(object):
         length = len(example)
         numerical = self._tokenizer.convert_tokens_to_ids(example)
         if self.decoder_vocab:
-            decoder_numerical = [self.decoder_vocab.encode(word) for word in example]
+            decoder_numerical = [self.decoder_vocab.encode(word, full_idx) for word, full_idx
+                                 in zip(example, numerical)]
         else:
             decoder_numerical = []
 
         # minibatch with one element
-        return SequentialField(length=[length], value=[numerical], limited=[decoder_numerical])
+        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
 
     def decode(self, tensor):
         return self._tokenizer.convert_ids_to_tokens(tensor)
 
-    def reverse(self, batch):
-        raise self._tokenizer.batch_decode(batch)
+    def reverse(self, batch, field_name=None):
+        return [x.strip() for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True,
+                                                                clean_up_tokenization_spaces=False)]

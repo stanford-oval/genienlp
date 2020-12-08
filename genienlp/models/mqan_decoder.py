@@ -82,7 +82,7 @@ class MQANDecoder(nn.Module):
 
             answer_padding = (answer.data == self.pad_idx)[:, :-1]
 
-            answer_embedded = self.decoder_embeddings(answer[:, :-1], padding=answer_padding).last_layer
+            answer_embedded = self.decoder_embeddings(answer[:, :-1], padding=answer_padding)
 
             if self.args.rnn_layers > 0:
                 rnn_decoder_outputs = self.rnn_decoder(answer_embedded, final_context, hidden=context_rnn_state)
@@ -237,7 +237,7 @@ class MQANDecoderWrapper(object):
             self.mqan_decoder.context_attn.applyMasks(self.context_padding)
 
     def next_token_probs(self, current_token_id):
-        embedding = self.mqan_decoder.decoder_embeddings(current_token_id).last_layer
+        embedding = self.mqan_decoder.decoder_embeddings(current_token_id)
 
         if self.mqan_decoder.args.rnn_layers > 0:
             rnn_decoder_outputs = self.mqan_decoder.rnn_decoder(embedding, self.context,
