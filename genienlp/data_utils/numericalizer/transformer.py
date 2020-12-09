@@ -424,7 +424,7 @@ class BartNumericalizer(TransformerNumericalizer):
             else:
                 batch_tokens.append(' '.join(tokens))
                 
-        encoded_batch = self._tokenizer.batch_encode_plus(batch_tokens, add_special_tokens=True, padding='longest', return_attention_mask=False)
+        encoded_batch = self._tokenizer.batch_encode_plus(batch_tokens, add_special_tokens=True, padding=False, return_attention_mask=False)
         numerical = encoded_batch['input_ids']
         length = [len(a) for a in encoded_batch['input_ids']]
 
