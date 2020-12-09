@@ -414,6 +414,12 @@ def elapsed_time(log):
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
     all_features = list(NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer))
+
+    context_lengths = [ex.context.length for ex in all_features]
+    answer_lengths = [ex.answer.length for ex in all_features]
+
+    logger.info(f'context lengths (min, mean, max): {np.min(context_lengths)}, {int(np.mean(context_lengths))}, {np.max(context_lengths)}')
+    logger.info(f'answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}')
     
     sampler = LengthSortedIterator(all_features, batch_size=batch_size, sort=True, shuffle_and_repeat=train,
                                    sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
