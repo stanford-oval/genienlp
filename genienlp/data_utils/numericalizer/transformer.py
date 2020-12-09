@@ -420,11 +420,11 @@ class BartNumericalizer(TransformerNumericalizer):
         batch_tokens = []
         for tokens, mask in minibatch:
             if len(tokens) == 0:
-                batch_tokens.append(' ')
+                batch_tokens.append(['']) # empty array makes tokenizer crash
             else:
-                batch_tokens.append(' '.join(tokens))
+                batch_tokens.append(tokens)
                 
-        encoded_batch = self._tokenizer.batch_encode_plus(batch_tokens, add_special_tokens=True, padding=False, return_attention_mask=False)
+        encoded_batch = self._tokenizer.batch_encode_plus(batch_tokens, add_special_tokens=True, padding=False, return_attention_mask=False, is_split_into_words=True)
         numerical = encoded_batch['input_ids']
         length = [len(a) for a in encoded_batch['input_ids']]
 
@@ -441,5 +441,5 @@ class BartNumericalizer(TransformerNumericalizer):
         return _reversed
 
     def decode(self, tensor):
-        return self.convert_ids_to_tokens(tensor)
+        return self._tokenizer.convert_ids_to_tokens(tensor)
         
