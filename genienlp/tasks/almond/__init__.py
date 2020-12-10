@@ -162,6 +162,23 @@ class BaseAlmondTask(BaseTask):
                     new_sentence += token
                 else:
                     new_sentence += ' ' + token
+        elif is_program and field_name != 'answer':
+            new_tokens = []
+            in_string = False
+            for token in tokens:
+                if token == '"':
+                    in_string = not in_string
+                if in_string:
+                    new_tokens.append(token)
+                    continue
+
+                if not is_entity(token) and not is_entity_marker(token) and \
+                        not is_device(token):
+                    for word in token.split('_'):
+                        new_tokens.append(word)
+                else:
+                    new_tokens.append(token)
+            new_sentence = ' '.join(new_tokens)
 
         return new_sentence
 
