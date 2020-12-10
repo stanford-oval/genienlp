@@ -15,12 +15,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Conditional text generation with transformer models
+"""
+This script in used for text generation using library models.
+It currently supports paraphrasing and translation tasks.
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-from tqdm import tqdm
 import math
 import json
 import re
@@ -42,18 +43,20 @@ except RuntimeError:
 import torch
 
 from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_GROUP_MEMBERS
+from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer
+from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer, BartTokenizer
 
-from transformers import BartForConditionalGeneration
-from .transformers_utils import MarianMTModel, T5ForConditionalGeneration, BartForConditionalGeneration as MBartForConditionalGeneration
-from .transformers_utils import BartTokenizer, MBartTokenizer
+from .transformers_utils import GenieMarianMTModel, GenieBartForConditionalGeneration, GenieMBartForConditionalGeneration,\
+    GenieT5ForConditionalGeneration, GenieMT5ForConditionalGeneration
+from .transformers_utils import GenieMBartTokenizer
+
 
 from transformers import PretrainedConfig
 from ..util import set_seed, combine_files_on_disk, split_file_on_disk, get_part_path
 from .GPT2Seq2Seq import GPT2Seq2Seq
 from .data_utils import group_together
+from .model_utils import check_args
 
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -66,10 +69,11 @@ ALL_MODELS = sum((tuple(map.keys()) for map in (GPT2_PRETRAINED_CONFIG_ARCHIVE_M
 
 MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'bos_token': '<unk>', 'sep_token': '<paraphrase>', 'eos_token': '</paraphrase>'}),
-    't5': (T5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'bart': (BartForConditionalGeneration, BartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'mbart': (MBartForConditionalGeneration, MBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'marian': (MarianMTModel, MarianTokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    't5': (GenieT5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'mt5': (GenieMT5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'bart': (GenieBartForConditionalGeneration, BartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'mbart': (GenieMBartForConditionalGeneration, GenieMBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'marian': (GenieMarianMTModel, MarianTokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
 }
 
 
@@ -123,14 +127,17 @@ def parse_argv(parser):
     parser.add_argument('--batch_size', type=int, default=4,
                         help="Batch size for text generation for each GPU.")
     
+    parser.add_argument('--pad_token', type=str, default='<pad>',
+                        help='The special token for padding, if tokenizer does not have that')
+    
     parser.add_argument('--cache_dir', default='.embeddings', type=str, help='where to save transforemrs cached models, configs, and tokenizers.')
     
     parser.add_argument('--trained_model_type', type=str, help='if provided we make sure the loaded model matches the model_type')
     
-    parser.add_argument('--src_lang', type=str, default='en', help='source language used for translation task')
+    parser.add_argument('--src_lang', type=str, help='source language used for translation task')
     parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
-    parser.add_argument('--return_attentions', action='store_true', help='return self and cross attention weights for seq2seq models')
-    parser.add_argument('--return_hidden_states', action='store_true', help='return all hidden states for seq2seq models')
+    parser.add_argument('--output_attentions', action='store_true', help='return self and cross attention weights for seq2seq models')
+    parser.add_argument('--output_hidden_states', action='store_true', help='return all hidden states for seq2seq models')
 
     parser.add_argument('--att_pooling', type=str, default='max', help='pooling used to calculate decoder-encoder attention values across different heads')
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot decoder-encoder attention heatmaps')
@@ -141,16 +148,24 @@ def parse_argv(parser):
     parser.add_argument('--task', type=str, required=True, choices=['paraphrase', 'translate'])
     parser.add_argument("--output_example_ids_too", action='store_true', help='Generate two column output with ids in the first column')
     
-    parser.add_argument('--masked_paraphrasing', action='store_true', help='mask input tokens and infill them using denoising pretrained model')
-    parser.add_argument('--fairseq_mask_prob', type=float, default=0.15, help='Probability of an input token being masked in the sentence for masked_paraphrasing')
-    
+    parser.add_argument('--mask_tokens', action='store_true', help='mask input tokens and infill them using denoising pretrained model')
+    parser.add_argument('--mask_token_prob', type=float, default=0.15, help='Probability of an input token being masked in the sentence')
+    parser.add_argument('--delete_tokens', action='store_true', help='delete input tokens and infill them using denoising pretrained model'
+                                                                     'In contrast to token masking, the model should decide which positions have missing inputs')
+    parser.add_argument('--delete_token_prob', type=float, default=0.15, help='Probability of an input token being deleted in the sentence')
+    parser.add_argument('--infill_text', action='store_true', help='mask consecutive tokens and infill them using denoising pretrained model')
+    parser.add_argument('--num_text_spans', type=int, default=3, help='number of text spans to sample for text infilling method')
+    parser.add_argument('--permute_sentences', action='store_true', help='divide document into sentences based on fill stops and'
+                                                                         'permutate them. Use this only if input has multiple sentences.')
+    parser.add_argument('--rotate_sentence', action='store_true', help='a pivot token is chosen randomly, and sentence is rotated so new sentence start with pivot token')
+
     parser.add_argument('--fp16', action='store_true',
                         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit. On certain GPUs (e.g. Nvidia V100) improves the inference speed")
     parser.add_argument('--fp16_opt_level', type=str, default='O1',
                         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
                              "See details at https://nvidia.github.io/apex/amp.html")
-
-
+    
+    parser.add_argument('--verbose', action='store_true', help='log additional information for debugging purposes')
 
 def main(args):
     hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
@@ -196,49 +211,21 @@ def run_multi_process_generation(args):
     # get model type from saved config
     if hasattr(config, 'model_type'):
         args.model_type = getattr(config, 'model_type')
-        # bart and mbart share the same config
-        # check which model we are actually using
-        if args.model_type == 'bart':
-            try:
-                if config.normalize_before and config.add_final_layer_norm and config.scale_embedding:
-                    args.model_type = 'mbart'
-            except AttributeError as e:
-                args.model_type = 'bart'
     else:
         raise ValueError('Model should be either GPT2, BART, MBART, or Marian')
     
+    # check arguments validity
+    check_args(args)
+
+    if sum([args.mask_tokens, args.delete_tokens, args.infill_text, args.permute_sentences, args.rotate_sentence]) >= 2:
+        raise ValueError('Mixing denoising techniques is unlikely to work. Please use one method per run')
+    
+    if (args.mask_tokens or args.delete_tokens or args.rotate_sentence) and args.model_type == 'mbart':
+        raise ValueError('MBART is pretrained only with text_infilling and permute_sentences noising methods. '
+                         'Applying other noising techniques is unlikely to work')
+    
     if args.trained_model_type and args.trained_model_type != '' and args.model_type != args.trained_model_type:
         raise ValueError('The loaded model type does not match with what the user provided')
-    
-    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:
-        if not args.tgt_lang:
-            raise ValueError('For translation task using Marian model, if target language is a group of languages, '
-                             'you have to specify the --tgt_lang flag.')
-        elif args.tgt_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 1)[1]]:
-            if args.tgt_lang == 'pl':
-                args.tgt_lang = 'pol'
-            else:
-                raise ValueError('Target language is not in the model group languages, please specify the correct target language.')
-        
-    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] in MARIAN_GROUP_MEMBERS:
-        if not args.src_lang:
-            raise ValueError('For translation task using Marian model, if source language is a group of languages, '
-                             'you have to specify the --src_lang flag.')
-        elif args.src_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 2)[1]]:
-            raise ValueError('Dource language is not in the model group languages, please specify the correct source language.')
-
-    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] not in MARIAN_GROUP_MEMBERS and args.tgt_lang:
-        logger.warning('Target language should not be provided when using models with single language pairs,'
-                       'otherwise the translation outputs will be incorrect; thus we ignore the target language you provided...')
-        args.tgt_lang = None
-
-    if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] not in MARIAN_GROUP_MEMBERS and args.src_lang:
-        logger.warning('Source language should not be provided when using models with single language pairs,'
-                       'otherwise the translation outputs will be incorrect; thus we ignore the source language you provided...')
-        args.src_lang = None
-        
-    if args.model_type == 'mbart' and not (args.tgt_lang and args.src_lang):
-        raise ValueError('Source and Target language should be provided when using mBART cc25 model')
     
     if args.prompt_column is not None and args.copy is not None and args.copy != 0:
         raise ValueError('Cannot copy from the input and use prompt at the same time. Disable either --copy or --prompt_column.')
@@ -286,12 +273,12 @@ def run_multi_process_generation(args):
 def run_single_process_generation(args, config):
     model_class, tokenizer_class, special_tokens = MODEL_CLASSES[args.model_type]
     
-    return_attentions = args.return_attentions
-    return_hidden_states = args.return_hidden_states
+    output_attentions = args.output_attentions
+    output_hidden_states = args.output_hidden_states
     
     model = model_class.from_pretrained(args.model_name_or_path,
-                                        output_attentions=return_attentions,
-                                        output_hidden_states=return_hidden_states,
+                                        output_attentions=output_attentions,
+                                        output_hidden_states=output_hidden_states,
                                         cache_dir=args.cache_dir)
     model.to(args.device)
 
@@ -306,6 +293,11 @@ def run_single_process_generation(args, config):
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     eos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['eos_token'])
     sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
+    
+    if tokenizer.pad_token is None:
+        # this assigns pad token but doesn't add it to the vocabulary
+        tokenizer.pad_token = args.pad_token
+        
     pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
     
     if pad_token_id is None:
@@ -328,6 +320,8 @@ def run_single_process_generation(args, config):
         else:
             t5_task = 'summarization'
         model_input_prefix = config.task_specific_params[t5_task]['prefix']
+        
+    masking_token = getattr(tokenizer, 'mask_token', '<mask>')
 
     all_input_sequences, all_input_sequence_lengths, all_example_ids, all_context_ids, estimated_output_lengths, all_golds, reverse_maps, all_prompt_ids = \
                                   create_features_from_tsv_file(file_path=args.input_file,
@@ -346,8 +340,15 @@ def run_single_process_generation(args, config):
                                                                 subsample=args.subsample,
                                                                 task=args.task,
                                                                 model_input_prefix=model_input_prefix,
-                                                                masked_paraphrasing=args.masked_paraphrasing,
-                                                                fairseq_mask_prob=args.fairseq_mask_prob)
+                                                                mask_tokens=args.mask_tokens,
+                                                                mask_token_prob=args.mask_token_prob,
+                                                                masking_token=masking_token,
+                                                                delete_tokens=args.delete_tokens,
+                                                                delete_token_prob=args.delete_token_prob,
+                                                                infill_text=args.infill_text,
+                                                                num_text_spans=args.num_text_spans,
+                                                                permute_sentences=args.permute_sentences,
+                                                                rotate_sentence=args.rotate_sentence)
 
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, original_order, reverse_maps, all_prompt_ids = \
@@ -357,8 +358,7 @@ def run_single_process_generation(args, config):
     stop_token_ids = [tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens]
     
     batch_idx = 0
-    for batch in tqdm(range(math.ceil(len(all_context_ids) / args.batch_size)), desc="Batch"):
-        logging.info('') # to make kubectl properly print tqdm progress bar
+    for batch in range(math.ceil(len(all_context_ids) / args.batch_size)):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_ids)))
         batch_size = batch_slice[1] - batch_slice[0]
         batch_context_tokens = all_context_ids[batch_slice[0]: batch_slice[1]]
@@ -375,9 +375,10 @@ def run_single_process_generation(args, config):
                 padded_batch_context_tokens.append(batch_context_tokens[i]+[pad_token_id]*(max_length-len(batch_context_tokens[i])))
             batch_context_tensor = torch.tensor(padded_batch_context_tokens, dtype=torch.long, device=args.device)
             attention_mask = (batch_context_tensor!=pad_token_id).to(torch.long)
-            
+
         if args.model_type == 'mbart':
             decoder_start_token_id = tokenizer.lang_code_to_id[args.tgt_lang]
+            model.config.decoder_start_token_id = decoder_start_token_id
         else:
             decoder_start_token_id = None
             
@@ -403,13 +404,12 @@ def run_single_process_generation(args, config):
                                  temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0, # if temperature==0, we do not sample
                                  eos_token_id=eos_token_id,
                                  pad_token_id=pad_token_id,
-                                 return_attentions=return_attentions,
-                                 return_hidden_states=return_hidden_states,
                                  use_cache=True,
+                                 output_attentions=output_attentions
                                 )
 
             # TODO fix the way output attention is handled. Some models do not support it.
-            if return_attentions and args.task == 'translate':
+            if output_attentions:
                 decoded, all_encoder_attentions = outputs
             else:
                 decoded = outputs
@@ -434,7 +434,7 @@ def run_single_process_generation(args, config):
                 min_index = min_index + 1
                 out_cropped = out[:min_index]
             
-                if args.task == 'translate':
+                if args.task == 'translate' and output_attentions:
                     src_tokens = tokenizer.convert_ids_to_tokens(batch_context_tensor[sample_index])
                     tgt_tokens = tokenizer.convert_ids_to_tokens(out_cropped)
                     
@@ -443,7 +443,7 @@ def run_single_process_generation(args, config):
                     layer_attention = all_encoder_attentions[-1]
                     sample_layer_attention = layer_attention[sample_index, :, :, :]
 
-                    if tgt_tokens[0] == tokenizer.pad_token or tgt_tokens[0] == special_tokens['sep_token'] or \
+                    if tgt_tokens[0] in [tokenizer.pad_token, special_tokens['bos_token'], special_tokens['sep_token']] or \
                             (decoder_start_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]):
                         # shift target tokens left to match the attention positions
                         tgt_tokens = tgt_tokens[1:]
@@ -504,7 +504,7 @@ def run_single_process_generation(args, config):
                 batch_outputs[sample_index].append(text)
                 
         all_outputs.extend(batch_outputs)
-        if batch_idx < 1:
+        if batch_idx < 1 and args.verbose:
             logger.info('First batch output: %s', str(all_outputs))
         batch_idx += 1
 

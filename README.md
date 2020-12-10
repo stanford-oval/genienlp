@@ -67,13 +67,46 @@ If you use the MultiTask Question Answering model in your work, please cite [*Th
 }
 ```
 
-If you use the BERT-LSTM model (Identity encoder + MQAN decoder), please cite [_Schema2QA: Answering Complex Queries on the Structured Web with a Neural Model_](https://arxiv.org/abs/2001.05609)
+If you use the BERT-LSTM model (Identity encoder + MQAN decoder), please cite [Schema2QA: High-Quality and Low-Cost Q&A Agents for the Structured Web](https://arxiv.org/abs/2001.05609)
 
 ```bibtex
-@article{Xu2020Schema2QA,
-  title={Schema2QA: Answering Complex Queries on the Structured Web with a Neural Model},
+@InProceedings{xu2020schema2qa,
+  title={{Schema2QA}: High-Quality and Low-Cost {Q\&A} Agents for the Structured Web},
   author={Silei Xu and Giovanni Campagna and Jian Li and Monica S. Lam},
-  journal={arXiv preprint arXiv:2001.05609},
-  year={2020}
+  booktitle={Proceedings of the 29th ACM International Conference on Information and Knowledge Management},
+  year={2020},
+  doi={https://doi.org/10.1145/3340531.3411974}
+}
+```
+
+If you use the paraphrasing model (BART or GPT-2 fine-tuned on a paraphrasing dataset), please cite [AutoQA: From Databases to QA Semantic Parsers with Only Synthetic Training Data](https://arxiv.org/abs/2010.04806)
+
+```bibtex
+@inproceedings{xu-etal-2020-autoqa,
+    title = "{A}uto{QA}: From Databases to {QA} Semantic Parsers with Only Synthetic Training Data",
+    author = "Xu, Silei  and Semnani, Sina  and Campagna, Giovanni  and Lam, Monica",
+    booktitle = "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)",
+    month = nov,
+    year = "2020",
+    address = "Online",
+    publisher = "Association for Computational Linguistics",
+    url = "https://www.aclweb.org/anthology/2020.emnlp-main.31",
+    pages = "422--434",
+}
+```
+
+If you use MarianMT/ mBART/ T5 for translation task, or XLMR-LSTM model for Seq2Seq tasks, please cite [Localizing Open-Ontology QA Semantic Parsers in a Day Using Machine Translation](https://arxiv.org/abs/2010.05106) and the original paper that introduced the model.
+
+```bibtex
+@inproceedings{moradshahi-etal-2020-localizing,
+    title = "Localizing Open-Ontology {QA} Semantic Parsers in a Day Using Machine Translation",
+    author = "Moradshahi, Mehrad and Campagna, Giovanni and Semnani, Sina and Xu, Silei and Lam, Monica",
+    booktitle = "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)",
+    month = November,
+    year = "2020",
+    address = "Online",
+    publisher = "Association for Computational Linguistics",
+    url = "https://www.aclweb.org/anthology/2020.emnlp-main.481",
+    pages = "5970--5983",
 }
 ```

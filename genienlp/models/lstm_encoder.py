@@ -75,9 +75,9 @@ class BiLSTMEncoder(nn.Module):
 
         # pick the top-most N transformer layers to pass to the decoder for cross-attention
         # (add 1 to account for the embedding layer - the decoder will drop it later)
-        self_attended_context = context_embedded.all_layers[-(self.args.transformer_layers + 1):]
-        final_context = context_embedded.last_layer
-        final_question = question_embedded.last_layer
+        self_attended_context = context_embedded.hidden_states[-(self.args.transformer_layers + 1):]
+        final_context = context_embedded.last_hidden_state
+        final_question = question_embedded.last_hidden_state
 
         final_context, context_rnn_state = self.bilstm_context(final_context, context_lengths)
         context_rnn_state = tuple(self.reshape_rnn_state(x) for x in context_rnn_state)

@@ -36,16 +36,19 @@ import multiprocessing as mp
 import ujson
 import marisa_trie
 import re
-import sys
 from wordfreq import zipf_frequency
 
 from ..base_task import BaseTask
 from ..registry import register_task
-from ..generic_dataset import CQA, context_answer_len, token_batch_fn, default_batch_fn
-from ...data_utils.example import Example, Feature
+from ...data_utils.example import Feature
 from ...data_utils.database import Database
 from ...data_utils.database_utils import DOMAIN_TYPE_MAPPING
 from ...data_utils.bootleg import Bootleg
+from ..generic_dataset import CQA, context_question_len, token_batch_fn, default_batch_fn
+from ...data_utils.example import Example
+from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
+from ...util import multiwoz_specific_preprocess
+
 from ..base_dataset import Split
 from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char, process, chunk_file
 
@@ -209,6 +212,7 @@ class BaseAlmondTask(BaseTask):
         super().__init__(name, args)
         self.args = args
         self._preprocess_context = args.almond_preprocess_context
+        self._dataset_specific_preprocess = args.almond_dataset_specific_preprocess
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
         
         no_feature_fields = ['answer']
@@ -262,7 +266,7 @@ class BaseAlmondTask(BaseTask):
     
     @property
     def metrics(self):
-        return ['em', 'bleu']
+        return ['em', 'sm', 'bleu']
 
     def _is_program_field(self, field_name):
         raise NotImplementedError()
@@ -404,9 +408,13 @@ class BaseAlmondTask(BaseTask):
         
         sentence = self._detokenize_cjk_chars(sentence)
         
-        tokens = [t for t in sentence.split(' ') if len(t) > 0]
-        if self._preprocess_context and field_name in ('context'):
-            tokens = self.preprocess_context(sentence)
+        if self._dataset_specific_preprocess == 'multiwoz' and self._is_program_field(field_name):
+            sentence = multiwoz_specific_preprocess(sentence)
+            tokens = [t for t in sentence.split(' ') if len(t) > 0]
+        else:
+            tokens = [t for t in sentence.split(' ') if len(t) > 0]
+            if self._preprocess_context and field_name in ('context'):
+                tokens = self.preprocess_context(sentence)
 
         if self._is_program_field(field_name):
             mask = []
@@ -475,6 +483,36 @@ class Almond(BaseAlmondTask):
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 tokenize=self.tokenize, lower=False)
 
+@register_task('natural_seq2seq')
+class NaturalSeq2Seq(BaseAlmondTask):
+    """The Almond seqeunce to sequence task where both sequences are natural language
+    i.e. no ThingTalk program. Paraphrasing and translation are examples of this task"""
+
+    def _is_program_field(self, field_name):
+        return False
+
+    def _make_example(self, parts, dir_name=None, **kwargs):
+        # the question is irrelevant
+        if len(parts) == 2:
+            input_sequence, target_sequence = parts
+            _id = "id-null"
+        else:
+            _id, input_sequence, target_sequence = parts
+        question = 'translate from input to output'
+        context = input_sequence
+        answer = target_sequence
+        return Example.from_raw(self.name + '/' + _id, context, question, answer,
+                                tokenize=self.tokenize, lower=False)
+
+    def get_splits(self, root, **kwargs):
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/natural_seq2seq'), make_example=self._make_example, **kwargs)
+
+    def tokenize(self, sentence, field_name=None):
+        if not sentence:
+            return [], []
+
+        tokens = [t for t in sentence.split(' ') if len(t) > 0]
+        return tokens, None # no mask since it will be ignored
 
 @register_task('contextual_almond')
 class ContextualAlmond(BaseAlmondTask):
@@ -619,7 +657,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
 
     @property
     def metrics(self):
-        return ['em', 'bleu']
+        return ['em', 'sm', 'bleu']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
@@ -684,7 +722,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
             sort_key_fn = process_id
             batch_size_fn = default_batch_fn
         else:
-            sort_key_fn = context_answer_len
+            sort_key_fn = context_question_len
             batch_size_fn = token_batch_fn
             
         groups = len(all_datasets) if kwargs.get('sentence_batching') else None
@@ -706,7 +744,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
 
     @property
     def metrics(self):
-        return ['em', 'bleu']
+        return ['em', 'sm', 'bleu']
     
     def _make_example(self, parts, dir_name, **kwargs):
         if self._almond_has_multiple_programs:
@@ -737,7 +775,7 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
 
     @property
     def metrics(self):
-        return ['em', 'bleu']
+        return ['em', 'sm', 'bleu']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:

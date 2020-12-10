@@ -36,6 +36,8 @@ import subprocess
 
 from .tasks.registry import get_tasks
 from .util import have_multilingual
+from .paraphrase.transformers_utils import BART_MODEL_LIST, MBART_MODEL_LIST, MT5_MODEL_LIST
+
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +77,10 @@ def parse_argv(parser):
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training',
                         required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
-    parser.add_argument('--train_batch_tokens', nargs='+', default=[9000], type=int,
-                        help='Number of tokens to use for dynamic batching, corresponding to tasks in train tasks')
+    #TODO rename to train_batch_size; keeping it for now for backward compatibility
+    parser.add_argument('--train_batch_tokens', nargs='+', default=[4000], type=int,
+                        help='Number of tokens to use for dynamic batching, corresponding to tasks in train tasks.'
+                        'If sentence_batching is used, this will be interpreted as number of examples.')
     parser.add_argument('--jump_start', default=0, type=int, help='number of iterations to give jump started tasks')
     parser.add_argument('--n_jump_start', default=0, type=int, help='how many tasks to jump start (presented in order)')
     parser.add_argument('--num_print', default=15, type=int,
@@ -97,8 +101,8 @@ def parse_argv(parser):
                         help='how often to run validation in # of iterations')
     parser.add_argument('--val_no_filter', action='store_false', dest='val_filter',
                         help='whether to allow filtering on the validation sets')
-    parser.add_argument('--val_batch_size', nargs='+', default=[256], type=int,
-                        help='Batch size for validation corresponding to tasks in val tasks')
+    parser.add_argument('--val_batch_size', nargs='+', default=[4000], type=int,
+                        help='Number of tokens in each batch for validation, corresponding to tasks in --val_tasks')
     
     parser.add_argument('--paired', action='store_true',
                         help='Pair related examples before numericalizing the input (e.g. training with synthetic and paraphrase '
@@ -108,8 +112,6 @@ def parse_argv(parser):
     
     parser.add_argument('--sentence_batching', action='store_true',
                         help='Batch same sentences together (used for multilingual tasks)')
-    parser.add_argument('--train_batch_size', type=int, default=0,
-                        help='Number of samples to use in each batch; will be used instead of train_batch_tokens when sentence_batching is on')
     parser.add_argument('--use_encoder_loss', action='store_true', help='Force encoded values for sentences in different languages to be the same')
     parser.add_argument('--encoder_loss_type', type=str, default='mean', choices=['mean', 'sum'],
                         help='Function to calculate encoder_loss_type from the context rnn hidden states')
@@ -117,8 +119,6 @@ def parse_argv(parser):
                         help='multiplicative constant choosing the weight of encoder_loss in total loss')
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
 
-    
-    parser.add_argument('--vocab_tasks', nargs='+', type=str, help='tasks to use in the construction of the vocabulary')
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
     parser.add_argument('--max_generative_vocab', default=50000, type=int,
                         help='max vocabulary for the generative softmax')
@@ -146,10 +146,10 @@ def parse_argv(parser):
 
     parser.add_argument("--almond_has_multiple_programs", action='store_true', help='Indicate if almond dataset has multiple programs for each sentence')
 
-    parser.add_argument('--model', type=str, choices=['Seq2Seq'], default='Seq2Seq', help='which model to import')
+    parser.add_argument('--model', type=str, choices=['Transformer2LSTM', 'Bart', 'MT5', 'MBart'], default='Transformer2LSTM', help='which model to import')
     parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity', 'Coattention'],
                         default='MQANEncoder', help='which encoder to use for the Seq2Seq model')
-    parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'], default='MQANDecoder',
+    parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'] + BART_MODEL_LIST + MBART_MODEL_LIST + MT5_MODEL_LIST, default='MQANDecoder',
                         help='which decoder to use for the Seq2Seq model')
     parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers')
@@ -200,8 +200,8 @@ def parse_argv(parser):
     parser.add_argument('--features_size', nargs='+', type=int, default=[1, 1], help='Max length of each feature vector. All features are padded up to this length')
     parser.add_argument('--features_default_val', nargs='+', type=float, default=[0, 1.0], help='Max length of each feature vector. All features are padded up to this length')
 
-    parser.add_argument('--encoder_embeddings', default='glove+char',
-                        help='which word embedding to use on the encoder side; use a bert-* pretrained model for BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
+    parser.add_argument('--encoder_embeddings', default=None,
+                        help='which word embedding to use on the encoder side; use `glove+char`, a bert-* model for pretrained BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
                              'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
     parser.add_argument('--context_embeddings', default=None,
                         help='which word embedding to use for the context; use a bert-* pretrained model for BERT; '
@@ -235,9 +235,11 @@ def parse_argv(parser):
                         help='force subword tokenization of code tokens too')
     parser.add_argument('--append_question_to_context_too', action='store_true', default=False,
                         help='')
-    parser.add_argument('--override_question', default=None, help='Override the question for all tasks')
-    parser.add_argument('--override_context', default=None, help='Override the context for all tasks')
+    parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
+    parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--almond_preprocess_context', action='store_true', default=False, help='')
+    parser.add_argument('--almond_dataset_specific_preprocess', type=str, default='none', choices=['none', 'multiwoz'],
+                        help='Applies dataset-sepcific preprocessing to context and answer fields, and postprocesses the model outputs back to the original form.')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
 
@@ -254,8 +256,7 @@ def parse_argv(parser):
     parser.add_argument('--lr_rate', default=0.001, type=float, help='fixed learning rate (if not using warmup)')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
     parser.add_argument('--gradient_accumulation_steps', default=1, type=int, help='Number of accumulation steps. Useful to effectively get larger batch sizes.')
-    
-    parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside args.save')
+    parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside --args.save, usually set to best.pth')
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')
 
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
@@ -268,7 +269,7 @@ def parse_argv(parser):
                         help='Ok if the save directory already exists, i.e. overwrite is ok')
 
     parser.add_argument('--skip_cache', action='store_true',
-                        help='whether to use exisiting cached splits or generate new ones')
+                        help='whether to use existing cached splits or generate new ones')
     parser.add_argument('--cache_input_data', action='store_true',
                         help='Cache examples from input data for faster subsequent trainings')
     parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')
@@ -300,19 +301,21 @@ def post_parse_general(args):
                 indices.append(i)
         return indices
     
-    if args.sentence_batching and args.train_batch_size == 0:
-        raise ValueError('You need to specify train_batch_size value when using sentence batching.')
-    # TODO relax the following assertions by dropping samples from batches in Iter
-    if args.sentence_batching and args.train_batch_size % len(args.train_languages.split('+')) != 0:
-        raise ValueError(
-            'Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
+    #TODO relax the following assertions by dropping samples from batches in Iterator
+    if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_languages.split('+')) != 0:
+        raise ValueError('Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
     if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
         raise ValueError(
             'Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
     
     if len(args.features) != len(args.features_size):
         raise ValueError('You should specify max feature size for each feature you provided')
-    
+
+    if args.warmup < 1:
+        raise ValueError('Warmup should be a positive integer.')
+    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1) :
+        raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
+
     if args.override_context and args.append_question_to_context_too:
         raise ValueError('You cannot use append_question_to_context_too when overriding context')
     
@@ -320,30 +323,25 @@ def post_parse_general(args):
         logger.warning('Paired training only works if sentence_batching is used as well.'
                        'Activating sentence_batching...')
         args.sentence_batching = True
-    
-    if args.min_entity_len <= 0:
-        logger.warning('min_entity_len should be equal to or greater than 1')
-    
-    args.train_batch_values = args.train_batch_tokens
+
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
             args.train_iterations = [1]
         if len(args.train_iterations) < len(args.train_task_names):
             args.train_iterations = len(args.train_task_names) * args.train_iterations
         if len(args.train_batch_tokens) < len(args.train_task_names):
-            args.train_batch_values = len(args.train_task_names) * args.train_batch_tokens
-    indices = indices_of_multilingual(args.train_task_names)
-    for i in indices:
-        if args.sentence_batching:
-            args.train_batch_values[i] = args.train_batch_size
-            if args.paired:
-                num_train_langs = len(args.train_languages.split('+'))
-                new_batch_size = int(args.train_batch_size * \
-                                     (1 + min(num_train_langs ** 2 - num_train_langs,
-                                              args.max_pairs) / num_train_langs))
-                logger.warning('Using paired example training will increase effective batch size from {} to {}'.
-                               format(args.train_batch_size, new_batch_size))
-    
+
+            args.train_batch_tokens = len(args.train_task_names) * args.train_batch_tokens
+    if args.sentence_batching:
+        if args.paired:
+            # TODO unify train_batch_tokens and train_batch_size
+            train_batch_size = int(args.train_batch_tokens[0])
+            num_train_langs = len(args.train_languages.split('+'))
+            new_batch_size = int(train_batch_size *
+                                 (1 + min(num_train_langs**2 - num_train_langs, args.max_pairs) / num_train_langs))
+            logger.warning('Using paired example training will increase effective batch size from {} to {}'.
+                            format(train_batch_size, new_batch_size))
+        
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
     

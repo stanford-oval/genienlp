@@ -31,9 +31,12 @@ trap on_error ERR INT TERM
 
 i=0
 for hparams in \
+      "--seq2seq_decoder sshleifer/bart-tiny-random --model Bart" \
+      "--seq2seq_decoder sshleifer/tiny-mbart --model MBart" \
+      "--seq2seq_decoder google/mt5-small --model MT5" \
       "--encoder_embeddings=small_glove+char --decoder_embeddings=small_glove+char" \
       "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50" \
+      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder MQANEncoder" \
       "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
       "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=BiLSTM --dimension=768" \
       "--encoder_embeddings=xlm-roberta-base --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
@@ -65,7 +68,8 @@ done
 # test almond_multilingual task
 for hparams in \
       "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --sentence_batching --train_batch_size 4 --val_batch_size 4 --use_encoder_loss" \
+      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --sentence_batching --train_batch_tokens 4 --val_batch_size 4 --use_encoder_loss" \
+      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --sentence_batching --train_batch_tokens 4 --val_batch_size 4 --use_encoder_loss --paired" \
       "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --rnn_zero_state cls --almond_lang_as_question" ;
 
 do
@@ -101,7 +105,11 @@ for model in  "gpt2" "sshleifer/bart-tiny-random" ; do
   fi
 
   # train a paraphrasing model for a few iterations
-  pipenv run python3 -m genienlp train-paraphrase --train_data_file $workdir/paraphrasing/train.tsv --eval_data_file $workdir/paraphrasing/dev.tsv --output_dir $workdir/"$model_type" --tensorboard_dir $workdir/tensorboard/ --model_type $model_type --do_train --do_eval --evaluate_during_training --overwrite_output_dir --logging_steps 1000 --save_steps 1000 --max_steps 4 --save_total_limit 1 --gradient_accumulation_steps 1 --per_gpu_eval_batch_size 1 --per_gpu_train_batch_size 1 --num_train_epochs 1 --model_name_or_path $model
+  pipenv run python3 -m genienlp train-paraphrase --sort_by_length --input_column 0 --gold_column 1 --train_data_file $workdir/paraphrasing/train.tsv --eval_data_file $workdir/paraphrasing/dev.tsv --output_dir $workdir/"$model_type" --tensorboard_dir $workdir/tensorboard/ --model_type $model_type --do_train --do_eval --evaluate_during_training --overwrite_output_dir --logging_steps 1000 --save_steps 1000 --max_steps 4 --save_total_limit 1 --gradient_accumulation_steps 2 --per_gpu_eval_batch_size 1 --per_gpu_train_batch_size 1 --num_train_epochs 1 --model_name_or_path $model --overwrite_cache
+
+  # train a second paraphrasing model (testing num_input_chunks)
+  pipenv run python3 -m genienlp train-paraphrase --sort_by_length --num_input_chunks 2 --input_column 0 --gold_column 1 --train_data_file $workdir/paraphrasing/train.tsv --eval_data_file $workdir/paraphrasing/dev.tsv --output_dir $workdir/"$model_type"_2/ --tensorboard_dir $workdir/tensorboard/ --model_type $model_type --do_train --do_eval --evaluate_during_training --overwrite_output_dir --logging_steps 1000 --save_steps 1000 --max_steps 4 --save_total_limit 1 --gradient_accumulation_steps 2 --per_gpu_eval_batch_size 1 --per_gpu_train_batch_size 1 --num_train_epochs 1 --model_name_or_path $model --overwrite_cache
+
 
   # use it to paraphrase almond's train set
   pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $workdir/"$model_type" --length 15 --temperature 0.4 --repetition_penalty 1.0 --num_samples 4 --input_file $SRCDIR/dataset/almond/train.tsv --input_column 1 --output_file $workdir/generated_"$model_type".tsv --task paraphrase
@@ -119,7 +127,7 @@ done
 # masked paraphrasing tests
 cp -r $SRCDIR/dataset/paraphrasing/ $workdir/masked_paraphrasing/
 
-for model in "sshleifer/bart-tiny-random" ; do
+for model in "sshleifer/bart-tiny-random" "sshleifer/tiny-mbart" ; do
 
   if [[ $model == *mbart* ]] ; then
     model_type="mbart"
@@ -128,14 +136,12 @@ for model in "sshleifer/bart-tiny-random" ; do
   fi
 
   # use a pre-trained model
-  pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $model --length 15 --temperature 0 --repetition_penalty 1.0 --num_samples 1 --batch_size 3 --input_file $workdir/masked_paraphrasing/dev.tsv --input_column 0 --gold_column 1 --output_file $workdir/generated_"$base_model".tsv  --skip_heuristics --task paraphrase --masked_paraphrasing --fairseq_mask_prob 0.15
+  pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $model --length 15 --temperature 0 --repetition_penalty 1.0 --num_samples 1 --batch_size 3 --input_file $workdir/masked_paraphrasing/dev.tsv --input_column 0 --gold_column 1 --output_file $workdir/generated_"$model_type".tsv  --skip_heuristics --task paraphrase --infill_text --num_text_spans 1 --src_lang en --tgt_lang en
 
-  if test ! -f $workdir/generated_"$base_model".tsv   ; then
+  if test ! -f $workdir/generated_"$model_type".tsv   ; then
       echo "File not found!"
       exit
   fi
-
-  rm -rf $workdir/generated_"$base_model".tsv
 
 done
 
@@ -156,16 +162,16 @@ for model in "t5-small" "Helsinki-NLP/opus-mt-en-de" ; do
   fi
 
   # use a pre-trained model
-  pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $model --length 15 --temperature 0 --repetition_penalty 1.0 --num_samples 1 --batch_size 3 --input_file $workdir/translation/en-de/dev_"$base_model".tsv --input_column 0 --gold_column 1 --output_file $workdir/generated_"$base_model".tsv  --skip_heuristics --att_pooling mean --task translate --tgt_lang de --replace_qp --return_attentions
+  pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $model --length 15 --temperature 0 --repetition_penalty 1.0 --num_samples 1 --batch_size 3 --input_file $workdir/translation/en-de/dev_"$base_model"_aligned.tsv --input_column 0 --gold_column 1 --output_file $workdir/generated_"$base_model"_aligned.tsv  --skip_heuristics --att_pooling mean --task translate --src_lang en --tgt_lang de --replace_qp --force_replace_qp --output_attentions
 
   # check if result file exists and exact match accuracy is 100%
-  cut -f2 $workdir/translation/en-de/dev_"$base_model".tsv | diff -u - $workdir/generated_"$base_model".tsv
-  if test ! -f $workdir/generated_"$base_model".tsv   ; then
+  cut -f2 $workdir/translation/en-de/dev_"$base_model"_aligned.tsv | diff -u - $workdir/generated_"$base_model"_aligned.tsv
+  if test ! -f $workdir/generated_"$base_model"_aligned.tsv   ; then
       echo "File not found!"
       exit
   fi
 
-  rm -rf $workdir/generated_"$base_model".tsv
+  rm -rf $workdir/generated_"$base_model"_aligned.tsv
 
 done
 

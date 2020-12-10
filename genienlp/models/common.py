@@ -28,7 +28,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import math
-from typing import NamedTuple, List
 
 import torch
 import torch.nn as nn
@@ -36,16 +35,8 @@ from torch.jit import Final
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pack_padded_sequence as pack
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
-from transformers import BertConfig
-from transformers.modeling_bert import BertLayerNorm
 
-from ..paraphrase.transformers_utils import BertModelV2
-
-
-class EmbeddingOutput(NamedTuple):
-    name: str
-    all_layers: List[torch.Tensor]
-    last_layer: torch.Tensor
+from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions as EmbeddingOutput
 
 INF = 1e10
 EPSILON = 1e-10
@@ -407,35 +398,46 @@ class CombinedEmbedding(nn.Module):
     def set_trainable(self, trainable):
         self.pretrained_embeddings.requires_grad_(trainable)
 
+    def resize_embedding(self, new_vocab_size):
+        if self.trained_embeddings is None:
+            # we are not training embeddings at all
+            return
+        dimensions = self.trained_embeddings.weight.shape
+        if new_vocab_size == dimensions[0]:
+            return
+        assert new_vocab_size > dimensions[0], 'Cannot shrink the embedding matrix'
+        resized_embeddings = nn.Embedding(new_vocab_size, dimensions[1])
+        resized_embeddings.weight.data[0:dimensions[0], :] = self.trained_embeddings.weight.data
+        self.trained_embeddings = resized_embeddings
+
+
     def _combine_embeddings(self, embeddings):
         if len(embeddings) == 1:
-            all_layers = embeddings[0].all_layers
-            last_layer = embeddings[0].last_layer
+            hidden_states = embeddings[0].hidden_states
+            last_hidden_state = embeddings[0].last_hidden_state
             if self.project:
-                last_layer = self.projection(last_layer)
-            return EmbeddingOutput(name='combined', all_layers=all_layers, last_layer=last_layer)
+                last_hidden_state = self.projection(last_hidden_state)
+            return EmbeddingOutput(hidden_states=hidden_states, last_hidden_state=last_hidden_state)
 
-        all_layers = None
-        last_layer = []
-        names = []
+        hidden_states = None
+        last_hidden_state = []
         for emb in embeddings:
-            if all_layers is None:
-                all_layers = [[layer] for layer in emb.all_layers]
-            elif len(all_layers) != len(emb.all_layers):
+            if hidden_states is None:
+                hidden_states = [[layer] for layer in emb.hidden_states]
+            elif len(hidden_states) != len(emb.hidden_states):
                 raise ValueError('Cannot combine embeddings that use different numbers of layers')
             else:
-                for layer_list, layer in zip(all_layers, emb.all_layers):
+                for layer_list, layer in zip(hidden_states, emb.hidden_states):
                     layer_list.append(layer)
-            last_layer.append(emb.last_layer)
-            names.append(emb.name)
-        
-        new_all_layers = [torch.cat(layer_list, dim=2) for layer_list in all_layers]
-        new_last_layer = torch.cat(last_layer, dim=2)
-        if self.project:
-            new_last_layer = self.projection(new_last_layer)
-        
-        return EmbeddingOutput(name='combined', all_layers=new_all_layers, last_layer=new_last_layer)
 
+            last_hidden_state.append(emb.last_hidden_state)
+            
+        hidden_states = [torch.cat(layer, dim=2) for layer in hidden_states]
+        last_hidden_state = torch.cat(last_hidden_state, dim=2)
+        if self.project:
+            last_hidden_state = self.projection(last_hidden_state)
+        return EmbeddingOutput(hidden_states=tuple(hidden_states), last_hidden_state=last_hidden_state)
+        
     def forward(self, x, entity_ids=None, entity_masking=None, entity_probs=None, mask_entities=None, padding=None):
         embedded: List[EmbeddingOutput] = []
         if len(self.pretrained_embeddings):
@@ -446,11 +448,9 @@ class CombinedEmbedding(nn.Module):
             valid_x = torch.lt(x, trained_vocabulary_size)
             masked_x = torch.where(valid_x, x, torch.zeros_like(x))
             output = self.trained_embeddings(masked_x)
-            embedded.append(EmbeddingOutput(name='trained', all_layers=[output], last_layer=output))
-            
+            embedded.append(EmbeddingOutput(hidden_states=(output,), last_hidden_state=output))
 
         return self._combine_embeddings(embedded)
-
 
 
 class SemanticFusionUnit(nn.Module):

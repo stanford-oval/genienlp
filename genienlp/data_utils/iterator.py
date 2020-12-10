@@ -31,139 +31,72 @@
 import torch
 import random
 
-from .example import Batch
-from ..tasks.generic_dataset import context_answer_len, default_batch_fn
 
+class LengthSortedIterator(torch.utils.data.Sampler):
+    """
+    """
 
-class Iterator(torch.utils.data.IterableDataset):
-    def __init__(self,
-                 dataset: torch.utils.data.Dataset,
-                 batch_size,
-                 shuffle=False,
-                 repeat=False,
-                 use_data_batch_fn=False,
-                 use_data_sort_key=False):
-        # batch_size can be number of tokens or number of examples
-        # the type is inferred from batch_size_fn
+    def __init__(self, data_source, batch_size, sort, shuffle_and_repeat, sort_key_fn, batch_size_fn, groups=1):
+        """
+        batch_size: can be number of tokens or number of examples, the type is inferred from batch_size_fn
+        sort: if False, disables sorting and uses the original order. Useful for evaluation.
+        shuffle_and_repeat: if True, the order of returned examples are semi-shuffled, and there is no end to the iterator
+        groups: used for sentence batching
+        """
+        if groups is None:
+            groups = 1
+        assert batch_size % groups == 0
+        assert len(data_source) % groups == 0
+
+        self.sort_key = sort_key_fn
+        self.batch_size_fn = batch_size_fn
+        self.groups = groups
         
-        self.dataset = dataset
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-        self.repeat = repeat
-        
-        # used for sentence_batching
-        self.groups = getattr(dataset, 'groups', None)
-        
-        if use_data_batch_fn:
-            self.batch_size_fn = self.dataset.batch_size_fn
+        if sort:
+            # sort while keeping track of the original order
+            data_with_original_order = list(zip(data_source, range(len(data_source)))) # list of tuples of the form (data_source[i], i)
+            # sort based on data_source 
+            sorted_data_with_original_order = sorted(data_with_original_order, key=lambda x: self.sort_key(x[0]))
+            # separate the two parts of each tuple
+            self.data_source, self.original_order = tuple(zip(*sorted_data_with_original_order))
         else:
-            self.batch_size_fn = default_batch_fn
-        
-        self.use_data_sort_key = use_data_sort_key
-        if use_data_sort_key:
-            self.sort_key = self.dataset.sort_key_fn
-        else:
-            self.sort_key = context_answer_len
+            self.data_source, self.original_order = data_source, list(range(len(data_source)))
+        self.batch_size = batch_size # number of examples or number of tokens
+        self.shuffle_and_repeat = shuffle_and_repeat
+        self.last_batch_start_index = 0
+        self.last_batch_start_index = self._get_next_batch_start_index()
 
     def __len__(self):
-        if self.repeat:
-            raise NotImplementedError()
+        return len(self.data_source)
+
+    def __iter__(self):
+        self.last_batch_start_index = 0
+        self.last_batch_start_index = self._get_next_batch_start_index()
+        return self
+
+    def __next__(self):
+        batch_of_indices = []
+        current_batch_size = 0
+        i = self._get_next_batch_start_index()
+        if i >= len(self):
+            # This is the end of the iterator
+            assert not self.shuffle_and_repeat
+            raise StopIteration
+        while current_batch_size < self.batch_size:
+            new_example = self.data_source[i]
+            batch_of_indices.append(i)
+            current_batch_size = self.batch_size_fn(new=new_example, count=len(batch_of_indices), sofar=current_batch_size)
+            i += 1
+            if i == len(self):
+                break # don't start from i=0; there is a large difference between the length of the first and last element
+
+        self.last_batch_start_index += len(batch_of_indices)
+        return batch_of_indices
+
+    def _get_next_batch_start_index(self):
+        if self.shuffle_and_repeat:
+            # if self.groups > 1, this ensures that the start of each batch is a multiply of self.groups, i.e. where a group starts
+            return random.randrange(0, len(self) / self.groups) * self.groups
         else:
-            return len(self.dataset)
-
-    def __iter__(self) -> Batch:
-        while True:
-            if self.shuffle:
-                dataset = list(self.dataset)
-                random.shuffle(dataset)
-            else:
-                dataset = self.dataset
-
-            if self.use_data_sort_key:
-                if self.groups:
-                    batches = self._sentence_batching(dataset)
-                else:
-                    batches = self._bucket_batching(dataset)
-            else:
-                batches = self._batch(dataset, self.batch_size)
-
-            for minibatch in batches:
-                yield minibatch
-
-            if not self.repeat:
-                break
-
-    def _batch(self, data, batch_size, fixed_size_only=False):
-        """
-        
-        :param data:
-        :param batch_size:
-        :param fixed_size_only: only return batches with exactly batch_size number of samples;
-        ** warning: only use this if you are passing actual length not number of tokens as batch_size.
-        :return:
-        """
-        """Yield elements from data in chunks of batch_size.
-        
-        """
-        minibatch = []
-        size_so_far = 0
-        for ex in data:
-            minibatch.append(ex)
-            size_so_far = self.batch_size_fn(ex, len(minibatch), size_so_far)
-            if size_so_far == batch_size:
-                yield minibatch
-                minibatch, size_so_far = [], 0
-            elif size_so_far > batch_size:
-                if fixed_size_only:
-                    yield []
-                if len(minibatch) == 1:  # if we only have one really big example
-                    yield minibatch
-                    minibatch, size_so_far = [], 0
-                else:
-                    yield minibatch[:-1]
-                    minibatch, size_so_far = minibatch[-1:], self.batch_size_fn(ex, 1, 0)
-                    if size_so_far > batch_size:  # if we add a really big example that needs to be on its own to a batch
-                        yield minibatch
-                        minibatch, size_so_far = [], 0
-        if minibatch and not fixed_size_only:
-            yield minibatch
-
-
-    def _bucket_batching(self, data):
-        """Sort within buckets, then batch, then shuffle batches.
-
-        Partitions data into chunks of size 100*batch_size, sorts examples within
-        each chunk using sort_key, then batch these examples and shuffle the
-        batches.
-        """
-        for p in self._batch(data, self.batch_size * 100):
-            p_batch = self._batch(sorted(p, key=self.sort_key), self.batch_size)
-            if self.shuffle:
-                p_batch = list(p_batch)
-                random.shuffle(p_batch)
-            for b in p_batch:
-                yield b
-                
-    def _sentence_batching(self, data):
-        """
-        Sort the dataset using sort_key.
-        Divide the batch into groups each representing minibatches of same sentences in different languages
-        Shuffle order of minibatches within each minibatch.
-        Regroup and return the batch
-        """
-        dataset_sorted = sorted(data, key=self.sort_key)
-        for batch in self._batch(dataset_sorted, self.batch_size, fixed_size_only=True):
-            assert self.batch_size % self.groups == 0
-            
-            if self.shuffle:
-                minibatches = [batch[i: i+self.groups] for i in range(0, self.batch_size, self.groups)]
-                random.shuffle(minibatches)
-                # shuffle samples within each minibatch too
-                # for minibatch in minibatches:
-                #     random.shuffle(minibatch)
-                batch = []
-                for minibatch in minibatches:
-                    batch.extend(minibatch)
-            
-            yield batch
-            
+            return self.last_batch_start_index
+   

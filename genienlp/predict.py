@@ -47,15 +47,12 @@ except RuntimeError:
 import torch
 
 from . import models
-from .data_utils.embeddings import load_embeddings
 from .tasks.registry import get_tasks
 from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
     have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
 from .validate import generate_with_model, calculate_and_reduce_metrics
 
 logger = logging.getLogger(__name__)
-
-quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
 
 
 def get_all_splits(args):
@@ -94,42 +91,8 @@ def get_all_splits(args):
     return splits
 
 
-def prepare_data(args, numericalizer, embeddings):
-    splits = get_all_splits(args)
-    logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens from training')
-    new_words = []
-    for task_splits in splits:
-        for split in task_splits:
-            new_words += numericalizer.grow_vocab(split)
-            logger.info(f'Vocabulary has expanded to {numericalizer.num_tokens} tokens')
-
-    for emb in embeddings:
-        emb.grow_for_vocab(numericalizer.vocab, new_words)
-
-    return splits
-
-
-def run(args, device):
-    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
-        load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings, args.decoder_embeddings,
-                        args.max_generative_vocab, args.num_db_types, args.db_unk_id, logger)
-    numericalizer.load(args.path)
-    for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
-        emb.init_for_vocab(numericalizer.vocab)
-
-    logger.info(f'Initializing Model')
-    Model = getattr(models, args.model)
-    model = Model.from_pretrained(args.path,
-                                  numericalizer=numericalizer,
-                                  context_embeddings=context_embeddings,
-                                  question_embeddings=question_embeddings,
-                                  decoder_embeddings=decoder_embeddings,
-                                  args=args,
-                                  device=device
-                                  )
-    val_sets = prepare_data(args, numericalizer, set(context_embeddings + question_embeddings + decoder_embeddings))
-
-    logger.info(f'Preparing iterators')
+def prepare_data_iterators(args, val_sets, numericalizer, device):
+    logger.info(f'Preparing data iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
     iters = []
@@ -149,15 +112,36 @@ def run(args, device):
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
             for index, set_ in enumerate(val_set):
-                loader = make_data_loader(set_, numericalizer, bs, device, **shared_kwargs)
-                task_iter.append((task, task_languages[index], loader))
+                loader, original_order = make_data_loader(set_, numericalizer, bs, device, train=False,
+                                          append_question_to_context_too=args.append_question_to_context_too,
+                                          override_question=args.override_question, override_context=args.override_context, return_original_order=True)
+                task_iter.append((task, task_languages[index], loader, original_order))
         # single language task or no separate eval
         else:
-           loader = make_data_loader(val_set[0], numericalizer, bs, device, **shared_kwargs)
-           task_iter.append((task, task_languages, loader))
+           loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device, train=False,
+                                     append_question_to_context_too=args.append_question_to_context_too,
+                                     override_question=args.override_question, override_context=args.override_context, return_original_order=True)
+           task_iter.append((task, task_languages, loader, original_order))
 
         iters.extend(task_iter)
         task_index += 1
+
+    return iters
+
+def run(args, device):
+    Model = getattr(models, args.model)
+    model, _ = Model.from_pretrained(args.path,
+                                     model_checkpoint_file=args.checkpoint_name,
+                                     args=args,
+                                     device=device
+                                    )
+
+    val_sets = get_all_splits(args)
+    model.add_new_vocab_from_data(val_sets)
+    if args.half_precision:
+        model.half()
+
+    iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
 
     log_model_size(logger, model, args.model)
     model.to(device)
@@ -170,7 +154,7 @@ def run(args, device):
     os.makedirs(eval_dir, exist_ok=True)
 
     with torch.no_grad():
-        for task, language, it in iters:
+        for task, language, it, original_order in iters:
             logger.info(task.name)
             # single language task
             if language is None:
@@ -191,8 +175,8 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            _, predictions, answers, contexts, _ = generate_with_model(model, it, numericalizer, task, args, prediction_file_name)
-            
+            _, predictions, answers, contexts, _ = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name, original_order=original_order)
+                
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
                 if args.main_metric_only:
@@ -287,6 +271,7 @@ def parse_argv(parser):
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
+    parser.add_argument("--half_precision", action='store_true', help='If True, will use half precision on all tensors and calculations.')
 
 
 def adjust_multilingual_eval(args):
@@ -322,7 +307,6 @@ def check_and_update_generation_args(args):
         setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
 
     logger.info('Will output %d sequences for each input.', sum(args.num_outputs))
-    # logger.info('Effective batch size for each GPU is %d', args.batch_size * max(args.num_outputs))
 
 def main(args):
     load_config_json(args)

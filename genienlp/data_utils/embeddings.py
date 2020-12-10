@@ -33,21 +33,21 @@ import os
 import numpy as np
 from collections import defaultdict
 import logging
-from transformers import AutoTokenizer, AutoModel, AutoConfig, \
+from transformers import AutoTokenizer, AutoConfig, \
     BERT_PRETRAINED_MODEL_ARCHIVE_LIST, XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
-from typing import NamedTuple, List
 
+from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions as EmbeddingOutput
+
+from . import word_vectors
 from .numericalizer.simple import SimpleNumericalizer
 from .numericalizer.transformer import BertNumericalizer, XLMRobertaNumericalizer
-from . import word_vectors
 from .almond_embeddings import AlmondEmbeddings
 from .pretrained_lstm_lm import PretrainedLTSMLM
-
-from genienlp.models.common import Feedforward
-
+from ..models.common import Feedforward
 from ..paraphrase.transformers_utils import BertModelV2, XLMRobertaModelV2
 
-_logger = logging.getLogger(__name__)
+
+logger = logging.getLogger(__name__)
 
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP = dict()
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update(
@@ -55,10 +55,6 @@ EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update(
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update(
     {embedding: XLMRobertaNumericalizer for embedding in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST})
 
-class EmbeddingOutput(NamedTuple):
-    name: str
-    all_layers: List[torch.Tensor]
-    last_layer: torch.Tensor
 
 class WordVectorEmbedding(torch.nn.Module):
     def __init__(self, vec_collection):
@@ -95,8 +91,8 @@ class WordVectorEmbedding(torch.nn.Module):
             self.embedding[0].weight.data = torch.cat([self.embedding[0].weight.data.cpu()] + new_vectors, dim=0)
 
     def forward(self, input: torch.Tensor, padding=None):
-        last_layer = self.embedding[0](input.cpu()).to(input.device)
-        return EmbeddingOutput(name='word_vector', all_layers=[last_layer], last_layer=last_layer)
+        last_hidden_state = self.embedding[0](input.cpu()).to(input.device)
+        return EmbeddingOutput(hidden_states=(last_hidden_state,), last_hidden_state=last_hidden_state)
 
     def to(self, *args, **kwargs):
         # ignore attempts to move the word embedding, which should stay on CPU
@@ -138,7 +134,7 @@ class TransformerEmbedding(torch.nn.Module):
             inputs['entity_probs'] = entity_probs
         last_hidden_state, _pooled, hidden_states = self.model(**inputs)
 
-        return EmbeddingOutput(name='transformer', all_layers=hidden_states, last_layer=last_hidden_state)
+        return EmbeddingOutput(hidden_states=hidden_states, last_hidden_state=last_hidden_state)
 
 class BootlegEmbedding(torch.nn.Module):
     def __init__(self, ent_emb_file, output_dim, freeze=True):
@@ -157,7 +153,8 @@ class BootlegEmbedding(torch.nn.Module):
         ents_embeddings = self.ent_embeddings(input_ent_ids)
         ents_embeddings = self.ent_proj(ents_embeddings)
 
-        return EmbeddingOutput(name='bootleg', all_layers=ents_embeddings, last_layer=ents_embeddings)
+        return EmbeddingOutput(hidden_states=ents_embeddings, last_hidden_state=ents_embeddings)
+
 
 class PretrainedLMEmbedding(torch.nn.Module):
     def __init__(self, model_name, cachedir):
@@ -197,7 +194,7 @@ class PretrainedLMEmbedding(torch.nn.Module):
     def forward(self, input: torch.Tensor, padding=None):
         pretrained_indices = torch.gather(self.vocab_to_pretrained, dim=0, index=input)
         rnn_output = self.model(pretrained_indices)
-        return EmbeddingOutput('pretrained_lm', all_layers=[rnn_output], last_layer=rnn_output)
+        return EmbeddingOutput(hidden_states=(rnn_output,), last_hidden_state=rnn_output)
 
 def _name_to_vector(emb_name, cachedir):
     if emb_name == 'glove':
@@ -223,7 +220,8 @@ def get_embedding_type(emb_name):
         return emb_name
 
 def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb_names,
-                    max_generative_vocab=50000, num_db_types=0, db_unk_id=0, logger=_logger, cache_only=False):
+                    max_generative_vocab=50000, num_db_types=0, db_unk_id=0, cache_only=False):
+
     logger.info(f'Getting pretrained word vectors and pretrained models')
 
     context_emb_names = context_emb_names.split('+')

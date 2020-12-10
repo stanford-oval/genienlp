@@ -32,6 +32,7 @@ import math
 import torch
 from torch import nn
 from torch.nn import functional as F
+from transformers.modeling_outputs import Seq2SeqLMOutput
 
 from .common import CombinedEmbedding, TransformerDecoder, LSTMDecoderAttention, Feedforward, \
     mask, positional_encodings_like, EPSILON, MultiLSTMCell
@@ -94,21 +95,7 @@ class MQANDecoder(nn.Module):
                 self.question_attn.applyMasks(question_padding)
 
             answer_padding = (answer.data == self.pad_idx)
-
-            answer_entity_ids, answer_entity_masking, answer_entity_probs = None, None, None
-            if self.args.num_db_types > 0:
-                answer_entity_ids = batch.answer.feature[:, :, :self.args.features_size[0]].long()
-    
-                answer_entity_masking = (answer_entity_ids != self.args.features_default_val[0]).int()
-    
-                if self.args.entity_type_agg_method == 'weighted':
-                    answer_entity_probs = batch.answer.feature[:, :, self.args.features_size[0]:self.args.features_size[0] + self.args.features_size[1]].long()
-
-            answer_embedded = self.decoder_embeddings(answer[:, :-1],
-                                                      entity_ids=answer_entity_ids[:, :-1, :] if answer_entity_ids is not None else None,
-                                                      entity_masking=answer_entity_masking[:, :-1, :] if answer_entity_masking is not None else None,
-                                                      entity_probs=answer_entity_probs[:, :-1, :] if answer_entity_probs is not None else None,
-                                                      padding=answer_padding[:, :-1]).last_layer
+            answer_embedded = self.decoder_embeddings(answer[:, :-1], padding=answer_padding).last_hidden_state
 
             if self.args.transformer_layers > 0:
                 self_attended_decoded = self.self_attentive_decoder(answer_embedded,
@@ -145,7 +132,8 @@ class MQANDecoder(nn.Module):
             loss = F.nll_loss(probs.log(), targets)
             if encoder_loss is not None:
                 loss += self.args.encoder_loss_weight * encoder_loss
-            return (loss, )
+            
+            return Seq2SeqLMOutput(loss=loss)
         else:
             if decoder_wrapper is None:
                 decoder_wrapper = self.decoder_wrapper(self_attended_context, final_context, context_padding, final_question, question_padding,
@@ -154,14 +142,8 @@ class MQANDecoder(nn.Module):
             else:
                 current_token_id = current_token_id.clone().cpu().apply_(self.map_to_full).to(current_token_id.device)
             # (next_token_logits, past) where `past` includes all the states needed to continue generation
-            # TODO: input entity ids to decoder during generation too
-            current_entity_id = current_token_id.new_full([*current_token_id.size(), self.args.features_size[0]], self.args.features_default_val[0])
-            logits = torch.log(decoder_wrapper.next_token_probs(current_token_id,
-                                                                current_entity_id=current_entity_id,
-                                                                current_entity_mask=(current_entity_id != self.args.features_default_val[0]).int(),
-                                                                current_entity_prob=None)
-                                                                )
-            return logits, decoder_wrapper
+            logits = torch.log(decoder_wrapper.next_token_probs(current_token_id))
+            return Seq2SeqLMOutput(logits=logits, past_key_values=decoder_wrapper)
 
     def probs(self, outputs, vocab_pointer_switches, context_question_switches,
               context_attention, question_attention,
@@ -304,7 +286,7 @@ class MQANDecoderWrapper(object):
         if self.mqan_decoder.args.transformer_layers > 0:
             self.hiddens = [self.self_attended_context[0].new_zeros((self.batch_size*expansion_factor, self.max_decoder_time, self.mqan_decoder.args.dimension))
                     for l in range(len(self.mqan_decoder.self_attentive_decoder.layers) + 1)]
-            self.hiddens[0] =  self.hiddens[0] + positional_encodings_like(self.hiddens[0])
+            self.hiddens[0] = self.hiddens[0] + positional_encodings_like(self.hiddens[0])
 
     
     def reorder(self, new_order):
@@ -324,10 +306,8 @@ class MQANDecoderWrapper(object):
             self.mqan_decoder.context_attn.applyMasks(self.context_padding)
             self.mqan_decoder.question_attn.applyMasks(self.question_padding)
 
-
-    def next_token_probs(self, current_token_id, current_entity_id=None, current_entity_mask=None, current_entity_prob=None):
-        embedding = self.mqan_decoder.decoder_embeddings(current_token_id, entity_ids=current_entity_id,
-                                                         entity_masking=current_entity_mask, entity_probs=current_entity_prob).last_layer
+    def next_token_probs(self, current_token_id):
+        embedding = self.mqan_decoder.decoder_embeddings(current_token_id).last_hidden_state
 
         if self.mqan_decoder.args.transformer_layers > 0:
             self.hiddens[0][:, self.time] = self.hiddens[0][:, self.time] + \

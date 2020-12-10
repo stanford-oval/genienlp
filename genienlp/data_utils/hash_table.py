@@ -28,7 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import numpy as np
-from tqdm import tqdm
+from .progbar import progress_bar
 
 
 def string_hash(x):
@@ -70,7 +70,7 @@ class HashTable(object):
             self._build(itos)
 
     def _build(self, itos):
-        for i, word in enumerate(tqdm(itos, total=len(itos))):
+        for i, word in enumerate(progress_bar(itos, total=len(itos))):
             hash = string_hash(word)
             bucket = hash % self.table_size
 

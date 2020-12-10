@@ -26,14 +26,19 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 import collections
 import os
+import numpy as np
 import torch
+from torch.nn.utils.rnn import pad_sequence
 
 from .decoder_vocab import DecoderVocabulary
 from .masked_tokenizer import MaskedBertTokenizer, MaskedXLMRobertaTokenizer
+from transformers import BartTokenizer, MBartTokenizer, T5Tokenizer
 from .sequential_field import SequentialField
-from transformers.tokenization_xlnet import SPIECE_UNDERLINE
+from transformers.file_utils import SPIECE_UNDERLINE
+
 
 class TransformerNumericalizer(object):
     """
@@ -58,6 +63,13 @@ class TransformerNumericalizer(object):
 
     def load(self, save_dir):
         raise NotImplementedError()
+
+    def pad(self, batch):
+        """
+        batch: a List of List of integers
+        """
+        #TODO account for left padding models
+        return pad_sequence(batch, padding_value=self.pad_id, batch_first=True)
 
     def save(self, save_dir):
         self._tokenizer.save_pretrained(save_dir)
@@ -105,7 +117,7 @@ class TransformerNumericalizer(object):
         self.decoder_vocab = DecoderVocabulary(self._decoder_words, self._tokenizer,
                                                pad_token=self.pad_token, eos_token=self.eos_token)
 
-    def encode_single(self, minibatch, decoder_vocab, features_size, features_default_val, device=None, max_length=-1):
+    def encode_single(self, minibatch, decoder_vocab, features_size, features_default_val, max_length=-1):
         assert isinstance(minibatch, list)
 
         # apply word-piece tokenization to everything first
@@ -141,62 +153,45 @@ class TransformerNumericalizer(object):
         else:
             max_len = self.fix_length
 
-        all_padded = []
-        all_padded_features = []
+        padded = []
         lengths = []
+        features = []
         numerical = []
         decoder_numerical = []
-        for wp_tokens, wp_features in zip(all_wp_tokenized, all_wp_features):
-            padded_features = []
+        for wp_tokens, wp_features in zip(wp_tokenized, all_wp_features):
+            ex_features = []
             wp_features_unpacked = list(zip(*wp_features))
-            if self.pad_first:
-                padded_example = [self.pad_token] * max(0, max_len - len(wp_tokens)) + \
-                                 [self.init_token] + \
-                                 list(wp_tokens[:max_len]) + \
-                                 [self.eos_token]
-                for i, wp_feature in enumerate(wp_features_unpacked):
-                    padded_features_example = [[features_default_val[i]] * features_size[i] for _ in range(max(0, max_len - len(wp_feature)))] + \
-                                     [[features_default_val[i]] * features_size[i]] + \
-                                     list(wp_feature[:max_len]) + \
-                                     [[features_default_val[i]] * features_size[i]]
-                    padded_features.append(padded_features_example)
-            else:
-                padded_example = [self.init_token] + \
-                                 list(wp_tokens[:max_len]) + \
-                                 [self.eos_token] + \
-                                 [self.pad_token] * max(0, max_len - len(wp_tokens))
-                for i, wp_feature in enumerate(wp_features_unpacked):
-                    padded_features_example = [[features_default_val[i]] * features_size[i]] + \
-                                     list(wp_feature[:max_len]) + \
-                                     [[features_default_val[i]] * features_size[i]] + \
-                                     [[features_default_val[i]] * features_size[i] for _ in range(max(0, max_len - len(wp_feature)))]
-                    padded_features.append(padded_features_example)
+            example = [self.init_token] + \
+                          list(wp_tokens[:max_len]) + \
+                          [self.eos_token]
+            for i, wp_feature in enumerate(wp_features_unpacked):
+                padded_features_example = [[features_default_val[i]] * features_size[i]] + \
+                                          list(wp_feature[:max_len]) + \
+                                          [[features_default_val[i]] * features_size[i]]
+                ex_features.append(padded_features_example)
 
-            all_padded.append(padded_example)
-            all_padded_features.append(padded_features)
-            lengths.append(len(padded_example) - max(0, max_len - len(wp_tokens)))
+            padded.append(example)
+            lengths.append(len(example))
+            features.append(ex_features)
 
-            numerical.append(self._tokenizer.convert_tokens_to_ids(padded_example))
-            decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
-
-        length = torch.tensor(lengths, dtype=torch.int32, device=device)
-        numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
-        decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
+            numerical.append(self._tokenizer.convert_tokens_to_ids(example))
+            decoder_numerical.append([decoder_vocab.encode(word) for word in example])
         
         # concat all features
-        all_tensor_features = []
-        for token_features in all_padded_features:
-            all_tensor_features.append(torch.cat([torch.tensor(data, dtype=torch.float32, device=device) for data in token_features], dim=-1))
+        all_features = []
+        for token_features in features:
+            all_features.append(np.concatenate([data for data in token_features], dim=-1))
 
-        feature = torch.stack(all_tensor_features)
+        features = list(np.stack(all_features))
 
-        return SequentialField(length=length, value=numerical, limited=decoder_numerical, feature=feature)
+        return SequentialField(length=lengths, value=numerical, limited=decoder_numerical, feature=features)
 
     def decode(self, tensor):
         return self._tokenizer.convert_ids_to_tokens(tensor)
 
     def reverse(self, batch, detokenize, field_name=None):
         raise NotImplementedError()
+
 
 class XLMRobertaNumericalizer(TransformerNumericalizer):
 
@@ -247,7 +242,7 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
 
         self._init()
 
-    def encode_pair(self, minibatch, decoder_vocab, device=None):
+    def encode_pair(self, minibatch, decoder_vocab):
         # apply word-piece tokenization to everything first
         wp_tokenized_a = []
         wp_tokenized_b = []
@@ -265,35 +260,20 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
         numerical = []
         decoder_numerical = []
         for (wp_tokens_a, _), (wp_tokens_b, _) in minibatch:
-            if self.pad_first:
-                padded_example = [self.pad_token] * max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b)) + \
-                                 [self.init_token] + \
-                                 list(wp_tokens_a[:max_len]) + \
-                                 [self.sep_token] + \
-                                 [self.sep_token] + \
-                                 list(wp_tokens_b[:max_len]) + \
-                                 [self.eos_token]
+            # XLM-R uses two sep tokens
+            example = [self.init_token] + \
+                            list(wp_tokens_a[:max_len]) + \
+                            [self.sep_token] + [self.sep_token] + \
+                            list(wp_tokens_b[:max_len]) + \
+                            [self.eos_token]
 
-            else:
-                padded_example = [self.init_token] + \
-                                 list(wp_tokens_a[:max_len]) + \
-                                 [self.sep_token] + \
-                                 [self.sep_token] + \
-                                 list(wp_tokens_b[:max_len]) + \
-                                 [self.eos_token] + \
-                                 [self.pad_token] * max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b))
+            padded.append(example)
+            lengths.append(len(example))
 
-            padded.append(padded_example)
-            lengths.append(len(padded_example) - max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b)))
+            numerical.append(self._tokenizer.convert_tokens_to_ids(example))
+            decoder_numerical.append([decoder_vocab.encode(word) for word in example])
 
-            numerical.append(self._tokenizer.convert_tokens_to_ids(padded_example))
-            decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
-
-        length = torch.tensor(lengths, dtype=torch.int32, device=device)
-        numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
-        decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-
-        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
+        return SequentialField(length=lengths, value=numerical, limited=decoder_numerical)
 
     def reverse(self, batch, detokenize, field_name=None):
         with torch.cuda.device_of(batch):
@@ -339,6 +319,7 @@ class XLMRobertaNumericalizer(TransformerNumericalizer):
             return detokenize(tokens, field_name=field_name)
 
         return [reverse_one(tensor, field_name) for tensor in batch]
+
 
 class BertNumericalizer(TransformerNumericalizer):
     """
@@ -391,7 +372,7 @@ class BertNumericalizer(TransformerNumericalizer):
 
         self._init()
 
-    def encode_pair(self, minibatch, decoder_vocab, device=None):
+    def encode_pair(self, minibatch, decoder_vocab):
         # apply word-piece tokenization to everything first
         wp_tokenized_a = []
         wp_tokenized_b = []
@@ -409,33 +390,19 @@ class BertNumericalizer(TransformerNumericalizer):
         numerical = []
         decoder_numerical = []
         for (wp_tokens_a, _), (wp_tokens_b, _) in minibatch:
-            if self.pad_first:
-                padded_example = [self.pad_token] * max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b)) + \
-                                 [self.init_token] + \
-                                 list(wp_tokens_a[:max_len]) + \
-                                 [self.sep_token] + \
-                                 list(wp_tokens_b[:max_len]) + \
-                                 [self.eos_token]
+            example = [self.init_token] + \
+                            list(wp_tokens_a[:max_len]) + \
+                            [self.sep_token] + \
+                            list(wp_tokens_b[:max_len]) + \
+                            [self.eos_token]
 
-            else:
-                padded_example = [self.init_token] + \
-                                 list(wp_tokens_a[:max_len]) + \
-                                 [self.sep_token] + \
-                                 list(wp_tokens_b[:max_len]) + \
-                                 [self.eos_token] + \
-                                 [self.pad_token] * max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b))
+            padded.append(example)
+            lengths.append(len(example))
 
-            padded.append(padded_example)
-            lengths.append(len(padded_example) - max(0, 2 * max_len - len(wp_tokens_a) - len(wp_tokens_b)))
+            numerical.append(self._tokenizer.convert_tokens_to_ids(example))
+            decoder_numerical.append([decoder_vocab.encode(word) for word in example])
 
-            numerical.append(self._tokenizer.convert_tokens_to_ids(padded_example))
-            decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
-
-        length = torch.tensor(lengths, dtype=torch.int32, device=device)
-        numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
-        decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-
-        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
+        return SequentialField(length=lengths, value=numerical, limited=decoder_numerical)
 
     def reverse(self, batch, detokenize, field_name=None):
         with torch.cuda.device_of(batch):
@@ -461,3 +428,90 @@ class BertNumericalizer(TransformerNumericalizer):
             return detokenize(tokens, field_name=field_name)
 
         return [reverse_one(tensor) for tensor in batch]
+
+
+class Seq2SeqNumericalizer(TransformerNumericalizer):
+    
+    def __init__(self, pretrained_tokenizer=None, config=None, max_generative_vocab=None, cache=None, fix_length=None):
+        super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
+        
+    @property
+    def pad_id(self):
+        return self._tokenizer.pad_token_id
+    
+    def load(self, save_dir, config=None):
+        raise NotImplementedError
+    
+    def save(self, save_dir):
+        self._tokenizer.save_pretrained(save_dir)
+
+    def build_vocab(self, vocab_fields, vocab_sets):
+        raise NotImplementedError
+
+    def encode_single(self, minibatch, decoder_vocab, max_length=-1):
+        """
+        minibatch: this method ignores the `mask` component of minibatch
+        """
+        assert isinstance(minibatch, list)
+        batch_tokens = []
+        for tokens, mask in minibatch:
+            if len(tokens) == 0:
+                batch_tokens.append(' ')
+            else:
+                batch_tokens.append(' '.join(tokens))
+                
+        encoded_batch = self._tokenizer.batch_encode_plus(batch_tokens, add_special_tokens=True, padding='longest', return_attention_mask=False)
+        numerical = encoded_batch['input_ids']
+        length = [len(a) for a in encoded_batch['input_ids']]
+
+        decoder_numerical = numerical
+
+        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
+
+    def encode_pair(self, minibatch, decoder_vocab):
+        # TODO
+        raise NotImplementedError
+
+    def reverse(self, batch, detokenize, field_name=None):
+        _reversed = self._tokenizer.batch_decode(batch, skip_special_tokens=True)
+        return _reversed
+
+    def decode(self, tensor):
+        return self._tokenizer.convert_ids_to_tokens(tensor)
+
+
+class BartNumericalizer(Seq2SeqNumericalizer):
+    
+    def __init__(self, pretrained_tokenizer=None, config=None, max_generative_vocab=None, cache=None, fix_length=None):
+        super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
+        self.load(pretrained_tokenizer, config)
+        
+    def load(self, save_dir, config=None):
+        self._tokenizer = BartTokenizer.from_pretrained(save_dir)
+        self.decoder_vocab = DecoderVocabulary(self._tokenizer.decoder.values(), None,
+                                               pad_token=self._tokenizer.pad_token, eos_token=self._tokenizer.eos_token)
+
+class MBartNumericalizer(Seq2SeqNumericalizer):
+    
+    def __init__(self, pretrained_tokenizer=None, config=None, max_generative_vocab=None, cache=None, fix_length=None):
+        super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
+        self.load(pretrained_tokenizer, config)
+    
+    def load(self, save_dir, config=None):
+        self._tokenizer = MBartTokenizer.from_pretrained(save_dir, config=config)
+        vocabs = ['<pad>'] + [self._tokenizer.sp_model.id_to_piece(i) for i in
+                              range(self._tokenizer.sp_model.get_piece_size())]
+        self.decoder_vocab = DecoderVocabulary(vocabs, None, pad_token=self._tokenizer.pad_token,
+                                               eos_token=self._tokenizer.eos_token)
+
+class MT5Numericalizer(Seq2SeqNumericalizer):
+    
+    def __init__(self, pretrained_tokenizer=None, config=None, max_generative_vocab=None, cache=None, fix_length=None):
+        super().__init__(pretrained_tokenizer, config, max_generative_vocab, cache, fix_length)
+        self.load(pretrained_tokenizer, config)
+        
+    def load(self, save_dir, config=None):
+        self._tokenizer = T5Tokenizer.from_pretrained(save_dir, config=config)
+        vocabs = [self._tokenizer.sp_model.id_to_piece(i) for i in range(self._tokenizer.sp_model.get_piece_size())]
+        self.decoder_vocab = DecoderVocabulary(vocabs, None, pad_token=self._tokenizer.pad_token,
+                                               eos_token=self._tokenizer.eos_token)

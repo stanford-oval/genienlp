@@ -75,11 +75,11 @@ class CoattentionEncoder(nn.Module):
         context_padding = context.data == self.pad_idx
         question_padding = question.data == self.pad_idx
 
-        context_embedded = self.context_embeddings(context, padding=context_padding).last_layer
+        context_embedded = self.context_embeddings(context, padding=context_padding).last_hidden_state
         context_embedded += positional_encodings_like(context_embedded)
         self_attended_context = self.self_attentive_encoder_context(context_embedded, padding=context_padding)
 
-        question_embedded = self.question_embeddings(question, padding=question_padding).last_layer
+        question_embedded = self.question_embeddings(question, padding=question_padding).last_hidden_state
 
         coattended_context, coattended_question = self.coattention(self_attended_context[-1], question_embedded,
                                                                    context_padding, question_padding)

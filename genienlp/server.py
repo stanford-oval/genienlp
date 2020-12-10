@@ -38,8 +38,8 @@ from pprint import pformat
 import torch
 
 from . import models
-from .data_utils.embeddings import load_embeddings
-from .data_utils.example import Batch
+from .data_utils.example import NumericalizedExamples
+from .data_utils.numericalizer.sequential_field import SequentialField
 from .tasks.generic_dataset import Example
 from .tasks.registry import get_tasks
 from .util import set_seed, init_devices, load_config_json, log_model_size
@@ -49,24 +49,18 @@ logger = logging.getLogger(__name__)
 
 
 class Server:
-    def __init__(self, args, numericalizer, embeddings, model, device):
+    def __init__(self, args, numericalizer, model, device):
         self.args = args
         self.device = device
         self.numericalizer = numericalizer
         self.model = model
 
-        logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens from training')
-        self._embeddings = embeddings
-
         self._cached_tasks = dict()
 
-    def numericalize_example(self, ex):
-        new_words = self.numericalizer.grow_vocab([ex])
-        for emb in self._embeddings:
-            emb.grow_for_vocab(self.numericalizer.vocab, new_words)
+    def numericalize_examples(self, ex):
+        self.model.add_new_vocab_from_data([[ex]])
 
-        # batch of size 1
-        return Batch.from_examples([ex], self.numericalizer, device=self.device,
+        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer, device=self.device,
                                    append_question_to_context_too=self.args.append_question_to_context_too,
                                    override_question=self.args.override_question,
                                    override_context=self.args.override_context,
@@ -74,6 +68,18 @@ class Server:
                                    features_size=self.args.features_size,
                                    features_default_val=self.args.features_default_val
                                    )
+
+        all_f = []
+        for i in range(len(all_features.example_id)):
+            all_f.append(NumericalizedExamples(example_id=[all_features.example_id[i]],
+                                context=SequentialField(value=all_features.context.value[i], length=all_features.context.length[i], limited=all_features.context.limited[i]),
+                                question=SequentialField(value=all_features.question.value[i], length=all_features.question.length[i], limited=all_features.question.limited[i]),
+                                answer=SequentialField(value=all_features.answer.value[i], length=all_features.answer.length[i], limited=all_features.answer.limited[i]),
+                                decoder_vocab=all_features.decoder_vocab, device=self.device, padding_function=self.numericalizer.pad))
+
+        # batch of size 1
+        return NumericalizedExamples.collate_batches(all_f)
+
     def handle_request(self, line):
         request = json.loads(line)
 
@@ -84,25 +90,44 @@ class Server:
             task = list(get_tasks([task_name], self.args).values())[0]
             self._cached_tasks[task_name] = task
 
-        context = request['context']
-        if not context:
-            context = task.default_context
-        question = request['question']
-        if not question:
-            question = task.default_question
-        
-        if 'answer' in request.keys():
-            answer = request['answer']
+        if 'instances' in request:
+            examples = []
+            # request['instances'] is an array of {context, question, answer, example_id}
+            for instance in request['instances']:
+                example_id, context, question, answer = instance.get('example_id', ''), instance['context'], instance['question'], instance.get('answer', '')
+                if not context:
+                    context = task.default_context
+                if not question:
+                    question = task.default_question
+
+                ex = Example.from_raw(str(example_id), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
+                examples.append(ex)
+
+            batch = self.numericalize_examples(examples)
+            # it is a single batch, so wrap it in []
+            predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
+
+            response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0] } for p in predictions] })
+            return response + '\n'
         else:
-            answer = ''
+            context = request['context']
+            if not context:
+                context = task.default_context
+            question = request['question']
+            if not question:
+                question = task.default_question
+                
+            if 'answer' in request.keys():
+                answer = request['answer']
+            else:
+                answer = ''
+            ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
 
-        ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
+            batch = self.numericalize_examples([ex])
+            predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
 
-        batch = self.numericalize_example(ex)
-        predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
-
-        response = json.dumps(dict(id=request['id'], answer=predictions[0][0]))
-        return response + '\n'
+            response = json.dumps(dict(id=request['id'], answer=predictions[0][0]))
+            return response + '\n'
 
     async def handle_client(self, client_reader, client_writer):
         try:
@@ -173,22 +198,19 @@ def main(args):
     logger.info(f'Loading from {args.best_checkpoint}')
 
     devices = init_devices(args)
-    save_dict = torch.load(args.best_checkpoint, map_location=devices[0])
+    device = devices[0] # server only runs on a single device
 
-    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
-        load_embeddings(args.embeddings, args.context_embeddings, args.question_embeddings,
-                        args.decoder_embeddings, args.max_generative_vocab, args.num_db_types, args.db_unk_id)
-    numericalizer.load(args.path)
-    for emb in set(context_embeddings + question_embeddings + decoder_embeddings):
-        emb.init_for_vocab(numericalizer.vocab)
-
-    logger.info(f'Initializing Model')
     Model = getattr(models, args.model)
-    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
-    model_dict = save_dict['model_state_dict']
-    model.load_state_dict(model_dict)
+    model, _ = Model.from_pretrained(args.path,
+                                     model_checkpoint_file=args.checkpoint_name,
+                                     args=args,
+                                     device=device
+                                    )
 
-    server = Server(args, numericalizer, context_embeddings + question_embeddings + decoder_embeddings,
-                    model, devices[0])
+    
+    model.to(device)
+    model.eval()
+
+    server = Server(args, model.numericalizer, model, device)
 
     server.run()

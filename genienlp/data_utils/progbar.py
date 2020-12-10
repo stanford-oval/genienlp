@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019-2020 The Board of Trustees of the Leland Stanford Junior University
+# Copyright (c) 2020 The Board of Trustees of the Leland Stanford Junior University
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -27,29 +27,51 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import List, NamedTuple
+import sys
+import math
+from tqdm import tqdm
 
 
-class SequentialField(NamedTuple):
+class LogFriendlyProgressBar:
+    def __init__(self, iterable, desc, total):
+        self._desc = desc
+        self._i = 0
+        self._N = total
+        self._progress = 0
+        self._iterable = iterable
+        self._iterator = None
 
-    value: List[List[int]]
-    length: List[int]
-    limited: List[List[int]]
-    feature: List[List[List[int]]]
+    def __iter__(self):
+        self._iterator = iter(self._iterable)
+        return self
 
-    @staticmethod
-    def merge(sequential_fields: List):
-        
-        #TODO check features is correct
+    def __next__(self):
+        value = next(self._iterator)
+        self._i += 1
+        progress = math.floor(self._i * 100 / self._N)
+        if progress > self._progress:
+            if self._desc:
+                print(f'{self._desc} - progress: {progress}%', file=sys.stderr)
+            else:
+                print(f'Progress: {progress}%', file=sys.stderr)
+            self._progress = progress
+        return value
 
-        values = []
-        lengths = []
-        limiteds = []
-        features = []
-        for sf in sequential_fields:
-            values.extend(sf.value)
-            lengths.extend(sf.length)
-            limiteds.extend(sf.limited)
-            features.extend(sf.feature)
+    def close(self):
+        return
 
-        return SequentialField(values, lengths, limiteds, features)
+def progress_bar(iterable, desc=None, total=None, disable=False):
+    if disable:
+        return iterable
+    if total is None:
+        if not hasattr(iterable, '__len__'):
+            return iterable
+        total = len(iterable)
+    if sys.stderr.isatty():
+        return tqdm(iterable, desc=desc, total=total)
+    else:
+        return LogFriendlyProgressBar(iterable, desc=desc, total=total)
+
+
+def prange(*args, desc=None, disable=False):
+    return progress_bar(range(*args), desc=desc, disable=disable)

@@ -29,6 +29,7 @@
 
 import os
 import torch
+from torch.nn.utils.rnn import pad_sequence
 
 from .vocab import Vocab
 from .sequential_field import SequentialField
@@ -59,6 +60,13 @@ class SimpleNumericalizer(object):
 
     def save(self, save_dir):
         torch.save(self.vocab, os.path.join(save_dir, 'vocab.pth'))
+
+    def pad(self, batch):
+        """
+        batch: a List of List of integers
+        """
+        #TODO account for left padding models
+        return pad_sequence(batch, padding_value=self.pad_id, batch_first=True)
 
     def build_vocab(self, vocab_fields, vocab_sets):
         self.vocab = Vocab.build_from_data(vocab_fields, *vocab_sets,
@@ -111,7 +119,7 @@ class SimpleNumericalizer(object):
         return list(map(lambda x: 1 if x in special_tokens_tuple else 0, tensor))
 
 
-    def encode_single(self, minibatch, decoder_vocab, device=None, max_length=-1, db_unk_id=0):
+    def encode_single(self, minibatch, decoder_vocab, max_length=-1, db_unk_id=0):
         assert isinstance(minibatch, list)
         
         if max_length > -1:
@@ -120,53 +128,35 @@ class SimpleNumericalizer(object):
             max_len = max(len(x[0]) for x in minibatch)
         else:
             max_len = self.fix_length
-        all_padded = []
-        all_padded_features = []
+
+        padded = []
         lengths = []
-        numerical = []
+        features = []
+        numericals = []
         decoder_numerical = []
-        for tokens, _masks, features in minibatch:
-            padded_features = []
-            features_unpacked = list(zip(*features))
-            if self.pad_first:
-                padded_example = [self.pad_token] * max(0, max_len - len(tokens)) + \
-                                 [self.init_token] + \
-                                 list(tokens[:max_len]) + \
-                                 [self.eos_token]
-                for feature in features_unpacked:
-                    padded_features_example = [db_unk_id] * max(0, max_len - len(feature)) + \
-                                     [db_unk_id] + \
-                                     list(feature[:max_len]) + \
-                                     [db_unk_id]
-                    padded_features.append(padded_features_example)
-            else:
-                padded_example = [self.init_token] + \
-                                 list(tokens[:max_len]) + \
-                                 [self.eos_token] + \
-                                 [self.pad_token] * max(0, max_len - len(tokens))
-                for feature in features_unpacked:
-                    padded_features_example = [db_unk_id] + \
-                                     list(feature[:max_len]) + \
-                                     [db_unk_id] + \
-                                     [db_unk_id] * max(0, max_len - len(feature))
-                    padded_features.append(padded_features_example)
+        for tokens, _mask, tokens_features in minibatch:
+            ex_features = []
+            ex_features_unpacked = list(zip(*tokens_features))
+            example = [self.init_token] + \
+                          list(tokens[:max_len]) + \
+                          [self.eos_token]
+            for feature in ex_features_unpacked:
+                feature_padded = [db_unk_id] + \
+                           list(feature[:max_len]) + \
+                           [db_unk_id]
+                ex_features.append(feature_padded)
 
-            all_padded.append(padded_example)
-            all_padded_features.append(padded_features)
-            lengths.append(len(padded_example) - max(0, max_len - len(tokens)))
+            padded.append(example)
+            lengths.append(len(example))
+            features.append(ex_features)
 
-            numerical.append([self.vocab.stoi[word] for word in padded_example])
-            decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
+            numericals.append([self.vocab.stoi[word] for word in example])
+            decoder_numerical.append([decoder_vocab.encode(word) for word in example])
 
-        length = torch.tensor(lengths, dtype=torch.int32, device=device)
-        numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
-        decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-        feature = torch.tensor(all_padded_features, dtype=torch.float32, device=device)
-
-        return SequentialField(length=length, value=numerical, limited=decoder_numerical, feature=feature)
+        return SequentialField(length=lengths, value=numericals, limited=decoder_numerical, feature=features)
 
 
-    def encode_pair(self, minibatch, decoder_vocab, device=None):
+    def encode_pair(self, minibatch, decoder_vocab):
         assert isinstance(minibatch, list)
         if self.fix_length is None:
             max_len = max(len(x[0][0]) + len(x[1][0]) for x in minibatch)
@@ -178,33 +168,19 @@ class SimpleNumericalizer(object):
         numerical = []
         decoder_numerical = []
         for (tokens_a, _), (tokens_b, _)  in minibatch:
-            if self.pad_first:
-                padded_example = [self.pad_token] * max(0, 2 * max_len - len(tokens_a) - len(tokens_b)) + \
-                                 [self.init_token] + \
-                                 list(tokens_a[:max_len]) + \
-                                 [self.sep_token] + \
-                                 list(tokens_b[:max_len]) + \
-                                 [self.eos_token]
-                    
-            else:
-                padded_example = [self.init_token] + \
-                                 list(tokens_a[:max_len]) + \
-                                 [self.sep_token] + \
-                                 list(tokens_b[:max_len]) + \
-                                 [self.eos_token] + \
-                                 [self.pad_token] * max(0, 2 * max_len - len(tokens_a) - len(tokens_b))
+            example = [self.init_token] + \
+                                list(tokens_a[:max_len]) + \
+                                [self.sep_token] + \
+                                list(tokens_b[:max_len]) + \
+                                [self.eos_token]
 
-            padded.append(padded_example)
-            lengths.append(len(padded_example) - max(0, 2 * max_len - len(tokens_a) - len(tokens_b)))
+            padded.append(example)
+            lengths.append(len(example))
 
-            numerical.append([self.vocab.stoi[word] for word in padded_example])
-            decoder_numerical.append([decoder_vocab.encode(word) for word in padded_example])
+            numerical.append([self.vocab.stoi[word] for word in example])
+            decoder_numerical.append([decoder_vocab.encode(word) for word in example])
 
-        length = torch.tensor(lengths, dtype=torch.int32, device=device)
-        numerical = torch.tensor(numerical, dtype=torch.int64, device=device)
-        decoder_numerical = torch.tensor(decoder_numerical, dtype=torch.int64, device=device)
-
-        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
+        return SequentialField(length=lengths, value=numerical, limited=decoder_numerical)
   
 
     def decode(self, tensor):

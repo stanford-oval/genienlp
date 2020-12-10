@@ -1,7 +1,8 @@
-import json
-import os
+import re
 from tqdm import tqdm
 
+quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
+device_pattern = re.compile(r'\s@([\w\.]+)\s')
 
 ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Italian', 'zh': 'Chinese',
                'hr': 'Croatian', 'ja': 'Japanese', 'ko': 'Korean', 'ru': 'Russian', 'es': 'Spanish',
@@ -38,13 +39,19 @@ def is_device(token):
     return token[0] == '@'
 
 def process_id(ex):
-    id_ = ex.example_id.rsplit('/', 1)
+    # Example instance
+    if isinstance(ex.example_id, str):
+        id_ = ex.example_id.rsplit('/', 1)
+    # NumericalizedExample instance
+    else:
+        assert isinstance(ex.example_id, list)
+        assert len(ex.example_id) == 1
+        id_ = ex.example_id[0].rsplit('/', 1)
     id_ = id_[0] if len(id_) == 1 else id_[1]
     # translated
     if id_[0] == 'T':
         id_ = id_[1:]
     return id_
-
 
 
 def chunk_file(input_src, chunk_files, chunk_size, num_chunks):
@@ -94,7 +101,3 @@ def process(args):
             break
     
     return chunk_examples
-
-
-
-

@@ -1,10 +1,8 @@
-from argparse import ArgumentParser
 import csv
-from tqdm import tqdm
 import re
 
-from genienlp.util import tokenize, lower_case
-from genienlp.paraphrase.data_utils import remove_thingtalk_quotes
+from ...util import tokenize, lower_case, remove_thingtalk_quotes
+from ...data_utils.progbar import progress_bar
 
 def is_subset(set1, set2):
     """
@@ -26,9 +24,7 @@ def passes_heuristic_checks(row, args):
             return False
     return True
     
-
-def main():
-    parser = ArgumentParser()
+def parse_argv(parser):
     parser.add_argument('input', type=str,
                         help='The path to the input file.')
     parser.add_argument('output', type=str,
@@ -55,7 +51,7 @@ def main():
                         help='Remove examples if the values inside quotations in ThingTalk have changed or special words like NUMBER_0 cannot be found in TT anymore.')
     parser.add_argument('--replace_with_gold', action='store_true', help='Instead of the original ThingTalk, output what the parser said is gold.')
 
-    parser.add_argument('--task', type=str, required=True, choices=['almond', 'almond_dialogue_nlu'],
+    parser.add_argument('--task', type=str, required=True, choices=['almond', 'almond_dialogue_nlu', 'almond_dialogue_nlu_agent'],
                         help='Specifies the meaning of columns in the input file and the ones that should go to the output')
 
     # parser.add_argument('--output_columns', type=int, nargs='+', default=None,
@@ -69,8 +65,8 @@ def main():
     # parser.add_argument('--no_duplication_columns', type=int, nargs='+', default=None,
     #                     help='The columns indices in the input file that determine whether two rows are duplicates of each other or not.')
 
-    args = parser.parse_args()
 
+def main(args):
     if args.task == 'almond':
         args.id_column = 0
         args.utterance_column = 1
@@ -79,7 +75,7 @@ def main():
         args.no_duplication_columns = [1]
         args.input_columns = [1]
 
-    elif args.task == 'almond_dialogue_nlu':
+    elif args.task == 'almond_dialogue_nlu' or 'almond_dialogue_nlu_agent':
         args.id_column = 0
         # column 1 is ontext (ThingTalk)
         args.utterance_column = 2
@@ -116,7 +112,7 @@ def main():
         if args.remove_duplicates:
             seen_examples = set()
         all_thrown_away_rows = []
-        for row in tqdm(reader, desc='Lines'):
+        for row in progress_bar(reader, desc='Lines'):
             output_rows = []
             thrown_away_rows = []
             if args.transformation == 'remove_thingtalk_quotes':
@@ -196,6 +192,3 @@ def main():
         print('Removed %d duplicate rows' % duplicate_count)
         print('Removed %d rows because the thingtalk quote did not satisfy heuristic rules' % heuristic_count)
         print('Output size is %d rows' % written_count)
-
-if __name__ == '__main__':
-    main()

@@ -44,8 +44,6 @@ from tensorboardX import SummaryWriter
 
 from . import arguments
 from . import models
-from .data_utils.embeddings import load_embeddings
-from .data_utils.example import Example
 from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader,\
     log_model_size, init_devices
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
@@ -74,7 +72,7 @@ def initialize_logger(args):
 
 
 def prepare_data(args, logger):
-    train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
+    train_sets, val_sets, aux_sets = [], [], [], []
 
     train_eval_shared_kwargs = {'subsample': args.subsample, 'skip_cache': args.skip_cache,
                                 'cache_input_data': args.cache_input_data,
@@ -85,6 +83,7 @@ def prepare_data(args, logger):
                                 'verbose': args.verbose
                                 }
     
+
     for task in args.train_tasks:
         logger.info(f'Loading {task.name}')
         kwargs = {'test': None, 'validation': None}
@@ -108,8 +107,6 @@ def prepare_data(args, logger):
             assert split.train
         train_sets.append(split.train)
         logger.info(f'{task.name} has {len(split.train)} training examples')
-        if args.vocab_tasks is not None and task.name in args.vocab_tasks:
-            vocab_sets.extend(split)
             
         if task.name.startswith('almond'):
             args.db_unk_id = int(args.features_default_val[0])
@@ -121,6 +118,7 @@ def prepare_data(args, logger):
             else:
                 args.num_db_types = 0
             save_args(args, force_overwrite=True)
+
 
     for task in args.val_tasks:
         logger.info(f'Loading {task.name}')
@@ -137,40 +135,13 @@ def prepare_data(args, logger):
         assert not split.train and not split.test and not split.aux
         logger.info(f'{task.name} has {len(split.eval)} validation examples')
         val_sets.append(split.eval)
-        if args.vocab_tasks is not None and task.name in args.vocab_tasks:
-            vocab_sets.extend(split)
-
+        
         if hasattr(task, 'bootleg'):
             if task.bootleg.bootleg_load_prepped_data:
                 emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
                 if args.use_curriculum:
                     emb_file_list += ['aux']
                 task.bootleg.merge_embeds(emb_file_list)
-
-    numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
-        load_embeddings(args.embeddings,
-                        args.context_embeddings,
-                        args.question_embeddings,
-                        args.decoder_embeddings,
-                        args.max_generative_vocab,
-                        args.num_db_types,
-                        args.db_unk_id,
-                        logger)
-    if args.load is not None:
-        numericalizer.load(args.save)
-    else:
-        vocab_sets = (train_sets + val_sets) if len(vocab_sets) == 0 else vocab_sets
-        logger.info(f'Building vocabulary')
-        numericalizer.build_vocab(Example.vocab_fields, vocab_sets)
-        numericalizer.save(args.save)
-
-    logger.info(f'Initializing encoder and decoder embeddings')
-    for vec in set(context_embeddings + question_embeddings + decoder_embeddings):
-        vec.init_for_vocab(numericalizer.vocab)
-
-    logger.info(f'Vocabulary has {numericalizer.num_tokens} tokens')
-    logger.debug(f'The first 200 tokens:')
-    logger.debug(numericalizer.vocab.itos[:200])
 
     if args.use_curriculum:
         logger.info('Preprocessing auxiliary data for curriculum')
@@ -180,7 +151,7 @@ def prepare_data(args, logger):
     logger.info('Preprocessing validation data')
     preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
 
-    return numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets
+    return train_sets, val_sets, aux_sets
 
 accumulated_batch_lengths = 0
 
@@ -197,7 +168,7 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
                                                iteration > train_question_embeddings_after)
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
-    loss = model(batch, pretraining=pretraining)[0]
+    loss = model(batch, pretraining=pretraining).loss
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
     if len(devices) > 1:
@@ -257,7 +228,7 @@ def do_validate(iteration, args, model, numericalizer, val_iters, *,
                 train_task, round_progress, task_progress, writer, logger):
     deca_score = 0
     for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-        val_loss, metric_dict = validate(val_task, val_iter, model, logger, numericalizer, iteration, args, num_print=args.num_print)
+        val_loss, metric_dict = validate(val_task, val_iter, model, numericalizer, args, num_print=args.num_print)
         if val_loss is not None:
             log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss{val_loss.item():.4f}:'
             writer.add_scalar(f'loss/{val_task.name}/val', val_loss.item(), iteration)
@@ -309,6 +280,7 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
             f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}found new best model')
         torch.save(save_model_state_dict, os.path.join(log_dir, 'best.pth'))
         torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
+        model.module.numericalizer.save(saver._savedir)
 
     return best_decascore
 
@@ -384,19 +356,19 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
         'features_default_val': args.features_default_val
     }
     
-    train_iters = [(task,
-                    make_data_loader(x, numericalizer, tok, main_device, train=True,
-                                     paired=args.paired, max_pairs=args.max_pairs, **shared_kwargs))
-                   for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_values)]
+    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, paired=args.paired,max_pairs=args.max_pairs, train=True, **shared_kwargs))
+                   for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False, **shared_kwargs))
+    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False,
+                                         append_question_to_context_too=args.append_question_to_context_too,
+                                         override_question=args.override_question, override_context=args.override_context))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     aux_iters = []
     if use_curriculum:
-        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True, **shared_kwargs))
-                     for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_values)]
+        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True,**shared_kwargs))
+                     for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         
     zero_loss = 0
@@ -504,26 +476,6 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     logger.info(f'{log_prefix} is done after {epoch} epochs')
 
 
-def init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings, devices, logger,
-               save_dict):
-    model_name = args.model
-    logger.info(f'Initializing {model_name}')
-    Model = getattr(models, model_name)
-    model = Model(numericalizer, args, context_embeddings, question_embeddings, decoder_embeddings)
-    params = get_trainable_params(model)
-    log_model_size(logger, model, model_name)
-
-    if save_dict is not None:
-        logger.info(f'Loading model from {os.path.join(args.save, args.load)}')
-        save_dict = torch.load(os.path.join(args.save, args.load))
-        model.load_state_dict(save_dict['model_state_dict'])
-
-    model.to(devices[0])
-    model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
-    model.params = params
-
-    return model
-
 
 def get_transformer_learning_rate(i, *, dimension, warmup):
     i += 1
@@ -576,27 +528,43 @@ def main(args):
     logger = initialize_logger(args)
     logger.info(f'Arguments:\n{pformat(vars(args))}')
 
-    save_dict = None
-    if args.load is not None:
-        logger.info(f'Loading vocab from {os.path.join(args.save, args.load)}')
-        save_dict = torch.load(os.path.join(args.save, args.load))
-    numericalizer, context_embeddings, question_embeddings, decoder_embeddings, train_sets, val_sets, aux_sets = \
-        prepare_data(args, logger)
+    model_name = args.model
+    model_class = getattr(models, model_name)
 
-        
-    if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets)):
-        logging.error('sth unpleasant is happening with curriculum')
+    train_sets, val_sets, aux_sets = prepare_data(args, logger)
+
+    if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets) > 0):
+        logging.error('Something unpleasant is happening with curriculum')
 
     logger.info(f'Processing')
     logger.start = time.time()
 
-    model = init_model(args, numericalizer, context_embeddings, question_embeddings, decoder_embeddings,
-                       devices, logger, save_dict)
+    ########## initialize model
+    best_decascore = None
+    if args.load is not None:
+        model, best_decascore = model_class.from_pretrained(args.save,
+                                                            args=args,
+                                                            model_checkpoint_file=args.load,
+                                                            vocab_sets=train_sets+val_sets,
+                                                            device=devices[0])
+    else:
+        logger.info(f'Initializing a new {model_name}')
+        model = model_class(args=args, vocab_sets=train_sets+val_sets)
+    
+    model.add_new_vocab_from_data([train_sets+val_sets], resize_decoder=True)
+    params = get_trainable_params(model)
+    log_model_size(logger, model, model_name)
+
+    model.to(devices[0])
+    model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
+    model.params = params
+    ##########
+
     opt, lr_scheduler = init_opt(args, model, logger)
     start_iteration = 1
 
-    if save_dict is not None and args.resume:
-        logger.info(f'Resuming Training from {os.path.splitext(args.load)[0]}_optim.pth')
+    if args.resume:
+        logger.info(f'Resuming training from {os.path.splitext(args.load)[0]}_optim.pth')
         opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'))
         start_iteration = opt_state_dict.pop('start_iteration')
         logger.info(f'Starting iteration is {start_iteration}')
@@ -612,14 +580,14 @@ def main(args):
         pretrain_opt, pretrain_lr_scheduler = init_opt(args, model, logger)
         train_iterations = [args.pretrain_context for _ in args.train_tasks]
         train(args, devices, model, pretrain_opt, pretrain_lr_scheduler, train_sets,
-              train_iterations, numericalizer, val_sets=[], aux_sets=[], logger=logger, writer=writer,
+              train_iterations, model.module.numericalizer, val_sets=[], aux_sets=[], logger=logger, writer=writer,
               log_every=args.log_every, val_every=None, save_every=None, use_curriculum=False,
               rounds=len(train_sets) > 1, start_iteration=start_iteration, best_decascore=0,
               pretraining=True, log_prefix='pretrain', db_unk_id=args.db_unk_id)
 
     train(args, devices, model, opt, lr_scheduler, train_sets,
-          args.train_iterations, numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
+          args.train_iterations, model.module.numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
           log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
           rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
-          best_decascore=save_dict.get('best_decascore') if save_dict is not None else None,
-          pretraining=False, log_prefix='training', db_unk_id=args.db_unk_id)
+          best_decascore=best_decascore,
+          pretraining=False, log_prefix='training')

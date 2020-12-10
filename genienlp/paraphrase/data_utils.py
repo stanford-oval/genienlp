@@ -2,14 +2,16 @@ import sys
 import re
 import random
 
-from tqdm import tqdm
 import torch
 import logging
+import numpy as np
 
-from ..util import detokenize, tokenize, lower_case, SpecialTokenMap
+from ..data_utils.progbar import progress_bar
+from ..util import detokenize, tokenize, lower_case, SpecialTokenMap, remove_thingtalk_quotes
 
-from genienlp.paraphrase.dataset import TextDataset
 from genienlp.util import get_number_of_lines
+from ..tasks.almond.utils import is_entity, quoted_pattern_maybe_space, device_pattern
+
 
 logger = logging.getLogger(__name__)
 
@@ -56,18 +58,6 @@ def group_together(file_paths, num_samples):
     return all_groups
 
 
-def load_and_cache_examples(args, tokenizer, evaluate=False, aux=False):
-    if evaluate:
-        if aux:
-            file_path = args.aux_eval_data_file
-        else:
-            file_path = args.eval_data_file
-    else:
-        file_path = args.train_data_file
-    dataset = TextDataset(tokenizer, args, file_path=file_path, block_size=args.block_size, evaluate=evaluate)
-    return dataset
-
-
 def mask_tokens(inputs, labels, tokenizer, mlm_probability, mlm_ignore_index):
     """
     Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
@@ -92,23 +82,6 @@ def mask_tokens(inputs, labels, tokenizer, mlm_probability, mlm_ignore_index):
     return inputs, labels
 
 
-def remove_thingtalk_quotes(thingtalk):
-    quote_values = []
-    while True:
-        # print('before: ', thingtalk)
-        l1 = thingtalk.find('"')
-        if l1 < 0:
-            break
-        l2 = thingtalk.find('"', l1+1)
-        if l2 < 0:
-            # ThingTalk code is not syntactic
-            return thingtalk, None
-        quote_values.append(thingtalk[l1+1: l2].strip())
-        thingtalk = thingtalk[:l1] + '<temp>' + thingtalk[l2+1:]
-        # print('after: ', thingtalk)
-    thingtalk = thingtalk.replace('<temp>', '""')
-    return thingtalk, quote_values
-
 
 def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=None):
     """ Add special tokens to the tokenizer and the model if they have not already been added. """
@@ -120,21 +93,123 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
     if num_added_tokens > 0:
         logger.info('Added %d special tokens', num_added_tokens)
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
-        
-        
-def fairseq_mask(input_sequence, tokenizer, mlm_probability):
+
+def has_match(sentence, all_entities):
+    for entity in all_entities:
+        j = 0
+        entity_tokenized = entity.split(' ')
+        found = True
+        while j < len(entity_tokenized):
+            if sentence[j] == entity_tokenized[j]:
+                j += 1
+            else:
+                found = False
+                break
+        if found:
+            return True
+    return False
+    
+def token_masking(input_sequence, mlm_probability, mask_token, thingtalk):
+    
+    all_entities = []
+    all_device_tokens = []
+    if thingtalk:
+        all_entities = quoted_pattern_maybe_space.findall(thingtalk)
+        for token in device_pattern.findall(thingtalk):
+            all_device_tokens.extend(token.split('.'))
+    
     input_tokens = input_sequence.split(' ')
     input_length = len(input_tokens)
+    
     # don't mask first and last tokens
     for i in range(1, input_length-1):
+        if is_entity(input_tokens[i]) or input_tokens[i] in all_device_tokens or has_match(input_tokens[i:], all_entities):
+            mlm_probability /= 0.9
+            continue
         if random.random() < mlm_probability:
-            input_tokens[i] = getattr(tokenizer, 'mask_token', '<mask>')
+            input_tokens[i] = mask_token
     return ' '.join(input_tokens)
+
+def token_deletion(input_sequence, mlm_probability, mask_token, thingtalk):
+    all_entities = []
+    all_device_tokens = []
+    if thingtalk:
+        all_entities = quoted_pattern_maybe_space.findall(thingtalk)
+        for token in device_pattern.findall(thingtalk):
+            all_device_tokens.extend(token.split('.'))
     
+    input_tokens = input_sequence.split(' ')
+    input_length = len(input_tokens)
+    
+    # don't mask first and last tokens
+    for i in range(1, input_length-1):
+        if is_entity(input_tokens[i]) or input_tokens[i] in all_device_tokens or has_match(input_tokens[i:], all_entities):
+            mlm_probability /= 0.9
+            continue
+        if random.random() < mlm_probability:
+            # temporarily put a mask token here
+            input_tokens[i] = mask_token
+    
+    # go through all the tokens, and delete the ones that were masked
+    input_tokens = list(filter(lambda x: x != mask_token, input_tokens))
 
+    return ' '.join(input_tokens)
 
-def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column, copy, sep_token_id,
-                                  skip_heuristics, is_cased, model_type, src_lang, subsample, task, model_input_prefix, masked_paraphrasing, fairseq_mask_prob):
+def text_infilling(input_sequence, num_text_spans, mask_token, thingtalk):
+    all_entities = []
+    all_device_tokens = []
+    if thingtalk:
+        all_entities = quoted_pattern_maybe_space.findall(thingtalk)
+        for token in device_pattern.findall(thingtalk):
+            all_device_tokens.extend(token.split('.'))
+
+    input_tokens = input_sequence.split(' ')
+
+    num_successful_spans = 0
+    while num_successful_spans < num_text_spans:
+        num_tokens_to_mask = np.random.poisson(lam=3)
+        mask_start_index = random.randint(0, len(input_tokens) - 1)
+
+        if mask_start_index + num_tokens_to_mask > len(input_tokens):
+            continue
+        if input_tokens[mask_start_index] == mask_token:
+            continue
+        
+        contains_crucial_token = False
+        # check this span for a crucial token
+        for j in range(0, num_tokens_to_mask):
+            curr_token = input_tokens[mask_start_index + j]
+            if is_entity(curr_token) or curr_token in all_device_tokens or has_match(input_tokens[j + mask_start_index:], all_entities):
+                contains_crucial_token = True
+                break
+        if not contains_crucial_token:
+            num_successful_spans += 1
+            if num_tokens_to_mask + mask_start_index != len(input_tokens):
+                input_tokens = input_tokens[:mask_start_index] + [mask_token] + input_tokens[mask_start_index + num_tokens_to_mask:]
+            else: 
+                input_tokens = input_tokens[:mask_start_index] + [mask_token]
+
+    return ' '.join(input_tokens)
+
+def sentence_permutation(input_sequence):
+    input_tokens = input_sequence.split('.')
+    random.shuffle(input_tokens)
+    return ' '.join(input_tokens)
+
+def document_rotation(input_sequence):
+    input_tokens = input_sequence.split(' ')
+    token_index_to_rotate = random.randint(0, len(input_tokens) - 1)
+    input_tokens = input_tokens[token_index_to_rotate:] + input_tokens[:token_index_to_rotate]
+    return ' '.join(input_tokens)
+
+def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column,
+                                  copy, sep_token_id, skip_heuristics, is_cased, model_type,
+                                  src_lang, subsample, task, model_input_prefix,
+                                  mask_tokens, mask_token_prob, masking_token,
+                                  delete_tokens, delete_token_prob,
+                                  infill_text, num_text_spans,
+                                  permute_sentences,
+                                  rotate_sentence):
     """
     Read a tsv file (this includes a text file with one example per line) and returns input features that the model needs
     Outputs:
@@ -151,15 +226,15 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
 
     if file_path is not None:
         number_of_lines = get_number_of_lines(file_path)
-        disable_tqdm = False
+        disable_progbar = False
         input_file = open(file_path)
     else:
         number_of_lines = 1
-        disable_tqdm = True
+        disable_progbar = True
         input_file = sys.stdin
 
     line_count = 0
-    for line in tqdm(input_file, desc='Reading Input File', total=number_of_lines, disable=disable_tqdm):
+    for line in progress_bar(input_file, desc='Reading Input File', total=number_of_lines, disable=disable_progbar):
         row = [r.strip() for r in line.split('\t')]
         input_sequence = row[input_column]
         gold = row[gold_column]
@@ -171,15 +246,23 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         if not skip_heuristics:
             gold, _ = input_heuristics(gold, None, is_cased, keep_special_tokens=True, keep_tokenized=True)
         all_golds.append(gold)
+        thingtalk = row[thingtalk_column] if thingtalk_column is not None else None
         if skip_heuristics:
             reverse_maps.append({})
         else:
-            thingtalk = row[thingtalk_column] if thingtalk_column is not None else None
             input_sequence, reverse_map = input_heuristics(input_sequence, thingtalk, is_cased)
             reverse_maps.append(reverse_map)
             
-        if masked_paraphrasing:
-            input_sequence = fairseq_mask(input_sequence, tokenizer, fairseq_mask_prob)
+        if mask_tokens:
+            input_sequence = token_masking(input_sequence, mask_token_prob, masking_token, thingtalk)
+        if delete_tokens:
+            input_sequence = token_deletion(input_sequence, delete_token_prob, masking_token, thingtalk)
+        if infill_text:
+            input_sequence = text_infilling(input_sequence, num_text_spans, masking_token, thingtalk)
+        if permute_sentences:
+            input_sequence = sentence_permutation(input_sequence)
+        if rotate_sentence:
+            input_sequence = document_rotation(input_sequence)
         
         # add model specific prefix
         input_sequence = model_input_prefix + input_sequence
@@ -225,7 +308,7 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
 
 
 def is_question(sentence: str):
-    question_words = ['which', 'what', 'where', 'how', 'who', 'when', 'is', 'are', 'am', \
+    question_words = ['which', 'what', 'where', 'how', 'who', 'when', 'is', 'are', 'am',
                       'can', 'could', 'would', 'will', 'have', 'did', 'do', 'does', 'no is', 'yes is']
     for w in question_words:
         if sentence.startswith(w+' '):

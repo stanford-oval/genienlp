@@ -3,12 +3,12 @@ import torch
 import pickle
 import logging
 import random
-from tqdm import tqdm
 
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
-from genienlp.util import get_number_of_lines
+from ..util import get_number_of_lines
+from ..data_utils.progbar import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,7 @@ class TextDataset(Dataset):
                 self.segment1_id = self.prompt_token_id
                 self.segment2_id = self.eos_token_id
             self.input_ids = []
+            self.attention_mask = []
             self.labels = []
             self.position_ids = []
             self.segment_ids = []
@@ -45,28 +46,44 @@ class TextDataset(Dataset):
 
             if not self.evaluate and args.aux_train_data_file is not None:
                 number_of_lines = get_number_of_lines(args.aux_train_data_file)
+                lines = min(args.subsample, number_of_lines)
+                i = 0
                 with open(args.aux_train_data_file, encoding="utf-8") as f_in:
-                    for line in tqdm(f_in, desc='Tokenizing Auxiliary File', total=number_of_lines):
+                    for line in progress_bar(f_in, desc='Tokenizing Auxiliary File', total=number_of_lines):
                         parts = list(map(lambda part: part.strip(), line.split('\t')))
-                    if 'bart' in args.model_type:
-                        self._add_bart_example(parts[0], None, args)
-                    else:
-                        self._add_example(parts[0], None, args)
+                        i += 1
+                        if i > lines:
+                            break
+                        
+                        parts[args.input_column] = args.model_input_prefix + parts[args.input_column]
+                        if args.model_type in ['bart', 'mbart', 'marian']:
+                            self._add_seq2seq_example(parts[args.input_column], None, args)
+                        else:
+                            self._add_example(parts[args.input_column], None, args)
 
             number_of_lines = get_number_of_lines(file_path)
+            lines = min(args.subsample, number_of_lines)
+            i = 0
             with open(file_path, encoding="utf-8") as f_in:
-                for line in tqdm(f_in, desc='Tokenizing', total=number_of_lines):
+                for line in progress_bar(f_in, desc='Tokenizing', total=number_of_lines):
                     parts = list(map(lambda part: part.strip(), line.split('\t')))
-                    if 'bart' in args.model_type:
-                        self._add_bart_example(parts[0], parts[1], args)
+                    i += 1
+                    if i > lines:
+                        break
+                        
+                    parts[args.input_column] = args.model_input_prefix + parts[args.input_column]
+                    if args.model_type in ['bart', 'mbart', 'marian']:
+                        self._add_seq2seq_example(parts[args.input_column], parts[args.gold_column], args)
                     else:
-                        self._add_example(parts[0], parts[1], args)
+                        self._add_example(parts[args.input_column], parts[args.gold_column], args)
             if args.sort_by_length:
-                _, self.input_ids, self.labels, self.position_ids, self.segment_ids = tuple(zip(*sorted(list(zip([len(x) for x in self.input_ids], self.input_ids, self.labels, self.position_ids, self.segment_ids)))))
+                _, self.input_ids, self.attention_mask, self.labels, self.position_ids, self.segment_ids = tuple(zip(*sorted(list(zip([len(x) for x in self.input_ids], self.input_ids, self.attention_mask, self.labels, self.position_ids, self.segment_ids)))))
             logger.info('Maximum input length: %d', self.max_input_length)
-            logger.info("Saving features into cached file %s", cached_features_file)
-            with open(cached_features_file, 'wb') as handle:
-                pickle.dump((self.input_ids, self.labels, self.position_ids, self.segment_ids), handle, protocol=pickle.HIGHEST_PROTOCOL)
+            
+            if args.cache_input_data:
+                logger.info("Saving features into cached file %s", cached_features_file)
+                with open(cached_features_file, 'wb') as handle:
+                    pickle.dump((self.input_ids, self.labels, self.position_ids, self.segment_ids), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def _add_example(self, input_sequence, output_sequence, args):
         # TODO we should make use of tokenizer.build_inputs_with_special_tokens(sequence1, sequence2). Add special tokens manualy only if our model does not support two sequences (like GPT2).
@@ -105,44 +122,51 @@ class TextDataset(Dataset):
             position_ids2 = reversed(position_ids2)
         self.position_ids.append(list(range(prompt_token_location+1)) + list(position_ids2))
         self.segment_ids.append([self.segment1_id]*(prompt_token_location+1) + [self.segment2_id]*(len(input_ids)-prompt_token_location-1))
-
-
-    def _add_bart_example(self, input_sequence, output_sequence, args):
-        # TODO we should make use of tokenizer.build_inputs_with_special_tokens(sequence1, sequence2). Add special tokens manualy only if our model does not support two sequences (like GPT2).
         
-        encoded_input_ids = self.tokenizer.encode_plus(input_sequence)['input_ids']
-        encoded_output_ids = self.tokenizer.encode_plus(output_sequence)['input_ids']
+        # ignored
+        self.attention_mask.append([1]*len(input_ids))
+
+    def _add_seq2seq_example(self, input_sequence, output_sequence, args):
         
+        if args.model_type == 'mbart':
+            model_inputs = self.tokenizer.prepare_seq2seq_batch([input_sequence], args.src_lang, [output_sequence], args.tgt_lang)
+        else:
+            model_inputs = self.tokenizer.prepare_seq2seq_batch([input_sequence], [output_sequence], return_tensors='pt')
+
+        encoded_input_ids = model_inputs['input_ids'].tolist()[0]
+        encoded_attention_mask = model_inputs['attention_mask'].tolist()[0]
+        encoded_output_ids = model_inputs['labels'].tolist()[0]
+
         self.max_input_length = max(self.max_input_length, len(encoded_input_ids))
         self.max_output_length = max(self.max_output_length, len(encoded_output_ids))
-        
+
         self.input_ids.append(encoded_input_ids)
+        self.attention_mask.append(encoded_attention_mask)
         self.position_ids.append(list(range(len(encoded_input_ids))))
         self.segment_ids.append([self.segment1_id] * len(encoded_input_ids))
-        
+
         self.labels.append(encoded_output_ids)
         
     def __len__(self):
         return len(self.input_ids)
 
     def __getitem__(self, item):
-        return torch.tensor(self.input_ids[item]), torch.tensor(self.labels[item]), torch.tensor(self.position_ids[item]), torch.tensor(self.segment_ids[item])
-
+        return torch.tensor(self.input_ids[item]), torch.tensor(self.attention_mask[item]), torch.tensor(self.labels[item]), torch.tensor(self.position_ids[item]), torch.tensor(self.segment_ids[item])
 
     def collate_fn(self, batch):
-        (inputs, labels, position_ids, segment_ids) = zip(*batch)
+        (inputs, attention_mask, labels, position_ids, segment_ids) = zip(*batch)
         inputs_pad = pad_sequence(inputs, batch_first=True, padding_value=self.tokenizer.pad_token_id)
         labels_pad = pad_sequence(labels, batch_first=True, padding_value=-100)
+        attention_mask = pad_sequence(attention_mask, batch_first=True, padding_value=0)
         position_ids = pad_sequence(position_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
         segment_ids = pad_sequence(segment_ids, batch_first=True, padding_value=0) # will be ignored in the loss function, so its value does not matter
     
-        return inputs_pad, labels_pad, position_ids, segment_ids
+        return inputs_pad, attention_mask, labels_pad, position_ids, segment_ids
 
 
 class LengthSortedSampler(torch.utils.data.Sampler):
 
     def __init__(self, data_source, batch_size, shuffle):
-        # print(data_source)
         self.data_source = data_source
         self.batch_size = batch_size
         self.shuffle = shuffle
