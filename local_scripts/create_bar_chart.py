@@ -46,6 +46,8 @@ ax.tick_params(axis='x', which='major', pad=26)
 
 ax.legend((rec2, rec1), ('Genie', 'SOTA'), fontsize=60)
 
+ax.yaxis.grid(which='both', color='black', linestyle='-.')
+
 for i, c in enumerate(languages):
     offset_image(i, c, ax)
     
