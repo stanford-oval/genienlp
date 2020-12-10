@@ -311,11 +311,6 @@ def post_parse_general(args):
     if len(args.features) != len(args.features_size):
         raise ValueError('You should specify max feature size for each feature you provided')
 
-    if args.warmup < 1:
-        raise ValueError('Warmup should be a positive integer.')
-    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1) :
-        raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
-
     if args.override_context and args.append_question_to_context_too:
         raise ValueError('You cannot use append_question_to_context_too when overriding context')
     
@@ -374,6 +369,9 @@ def post_parse_general(args):
 
 
 def post_parse_train_specific(args):
+    
+    if args.warmup < 1:
+        raise ValueError('Warmup should be a positive integer.')
 
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')

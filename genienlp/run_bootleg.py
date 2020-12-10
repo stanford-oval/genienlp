@@ -51,7 +51,8 @@ def parse_argv(parser):
     parser.add_argument('--preserve_case', action='store_false', dest='lower',
                         help='whether to preserve casing for all text')
 
-
+    parser.add_argument('--almond_dataset_specific_preprocess', type=str, default='none', choices=['none', 'multiwoz'],
+                        help='Applies dataset-sepcific preprocessing to context and answer fields, and postprocesses the model outputs back to the original form.')
     parser.add_argument("--almond_has_multiple_programs", action='store_true',
                         help='Indicate if almond dataset has multiple programs for each sentence')
 

@@ -249,15 +249,15 @@ class NumericalizedExamples(NamedTuple):
         context_values = padding_function(context_values)
         context_limiteds = padding_function(context_limiteds)
         context_lengths = torch.stack(context_lengths, dim=0)
-        context_features = torch.stack(context_features, dim=0)
+        context_features = padding_function(context_features)
         question_values = padding_function(question_values)
         question_limiteds = padding_function(question_limiteds)
         question_lengths = torch.stack(question_lengths, dim=0)
-        question_features = torch.stack(question_features, dim=0)
+        question_features = padding_function(question_features)
         answer_values = padding_function(answer_values)
         answer_limiteds = padding_function(answer_limiteds)
         answer_lengths = torch.stack(answer_lengths, dim=0)
-        answer_features = torch.stack(answer_features, dim=0)
+        answer_features = padding_function(answer_features)
 
         context = SequentialField(value=context_values,
                                   length=context_lengths,

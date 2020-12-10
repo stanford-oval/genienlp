@@ -32,14 +32,8 @@ from torch import nn
 
 from .common import CombinedEmbedding, LayerNorm, LinearFeedforward
 from transformers.models.bert.modeling_bert import BertConfig
+from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions as EmbeddingOutput
 from ..paraphrase.transformers_utils import BootlegBertEncoder
-
-from typing import NamedTuple, List
-
-class EmbeddingOutput(NamedTuple):
-    name: str
-    all_layers: List[torch.Tensor]
-    last_layer: torch.Tensor
 
 
 class IdentityEncoder(nn.Module):
@@ -94,12 +88,11 @@ class IdentityEncoder(nn.Module):
             context_embedded = self.encoder_embeddings(context, entity_masking=context_entity_masking, mask_entities=mask_entities, padding=context_padding)
             question_embedded = self.encoder_embeddings(question, entity_masking=question_entity_masking, mask_entities=mask_entities, padding=question_padding)
 
-            context_embedded_last_layer, _pooled, context_embedded_all_layers = self.context_BootlegBertEncoder(inputs_embeds=context_embedded.last_layer, input_ent_ids=context_entity_ids)
-            question_embedded_last_layer, _pooled, question_embedded_all_layers = self.question_BootlegBertEncoder(inputs_embeds=question_embedded.last_layer, input_ent_ids=question_entity_ids)
+            context_embedded_last_hidden_state, _pooled, context_embedded_hidden_states = self.context_BootlegBertEncoder(inputs_embeds=context_embedded.last_hidden_state, input_ent_ids=context_entity_ids)
+            question_embedded_last_hidden_state, _pooled, question_embedded_hidden_states = self.question_BootlegBertEncoder(inputs_embeds=question_embedded.last_hidden_state, input_ent_ids=question_entity_ids)
 
-            context_embedded = EmbeddingOutput(name='Bootleg+Contextual', all_layers=context_embedded_all_layers, last_layer=context_embedded_last_layer)
-            question_embedded = EmbeddingOutput(name='Bootleg+Contextual', all_layers=question_embedded_all_layers, last_layer=question_embedded_last_layer)
-
+            context_embedded = EmbeddingOutput(hidden_states=context_embedded_hidden_states, last_hidden_state=context_embedded_last_hidden_state)
+            question_embedded = EmbeddingOutput(hidden_states=question_embedded_hidden_states, last_hidden_state=question_embedded_last_hidden_state)
         
         else:
             context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking, entity_probs=context_entity_probs, mask_entities=mask_entities, padding=context_padding)
