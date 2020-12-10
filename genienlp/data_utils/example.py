@@ -78,7 +78,7 @@ class NumericalizedExamples(NamedTuple):
         assert all(isinstance(ex.example_id, str) for ex in examples)
 
         for ex in examples:
-            yield NumericalizedExamples(ex.example_id,
+            yield NumericalizedExamples([ex.example_id],
                                         numericalizer.encode_single(ex.context_plus_question),
                                         numericalizer.encode_single(ex.answer))
 
