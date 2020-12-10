@@ -164,20 +164,20 @@ class BaseAlmondTask(BaseTask):
             tokens = [t for t in sentence.split(' ') if len(t) > 0]
             if self._preprocess_context and field_name in ('context'):
                 preprocessed_context = []
+                in_string = False
                 for token in sentence.split(' '):
                     if len(token) == 0:
+                        continue
+                    if token == '"':
+                        in_string = not in_string
+                    if in_string:
+                        preprocessed_context.append(token)
                         continue
                     if token.startswith('@') and '.' in token:
                         word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
                         preprocessed_context += word.split('_')
-                    elif token.startswith('param:'):
-                        word = token[len('param:'):]
-                        preprocessed_context += word.split('_')
-                    elif token.startswith('enum:'):
-                        word = token[len('enum:'):]
-                        preprocessed_context += word.split('_')
                     else:
-                        preprocessed_context.append(token)
+                        preprocessed_context += token.split('_')
                 tokens = preprocessed_context
 
         if self._is_program_field(field_name):
