@@ -31,7 +31,7 @@ import torch
 from torch import nn
 
 from .common import CombinedEmbedding, LayerNorm, LinearFeedforward
-from transformers.modeling_bert import BertConfig
+from transformers.models.bert.modeling_bert import BertConfig
 from ..paraphrase.transformers_utils import BootlegBertEncoder
 
 from typing import NamedTuple, List

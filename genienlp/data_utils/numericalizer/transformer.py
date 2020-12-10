@@ -158,7 +158,7 @@ class TransformerNumericalizer(object):
         features = []
         numerical = []
         decoder_numerical = []
-        for wp_tokens, wp_features in zip(wp_tokenized, all_wp_features):
+        for wp_tokens, wp_features in zip(all_wp_tokenized, all_wp_features):
             ex_features = []
             wp_features_unpacked = list(zip(*wp_features))
             example = [self.init_token] + \
@@ -169,7 +169,7 @@ class TransformerNumericalizer(object):
                                           list(wp_feature[:max_len]) + \
                                           [[features_default_val[i]] * features_size[i]]
                 ex_features.append(padded_features_example)
-
+            
             padded.append(example)
             lengths.append(len(example))
             features.append(ex_features)
@@ -180,11 +180,11 @@ class TransformerNumericalizer(object):
         # concat all features
         all_features = []
         for token_features in features:
-            all_features.append(np.concatenate([data for data in token_features], dim=-1))
+            all_features.append(np.concatenate(token_features, axis=-1))
 
-        features = list(np.stack(all_features))
+        # features = list(np.stack(all_features))
 
-        return SequentialField(length=lengths, value=numerical, limited=decoder_numerical, feature=features)
+        return SequentialField(length=lengths, value=numerical, limited=decoder_numerical, feature=all_features)
 
     def decode(self, tensor):
         return self._tokenizer.convert_ids_to_tokens(tensor)

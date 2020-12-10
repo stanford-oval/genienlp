@@ -12,7 +12,7 @@ from transformers import MarianMTModel, BartForConditionalGeneration, MBartForCo
     T5ForConditionalGeneration, MT5ForConditionalGeneration
 from transformers.modeling_utils import PreTrainedModel
 
-from transformers.models.bert.modeling_bert import BertEncoder, BertPooler, BertPreTrainedModel
+from transformers.models.bert.modeling_bert import BertEncoder, BertPooler, BertPreTrainedModel, BertEmbeddings, BertModel
 from transformers.models.mbart.tokenization_mbart import MBartTokenizer, _all_mbart_models, SPM_URL
 
 

@@ -29,7 +29,6 @@
 
 from typing import List, NamedTuple
 
-
 class SequentialField(NamedTuple):
 
     value: List[List[int]]

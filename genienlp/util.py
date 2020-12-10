@@ -644,22 +644,22 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, paired=Fal
                      features=None, features_size=None, features_default_val=None, return_original_order=False):
 
     
-    all_features = NumericalizedExamples.from_examples(dataset, numericalizer, device=device,
+    all_numericalized = NumericalizedExamples.from_examples(dataset, numericalizer, device=device,
                                   paired=paired and train, max_pairs=max_pairs, groups=dataset.groups,
                                   append_question_to_context_too=append_question_to_context_too,
                                   override_question=override_question, override_context=override_context,
                                   features=features, features_size=features_size, features_default_val=features_default_val)
 
     all_f = []
-    for i in prange(len(all_features.example_id), desc='Converting dataset to features'):
-        all_f.append(NumericalizedExamples(example_id=[all_features.example_id[i]],
-                            context=SequentialField(value=all_features.context.value[i], length=all_features.context.length[i], limited=all_features.context.limited[i]),
-                            question=SequentialField(value=all_features.question.value[i], length=all_features.question.length[i], limited=all_features.question.limited[i]),
-                            answer=SequentialField(value=all_features.answer.value[i], length=all_features.answer.length[i], limited=all_features.answer.limited[i]),
-                            decoder_vocab=all_features.decoder_vocab, device=device, padding_function=numericalizer.pad))
+    for i in prange(len(all_numericalized.example_id), desc='Converting dataset to features'):
+        all_f.append(NumericalizedExamples(example_id=[all_numericalized.example_id[i]],
+                            context=SequentialField(value=all_numericalized.context.value[i], length=all_numericalized.context.length[i], limited=all_numericalized.context.limited[i], feature=all_numericalized.context.feature[i]),
+                            question=SequentialField(value=all_numericalized.question.value[i], length=all_numericalized.question.length[i], limited=all_numericalized.question.limited[i], feature=all_numericalized.question.feature[i]),
+                            answer=SequentialField(value=all_numericalized.answer.value[i], length=all_numericalized.answer.length[i], limited=all_numericalized.answer.limited[i], feature=all_numericalized.answer.feature[i]),
+                            decoder_vocab=all_numericalized.decoder_vocab, device=device, padding_function=numericalizer.pad))
     
 
-    del all_features
+    del all_numericalized
     sampler = LengthSortedIterator(all_f, batch_size=batch_size, sort=True, shuffle_and_repeat=train, sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
     # get the sorted data_source
     all_f = sampler.data_source

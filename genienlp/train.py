@@ -72,7 +72,7 @@ def initialize_logger(args):
 
 
 def prepare_data(args, logger):
-    train_sets, val_sets, aux_sets = [], [], [], []
+    train_sets, val_sets, aux_sets = [], [], []
 
     train_eval_shared_kwargs = {'subsample': args.subsample, 'skip_cache': args.skip_cache,
                                 'cache_input_data': args.cache_input_data,
@@ -136,7 +136,7 @@ def prepare_data(args, logger):
         logger.info(f'{task.name} has {len(split.eval)} validation examples')
         val_sets.append(split.eval)
         
-        if hasattr(task, 'bootleg'):
+        if getattr(task, 'bootleg', None):
             if task.bootleg.bootleg_load_prepped_data:
                 emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
                 if args.use_curriculum:
@@ -360,9 +360,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False,
-                                         append_question_to_context_too=args.append_question_to_context_too,
-                                         override_question=args.override_question, override_context=args.override_context))
+    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False, **shared_kwargs))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     aux_iters = []
@@ -590,4 +588,4 @@ def main(args):
           log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
           rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
           best_decascore=best_decascore,
-          pretraining=False, log_prefix='training')
+          pretraining=False, log_prefix='training', db_unk_id=args.db_unk_id)
