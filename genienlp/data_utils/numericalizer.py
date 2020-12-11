@@ -64,7 +64,7 @@ class TransformerNumericalizer(object):
         # map a space-separated sequence of words to a token
         self._special_tokens_to_token_regexes = []
 
-        self._is_bart = self._pretrained_name in ('facebook/bart-large', 'facebook/bart-base')
+        self._is_bart_large = self._pretrained_name == 'facebook/bart-large'
 
     @property
     def vocab(self):
@@ -292,8 +292,8 @@ class TransformerNumericalizer(object):
         numerical = encoded.data['input_ids']
         length = encoded.data['length']
 
-        if self._is_bart:
-            # remove BOS from the inputs to BART because BART was not trained with those
+        if self._is_bart_large:
+            # remove BOS from the inputs to BART-Large because BART-Large was not trained with those
             numerical = numerical[1:]
             length -= 1
 
