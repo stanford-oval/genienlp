@@ -44,7 +44,8 @@ class TransformerSeq2Seq(GenieModel):
         args.dimension = config.d_model
         self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
                                                            cache_dir=self.args.embeddings)
-        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, max_generative_vocab=None)
+        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, max_generative_vocab=None,
+                                                      preprocess_special_tokens=args.preprocess_special_tokens)
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 

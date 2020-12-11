@@ -460,7 +460,8 @@ def load_config_json(args):
                     'max_val_context_length', 'max_output_length', 'max_generative_vocab', 'lower',
                     'trainable_decoder_embeddings', 'locale', 'use_pretrained_bert',
                     'override_context', 'override_question',
-                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence']
+                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence',
+                    'preprocess_special_tokens']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
@@ -475,9 +476,7 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
-            elif r == 'almond_has_multiple_programs':
-                setattr(args, r, False)
-            elif r == 'almond_lang_as_question':
+            elif r in ('almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens'):
                 setattr(args, r, False)
             elif r == 'locale':
                 setattr(args, r, 'en')

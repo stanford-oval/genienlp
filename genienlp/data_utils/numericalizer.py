@@ -29,6 +29,10 @@
 
 import collections
 import os
+import re
+import json
+from typing import List, Tuple
+from collections import defaultdict
 from torch.nn.utils.rnn import pad_sequence
 from transformers import AutoConfig, AutoTokenizer
 
@@ -40,12 +44,26 @@ class TransformerNumericalizer(object):
     Numericalizer that uses Tokenizers from huggingface's transformers library.
     """
 
-    def __init__(self, pretrained_tokenizer, max_generative_vocab, cache=None, fix_length=None):
+    _special_tokens_to_word_map : List[Tuple[str, str]]
+    _special_tokens_to_word_regexes : List[Tuple[re.Pattern, str]]
+    _special_tokens_to_token_regexes : List[Tuple[re.Pattern, str]]
+
+    def __init__(self, pretrained_tokenizer, max_generative_vocab, cache=None,
+                 fix_length=None, preprocess_special_tokens=False):
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
         self._cache = cache
         self._tokenizer = None
         self.fix_length = fix_length
+
+        self._preprocess_special_tokens = preprocess_special_tokens
+
+        # map a token to a space-separated sequence of words
+        self._special_tokens_to_word_map = []
+        # same, but the token is a regular expression matching that token using \b
+        self._special_tokens_to_word_regexes = []
+        # map a space-separated sequence of words to a token
+        self._special_tokens_to_token_regexes = []
 
     @property
     def vocab(self):
@@ -74,6 +92,12 @@ class TransformerNumericalizer(object):
             with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'r') as fp:
                 self._decoder_words = [(line.rstrip('\n'), self._tokenizer.convert_tokens_to_ids(line.rstrip('\n')))
                                         for line in fp]
+        try:
+            with open(os.path.join(save_dir, 'special-token-preprocessing.json')) as fp:
+                self._special_tokens_to_word_map = json.load(fp)
+            self._build_special_tokens_regexes()
+        except FileNotFoundError:
+            pass
 
         self._init()
 
@@ -90,6 +114,9 @@ class TransformerNumericalizer(object):
             with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'w') as fp:
                 for word, _full_idx in self._decoder_words:
                     fp.write(word + '\n')
+        if len(self._special_tokens_to_word_map) > 0:
+            with open(os.path.join(save_dir, 'special-token-preprocessing.json'), 'w') as fp:
+                json.dump(self._special_tokens_to_word_map, fp)
 
     def build_vocab(self, vocab_sets, tasks):
         self._tokenizer = AutoTokenizer.from_pretrained(self._pretrained_name,
@@ -109,9 +136,17 @@ class TransformerNumericalizer(object):
             'cls_token': "<s>",
         })
 
-        # add the special tokens from the task
+        special_tokens = []
         for task in tasks:
-            self._tokenizer.add_tokens(list(task.special_tokens))
+            special_tokens += list(task.special_tokens)
+        special_tokens.sort()
+
+        if self._preprocess_special_tokens:
+            self._build_special_tokens_maps(special_tokens)
+            self._build_special_tokens_regexes()
+        else:
+            # add the special tokens directly to the tokenizer
+            self._tokenizer.add_tokens(special_tokens)
 
         if self.max_generative_vocab is not None:
             # do a pass over all the data in the dataset
@@ -136,13 +171,101 @@ class TransformerNumericalizer(object):
         self._init()
 
     def grow_vocab(self, tasks):
+        if self._preprocess_special_tokens:
+            # if we're preprocessing special tokens, we cannot extend the vocabulary
+            # if the vocabulary was incomplete during training, tough luck, those words will be subwords all the way
+            # (what do you expect?)
+            return
+
         # add the new special tokens from the task
         for task in tasks:
             self._tokenizer.add_tokens(list(task.special_tokens))
 
-    def get_special_token_mask(self, token_ids):
-        special_tokens_tuple = (self.init_id, self.eos_id, self.pad_id, self.mask_id)
-        return list(map(lambda x: 1 if x in special_tokens_tuple else 0, token_ids))
+    def _build_special_tokens_maps(self, special_tokens):
+        # we automatically construct the mapping from special tokens to the shortest unambiguous
+        # sequence of word-like things
+
+        processed_tokens = dict()
+        # first, split each token into words
+        for original_token in special_tokens:
+            token = original_token
+            prefix = None
+            if token.startswith('@'):
+                prefix = '@ '
+                token = token[1:]
+            elif token.startswith('^^'):
+                prefix = '^^ '
+                token = token[2:]
+
+            # split the token into words
+            parts = re.split('[:._-]', token)
+            if not prefix:
+                # if we don't have a prefix, use the first word as prefix
+                assert len(parts) >= 2
+                prefix = parts[0] + ' '
+                parts = parts[1:]
+            processed_tokens[original_token] = (prefix, parts)
+
+        # words -> token(s) (multiple tokens if a sequence of words is ambiguous)
+        assignment = defaultdict(list)
+        # token -> words
+        reverse_mapping = dict()
+
+        # now greedily assign each token to the shortest end that is not ambiguous
+        for original_token, (prefix, parts) in processed_tokens.items():
+            for i in range(len(parts)-1, -1, -1):
+                attempt = prefix + ' '.join(parts[i:])
+                if attempt in assignment:
+                    # ambiguous, extend everything in the current assignment by one word
+                    for ambiguous_token in assignment[attempt]:
+                        # list of sequences of words mapping to this token
+                        # the first one is the one we have chosen so far, and the others are ambiguous
+                        word_sequences = reverse_mapping[ambiguous_token]
+                        if word_sequences[0] != attempt:
+                            # ambiguous_token is already choosing a word sequence that is not ambiguous with
+                            # original_token, nothing to do, other than to know original_token will need to
+                            # be extended
+                            continue
+                        # extend ambiguous_token by one
+                        ambiguous_prefix, ambiguous_parts = processed_tokens[ambiguous_token]
+                        # assert we still have one word to use to disambiguate
+                        # this works as long as the tokens are not suffix of one another
+                        assert len(word_sequences) < len(ambiguous_parts)
+                        new_words = ambiguous_prefix + ' '.join(ambiguous_parts[len(ambiguous_parts) - len(word_sequences) - 1:])
+                        word_sequences.insert(0, new_words)
+                        # before original_token, ambiguous_token was not ambiguous with any token already
+                        # assigned, so it cannot be ambiguous after we made it longer
+                        assert new_words not in assignment
+                        assignment[new_words] = [ambiguous_token]
+
+                    # mark that attempt is an ambiguous suffix of original_token
+                    assignment[attempt].append(original_token)
+
+                    # don't assign original_token at this step, wait until the next loop cycle
+                    # at the next loop, we'll try again with a longer suffix of original_token
+                    # that way, we check if the token is still ambiguous after we extended everything
+                    # else by one word
+                else:
+                    # yay not ambiguous, time to assign it
+
+                    # construct all word sequences, from the one we chose to the end
+                    word_sequences = [prefix + ' '.join(parts[j:]) for j in range(i, len(parts))]
+                    assignment[attempt] = [original_token]
+                    reverse_mapping[original_token] = word_sequences
+                    break
+
+        # okay we have assigned everything, time to clean up
+        for token, word_sequences in reverse_mapping.items():
+            self._special_tokens_to_word_map.append((token, word_sequences[0]))
+
+    def _build_special_tokens_regexes(self):
+        for token, words in self._special_tokens_to_word_map:
+            # match requiring (at the beginning of the string or preceded by a space (positive lookbehind))
+            # and (at the end of the string or followed by a space (positive lookahead))
+            word_re = re.compile("(^|(?<= ))" + re.escape(words) + "($|(?= ))")
+            self._special_tokens_to_token_regexes.append((word_re, token))
+            token_re = re.compile("(^|(?<= ))" + re.escape(token) + "(^|(?= ))")
+            self._special_tokens_to_word_regexes.append((token_re, words))
 
     def _init(self):
         self.pad_first = self._tokenizer.padding_side == 'left'
@@ -172,6 +295,9 @@ class TransformerNumericalizer(object):
             self.decoder_vocab = None
 
     def encode_single(self, sentence, max_length=-1):
+        if self._preprocess_special_tokens:
+            sentence = self._apply_special_token_preprocessing(sentence)
+
         wp_tokenized = self._tokenizer.tokenize(sentence)
 
         if max_length > -1:
@@ -196,6 +322,23 @@ class TransformerNumericalizer(object):
     def decode(self, tensor):
         return self._tokenizer.convert_ids_to_tokens(tensor)
 
+    def _apply_special_token_preprocessing(self, sentence):
+        for regex, replacement in self._special_tokens_to_word_regexes:
+            sentence = regex.sub(replacement, sentence)
+        return sentence
+
+    def _undo_special_token_preprocessing(self, sentence):
+        for regex, replacement in self._special_tokens_to_token_regexes:
+            sentence = regex.sub(replacement, sentence)
+        return sentence
+
     def reverse(self, batch, field_name=None):
-        return [x.strip() for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True,
-                                                                clean_up_tokenization_spaces=False)]
+        output = []
+
+        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True,
+                                              clean_up_tokenization_spaces=False):
+            if self._preprocess_special_tokens:
+                x = self._undo_special_token_preprocessing(x)
+            output.append(x)
+
+        return output
