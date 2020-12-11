@@ -130,7 +130,18 @@ class BaseAlmondTask(BaseTask):
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
-    
+
+    def postprocess_answer(self, answer):
+        new_tokens = []
+        for token in answer.split():
+            if token.startswith('STRING_'):
+                token = 'QUOTED_' + token
+            elif token.startswith('ENTITY_'):
+                token = 'GENERIC_' + token
+            new_tokens.append(token)
+        new_answer = ' '.join(new_tokens)
+        return new_answer
+
     def preprocess_field(self, sentence, field_name=None):
         if self.override_context and field_name == 'context':
             return self.override_context
@@ -141,11 +152,19 @@ class BaseAlmondTask(BaseTask):
 
         tokens = sentence.split(' ')
         is_program = self._is_program_field(field_name)
+        new_tokens = []
         for token in tokens:
             if is_entity(token) or (is_program and (is_device(token) or is_entity_marker(token))):
-                self.special_tokens.add(token)
+                if token.startswith('QUOTED_STRING_'):
+                    token = token[len('QUOTED_'):]
+                elif token.startswith('GENERIC_ENTITY_'):
+                    token = token[len('GENERIC_'):]
 
-        new_sentence = sentence
+                self.special_tokens.add(token)
+            new_tokens.append(token)
+        tokens = new_tokens
+        new_sentence = ' '.join(tokens)
+
         if self._almond_detokenize_sentence:
             new_sentence = ''
             in_string = False
