@@ -124,18 +124,6 @@ class TransformerNumericalizer(object):
                                                         do_basic_tokenize=False,
                                                         cache_dir=self._cache)
 
-        # ensure that init, eos, unk and pad are set
-        # this method has no effect if the tokens are already set according to the tokenizer class
-        self._tokenizer.add_special_tokens({
-            'bos_token': "<s>",
-            'eos_token': "</s>",
-            'sep_token': "</s>",
-            'unk_token': "<unk>",
-            'pad_token': "<pad>",
-            'mask_token': "<mask>",
-            'cls_token': "<s>",
-        })
-
         special_tokens = []
         for task in tasks:
             special_tokens += list(task.special_tokens)
@@ -163,8 +151,7 @@ class TransformerNumericalizer(object):
             self._decoder_words = [(self._tokenizer.bos_token, self._tokenizer.bos_token_id),
                                    (self._tokenizer.eos_token, self._tokenizer.eos_token_id),
                                    (self._tokenizer.pad_token, self._tokenizer.pad_token_id),
-                                   (self._tokenizer.unk_token, self._tokenizer.unk_token_id),
-                                   (self._tokenizer.mask_token, self._tokenizer.mask_token_id)] + \
+                                   (self._tokenizer.unk_token, self._tokenizer.unk_token_id)] + \
                                   [(word, self._tokenizer.convert_tokens_to_ids(word)) for word, _freq
                                    in decoder_words.most_common(self.max_generative_vocab)]
 

@@ -28,7 +28,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
+import sys
 import torch
 from collections import OrderedDict
 
@@ -113,6 +113,7 @@ def print_results(keys, values, num_print=1):
             v = value[0] if isinstance(value, list) else value
             print(f'{key}: {repr(v)}')
         print()
+    sys.stdout.flush()
 
 
 def validate(task, val_iter, model, numericalizer, args, num_print=10):
