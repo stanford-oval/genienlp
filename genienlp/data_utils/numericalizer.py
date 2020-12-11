@@ -49,12 +49,11 @@ class TransformerNumericalizer(object):
     _special_tokens_to_token_regexes : List[Tuple[re.Pattern, str]]
 
     def __init__(self, pretrained_tokenizer, max_generative_vocab, cache=None,
-                 fix_length=None, preprocess_special_tokens=False):
+                 preprocess_special_tokens=False):
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
         self._cache = cache
         self._tokenizer = None
-        self.fix_length = fix_length
 
         self._preprocess_special_tokens = preprocess_special_tokens
 
@@ -281,25 +280,18 @@ class TransformerNumericalizer(object):
             self.generative_vocab_size = len(self._tokenizer)
             self.decoder_vocab = None
 
-    def encode_single(self, sentence, max_length=-1):
+    def encode_single(self, sentence):
         if self._preprocess_special_tokens:
             sentence = self._apply_special_token_preprocessing(sentence)
 
-        wp_tokenized = self._tokenizer.tokenize(sentence)
+        encoded = self._tokenizer.encode_plus(sentence, add_special_tokens=True, max_length=None,
+                                              return_length=True, padding=False)
 
-        if max_length > -1:
-            max_len = max_length
-        elif self.fix_length is None:
-            max_len = len(wp_tokenized)
-        else:
-            max_len = self.fix_length
+        numerical = encoded.data['input_ids']
+        length = encoded.data['length']
 
-        example = [self.init_token] + list(wp_tokenized[:max_len]) + [self.eos_token]
-        length = len(example)
-        numerical = self._tokenizer.convert_tokens_to_ids(example)
         if self.decoder_vocab:
-            decoder_numerical = [self.decoder_vocab.encode(word, full_idx) for word, full_idx
-                                 in zip(example, numerical)]
+            decoder_numerical = self.decoder_vocab.encode(numerical)
         else:
             decoder_numerical = []
 

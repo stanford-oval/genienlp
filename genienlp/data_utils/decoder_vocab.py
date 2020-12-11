@@ -32,24 +32,26 @@ class DecoderVocabulary(object):
         self.full_vocab = full_vocab
         self.pad_token = pad_token
         self.eos_token = eos_token
-        self.itos = words
-        self.stoi = {word: idx for idx, (word, full_idx) in enumerate(words)}
-        self.limited_to_full = {self.stoi[word]: full_idx for word, full_idx in words}
-        self.pad_idx = self.stoi[pad_token]
-        self.eos_idx = self.stoi[eos_token]
+        stoi = {word: idx for idx, (word, full_idx) in enumerate(words)}
+        self.limited_to_full = {stoi[word]: full_idx for word, full_idx in words}
+        self.full_to_limited = {full_idx: stoi[word] for word, full_idx in words}
+        self.pad_idx = stoi[pad_token]
+        self.eos_idx = stoi[eos_token]
 
     def __len__(self):
-        return len(self.itos)
+        return len(self.limited_to_full)
 
-    def encode(self, word, full_idx):
-        if word in self.stoi:
-            lim_idx = self.stoi[word]
-        else:
-            lim_idx = len(self)
-            self.itos.append(word)
-            self.stoi[word] = lim_idx
-            self.limited_to_full[lim_idx] = full_idx
-        return lim_idx
+    def encode(self, full_idx_list):
+        limited_list = []
+        for full_idx in full_idx_list:
+            if full_idx in self.full_to_limited:
+                lim_idx = self.full_to_limited[full_idx]
+            else:
+                lim_idx = len(self)
+                self.limited_to_full[lim_idx] = full_idx
+                self.full_to_limited[full_idx] = lim_idx
+            limited_list.append(lim_idx)
+        return limited_list
 
     def decode(self, lim_idx):
         return self.limited_to_full[lim_idx]
