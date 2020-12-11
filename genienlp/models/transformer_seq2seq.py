@@ -59,7 +59,7 @@ class TransformerSeq2Seq(GenieModel):
             pad = self.numericalizer._tokenizer.pad_token_id
             source_ids, source_mask, answer = batch.context.value, batch.context.value != pad, batch.answer.value
             decoder_input_ids = answer[:, :-1].contiguous()
-            if self.model.config.decoder_start_token_id:
+            if self.model.config.decoder_start_token_id is not None:
                 decoder_input_ids[:, 0] = self.model.config.decoder_start_token_id
             labels = answer[:, 1:].clone()
             labels[answer[:, 1:] == pad] = -100
