@@ -139,7 +139,7 @@ def prepare_data(args, logger):
         val_sets.append(split.eval)
         
         if getattr(task, 'bootleg', None):
-            if task.bootleg.bootleg_load_prepped_data:
+            if args.bootleg_load_prepped_data:
                 emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
                 if args.use_curriculum:
                     emb_file_list += ['aux']

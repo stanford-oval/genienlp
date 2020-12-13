@@ -36,6 +36,7 @@ import subprocess
 
 from .tasks.registry import get_tasks
 from .util import have_multilingual
+from .data_utils.example import VALID_FEATURE_FIELDS
 from .paraphrase.transformers_utils import BART_MODEL_LIST, MBART_MODEL_LIST, MT5_MODEL_LIST
 
 
@@ -200,10 +201,10 @@ def parse_argv(parser):
     
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
-    parser.add_argument('--features', nargs='+', type=str, default=['type', 'freq'], help='Features that will be extracted for each entity: "type" and "freq" are supported.'
+    parser.add_argument('--features', nargs='+', type=str, default=['type_ids', 'type_prob', 'word_freq'], help='Features that will be extracted for each entity.'
                                                                         ' Order is important')
-    parser.add_argument('--features_size', nargs='+', type=int, default=[1, 1], help='Max length of each feature vector. All features are padded up to this length')
-    parser.add_argument('--features_default_val', nargs='+', type=float, default=[0, 1.0], help='Max length of each feature vector. All features are padded up to this length')
+    parser.add_argument('--features_size', nargs='+', type=int, default=[1, 1, 1], help='Max length of each feature vector. All features are padded up to this length')
+    parser.add_argument('--features_default_val', nargs='+', type=float, default=[26933, 1.0, 1.0], help='Max length of each feature vector. All features are padded up to this length')
 
     parser.add_argument('--encoder_embeddings', default=None,
                         help='which word embedding to use on the encoder side; use `glove+char`, a bert-* model for pretrained BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
@@ -288,6 +289,9 @@ def parse_argv(parser):
 
 
 def post_parse_general(args):
+    for feat in args.features:
+        if feat not in VALID_FEATURE_FIELDS:
+            raise ValueError('Feature {} is not supported. Please provide valide features from {} list'.format(feat, VALID_FEATURE_FIELDS))
     
     if args.val_task_names is None:
         args.val_task_names = []

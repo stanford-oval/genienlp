@@ -142,21 +142,20 @@ class AlmondDataset(CQA):
                 
                 # find the right entity candidate for each mention
                 # extract type ids for each token in input sentence
-                all_token_type_ids, all_tokens_type_probs = bootleg.disambiguate_mentions(config_args, input_file_name[:-len('_bootleg.jsonl')],
-                                                                                          type_size=features_size[0], type_default_val=int(features_default_val[0]))
+                all_token_type_ids, all_tokens_type_probs = bootleg.disambiguate_mentions(config_args, input_file_name[:-len('_bootleg.jsonl')])
                 
                 # override examples features with bootleg features
                 assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
                 for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
                     if bootleg.is_contextual:
                         for i in range(len(tokens_type_ids)):
-                            examples[n].question_feature[i] = ex.question_feature[i]._replace(type_ids=tokens_type_ids[i], token_freq=tokens_type_probs[i])
-                            examples[n].context_plus_question_feature[i + len(ex.context)] = ex.context_plus_question_feature[i + len(ex.context)]._replace(type_ids=tokens_type_ids[i], token_freq=tokens_type_probs[i])
+                            examples[n].question_feature[i] = ex.question_feature[i]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
+                            examples[n].context_plus_question_feature[i + len(ex.context)] = ex.context_plus_question_feature[i + len(ex.context)]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
                             
                     else:
                         for i in range(len(tokens_type_ids)):
-                            examples[n].context_feature[i] = ex.context_feature[i]._replace(type_ids=tokens_type_ids[i], token_freq=tokens_type_probs[i])
-                            examples[n].context_plus_question_feature[i] = ex.context_plus_question_feature[i]._replace(type_ids=tokens_type_ids[i], token_freq=tokens_type_probs[i])
+                            examples[n].context_feature[i] = ex.context_feature[i]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
+                            examples[n].context_plus_question_feature[i] = ex.context_plus_question_feature[i]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
                             
                 if verbose:
                     print()
@@ -256,7 +255,7 @@ class BaseAlmondTask(BaseTask):
         #         es_dump_canonical2type(self.db)
 
     def _init_bootleg(self):
-        self.bootleg = Bootleg(self.args, self.unk_id, self.is_contextual())
+        self.bootleg = Bootleg(self.args, self.is_contextual())
 
     def is_contextual(self):
         return NotImplementedError
@@ -371,7 +370,7 @@ class BaseAlmondTask(BaseTask):
     
         return tokens_type_ids
 
-    def find_types(self, tokens, answer):
+    def find_type_ids(self, tokens, answer):
         tokens_type_ids = []
 
         if self.args.database_type == 'json':
@@ -386,7 +385,7 @@ class BaseAlmondTask(BaseTask):
 
         return tokens_type_ids
     
-    def find_freqs(self, tokens, tokens_type_ids):
+    def find_word_freqs(self, tokens, tokens_type_ids):
         token_freqs = []
         
         for token, token_type_id in zip(tokens, tokens_type_ids):
@@ -394,6 +393,10 @@ class BaseAlmondTask(BaseTask):
                 token_freqs.append([1.0] * self.args.features_size[1])
             else:
                 token_freqs.append([1.0 / (zipf_frequency(token, 'en') + 1e-3)] * self.args.features_size[1])
+        return token_freqs
+
+    def find_type_probs(self, tokens, default_val):
+        token_freqs = [default_val] * len(tokens)
         return token_freqs
 
     def tokenize(self, sentence, field_name=None, answer=None):
@@ -427,15 +430,23 @@ class BaseAlmondTask(BaseTask):
 
         else:
             mask = [not is_entity(token) and not is_device(token) for token in tokens]
-            
-        tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokens))]
-        tokens_freqs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(len(tokens))]
+
+        tokens_type_ids, tokens_type_probs, tokens_word_freqs = None, None, None
+        
+        if 'type_id' in self.args.features:
+            tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokens))]
+        if 'type_prob' in self.args.features:
+            tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(len(tokens))]
+        if 'word_freq' in self.args.features:
+            tokens_word_freqs = [[self.args.features_default_val[2]] * self.args.features_size[2] for _ in range(len(tokens))]
 
         if self.args.do_ner and self.bootleg is None and field_name not in self.no_feature_fields:
-            if 'type' in self.args.features:
-                tokens_type_ids = self.find_types(tokens, answer)
-            if 'freq' in self.args.features:
-                tokens_freqs = self.find_freqs(tokens, tokens_type_ids)
+            if 'type_id' in self.args.features:
+                tokens_type_ids = self.find_type_ids(tokens, answer)
+            if 'type_prob' in self.args.features:
+                tokens_type_probs = self.find_type_probs(tokens, self.args.features_size[1])
+            if 'word_freq' in self.args.features:
+                tokens_word_freqs = self.find_word_freqs(tokens, tokens_type_ids)
                 
             if self.args.verbose and self.args.do_ner:
                     print()
@@ -445,9 +456,12 @@ class BaseAlmondTask(BaseTask):
         if tokens_type_ids:
             assert len(tokens) == len(tokens_type_ids)
             zip_list.append(tokens_type_ids)
-        if tokens_freqs:
-            assert len(tokens) == len(tokens_freqs)
-            zip_list.append(tokens_freqs)
+        if tokens_type_probs:
+            assert len(tokens) == len(tokens_type_probs)
+            zip_list.append(tokens_type_probs)
+        if tokens_word_freqs:
+            assert len(tokens) == len(tokens_word_freqs)
+            zip_list.append(tokens_word_freqs)
         features = [Feature(*tup) for tup in zip(*zip_list)]
         
         return tokens, mask, features

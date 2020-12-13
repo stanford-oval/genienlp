@@ -149,12 +149,24 @@ class Transformer2LSTM(PreTrainedModel):
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
 
     def _init_embeddings_from_data(self, args, vocab_sets, is_loading):
+        
+        if args.do_ner and args.retrieve_method == 'bootleg' and args.bootleg_integration == 2:
+            # use unmodified transformer models (i.e. without entity embedding layer)
+            num_db_types = 0
+            db_unk_id = 0
+        else:
+            num_db_types = int(args.num_db_types)
+            db_unk_id = int(args.features_default_val[0])
+        
         numericalizer, context_embeddings, question_embeddings, decoder_embeddings = \
         load_embeddings(args.embeddings,
                         args.context_embeddings,
                         args.question_embeddings,
                         args.decoder_embeddings,
-                        args.max_generative_vocab)
+                        args.max_generative_vocab,
+                        num_db_types=num_db_types,
+                        db_unk_id=db_unk_id
+                        )
         if not is_loading:
             logger.info(f'Building vocabulary')
             numericalizer.build_vocab(Example.vocab_fields, vocab_sets)

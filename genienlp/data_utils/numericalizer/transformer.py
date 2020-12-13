@@ -161,10 +161,14 @@ class TransformerNumericalizer(object):
         for wp_tokens, wp_features in zip(all_wp_tokenized, all_wp_features):
             ex_features = []
             wp_features_unpacked = list(zip(*wp_features))
+            
             example = [self.init_token] + \
                           list(wp_tokens[:max_len]) + \
                           [self.eos_token]
             for i, wp_feature in enumerate(wp_features_unpacked):
+                # filter out all None features
+                if all([feat is None for feat in wp_feature]):
+                    continue
                 padded_features_example = [[features_default_val[i]] * features_size[i]] + \
                                           list(wp_feature[:max_len]) + \
                                           [[features_default_val[i]] * features_size[i]]

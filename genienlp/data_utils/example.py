@@ -35,10 +35,12 @@ from typing import Callable
 
 from .numericalizer.sequential_field import SequentialField
 
-
 class Feature(NamedTuple):
-    type_ids: List[float]
-    token_freq: List[float]
+    type_id: List[int] = None
+    type_prob: List[float] = None
+    word_freq: List[float] = None
+    
+VALID_FEATURE_FIELDS = tuple(Feature._fields)
 
 class Example(NamedTuple):
     example_id: str
@@ -86,10 +88,10 @@ def get_default_fields(text, features, features_size, features_default_val):
     text_mask = [True for _ in text]
     # dummy values
     zip_list = []
-    if 'type' in features:
-        zip_list.append([[features_default_val[0]] * features_size[0] for _ in range(len(text))])
-    if 'freq' in features:
-        zip_list.append([[features_default_val[1]] * features_size[0] for _ in range(len(text))])
+    for feat in features:
+        index = VALID_FEATURE_FIELDS.index(feat)
+        zip_list.append([[features_default_val[index]] * features_size[index] for _ in range(len(text))])
+
     text_feature = [Feature(*tup) for tup in zip(*zip_list)]
     
     return text, text_mask, text_feature

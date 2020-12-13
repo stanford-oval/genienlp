@@ -10,9 +10,8 @@ from ..util import reverse_bisect_left
 
 class Bootleg(object):
     
-    def __init__(self, args, unk_id, is_contextual):
+    def __init__(self, args, is_contextual):
         self.args = args
-        self.unk_id = int(unk_id)
         self.is_contextual = is_contextual
         
         self.model = f'{self.args.bootleg_input_dir}/{self.args.bootleg_model}'
@@ -42,8 +41,8 @@ class Bootleg(object):
              "--data_config.emb_dir", self.embed_dir,
              "--data_config.alias_cand_map", 'alias2qids_wiki.json',
              "--data_config.word_embedding.cache_dir", self.pretrained_bert,
-             '--run_config.dataset_threads', self.args.bootleg_dataset_threads,
-             '--run_config.dataloader_threads', self.args.bootleg_dataloader_threads
+             '--run_config.dataset_threads', str(self.args.bootleg_dataset_threads),
+             '--run_config.dataloader_threads', str(self.args.bootleg_dataloader_threads)
         ]
         
     
@@ -74,7 +73,7 @@ class Bootleg(object):
             tokens += [pad_id] * (max_size - len(tokens))
         return tokens
 
-    def disambiguate_mentions(self, config_args, file_name, type_size, type_default_val):
+    def disambiguate_mentions(self, config_args, file_name):
         if not self.args.bootleg_load_prepped_data:
             run.main(config_args, self.args.bootleg_dump_mode)
         
@@ -87,8 +86,8 @@ class Bootleg(object):
             for i, line in enumerate(fin):
                 line = ujson.loads(line)
                 tokenized = line['sentence'].split(' ')
-                tokens_type_ids = [[self.unk_id] * type_size for _ in range(len(tokenized))]
-                tokens_type_probs = [[0.0] * type_size for _ in range(len(tokenized))]
+                tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokenized))]
+                tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(len(tokenized))]
         
                 if self.args.bootleg_integration == 2:
                     # we only have ctx_emb_ids for top candidates
@@ -104,8 +103,8 @@ class Bootleg(object):
                         type_ids = [ctx_emb_id]
                         type_probs = [prob]
                 
-                        padded_type_ids = self.pad_features(type_ids, type_size, type_default_val)
-                        padded_type_probs = self.pad_features(type_probs, type_size, 0.0)
+                        padded_type_ids = self.pad_features(type_ids, self.args.features_size[0], self.args.features_default_val[0])
+                        padded_type_probs = self.pad_features(type_probs, self.args.features_size[1], self.args.features_default_val[1])
                 
                         tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
                         tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
@@ -131,8 +130,8 @@ class Bootleg(object):
                                 type_ids.append(type_id)
                                 type_probs.append(prob)
                             
-                        padded_type_ids = self.pad_features(type_ids, type_size, type_default_val)
-                        padded_type_probs = self.pad_features(type_probs, type_size, 0.0)
+                        padded_type_ids = self.pad_features(type_ids, self.args.features_size[0], self.args.features_default_val[0])
+                        padded_type_probs = self.pad_features(type_probs, self.args.features_size[1], self.args.features_default_val[1])
                         
                         tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
                         tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
@@ -151,8 +150,8 @@ class Bootleg(object):
     def merge_embeds(self, file_list):
         all_emb_data = []
         for file_name in file_list:
-            emb_dir = f'{self.args.bootleg_output_dir}/{file_name}_bootleg/eval/{self.args.bootleg_model}'
-            with open(f'{emb_dir}/bootleg_embs.npy', 'rb') as fin:
+            emb_file = f'{self.args.bootleg_output_dir}/{file_name}_bootleg/eval/{self.args.bootleg_model}/bootleg_embs.npy'
+            with open(emb_file, 'rb') as fin:
                 emb_data = np.load(fin)
                 all_emb_data.append(emb_data)
 

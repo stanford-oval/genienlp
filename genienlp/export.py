@@ -57,10 +57,10 @@ def main(args):
                                              args.context_embeddings,
                                              args.question_embeddings,
                                              args.decoder_embeddings,
-                                             args.max_generative_vocab,
-                                             args.num_db_types,
-                                             args.db_unk_id,
-                                             logger)
+                                             max_generative_vocab=args.max_generative_vocab,
+                                             num_db_types=int(args.num_db_types),
+                                             db_unk_id=int(args.db_unk_id),
+                                             )
 
     # load the numericalizer from the model training directory, and immediately save it in the export directory
     # this will copy over all the necessary vocabulary and config files that the numericalizer needs

@@ -76,8 +76,11 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4, help='Number of kg encoder layers for BootlegBertEncoder model')
     parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_embs',
                         help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
-    parser.add_argument('--bootleg_batch_size', type=int, default=30,
-                        help='Batch size used for inference using bootleg')
+    parser.add_argument('--bootleg_batch_size', type=int, default=30, help='Batch size used for inference using bootleg')
+    parser.add_argument('--bootleg_prob_threshold', type=float, default=0.3, help='Probability threshold for accepting a candidate for a mention')
+    parser.add_argument('--bootleg_dataset_threads', type=int, default=1, help='Number of threads for parallel processing of dataset in bootleg')
+    parser.add_argument('--bootleg_dataloader_threads', type=int, default=4, help='Number of threads for parallel loading of datasets in bootleg')
+    
     parser.add_argument('--bootleg_integration', type=int, choices=[1, 2],
                         help='In level 1 we extract types for top Qid candidates and feed it to the bottom of Encoder using an entity embedding layer'
                              'In level 2 we use bootleg entity embeddings directly by concatenating it with Encoder output representations')
