@@ -44,7 +44,7 @@ from .numericalizer.transformer import BertNumericalizer, XLMRobertaNumericalize
 from .almond_embeddings import AlmondEmbeddings
 from .pretrained_lstm_lm import PretrainedLTSMLM
 from ..models.common import Feedforward
-from ..paraphrase.transformers_utils import BertModelV2, XLMRobertaModelV2
+from ..paraphrase.transformers_utils import BertModelForNER, XLMRobertaModelForNER
 
 
 logger = logging.getLogger(__name__)
@@ -258,13 +258,13 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
 
             if emb_type in BERT_PRETRAINED_MODEL_ARCHIVE_LIST:
-                transformer_model = BertModelV2(config, num_db_types, db_unk_id).from_pretrained(emb_type,
+                transformer_model = BertModelForNER(config, num_db_types, db_unk_id).from_pretrained(emb_type,
                                                                                                  num_db_types=num_db_types,
                                                                                                  db_unk_id=db_unk_id,
                                                                                                  cache_dir=cachedir,
                                                                                                  output_hidden_states=True)
             elif emb_type in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST:
-                transformer_model = XLMRobertaModelV2(config, num_db_types, db_unk_id).from_pretrained(emb_type,
+                transformer_model = XLMRobertaModelForNER(config, num_db_types, db_unk_id).from_pretrained(emb_type,
                                                                                                      num_db_types=num_db_types,
                                                                                                      db_unk_id=db_unk_id,
                                                                                                      cache_dir=cachedir,
@@ -303,13 +303,13 @@ def load_embeddings(cachedir, context_emb_names, question_emb_names, decoder_emb
             AutoTokenizer.from_pretrained(emb_type, cache_dir=cachedir)
 
             if emb_type in BERT_PRETRAINED_MODEL_ARCHIVE_LIST:
-                transformer_model = BertModelV2(config, num_db_types, db_unk_id).from_pretrained(emb_type,
+                transformer_model = BertModelForNER(config, num_db_types, db_unk_id).from_pretrained(emb_type,
                                                                                                  num_db_types=num_db_types,
                                                                                                  db_unk_id=db_unk_id,
                                                                                                  cache_dir=cachedir,
                                                                                                  output_hidden_states=True)
             elif emb_type in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST:
-                transformer_model = XLMRobertaModelV2(config, num_db_types, db_unk_id).from_pretrained(emb_type,
+                transformer_model = XLMRobertaModelForNER(config, num_db_types, db_unk_id).from_pretrained(emb_type,
                                                                                                      num_db_types=num_db_types,
                                                                                                      db_unk_id=db_unk_id,
                                                                                                      cache_dir=cachedir,

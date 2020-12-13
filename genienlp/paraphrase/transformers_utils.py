@@ -336,7 +336,7 @@ class GenieMT5ForConditionalGeneration(MT5ForConditionalGeneration, GeniePreTrai
 
 ###############
 
-class BertEmbeddingsV2(BertEmbeddings):
+class BertEmbeddingsForNER(BertEmbeddings):
     """Construct the embeddings from word, position, token_type, and entity_type embeddings.
     """
 
@@ -393,7 +393,7 @@ class BertEmbeddingsV2(BertEmbeddings):
         embeddings = self.dropout(embeddings)
         return embeddings
 
-class BertModelV2(BertModel):
+class BertModelForNER(BertModel):
     """
     Subcalss of BertModel model with an additional entity type embedding layer at the bottom
     """
@@ -401,7 +401,7 @@ class BertModelV2(BertModel):
     def __init__(self, config, num_db_types, db_unk_id):
         super().__init__(config)
 
-        self.embeddings = BertEmbeddingsV2(config, num_db_types, db_unk_id)
+        self.embeddings = BertEmbeddingsForNER(config, num_db_types, db_unk_id)
         self.init_weights()
 
     def forward(
@@ -492,7 +492,7 @@ class BertModelV2(BertModel):
 
 ###############
 
-class RobertaEmbeddingsV2(BertEmbeddingsV2):
+class RobertaEmbeddingsForNER(BertEmbeddingsForNER):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing and adding entity_types.
     """
@@ -532,7 +532,7 @@ class RobertaEmbeddingsV2(BertEmbeddingsV2):
         )
         return position_ids.unsqueeze(0).expand(input_shape)
 
-class XLMRobertaModelV2(BertModelV2):
+class XLMRobertaModelForNER(BertModelForNER):
     """
     Subcalss of XLMRobertaModel model with an additional entity type embedding layer at the bottom
     """
@@ -543,7 +543,7 @@ class XLMRobertaModelV2(BertModelV2):
     def __init__(self, config, num_db_types, db_unk_id):
         super().__init__(config, num_db_types, db_unk_id)
 
-        self.embeddings = RobertaEmbeddingsV2(config, num_db_types, db_unk_id)
+        self.embeddings = RobertaEmbeddingsForNER(config, num_db_types, db_unk_id)
         self.init_weights()
 
     def get_input_embeddings(self):
