@@ -25,6 +25,12 @@ sentencepiece = "==0.1.91"
 mosestokenizer = '~=1.1'
 matplotlib = '~=3.1'
 seaborn = '~=0.9'
+nltk = '~=3.4'
+pytrie = '==0.3.1'
+wordfreq = '==2.3.2'
+elasticsearch = '==7.9.1'
+ujson = '==1.35'
+marisa_trie = '==0.7.5'
 
 [requires]
 python_version = "3.8"
