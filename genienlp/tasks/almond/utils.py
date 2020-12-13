@@ -1,5 +1,5 @@
 import re
-from tqdm import tqdm
+from ...data_utils.progbar import progress_bar
 
 quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
 device_pattern = re.compile(r'\s@([\w\.]+)\s')
@@ -84,7 +84,7 @@ def process(args):
     
     batch = []
     last_batch = False
-    for i, line in tqdm(enumerate(open(path, 'r', encoding='utf-8')), total=chunk_size):
+    for i, line in progress_bar(enumerate(open(path, 'r', encoding='utf-8')), desc='Reading dataset'):
         parts = line.strip().split('\t')
         batch.append(parts)
         if len(chunk_examples) + example_batch_size > chunk_size:
