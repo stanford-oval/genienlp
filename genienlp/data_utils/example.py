@@ -81,15 +81,15 @@ class Example(NamedTuple):
         
         return Example(*args)
     
-def get_default_fields(text, features, features_size, db_unk_id):
+def get_default_fields(text, features, features_size, features_default_val):
     text = text.split()
     text_mask = [True for _ in text]
     # dummy values
     zip_list = []
     if 'type' in features:
-        zip_list.append([[db_unk_id] * features_size[0] for _ in range(len(text))])
+        zip_list.append([[features_default_val[0]] * features_size[0] for _ in range(len(text))])
     if 'freq' in features:
-        zip_list.append([[1.0] * features_size[0] for _ in range(len(text))])
+        zip_list.append([[features_default_val[1]] * features_size[0] for _ in range(len(text))])
     text_feature = [Feature(*tup) for tup in zip(*zip_list)]
     
     return text, text_mask, text_feature
@@ -115,12 +115,12 @@ class NumericalizedExamples(NamedTuple):
         override_question_mask = None
         if override_question:
             override_question, override_question_mask, override_question_feature = \
-                get_default_fields(override_question, features, features_size, db_unk_id)
+                get_default_fields(override_question, features, features_size, features_default_val)
 
         override_context_mask = None
         if override_context:
             override_context, override_context_mask, override_context_feature = \
-                get_default_fields(override_context, features, features_size, db_unk_id)
+                get_default_fields(override_context, features, features_size, features_default_val)
 
         if paired:
             example_pairs = []
