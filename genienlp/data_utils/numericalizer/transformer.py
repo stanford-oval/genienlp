@@ -452,13 +452,13 @@ class Seq2SeqNumericalizer(TransformerNumericalizer):
     def build_vocab(self, vocab_fields, vocab_sets):
         raise NotImplementedError
 
-    def encode_single(self, minibatch, decoder_vocab, max_length=-1):
+    def encode_single(self, minibatch, decoder_vocab, features_size, features_default_val, max_length=-1):
         """
         minibatch: this method ignores the `mask` component of minibatch
         """
         assert isinstance(minibatch, list)
         batch_tokens = []
-        for tokens, mask in minibatch:
+        for tokens, mask, feature in minibatch:
             if len(tokens) == 0:
                 batch_tokens.append(' ')
             else:
@@ -469,8 +469,12 @@ class Seq2SeqNumericalizer(TransformerNumericalizer):
         length = [len(a) for a in encoded_batch['input_ids']]
 
         decoder_numerical = numerical
+        
+        # dummy feature
+        features = list(np.zeros([len(numerical), max(length), sum(features_size)]))
+        
 
-        return SequentialField(length=length, value=numerical, limited=decoder_numerical)
+        return SequentialField(length=length, value=numerical, limited=decoder_numerical, feature=features)
 
     def encode_pair(self, minibatch, decoder_vocab):
         # TODO

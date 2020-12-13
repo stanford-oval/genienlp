@@ -29,6 +29,7 @@
 
 import os
 import torch
+import numpy as np
 from torch.nn.utils.rnn import pad_sequence
 
 from .vocab import Vocab
@@ -119,7 +120,7 @@ class SimpleNumericalizer(object):
         return list(map(lambda x: 1 if x in special_tokens_tuple else 0, tensor))
 
 
-    def encode_single(self, minibatch, decoder_vocab, max_length=-1, db_unk_id=0):
+    def encode_single(self, minibatch, decoder_vocab, features_size, features_default_val, max_length=-1):
         assert isinstance(minibatch, list)
         
         if max_length > -1:
@@ -140,11 +141,14 @@ class SimpleNumericalizer(object):
             example = [self.init_token] + \
                           list(tokens[:max_len]) + \
                           [self.eos_token]
-            for feature in ex_features_unpacked:
-                feature_padded = [db_unk_id] + \
-                           list(feature[:max_len]) + \
-                           [db_unk_id]
-                ex_features.append(feature_padded)
+            for i, feature in enumerate(ex_features_unpacked):
+                # filter out all None features
+                if all([feat is None for feat in wp_feature]):
+                    continue
+                padded_features_example = [[features_default_val[i]] * features_size[i]] + \
+                                          list(feature[:max_len]) + \
+                                          [[features_default_val[i]] * features_size[i]]
+                ex_features.append(padded_features_example)
 
             padded.append(example)
             lengths.append(len(example))
@@ -152,6 +156,11 @@ class SimpleNumericalizer(object):
 
             numericals.append([self.vocab.stoi[word] for word in example])
             decoder_numerical.append([decoder_vocab.encode(word) for word in example])
+        
+        # concat all features
+        all_features = []
+        for token_features in features:
+            all_features.append(np.concatenate(token_features, axis=-1))
 
         return SequentialField(length=lengths, value=numericals, limited=decoder_numerical, feature=features)
 
