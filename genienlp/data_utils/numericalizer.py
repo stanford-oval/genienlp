@@ -218,7 +218,7 @@ class TransformerNumericalizer(object):
                         ambiguous_prefix, ambiguous_parts = processed_tokens[ambiguous_token]
                         # assert we still have one word to use to disambiguate
                         # this works as long as the tokens are not suffix of one another
-                        assert len(word_sequences) < len(ambiguous_parts)
+                        assert len(word_sequences) < len(ambiguous_parts), (original_token, ambiguous_token, word_sequences)
                         new_words = ambiguous_prefix + ' '.join(ambiguous_parts[len(ambiguous_parts) - len(word_sequences) - 1:])
                         word_sequences.insert(0, new_words)
                         # before original_token, ambiguous_token was not ambiguous with any token already
