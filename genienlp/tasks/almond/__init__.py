@@ -256,10 +256,7 @@ class BaseAlmondTask(BaseTask):
         #         es_dump_canonical2type(self.db)
 
     def _init_bootleg(self):
-        self.bootleg = Bootleg(self.args.bootleg_input_dir, self.args.bootleg_output_dir, self.args.bootleg_model,
-                               self.unk_id, self.args.num_workers, self.is_contextual(),
-                               self.args.bootleg_load_prepped_data, self.args.bootleg_dump_mode,
-                               self.args.bootleg_batch_size, self.args.bootleg_integration)
+        self.bootleg = Bootleg(self.args, self.unk_id, self.is_contextual())
 
     def is_contextual(self):
         return NotImplementedError

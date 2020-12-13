@@ -60,7 +60,7 @@ class Server:
     def numericalize_examples(self, ex):
         self.model.add_new_vocab_from_data([[ex]])
 
-        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer, device=self.device,
+        all_numericalized = NumericalizedExamples.from_examples(ex, self.numericalizer, device=self.device,
                                    append_question_to_context_too=self.args.append_question_to_context_too,
                                    override_question=self.args.override_question,
                                    override_context=self.args.override_context,
@@ -70,12 +70,12 @@ class Server:
                                    )
 
         all_f = []
-        for i in range(len(all_features.example_id)):
-            all_f.append(NumericalizedExamples(example_id=[all_features.example_id[i]],
-                                context=SequentialField(value=all_features.context.value[i], length=all_features.context.length[i], limited=all_features.context.limited[i]),
-                                question=SequentialField(value=all_features.question.value[i], length=all_features.question.length[i], limited=all_features.question.limited[i]),
-                                answer=SequentialField(value=all_features.answer.value[i], length=all_features.answer.length[i], limited=all_features.answer.limited[i]),
-                                decoder_vocab=all_features.decoder_vocab, device=self.device, padding_function=self.numericalizer.pad))
+        for i in range(len(all_numericalized.example_id)):
+            all_f.append(NumericalizedExamples(example_id=[all_numericalized.example_id[i]],
+                                context=SequentialField(value=all_numericalized.context.value[i], length=all_numericalized.context.length[i], limited=all_numericalized.context.limited[i], feature=all_numericalized.context.feature[i]),
+                                question=SequentialField(value=all_numericalized.question.value[i], length=all_numericalized.question.length[i], limited=all_numericalized.question.limited[i], feature=all_numericalized.question.feature[i]),
+                                answer=SequentialField(value=all_numericalized.answer.value[i], length=all_numericalized.answer.length[i], limited=all_numericalized.answer.limited[i], feature=all_numericalized.answer.feature[i]),
+                                decoder_vocab=all_numericalized.decoder_vocab, device=self.device, padding_function=self.numericalizer.pad))
 
         # batch of size 1
         return NumericalizedExamples.collate_batches(all_f)
@@ -193,6 +193,11 @@ def parse_argv(parser):
 def main(args):
     load_config_json(args)
     set_seed(args)
+    
+    if args.do_ner and args.retrieve_method == 'bootleg':
+        # instantiate the annotator class
+        pass
+        
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
