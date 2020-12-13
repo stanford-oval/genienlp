@@ -702,10 +702,13 @@ def load_config_json(args):
                     'pretrain_context', 'pretrain_mlm_probability', 'force_subword_tokenize',
                     'append_question_to_context_too', 'almond_preprocess_context', 'almond_dataset_specific_preprocess',
                     'almond_lang_as_question', 'almond_has_multiple_programs',
+                    'use_encoder_loss', 'num_workers',
                     'override_question', 'override_context',
-                    'do_ner', 'database_type', 'elastic_config', 'min_entity_len', 'max_entity_len',
-                    'retrieve_method', 'lookup_method', 'almond_domains', 'features',
-                    'num_db_types', 'db_unk_id', 'use_encoder_loss']
+                    'do_ner', 'database_type', 'elastic_config', 'min_entity_len', 'max_entity_len', 'entity_type_agg_method',
+                    'num_db_types', 'db_unk_id', 'retrieve_method', 'lookup_method', 'almond_domains',
+                    'features', 'features_size', 'features_default_val',
+                    'bootleg_input_dir', 'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size', 'bootleg_kg_encoder_layer',
+                    'bootleg_integration', 'bootleg_load_prepped_data', 'bootleg_dump_mode']
 
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
@@ -736,7 +739,10 @@ def load_config_json(args):
                 
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
-            
+                
+            elif r in ['features', 'features_size', 'features_default_val']:
+                setattr(args, r, [])
+                
             elif r == 'database_type':
                 setattr(args, r, 'json')
             elif r == 'elastic_config':
@@ -752,8 +758,6 @@ def load_config_json(args):
             elif r == 'lookup_method':
                 setattr(args, r, 'ngrams')
             elif r == 'almond_domains':
-                setattr(args, r, [])
-            elif r == 'features':
                 setattr(args, r, [])
             elif r == 'locale':
                 setattr(args, r, 'en')

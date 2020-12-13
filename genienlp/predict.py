@@ -39,6 +39,9 @@ import re
 
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
+
+from .tasks.almond.utils import quoted_pattern_maybe_space
+
 try:
      set_start_method('spawn')
 except RuntimeError:
@@ -72,11 +75,17 @@ def get_all_splits(args):
         else:
             raise ValueError('Split used for prediction should be either valid or test')
         
-        kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
-                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages,
-                       'almond_lang_as_question': args.almond_lang_as_question})
+        kwargs.update({'skip_cache': args.skip_cache,
+                       'subsample': args.subsample,
+                       'cached_path': os.path.join(args.cache, task.name),
+                       'all_dirs': task_languages,
+                       'almond_lang_as_question': args.almond_lang_as_question,
+                       'num_workers': args.num_workers,
+                       'features_size': args.features_size,
+                       'features_default_val': args.features_default_val,
+                       'verbose': args.verbose,
+                       'separate_eval': args.separate_eval})
         
-        kwargs['separate_eval'] = args.separate_eval
         task_splits = task.get_splits(root=args.data, lower=args.lower, **kwargs)
         if not isinstance(task_splits, list):
             task_splits = [task_splits]
@@ -102,6 +111,7 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
             'append_question_to_context_too': args.append_question_to_context_too,
             'override_question': args.override_question,
             'override_context': args.override_context,
+            'return_original_order': True,
             'features': args.features,
             'features_size': args.features_size,
             'features_default_val': args.features_default_val
@@ -112,15 +122,11 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
             for index, set_ in enumerate(val_set):
-                loader, original_order = make_data_loader(set_, numericalizer, bs, device, train=False,
-                                          append_question_to_context_too=args.append_question_to_context_too,
-                                          override_question=args.override_question, override_context=args.override_context, return_original_order=True)
+                loader, original_order = make_data_loader(set_, numericalizer, bs, device, train=False, **shared_kwargs)
                 task_iter.append((task, task_languages[index], loader, original_order))
         # single language task or no separate eval
         else:
-           loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device, train=False,
-                                     append_question_to_context_too=args.append_question_to_context_too,
-                                     override_question=args.override_question, override_context=args.override_context, return_original_order=True)
+           loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device, train=False, **shared_kwargs)
            task_iter.append((task, task_languages, loader, original_order))
 
         iters.extend(task_iter)
@@ -308,10 +314,20 @@ def check_and_update_generation_args(args):
 
     logger.info('Will output %d sequences for each input.', sum(args.num_outputs))
 
+def check_args(args):
+    if getattr(args, 'retrieve_method', None) == 'bootleg' and args.bootleg_load_prepped_data:
+        with open(os.path.join(args.path, 'config.json')) as config_file:
+            config = json.load(config_file)
+        if args.subsample != config['subsample']:
+            raise ValueError('To use bootleg prepped data, you have to use the same number for subsampling as training.')
+            
+
 def main(args):
     load_config_json(args)
     check_and_update_generation_args(args)
     adjust_multilingual_eval(args)
+    check_args(args)
+    
     set_seed(args)
     args.tasks = list(get_tasks(args.task_names, args).values())
 

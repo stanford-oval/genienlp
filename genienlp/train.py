@@ -74,11 +74,13 @@ def initialize_logger(args):
 def prepare_data(args, logger):
     train_sets, val_sets, aux_sets = [], [], []
 
-    train_eval_shared_kwargs = {'subsample': args.subsample, 'skip_cache': args.skip_cache,
+    train_eval_shared_kwargs = {'subsample': args.subsample,
+                                'skip_cache': args.skip_cache,
                                 'cache_input_data': args.cache_input_data,
                                 'sentence_batching': args.sentence_batching,
                                 'almond_lang_as_question': args.almond_lang_as_question,
-                                'num_workers': args.num_workers, 'features_size': args.features_size,
+                                'num_workers': args.num_workers,
+                                'features_size': args.features_size,
                                 'features_default_val': args.features_default_val,
                                 'verbose': args.verbose
                                 }
