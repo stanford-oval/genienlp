@@ -14,6 +14,7 @@ from transformers.modeling_utils import PreTrainedModel
 
 from transformers.models.bert.modeling_bert import BertEncoder, BertPooler, BertPreTrainedModel, BertEmbeddings, BertModel
 from transformers.models.mbart.tokenization_mbart import MBartTokenizer, _all_mbart_models, SPM_URL
+from transformers.models.roberta.modeling_roberta import create_position_ids_from_input_ids
 
 
 SPIECE_UNDERLINE = "▁"
@@ -339,7 +340,7 @@ class BertEmbeddingsV2(BertEmbeddings):
     """Construct the embeddings from word, position, token_type, and entity_type embeddings.
     """
 
-    def __init__(self, config, num_db_types=0, db_unk_id=0):
+    def __init__(self, config, num_db_types, db_unk_id):
         super().__init__(config)
         self.num_db_types = num_db_types
         self.db_unk_id = db_unk_id
@@ -397,7 +398,7 @@ class BertModelV2(BertModel):
     Subcalss of BertModel model with an additional entity type embedding layer at the bottom
     """
 
-    def __init__(self, config, num_db_types, db_unk_id=0):
+    def __init__(self, config, num_db_types, db_unk_id):
         super().__init__(config)
 
         self.embeddings = BertEmbeddingsV2(config, num_db_types, db_unk_id)
@@ -489,21 +490,20 @@ class BertModelV2(BertModel):
         ]  # add hidden_states and attentions if they are here
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
+###############
 
 class RobertaEmbeddingsV2(BertEmbeddingsV2):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing and adding entity_types.
     """
 
-    def __init__(self, config, num_db_types=0, db_unk_id=0):
+    def __init__(self, config, num_db_types, db_unk_id):
         super().__init__(config, num_db_types, db_unk_id)
         self.padding_idx = config.pad_token_id
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size,
-                                                padding_idx=self.padding_idx)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None,
-                entity_ids=None, entity_masking=None, mask_entities=False, inputs_embeds=None):
+                entity_ids=None, entity_masking=None, entity_probs=None, mask_entities=False, inputs_embeds=None):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
@@ -512,15 +512,17 @@ class RobertaEmbeddingsV2(BertEmbeddingsV2):
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         return super().forward(
-            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, entity_ids=entity_ids, entity_masking=entity_masking, mask_entities=mask_entities, inputs_embeds=inputs_embeds
+            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs, mask_entities=mask_entities, inputs_embeds=inputs_embeds
         )
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
-        """ We are provided embeddings directly. We cannot infer which are padded so just generate
-        sequential position ids.
+        """
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
 
-        :param torch.Tensor inputs_embeds:
-        :return torch.Tensor:
+        Args:
+            inputs_embeds: torch.Tensor
+
+        Returns: torch.Tensor
         """
         input_shape = inputs_embeds.size()[:-1]
         sequence_length = input_shape[1]
@@ -550,6 +552,7 @@ class XLMRobertaModelV2(BertModelV2):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
         
+###############
 
 class BootlegBertEncoder(BertPreTrainedModel):
     def __init__(
@@ -758,3 +761,4 @@ class BootlegBertEncoder(BertPreTrainedModel):
         
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
+###############
