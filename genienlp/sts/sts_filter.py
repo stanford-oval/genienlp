@@ -4,9 +4,8 @@ def parse_argv(parser):
     
     parser.add_argument('--input_file', type=str)
     parser.add_argument('--output_file', type=str)
-    parser.add_argument('--batch_size', type=int, default=250)
-    parser.add_argument('--subsample', type=int, default=-1)
-    parser.add_argument('--filtering_metric', type=str, default='mean', choices=['mean', 'mean+std', 'all'])
+    parser.add_argument('--filtering_metric', type=str, default='constant', choices=['mean', 'mean+std', 'all', 'constant'])
+    parser.add_argument('--filtering_threshold', type=float, help='STS threshold score used to filter sentences if filtering_metric is constant')
 
 
 def main(args):
@@ -27,6 +26,9 @@ def main(args):
         accepted_ids = all_scores >= scores_mean
     elif args.filtering_metric == 'mean+std':
         accepted_ids = all_scores >= (scores_mean + scoers_std)
+    elif args.filtering_metric == 'constant':
+        assert args.filtering_threshold
+        accepted_ids = all_scores >= args.filtering_threshold
     # accept all
     else:
         accepted_ids = all_scores >= 0.0
