@@ -49,6 +49,8 @@ class TransformerSeq2Seq(GenieModel):
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
+        self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
+
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
@@ -56,7 +58,20 @@ class TransformerSeq2Seq(GenieModel):
     def forward(self, *input, **kwargs):
         if self.training:
             batch = input[0]
-            return self.model(batch.context.value, labels=batch.answer.value)
+
+            answer = batch.answer.value
+            if self._is_bart_large:
+                # remove BOS from the answer to BART-Large because BART-Large was not trained to predict BOS
+                # (unlike BART-Base or mBART)
+                #
+                # NOTE: various people at Huggingface and elsewhere have tried to conclusively ascertain
+                # whether BOS should be there or not, and the answer seems to be that BOS should not be there
+                # at all, either in input or in the output
+                # but empirically, BOS in the input works slightly better, pehraps because our sentences start
+                # with a lowercase letter, so we leave it
+                answer = answer[:, 1:].contiguous()
+
+            return self.model(batch.context.value, labels=answer)
         else:
             return self.model(**kwargs)
 
