@@ -57,7 +57,7 @@ DECODERS = {
 
 logger = logging.getLogger(__name__)
 
-class Transformer2LSTM(PreTrainedModel):
+class Seq2Seq(PreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
