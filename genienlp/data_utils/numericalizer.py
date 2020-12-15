@@ -147,6 +147,18 @@ class TransformerNumericalizer(object):
                     decoder_words.update(self._tokenizer.tokenize(example.question))
                     decoder_words.update(self._tokenizer.tokenize(example.answer))
 
+            existing_special_tokens = self._tokenizer.special_tokens_map
+            # add the required special tokens, if not present already
+            # note: if the tokens are not present, it means they are not used natively
+            # by the model, so we can pick our favorite token
+            if 'bos_token' not in existing_special_tokens:
+                self._tokenizer.add_special_tokens({ 'bos_token': existing_special_tokens.get('cls_token', '<s>') })
+            if 'eos_token' not in existing_special_tokens:
+                self._tokenizer.add_special_tokens({ 'eos_token': existing_special_tokens.get('sep_token', '</s>') })
+            if 'pad_token' not in existing_special_tokens:
+                self._tokenizer.add_special_tokens({ 'pad_token': '<pad>' })
+            if 'unk_token' not in existing_special_tokens:
+                self._tokenizer.add_special_tokens({ 'unk_token': '<unk>' })
             self._decoder_words = [(self._tokenizer.bos_token, self._tokenizer.bos_token_id),
                                    (self._tokenizer.eos_token, self._tokenizer.eos_token_id),
                                    (self._tokenizer.pad_token, self._tokenizer.pad_token_id),
