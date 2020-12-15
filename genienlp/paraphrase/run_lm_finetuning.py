@@ -195,7 +195,7 @@ def train(args, train_dataset, model, tokenizer, input_file_name=None, multiple_
             segment_ids = segment_ids.to(args.device)
             model.train()
             
-            model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids, 'use_cache': False}
+            model_inputs = {'input_ids': inputs, 'use_cache': False}
             
             # prepare inputs for mbart, and marian
             if args.model_type in ['mbart', 'marian']:
@@ -210,9 +210,11 @@ def train(args, train_dataset, model, tokenizer, input_file_name=None, multiple_
                 decoder_input_ids = labels.contiguous()
                 decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
                 model_inputs['decoder_input_ids'] = decoder_input_ids
+            else:
+                model_inputs.update({'position_ids': position_ids, 'token_type_ids': segment_ids})
 
             outputs = model(**model_inputs)
-            lm_logits = outputs[0].contiguous()
+            lm_logits = outputs.logits.contiguous()
             assert lm_logits.shape[-1] == model.config.vocab_size
             
             # CrossEntropyLoss ignore_index defaults to -100
@@ -349,7 +351,7 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
         segment_ids = segment_ids.to(args.device)
 
         with torch.no_grad():
-            model_inputs = {'input_ids': inputs, 'position_ids': position_ids, 'token_type_ids': segment_ids, 'use_cache': False}
+            model_inputs = {'input_ids': inputs, 'use_cache': False}
             
             if args.model_type in ['mbart', 'marian']:
                 model_inputs['attention_mask'] = attention_mask
@@ -361,9 +363,11 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
                 decoder_input_ids = labels.contiguous()
                 decoder_input_ids[decoder_input_ids == args.mlm_ignore_index] = tokenizer.pad_token_id
                 model_inputs['decoder_input_ids'] = decoder_input_ids
+            else:
+                model_inputs.update({'position_ids': position_ids, 'token_type_ids': segment_ids})
 
             outputs = model(**model_inputs)
-            lm_logits = outputs[0]
+            lm_logits = outputs.logits
             
             # debugging
             if args.debug:

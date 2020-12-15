@@ -34,14 +34,15 @@ import os
 
 from .coatt_encoder import CoattentionEncoder
 from ..data_utils.embeddings import load_embeddings
-from ..data_utils.numericalizer.transformer import BartNumericalizer
+from ..data_utils.numericalizer.transformer import BartNumericalizer, MBartNumericalizer, MT5Numericalizer
 from ..data_utils.example import Example
 from .lstm_encoder import BiLSTMEncoder
 from .mqan_encoder import MQANEncoder
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
 from .common import mask_tokens
-from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration
+from transformers import PreTrainedModel, PretrainedConfig, BartForConditionalGeneration, MBartForConditionalGeneration, \
+    MT5ForConditionalGeneration
 
 ENCODERS = {
     'MQANEncoder': MQANEncoder,
@@ -49,12 +50,12 @@ ENCODERS = {
     'Identity': IdentityEncoder,
     'Coattention': CoattentionEncoder,
 }
+
 DECODERS = {
     'MQANDecoder': MQANDecoder
 }
 
 logger = logging.getLogger(__name__)
-
 
 class Seq2Seq(PreTrainedModel):
 
@@ -82,7 +83,7 @@ class Seq2Seq(PreTrainedModel):
 
         full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
         logger.info(f'Loading the model from {full_checkpoint_path}')
-        model = Seq2Seq(args=args, vocab_sets=vocab_sets, is_loading=True, save_directory=save_directory)
+        model = cls(args=args, vocab_sets=vocab_sets, is_loading=True, save_directory=save_directory)
         save_dict = torch.load(full_checkpoint_path, map_location=device)
         model.load_state_dict(save_dict['model_state_dict'])
 
@@ -120,7 +121,8 @@ class Seq2Seq(PreTrainedModel):
         logger.debug(f'The first 200 tokens:')
         logger.debug(self.numericalizer.vocab.itos[:200])
 
-        self.encoder = ENCODERS[args.seq2seq_encoder](self.numericalizer, args, self.context_embeddings, self.question_embeddings)
+        self.encoder = ENCODERS[args.seq2seq_encoder](self.numericalizer, args, self.context_embeddings,
+                                                      self.question_embeddings)
         self.decoder = DECODERS[args.seq2seq_decoder](self.numericalizer, args, self.decoder_embeddings)
 
         if self.args.pretrain_context > 0:
@@ -178,17 +180,21 @@ class Seq2Seq(PreTrainedModel):
         loss = torch.nn.functional.cross_entropy(context_logits, masked_labels, ignore_index=self.numericalizer.pad_id)
         return (loss, )
 
-    def _normal_forward(self, batch, current_token_id, past_key_values=None, expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
+    def _normal_forward(self, batch, current_token_id, past_key_values=None, expansion_factor=1, generation_dict=None,
+                        encoder_output=None, return_dict=False):
         if encoder_output is None:
-            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(batch)
+            self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = self.encoder(
+                batch)
         else:
             self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = encoder_output
         encoder_loss = None
+        
         if self.training and getattr(self.args, 'use_encoder_loss', None):
             encoder_loss = self.get_encoder_loss(context_rnn_state)
             
         return self.decoder(batch, self_attended_context, final_context, context_rnn_state,
-                            final_question, question_rnn_state, encoder_loss, current_token_id, decoder_wrapper=past_key_values,
+                            final_question, question_rnn_state, encoder_loss, current_token_id,
+                            decoder_wrapper=past_key_values,
                             expansion_factor=expansion_factor, generation_dict=generation_dict)
 
     def forward(self, batch, pretraining=False, current_token_id=None, past_key_values=None,
@@ -199,8 +205,8 @@ class Seq2Seq(PreTrainedModel):
         if pretraining:
             return self._pretrain_forward(batch)
         else:
-            return self._normal_forward(batch, current_token_id, past_key_values, expansion_factor, generation_dict, encoder_output, return_dict)
-        
+            return self._normal_forward(batch, current_token_id, past_key_values, expansion_factor, generation_dict,
+                                        encoder_output, return_dict)
         
     def get_encoder_loss(self, context_rnn_state):
         
@@ -233,9 +239,12 @@ class Seq2Seq(PreTrainedModel):
     def get_output_embeddings(self):
         return self.decoder.decoder_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask, use_cache, batch, generation_dict, encoder_output, past=None):
+    def prepare_inputs_for_generation(self, input_ids, attention_mask, use_cache, batch, generation_dict,
+                                      encoder_output, past=None):
         expansion_factor = input_ids.shape[0] // len(batch.example_id)
-        return {"batch": batch, "past_key_values": past, "current_token_id": input_ids[:,-1:], "expansion_factor": expansion_factor, "generation_dict": generation_dict, "encoder_output": encoder_output}
+        return {"batch": batch, "past_key_values": past, "current_token_id": input_ids[:, -1:],
+                "expansion_factor": expansion_factor, "generation_dict": generation_dict,
+                "encoder_output": encoder_output}
 
     def _reorder_cache(self, past, beam_idx):
         past.reorder(beam_idx)
@@ -258,7 +267,8 @@ class Seq2Seq(PreTrainedModel):
         self.config.vocab_size = len(batch.decoder_vocab)
         self.config.is_encoder_decoder = False # in order to make it work with `transformers` generation code, we should treat this as a decoder-only model
         batch_size = len(batch.example_id)
-        input_ids = torch.full((batch_size, 1), self.decoder.init_idx, dtype=torch.long, device=batch.context.value.device)
+        input_ids = torch.full((batch_size, 1), self.decoder.init_idx, dtype=torch.long,
+                               device=batch.context.value.device)
         
         generated = super().generate(input_ids=input_ids,
                                      batch=batch,
@@ -279,13 +289,16 @@ class Seq2Seq(PreTrainedModel):
                                      generation_dict={'max_output_length': max_output_length, 'num_beams': num_beams},
                                      encoder_output=encoder_output
                                     )
-        generated = torch.cat((generated[:, 0:1], generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)), dim=1) # map everything to full vocabulary except BOS which already is in full vocabulary
+        generated = torch.cat(
+            (generated[:, 0:1], generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)),
+            dim=1)  # map everything to full vocabulary except BOS which already is in full vocabulary
 
         return generated
         
+class Transformer2Transformer(torch.nn.Module):
 
-           
-class Bart(torch.nn.Module):
+    def __init__(self, **kwargs):
+        super().__init__()
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -296,19 +309,11 @@ class Bart(torch.nn.Module):
 
         full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
         logger.info(f'Loading the model from {full_checkpoint_path}')
-        model = Bart(args=args)
+        model = cls(args=args)
         save_dict = torch.load(full_checkpoint_path, map_location=device)
         model.load_state_dict(save_dict['model_state_dict'])
 
         return model, save_dict.get('best_decascore')
-
-
-    def __init__(self, config=None, *inputs, **kwargs):
-        super().__init__()
-        assert 'args' in kwargs
-        self.args = kwargs['args']
-        self.bart = BartForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder, cache_dir=self.args.embeddings)
-        self.numericalizer = BartNumericalizer(self.args.seq2seq_decoder)
 
     def forward(self, *input, **kwargs):
         #TODO pretraining
@@ -321,10 +326,11 @@ class Bart(torch.nn.Module):
             y_ids = y[:, :-1].contiguous()
             labels = y[:, 1:].clone()
             labels[y[:, 1:] == pad] = -100
-            return self.bart.forward(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, labels=labels)
+            return self.base_model.forward(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids,
+                                           labels=labels)
 
         else:
-            return self.bart.forward(**kwargs)
+            return self.base_model.forward(**kwargs)
         
     def set_train_context_embeddings(self, trainable):
         #TODO
@@ -352,7 +358,7 @@ class Bart(torch.nn.Module):
 
         input_ids = batch.context.value
         # TODO attention_mask
-        generated = self.bart.generate(input_ids=input_ids,
+        generated = self.base_model.generate(input_ids=input_ids,
                                      max_length=max_output_length,
                                      min_length=2, # generate at least one token after BOS
                                      bos_token_id=self.numericalizer._tokenizer.bos_token_id,
@@ -370,3 +376,35 @@ class Bart(torch.nn.Module):
                                     )
 
         return generated
+
+class Bart(Transformer2Transformer):
+
+    def __init__(self, config=None, *inputs, **kwargs):
+        super().__init__()
+        assert 'args' in kwargs
+        self.args = kwargs['args']
+        self.base_model = BartForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder,
+                                                                       cache_dir=self.args.embeddings)
+        self.numericalizer = BartNumericalizer(self.args.seq2seq_decoder)
+
+
+class MBart(Transformer2Transformer):
+    
+    def __init__(self, config=None, *inputs, **kwargs):
+        super().__init__()
+        assert 'args' in kwargs
+        self.args = kwargs['args']
+        self.base_model = MBartForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder,
+                                                                        cache_dir=self.args.embeddings)
+        self.numericalizer = MBartNumericalizer(self.args.seq2seq_decoder)
+
+
+class MT5(Transformer2Transformer):
+
+    def __init__(self, config=None, *inputs, **kwargs):
+        super().__init__()
+        assert 'args' in kwargs
+        self.args = kwargs['args']
+        self.base_model = MT5ForConditionalGeneration.from_pretrained(self.args.seq2seq_decoder,
+                                                                      cache_dir=self.args.embeddings)
+        self.numericalizer = MT5Numericalizer(self.args.seq2seq_decoder)

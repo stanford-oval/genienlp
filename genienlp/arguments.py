@@ -36,8 +36,8 @@ import subprocess
 
 from .tasks.registry import get_tasks
 from .util import have_multilingual
-from .paraphrase.transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP
-BART_MODEL_LIST = list(BART_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
+from .paraphrase.transformers_utils import BART_MODEL_LIST, MBART_MODEL_LIST, MT5_MODEL_LIST
+
 
 logger = logging.getLogger(__name__)
 
@@ -141,10 +141,10 @@ def parse_argv(parser):
 
     parser.add_argument("--almond_has_multiple_programs", action='store_true', help='Indicate if almond dataset has multiple programs for each sentence')
 
-    parser.add_argument('--model', type=str, choices=['Seq2Seq', 'Bart'], default='Seq2Seq', help='which model to import')
+    parser.add_argument('--model', type=str, choices=['Seq2Seq', 'Bart', 'MT5', 'MBart'], default='Seq2Seq', help='which model to import')
     parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity', 'Coattention'],
                         default='MQANEncoder', help='which encoder to use for the Seq2Seq model')
-    parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'] + BART_MODEL_LIST, default='MQANDecoder',
+    parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'] + BART_MODEL_LIST + MBART_MODEL_LIST + MT5_MODEL_LIST, default='MQANDecoder',
                         help='which decoder to use for the Seq2Seq model')
     parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers')

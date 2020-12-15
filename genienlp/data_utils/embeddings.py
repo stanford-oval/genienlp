@@ -34,7 +34,6 @@ from collections import defaultdict
 import logging
 from transformers import AutoTokenizer, AutoModel, AutoConfig, \
     BERT_PRETRAINED_MODEL_ARCHIVE_LIST, XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
-from typing import NamedTuple, List
 
 from .numericalizer.simple import SimpleNumericalizer
 from .numericalizer.transformer import BertNumericalizer, XLMRobertaNumericalizer
@@ -42,16 +41,14 @@ from . import word_vectors
 from .almond_embeddings import AlmondEmbeddings
 from .pretrained_lstm_lm import PretrainedLTSMLM
 
+from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions as EmbeddingOutput
+
 logger = logging.getLogger(__name__)
 
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP = dict()
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: BertNumericalizer for embedding in BERT_PRETRAINED_MODEL_ARCHIVE_LIST})
 EMBEDDING_NAME_TO_NUMERICALIZER_MAP.update({embedding: XLMRobertaNumericalizer for embedding in XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST})
 
-
-class EmbeddingOutput(NamedTuple):
-    all_layers: List[torch.Tensor]
-    last_layer: torch.Tensor
 
 class WordVectorEmbedding(torch.nn.Module):
     def __init__(self, vec_collection):
@@ -88,8 +85,8 @@ class WordVectorEmbedding(torch.nn.Module):
             self.embedding[0].weight.data = torch.cat([self.embedding[0].weight.data.cpu()] + new_vectors, dim=0)
 
     def forward(self, input: torch.Tensor, padding=None):
-        last_layer = self.embedding[0](input.cpu()).to(input.device)
-        return EmbeddingOutput(all_layers=[last_layer], last_layer=last_layer)
+        last_hidden_state = self.embedding[0](input.cpu()).to(input.device)
+        return EmbeddingOutput(hidden_states=(last_hidden_state,), last_hidden_state=last_hidden_state)
 
     def to(self, *args, **kwargs):
         # ignore attempts to move the word embedding, which should stay on CPU
@@ -115,9 +112,8 @@ class TransformerEmbedding(torch.nn.Module):
         self.model.resize_token_embeddings(len(vocab))
 
     def forward(self, input: torch.Tensor, padding=None):
-        last_hidden_state, _pooled, hidden_states = self.model(input, attention_mask=(~padding).to(dtype=torch.float))
+        return self.model(input, attention_mask=(~padding).to(dtype=torch.float))
 
-        return EmbeddingOutput(all_layers=hidden_states, last_layer=last_hidden_state)
 
 class PretrainedLMEmbedding(torch.nn.Module):
     def __init__(self, model_name, cachedir):
@@ -157,7 +153,7 @@ class PretrainedLMEmbedding(torch.nn.Module):
     def forward(self, input: torch.Tensor, padding=None):
         pretrained_indices = torch.gather(self.vocab_to_pretrained, dim=0, index=input)
         rnn_output = self.model(pretrained_indices)
-        return EmbeddingOutput(all_layers=[rnn_output], last_layer=rnn_output)
+        return EmbeddingOutput(hidden_states=(rnn_output,), last_hidden_state=rnn_output)
 
 def _name_to_vector(emb_name, cachedir):
     if emb_name == 'glove':
