@@ -39,6 +39,30 @@ from transformers import AutoConfig, AutoTokenizer
 from .decoder_vocab import DecoderVocabulary
 from .example import SequentialField
 
+# not all tokenizers respect whitespace in the input or honor do_basic_tokenize=False
+# for those, we need to use the slow tokenizers or we'll get messed up thingtalk output
+ALLOWED_FAST_TOKENIZERS = {
+    'facebook/bart-base',
+    'facebook/bart-large',
+    'google/mt5-small',
+    'google/mt5-base',
+    'google/mt5-large',
+    'google/mt5-xl',
+    'google/mt5-xxl',
+    'sshleifer/bart-tiny-random'
+}
+# known NOT to work:
+# - all the BERT models
+# - all the XLM-R models
+#
+# mBART models work when preprocessing, because they're SPM/RoBERTa-based so they respect
+# whitespace, but the fast tokenizers treat special tokens differently than the slow ones
+# and drop whitespace before special tokens, which breaks
+ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING = {
+    'sshleifer/tiny-mbart',
+    'facebook/mbart-large-cc25'
+}
+
 class TransformerNumericalizer(object):
     """
     Numericalizer that uses Tokenizers from huggingface's transformers library.
@@ -79,13 +103,18 @@ class TransformerNumericalizer(object):
         else:
             return self.pad_id
 
+    def _use_fast(self):
+        return self._pretrained_name in ALLOWED_FAST_TOKENIZERS or \
+               (self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING)
+
     def load(self, save_dir):
         config = AutoConfig.from_pretrained(self._pretrained_name)
         self._tokenizer = AutoTokenizer.from_pretrained(save_dir,
                                                         do_lower_case=False,
                                                         do_basic_tokenize=False,
                                                         config=config,
-                                                        cache_dir=self._cache)
+                                                        cache_dir=self._cache,
+                                                        use_fast=self._use_fast())
 
         if self.max_generative_vocab is not None:
             with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'r') as fp:
@@ -121,7 +150,8 @@ class TransformerNumericalizer(object):
         self._tokenizer = AutoTokenizer.from_pretrained(self._pretrained_name,
                                                         do_lower_case=False,
                                                         do_basic_tokenize=False,
-                                                        cache_dir=self._cache)
+                                                        cache_dir=self._cache,
+                                                        use_fast=self._use_fast())
 
         special_tokens = []
         for task in tasks:
@@ -301,6 +331,8 @@ class TransformerNumericalizer(object):
 
         numerical = encoded.data['input_ids']
         length = encoded.data['length']
+        if isinstance(length, list):
+            length = length[0]
 
         if self.decoder_vocab:
             decoder_numerical = self.decoder_vocab.encode(numerical)
