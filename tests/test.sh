@@ -26,12 +26,15 @@ trap on_error ERR INT TERM
 i=0
 for hparams in \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/tiny-mbart" \
+      "--model TransformerSeq2Seq --pretrained_model google/mt5-small" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --preprocess_special_tokens" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --almond_detokenize_sentence" \
       "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50" \
       "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50" \
       "--model TransformerLSTM --pretrained_model xlm-roberta-base --trainable_decoder_embeddings=50" \
-      "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50 --eval_set_name aux" ; do
+      "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50 --eval_set_name aux" ;
+do
 
     # train
     pipenv run python3 -m genienlp train --train_tasks almond  --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit

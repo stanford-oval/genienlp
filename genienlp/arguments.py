@@ -36,8 +36,7 @@ import subprocess
 
 from .tasks.registry import get_tasks
 from .util import have_multilingual
-from .paraphrase.transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP
-BART_MODEL_LIST = list(BART_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
+
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +71,7 @@ def parse_argv(parser):
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training',
                         required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
-    #TODO rename to train_batch_size; keeping it for now for backward compatibility
+    # TODO rename to train_batch_size; keeping it for now for backward compatibility
     parser.add_argument('--train_batch_tokens', nargs='+', default=[4000], type=int,
                         help='Number of tokens to use for dynamic batching, corresponding to tasks in train tasks.'
                         'If sentence_batching is used, this will be interpreted as number of examples.')
@@ -205,7 +204,7 @@ def post_parse(args):
                 indices.append(i)
         return indices
     
-    #TODO relax the following assertions by dropping samples from batches in Iterator
+    # TODO relax the following assertions by dropping samples from batches in Iterator
     if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_languages.split('+')) != 0:
         raise ValueError('Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
     if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:

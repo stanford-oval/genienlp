@@ -54,7 +54,7 @@ def context_answer_len(ex):
     return interleave_keys(ex.context.length, ex.answer.length)
 
 def context_question_len(ex):
-    return ex.context.length
+    return ex.context.length[0]
 
 def id_value(ex):
     id_ = ex.example_id.rsplit('/', 1)

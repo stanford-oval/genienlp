@@ -28,16 +28,12 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import math
-from typing import NamedTuple, List
+from typing import List
 
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 from torch.jit import Final
 from torch.nn import functional as F
-from torch.nn.utils.rnn import pack_padded_sequence as pack
-from torch.nn.utils.rnn import pad_packed_sequence as unpack
 
 
 INF = 1e10

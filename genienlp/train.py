@@ -123,7 +123,7 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
     model.train()
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
-    loss = model(batch)[0]
+    loss = model(batch).loss
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
     if len(devices) > 1:

@@ -1,7 +1,7 @@
 from typing import List
 
 import torch
-from transformers.modeling_gpt2 import GPT2LMHeadModel
+from transformers.models.gpt2.modeling_gpt2 import GPT2LMHeadModel
 
 
 class GPT2Seq2Seq(GPT2LMHeadModel):

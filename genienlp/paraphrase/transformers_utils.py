@@ -3,14 +3,13 @@ import torch
 import torch.nn.functional as F
 from typing import List, Optional
 
-from transformers.generation_utils import LogitsProcessorList
-from transformers.modeling_marian import MarianMTModel
-from transformers.modeling_bart import BartForConditionalGeneration
-from transformers.modeling_mbart import MBartForConditionalGeneration
-from transformers.modeling_t5 import T5ForConditionalGeneration
+
+from transformers import LogitsProcessorList
+from transformers import MarianMTModel, BartForConditionalGeneration, MBartForConditionalGeneration,\
+    T5ForConditionalGeneration, MT5ForConditionalGeneration
 from transformers.modeling_utils import PreTrainedModel
 
-from transformers.tokenization_mbart import MBartTokenizer, _all_mbart_models, SPM_URL
+from transformers.models.mbart.tokenization_mbart import MBartTokenizer, _all_mbart_models, SPM_URL
 
 SPIECE_UNDERLINE = "▁"
 
@@ -37,6 +36,14 @@ MBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # community models; see https://huggingface.co/models?filter=mbart for more
     "sshleifer/tiny-mbart": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/tiny-mbart/config.json"
 }
+
+MT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {'google/mt5-{}'.format(v): "https://s3.amazonaws.com/models.huggingface.co/bert/google/mt5-{}/config.json".format(v)
+                                     for v in ['small', 'base', 'large', 'xl', 'xxl']}
+
+
+BART_MODEL_LIST = list(BART_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
+MBART_MODEL_LIST = list(MBART_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
+MT5_MODEL_LIST = list(MT5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
 
 
 MARIAN_SUPPORTED_LANGUAGES = ['https://huggingface.co/Helsinki-NLP']
@@ -336,5 +343,9 @@ class GenieMBartForConditionalGeneration(MBartForConditionalGeneration, GeniePre
         super().__init__(config)
 
 class GenieT5ForConditionalGeneration(T5ForConditionalGeneration, GeniePreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+class GenieMT5ForConditionalGeneration(MT5ForConditionalGeneration, GeniePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

@@ -30,7 +30,7 @@
 import torch
 from torch import nn
 
-from .common import CombinedEmbedding, LayerNorm, LinearFeedforward
+from .common import LayerNorm, LinearFeedforward
 
 
 class IdentityEncoder(nn.Module):
@@ -52,7 +52,8 @@ class IdentityEncoder(nn.Module):
             self.projection = None
 
         if self.args.rnn_layers > 0 and self.args.rnn_zero_state in ['average', 'cls']:
-            self.pool = LinearFeedforward(config.hidden_size, config.hidden_size, 2 * args.rnn_dimension * args.rnn_layers,
+            self.pool = LinearFeedforward(config.hidden_size, config.hidden_size,
+                                          2 * args.rnn_dimension * args.rnn_layers,
                                           dropout=args.dropout_ratio)
             self.norm = LayerNorm(2 * args.rnn_dimension * args.rnn_layers)
         else:

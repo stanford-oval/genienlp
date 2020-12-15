@@ -8,7 +8,7 @@ import shutil
 import numpy as np
 
 from .transformers_utils import SPIECE_UNDERLINE, MARIAN_GROUP_MEMBERS
-from transformers.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
+from transformers.models.mbart.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
 
 from genienlp.metrics import computeBLEU
 
