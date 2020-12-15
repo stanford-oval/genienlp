@@ -30,7 +30,6 @@
 
 import torch
 import logging
-from typing import NamedTuple, List
 from transformers import AutoModel, PretrainedConfig, AutoConfig
 
 from ..data_utils.numericalizer import TransformerNumericalizer

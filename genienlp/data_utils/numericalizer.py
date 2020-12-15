@@ -27,12 +27,11 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import collections
 import os
 import re
 import json
 from typing import List, Tuple
-from collections import defaultdict
+from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
 from transformers import AutoConfig, AutoTokenizer
 
@@ -170,7 +169,7 @@ class TransformerNumericalizer(object):
             # in this pass, we
             # 1) tokenize everything, to ensure we account for all added tokens
             # 2) we construct a counter of wordpieces in the answers, for the decoder vocabulary
-            decoder_words = collections.Counter()
+            decoder_words = Counter()
             for dataset in vocab_sets:
                 for example in dataset:
                     decoder_words.update(self._tokenizer.tokenize(example.context))
