@@ -34,6 +34,7 @@ from torch.multiprocessing import Process, set_start_method
 
 from genienlp.paraphrase.data_utils import create_features_from_tsv_file, output_heuristics
 from genienlp.paraphrase.model_utils import compute_metrics, compute_attention, replace_quoted_params, force_replace_quoted_params
+from ..tasks.almond.utils import tokenize_cjk_chars
 
 try:
      set_start_method('spawn')
@@ -495,6 +496,8 @@ def run_single_process_generation(args, config):
 
                 text = re.sub('\s\s+', ' ', text)  # remove duplicate white spaces
                 text = text.strip()
+                
+                text = tokenize_cjk_chars(text)
                 
                 if not args.skip_heuristics:
                     text = output_heuristics(text, batch_reverse_maps[sample_index])

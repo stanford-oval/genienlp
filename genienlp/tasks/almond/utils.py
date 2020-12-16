@@ -52,5 +52,34 @@ def process_id(ex):
         id_ = id_[1:]
     return id_
 
+def detokenize_cjk_chars(sentence):
+    output = []
+    i = 0
+    while i < len(sentence):
+        output.append(sentence[i])
+        # skip space after cjk chars only if followed by another cjk char
+        if is_cjk_char(ord(sentence[i])) and \
+                i+1 < len(sentence) and sentence[i+1] == ' ' and \
+                i+2 < len(sentence) and is_cjk_char(ord(sentence[i+2])):
+            i += 2
+        else:
+            i += 1
+            
+    return "".join(output)
 
 
+def tokenize_cjk_chars(sentence):
+    output = []
+    i = 0
+    while i < len(sentence):
+        output.append(sentence[i])
+        if is_cjk_char(ord(sentence[i])) and i+1 < len(sentence) and sentence[i+1] != ' ':
+            output.append(' ')
+        elif not is_cjk_char(ord(sentence[i])) and i + 1 < len(sentence) and is_cjk_char(ord(sentence[i + 1])):
+            output.append(' ')
+        i += 1
+        
+    output = "".join(output)
+    output = output.replace('  ', ' ')
+    
+    return output

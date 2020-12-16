@@ -37,7 +37,7 @@ from ..registry import register_task
 from ..generic_dataset import CQA, context_question_len, token_batch_fn, default_batch_fn
 from ...data_utils.example import Example
 from ...data_utils.progbar import progress_bar
-from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
+from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char, detokenize_cjk_chars
 from ...util import multiwoz_specific_preprocess, multiwoz_specific_postprocess
 
 from ..base_dataset import Split
@@ -132,20 +132,6 @@ class BaseAlmondTask(BaseTask):
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
-    
-    def _detokenize_cjk_chars(self, sentence):
-        output = []
-        i = 0
-        while i < len(sentence):
-            output.append(sentence[i])
-            # skip space after cjk chars only if followed by another cjk char
-            if is_cjk_char(ord(sentence[i])) and \
-                    i+1 < len(sentence) and sentence[i+1] == ' ' and \
-                    i+2 < len(sentence) and is_cjk_char(ord(sentence[i+2])):
-                i += 2
-            else:
-                i += 1
-        return "".join(output)
 
     def tokenize(self, sentence, field_name=None):
         if not sentence:
@@ -154,7 +140,7 @@ class BaseAlmondTask(BaseTask):
         if self.force_subword_tokenize:
             return sentence.split(' '), None
         
-        sentence = self._detokenize_cjk_chars(sentence)
+        sentence = detokenize_cjk_chars(sentence)
         
         if self._dataset_specific_preprocess == 'multiwoz' and self._is_program_field(field_name):
             sentence = multiwoz_specific_preprocess(sentence)
