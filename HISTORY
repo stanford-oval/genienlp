@@ -1,3 +1,17 @@
+0.5.0
+=====
+
+* Paraphrasing and training was made much faster, with improved GPU usage and by removing
+  redundant tokenization in the hot-paraphrase path [#37, #38, #47].
+* The transformers library was updated to 4.0; PyTorch dependency increased to 1.6 [#44, #59, #62].
+* New models: BART, mBART, mT5. As part of this work, the model code was refactored to be more consistent
+  with Huggingface models and generation code [#46, #62].
+* Paraphrasing scripts are now proper subcommands of genienlp [#53].
+* It is now possible to fine-tune MBart and Marian models for neural machine translation
+  and sentence denoising [#54].
+* genienlp server can now operate in batch mode, improving GPU utilization [#58].
+* Misc bug and documentation fixes [#39, #40, #41, #43, #48, #55, #58].
+
 0.4.0
 =====
 
