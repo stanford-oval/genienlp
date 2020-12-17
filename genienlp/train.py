@@ -44,7 +44,7 @@ from tensorboardX import SummaryWriter
 
 from . import arguments
 from . import models
-from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader,\
+from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader,\
     log_model_size, init_devices
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
@@ -109,32 +109,21 @@ def prepare_data(args, logger):
         logger.info(f'{task.name} has {len(split.eval)} validation examples')
         val_sets.append(split.eval)
 
-    if args.use_curriculum:
-        logger.info('Preprocessing auxiliary data for curriculum')
-        preprocess_examples(args, args.train_tasks, aux_sets, logger, train=True)
-    logger.info('Preprocessing training data')
-    preprocess_examples(args, args.train_tasks, train_sets, logger, train=True)
-    logger.info('Preprocessing validation data')
-    preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
-
     return train_sets, val_sets, aux_sets
+
 
 accumulated_batch_lengths = 0
 
-def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None, pretraining=False,
-               train_context_embeddings_after=None, train_question_embeddings_after=None,
+
+def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None,
                gradient_accumulation_steps=1):
     # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of
     # the total batch size
     global accumulated_batch_lengths
     model.train()
-    model.module.set_train_context_embeddings(train_context_embeddings_after is not None and
-                                              iteration > train_context_embeddings_after)
-    model.module.set_train_question_embeddings(train_question_embeddings_after is not None and
-                                               iteration > train_question_embeddings_after)
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
-    loss = model(batch, pretraining=pretraining).loss
+    loss = model(batch).loss
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
     if len(devices) > 1:
@@ -293,7 +282,7 @@ def get_next_batch(train_iter, aux_iters, *, task, task_idx, task_fraction, use_
 
 def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations, numericalizer, *,
           log_every, val_every, save_every, rounds, val_sets, aux_sets, writer, logger, log_prefix,
-          start_iteration=1, rnd=1, best_decascore, use_curriculum, pretraining):
+          start_iteration=1, rnd=1, best_decascore, use_curriculum):
     """main training function"""
     local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, start_iteration
 
@@ -313,23 +302,16 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
-    train_iters = [(task,
-                    make_data_loader(x, numericalizer, tok, main_device, paired=args.paired,max_pairs=args.max_pairs,
-                                     train=True,  append_question_to_context_too=args.append_question_to_context_too,
-                                     override_question=args.override_question, override_context=args.override_context))
+    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, train=True))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False,
-                                         append_question_to_context_too=args.append_question_to_context_too,
-                                         override_question=args.override_question, override_context=args.override_context))
+    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     aux_iters = []
     if use_curriculum:
-        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True,
-                                             append_question_to_context_too=args.append_question_to_context_too,
-                                             override_question=args.override_question, override_context=args.override_context))
+        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         
@@ -382,12 +364,8 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
             # param update
             loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
-                                         grad_clip=args.grad_clip, pretraining=pretraining,
-                                         gradient_accumulation_steps=args.gradient_accumulation_steps,
-                                         train_context_embeddings_after=args.train_context_embeddings_after if
-                                                                        args.train_context_embeddings else None,
-                                         train_question_embeddings_after=args.train_question_embeddings_after if
-                                                                         args.train_question_embeddings else None)
+                                         grad_clip=args.grad_clip,
+                                         gradient_accumulation_steps=args.gradient_accumulation_steps)
             if loss is None:
                 logger.info(
                     'Encountered NAN loss during training... Continue training ignoring the current batch')
@@ -492,6 +470,7 @@ def main(args):
     model_name = args.model
     model_class = getattr(models, model_name)
 
+    tasks = set(args.train_tasks) | set(args.val_tasks)
     train_sets, val_sets, aux_sets = prepare_data(args, logger)
 
     if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets) > 0):
@@ -507,12 +486,13 @@ def main(args):
                                                             args=args,
                                                             model_checkpoint_file=args.load,
                                                             vocab_sets=train_sets+val_sets,
+                                                            tasks=tasks,
                                                             device=devices[0])
+        model.add_new_vocab_from_data(tasks=tasks, resize_decoder=True)
     else:
         logger.info(f'Initializing a new {model_name}')
-        model = model_class(args=args, vocab_sets=train_sets+val_sets)
-    
-    model.add_new_vocab_from_data([train_sets+val_sets], resize_decoder=True)
+        model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks)
+
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
 
@@ -537,18 +517,8 @@ def main(args):
     else:
         writer = None
 
-    if not args.resume and args.pretrain_context > 0:
-        pretrain_opt, pretrain_lr_scheduler = init_opt(args, model, logger)
-        train_iterations = [args.pretrain_context for _ in args.train_tasks]
-        train(args, devices, model, pretrain_opt, pretrain_lr_scheduler, train_sets,
-              train_iterations, model.module.numericalizer, val_sets=[], aux_sets=[], logger=logger, writer=writer,
-              log_every=args.log_every, val_every=None, save_every=None, use_curriculum=False,
-              rounds=len(train_sets) > 1, start_iteration=start_iteration, best_decascore=0,
-              pretraining=True, log_prefix='pretrain')
-
     train(args, devices, model, opt, lr_scheduler, train_sets,
           args.train_iterations, model.module.numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
           log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
           rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
-          best_decascore=best_decascore,
-          pretraining=False, log_prefix='training')
+          best_decascore=best_decascore, log_prefix='training')

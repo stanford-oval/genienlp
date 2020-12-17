@@ -24,12 +24,6 @@ pip3 install genienlp
 
 After installation, a `genienlp` command becomes available.
 
-Likely, you will also want to download the word embeddings ahead of time:
-
-```bash
-genienlp cache-embeddings --embeddings glove+char -d <embeddingdir>
-```
-
 ## Usage
 
 Train a model:

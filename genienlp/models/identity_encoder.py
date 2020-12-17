@@ -30,66 +30,47 @@
 import torch
 from torch import nn
 
-from .common import CombinedEmbedding, LayerNorm, LinearFeedforward
+from .common import LayerNorm, LinearFeedforward
 
 
 class IdentityEncoder(nn.Module):
-    def __init__(self, numericalizer, args, context_embeddings, question_embeddings):
+    def __init__(self, numericalizer, args, config, context_embeddings):
         super().__init__()
         self.args = args
         self.pad_idx = numericalizer.pad_id
 
-        self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
-                                                    trained_dimension=0,
-                                                    project=False,
-                                                    finetune_pretrained=args.train_context_embeddings)
+        if args.rnn_dimension is None:
+            args.rnn_dimension = config.hidden_size
 
-        if self.args.rnn_layers > 0 and self.args.rnn_dimension != self.args.dimension:
+        self.encoder_embeddings = context_embeddings
+
+        if self.args.rnn_layers > 0 and self.args.rnn_dimension != config.hidden_size:
             self.dropout = nn.Dropout(args.dropout_ratio)
-            self.projection = nn.Linear(self.encoder_embeddings.dimension, self.args.rnn_dimension, bias=False)
+            self.projection = nn.Linear(config.hidden_size, self.args.rnn_dimension, bias=False)
         else:
             self.dropout = None
             self.projection = None
 
         if self.args.rnn_layers > 0 and self.args.rnn_zero_state in ['average', 'cls']:
-            self.pool = LinearFeedforward(args.dimension, args.dimension, 2 * args.rnn_dimension * args.rnn_layers,
+            self.pool = LinearFeedforward(config.hidden_size, config.hidden_size,
+                                          2 * args.rnn_dimension * args.rnn_layers,
                                           dropout=args.dropout_ratio)
             self.norm = LayerNorm(2 * args.rnn_dimension * args.rnn_layers)
         else:
             self.pool = None
             self.norm = None
 
-    def set_train_context_embeddings(self, trainable):
-        self.encoder_embeddings.set_trainable(trainable)
-
-    def set_train_question_embeddings(self, trainable):
-        pass
-
     def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length
-        question, question_lengths = batch.question.value, batch.question.length
+        context_padding = torch.eq(context.data, self.pad_idx)
 
-        context_padding = context.data == self.pad_idx
-        question_padding = question.data == self.pad_idx
-
-        context_embedded = self.encoder_embeddings(context, padding=context_padding)
-        question_embedded = self.encoder_embeddings(question, padding=question_padding)
-
-        # pick the top-most N transformer layers to pass to the decoder for cross-attention
-        # (add 1 to account for the embedding layer - the decoder will drop it later)
-        self_attended_context = context_embedded.hidden_states[-(self.args.transformer_layers + 1):]
-        final_context = context_embedded.last_hidden_state
-        final_question = question_embedded.last_hidden_state
+        final_context = self.encoder_embeddings(context, attention_mask=(~context_padding).to(dtype=torch.float))[0]
 
         if self.projection is not None:
             final_context = self.dropout(final_context)
             final_context = self.projection(final_context)
 
-            final_question = self.dropout(final_question)
-            final_question = self.projection(final_question)
-
         context_rnn_state = None
-        question_rnn_state = None
         if self.args.rnn_layers > 0:
             batch_size = context.size(0)
             if self.args.rnn_zero_state == 'zero':
@@ -97,13 +78,13 @@ class IdentityEncoder(nn.Module):
                 zero = torch.zeros(self.args.rnn_layers, batch_size, self.args.rnn_dimension,
                                    dtype=torch.float, requires_grad=False, device=context.device)
                 context_rnn_state = (zero, zero)
-                question_rnn_state = (zero, zero)
             else:
                 if self.args.rnn_zero_state == 'cls':
-                    packed_rnn_state = self.norm(self.pool(context_embedded.last_hidden_state[:, 0, :]))
+                    packed_rnn_state = self.norm(self.pool(final_context[:, 0, :]))
 
-                elif self.args.rnn_zero_state == 'average':
-                    masked_final_context = context_embedded.last_hidden_state.masked_fill(context_padding.unsqueeze(2), 0)
+                else:
+                    assert self.args.rnn_zero_state == 'average'
+                    masked_final_context = final_context.masked_fill(context_padding.unsqueeze(2), 0)
                     summed_context = torch.sum(masked_final_context, dim=1)
                     average_context = summed_context / context_lengths.unsqueeze(1)
 
@@ -120,4 +101,4 @@ class IdentityEncoder(nn.Module):
                 packed_rnn_state = packed_rnn_state.chunk(2, dim=0)
                 context_rnn_state = (packed_rnn_state[0].squeeze(0), packed_rnn_state[1].squeeze(0))
 
-        return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state
+        return final_context, context_rnn_state

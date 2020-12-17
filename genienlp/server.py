@@ -38,9 +38,7 @@ from pprint import pformat
 import torch
 
 from . import models
-from .data_utils.example import NumericalizedExamples
-from .data_utils.numericalizer.sequential_field import SequentialField
-from .tasks.generic_dataset import Example
+from .data_utils.example import Example, NumericalizedExamples
 from .tasks.registry import get_tasks
 from .util import set_seed, init_devices, load_config_json, log_model_size
 from .validate import generate_with_model
@@ -58,22 +56,9 @@ class Server:
         self._cached_tasks = dict()
 
     def numericalize_examples(self, ex):
-        self.model.add_new_vocab_from_data([[ex]])
-
-        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer, device=self.device,
-                                   append_question_to_context_too=self.args.append_question_to_context_too,
-                                   override_question=self.args.override_question,
-                                   override_context=self.args.override_context)
-        all_f = []
-        for i in range(len(all_features.example_id)):
-            all_f.append(NumericalizedExamples(example_id=[all_features.example_id[i]],
-                                context=SequentialField(value=all_features.context.value[i], length=all_features.context.length[i], limited=all_features.context.limited[i]),
-                                question=SequentialField(value=all_features.question.value[i], length=all_features.question.length[i], limited=all_features.question.limited[i]),
-                                answer=SequentialField(value=all_features.answer.value[i], length=all_features.answer.length[i], limited=all_features.answer.limited[i]),
-                                decoder_vocab=all_features.decoder_vocab, device=self.device, padding_function=self.numericalizer.pad))
-
-        # batch of size 1
-        return NumericalizedExamples.collate_batches(all_f)
+        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer)
+        # make a single batch with all examples
+        return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
 
     def handle_request(self, line):
         request = json.loads(line)
@@ -95,9 +80,10 @@ class Server:
                 if not question:
                     question = task.default_question
 
-                ex = Example.from_raw(str(example_id), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
+                ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
                 examples.append(ex)
 
+            self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples(examples)
             # it is a single batch, so wrap it in []
             predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
@@ -113,8 +99,9 @@ class Server:
                 question = task.default_question
             answer = ''
 
-            ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
+            ex = Example.from_raw(str(request['id']), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
 
+            self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples([ex])
             predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
 

@@ -31,11 +31,21 @@ CJK_ADDONS = [ord(u"\u3001")]
 def is_cjk_char(cp):
   return cp in CJK_ADDONS or any([range[0] <= cp <= range[1] for range in CJK_RANGES])
 
+
+ENTITY_REGEX = re.compile('^[A-Z]+_')
+
+
 def is_entity(token):
-    return token[0].isupper()
+    return ENTITY_REGEX.match(token) is not None
+
 
 def is_device(token):
     return token[0] == '@'
+
+
+def is_entity_marker(token):
+    return token.startswith('^^')
+
 
 def process_id(ex):
     # Example instance

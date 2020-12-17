@@ -16,12 +16,6 @@ if test -d $(dirname ${SRCDIR})/.embeddings; then
 else
   mkdir -p $SRCDIR/embeddings
   embedding_dir="$SRCDIR/embeddings"
-
-  for v in glove.6B.50d charNgram ; do
-      for f in vectors itos table ; do
-          wget -c "https://parmesan.stanford.edu/glove/${v}.txt.${f}.npy" -O $SRCDIR/embeddings/${v}.txt.${f}.npy
-      done
-  done
 fi
 
 TMPDIR=`pwd`
@@ -31,16 +25,15 @@ trap on_error ERR INT TERM
 
 i=0
 for hparams in \
-      "--seq2seq_decoder sshleifer/bart-tiny-random --model Bart" \
-      "--seq2seq_decoder sshleifer/tiny-mbart --model MBart" \
-      "--seq2seq_decoder google/mt5-small --model MT5" \
-      "--encoder_embeddings=small_glove+char --decoder_embeddings=small_glove+char" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder MQANEncoder" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=BiLSTM --dimension=768" \
-      "--encoder_embeddings=xlm-roberta-base --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --eval_set_name aux" ;
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/tiny-mbart" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --preprocess_special_tokens" \
+      "--model TransformerSeq2Seq --pretrained_model google/mt5-small --preprocess_special_tokens" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --almond_detokenize_sentence" \
+      "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50" \
+      "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50" \
+      "--model TransformerLSTM --pretrained_model xlm-roberta-base --trainable_decoder_embeddings=50" \
+      "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50 --eval_set_name aux" ;
 do
 
     # train
@@ -67,12 +60,9 @@ done
 
 # test almond_multilingual task
 for hparams in \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --sentence_batching --train_batch_tokens 4 --val_batch_size 4 --use_encoder_loss" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --sentence_batching --train_batch_tokens 4 --val_batch_size 4 --use_encoder_loss --paired" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --rnn_zero_state cls --almond_lang_as_question" ;
-
-do
+      "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50" \
+      "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50 --sentence_batching --use_encoder_loss" \
+      "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50 --rnn_zero_state cls --almond_lang_as_question" ; do
 
     # train
     pipenv run python3 -m genienlp train --train_tasks almond_multilingual --train_languages fa+en --eval_languages fa+en --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
