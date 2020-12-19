@@ -28,7 +28,6 @@ for hparams in \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/tiny-mbart" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --preprocess_special_tokens" \
-      "--model TransformerSeq2Seq --pretrained_model google/mt5-small --preprocess_special_tokens" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --almond_detokenize_sentence" \
       "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50" \
       "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50" \
