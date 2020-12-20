@@ -457,17 +457,16 @@ def load_config_json(args):
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
         retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
-                    'max_val_context_length', 'max_output_length', 'max_generative_vocab', 'lower',
-                    'trainable_decoder_embeddings', 'locale', 'use_pretrained_bert',
+                    'max_output_length', 'max_generative_vocab', 'lower',
+                    'trainable_decoder_embeddings', 'use_pretrained_bert',
                     'override_context', 'override_question',
                     'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence',
                     'preprocess_special_tokens']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
-        if 'num_beams' in config and not isinstance(config['num_beams'], list):
-            # num_beams used to be an integer in previous versions of the code
-            config['num_beams'] = [config['num_beams']]
-        overwrite = ['val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty', 'temperature', 'reduce_metrics']
+        overwrite = ['val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty',
+                     'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty',
+                     'temperature', 'reduce_metrics']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -476,38 +475,14 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
-            elif r in ('almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens'):
+            elif r in ('preprocess_special_tokens'):
                 setattr(args, r, False)
-            elif r == 'locale':
-                setattr(args, r, 'en')
-            elif r == 'trainable_decoder_embedding':
-                setattr(args, r, 0)
-            elif r == 'rnn_dimension':
-                setattr(args, r, args.dimension)
-            elif r == 'rnn_zero_state':
-                setattr(args, r, 'zero')
             elif r == 'use_pretrained_bert':
                 setattr(args, r, True)
-            elif r == 'num_beams':
-                setattr(args, r, [1])
             elif r == 'num_beam_groups':
                 setattr(args, r, [1])
             elif r == 'diversity_penalty':
                 setattr(args, r, [0.0])
-            elif r == 'num_outputs':
-                setattr(args, r, [1])
-            elif r == 'no_repeat_ngram_size':
-                setattr(args, r, [0])
-            elif r == 'top_p':
-                setattr(args, r, [1.0])
-            elif r == 'top_k':
-                setattr(args, r, [0])
-            elif r == 'repetition_penalty':
-                setattr(args, r, [1.0])
-            elif r == 'temperature':
-                setattr(args, r, [0.0])
-            elif r == 'reduce_metrics':
-                setattr(args, r, 'max')
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0
