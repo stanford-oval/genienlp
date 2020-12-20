@@ -197,13 +197,6 @@ def post_parse(args):
 
     args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
     
-    def indices_of_multilingual(train_task_names):
-        indices = []
-        for i, task in enumerate(train_task_names):
-            if 'multilingual' in task:
-                indices.append(i)
-        return indices
-    
     # TODO relax the following assertions by dropping samples from batches in Iterator
     if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_languages.split('+')) != 0:
         raise ValueError('Your train_batch_size should be divisible by number of train_languages when using sentence batching.')

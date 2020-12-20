@@ -84,7 +84,7 @@ class TransformerLSTM(GenieModel):
         else:
             final_context, context_rnn_state = encoder_output
         encoder_loss = None
-        if getattr(self.args, 'use_encoder_loss', None):
+        if self.training and getattr(self.args, 'use_encoder_loss', None):
             encoder_loss = self.get_encoder_loss(context_rnn_state)
             
         return self.decoder(batch, final_context, context_rnn_state,
