@@ -72,7 +72,7 @@ def parse_argv(parser):
                         required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
     # TODO rename to train_batch_size; keeping it for now for backward compatibility
-    parser.add_argument('--train_batch_tokens', nargs='+', default=[4000], type=int,
+    parser.add_argument('--train_batch_tokens', nargs='+', default=[400], type=int,
                         help='Number of tokens to use for dynamic batching, corresponding to tasks in train tasks.'
                         'If sentence_batching is used, this will be interpreted as number of examples.')
     parser.add_argument('--jump_start', default=0, type=int, help='number of iterations to give jump started tasks')
@@ -93,7 +93,7 @@ def parse_argv(parser):
                         help='tasks to collect evaluation metrics for')
     parser.add_argument('--val_every', default=int(1e3), type=int,
                         help='how often to run validation in # of iterations')
-    parser.add_argument('--val_batch_size', nargs='+', default=[4000], type=int,
+    parser.add_argument('--val_batch_size', nargs='+', default=[3000], type=int,
                         help='Number of tokens in each batch for validation, corresponding to tasks in --val_tasks')
     
     parser.add_argument('--sentence_batching', action='store_true',
@@ -146,7 +146,7 @@ def parse_argv(parser):
     parser.add_argument('--preprocess_special_tokens', action='store_true',
                         help='convert special ThingTalk tokens to words')
 
-    parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
+    parser.add_argument('--warmup', default=40, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
     parser.add_argument('--beta0', default=0.9, type=float,
                         help='alternative momentum for Adam (only when not using transformer_lr)')
@@ -154,7 +154,7 @@ def parse_argv(parser):
                         help='optimizer to use')
     parser.add_argument('--no_transformer_lr', action='store_false', dest='transformer_lr',
                         help='turns off the transformer learning rate strategy')
-    parser.add_argument('--transformer_lr_multiply', default=1.0, type=float,
+    parser.add_argument('--transformer_lr_multiply', default=0.01, type=float,
                         help='multiplier for transformer learning rate (if using Adam)')
     parser.add_argument('--lr_rate', default=0.001, type=float, help='fixed learning rate (if not using warmup)')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
