@@ -34,6 +34,7 @@ import string
 from contextlib import closing
 from multiprocessing import Pool, cpu_count
 from subprocess import Popen, PIPE
+from typing import Iterable
 
 import numpy as np
 from pyrouge import Rouge155
@@ -427,10 +428,21 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
 
 
-def compute_metrics(greedy, answer, requested_metrics, batch_mode=True):
-    if not batch_mode:
-        greedy = [greedy]
-        answer = [answer]
+def compute_metrics(greedy, answer, requested_metrics: Iterable):
+    """
+    Inputs:
+        requested_metrics: contains a subset of the following metrics
+            em (exact match)
+            sm (structure match): valid if the output is ThingTalk code. Whether the gold answer and prediction are identical if we ignore parameter values of ThingTalk programs
+            bleu
+            rouge1, rouge2, rougeL, avg_rouge
+            f1: token-level F1 score, tokenizes with whitespace
+            nf1: normalize outputs then calculate token-level F1 score
+            nem: normalize outputs then calculate exact match
+            corpus_f1, precision, recall: corpus-level precision, recall and F1 score
+            lfem
+            joint_goal_em, turn_request_em, turn_goal_em, avg_dialogue
+    """
     metric_keys = []
     metric_values = []
     if not isinstance(answer[0], list):
@@ -455,18 +467,26 @@ def compute_metrics(greedy, answer, requested_metrics, batch_mode=True):
         bleu = computeBLEU(greedy, answer)
         metric_keys.append('bleu')
         metric_values.append(bleu)
-
     if 'avg_rouge' in requested_metrics:
         rouge = computeROUGE(greedy, answer)
         metric_keys += ['rouge1', 'rouge2', 'rougeL', 'avg_rouge']
         avg_rouge = (rouge['rouge_1_f_score'] + rouge['rouge_2_f_score'] + rouge['rouge_l_f_score']) / 3
         metric_values += [rouge['rouge_1_f_score'], rouge['rouge_2_f_score'], rouge['rouge_l_f_score'], avg_rouge]
+    if 'f1' in requested_metrics:
+        f1 = computeF1(greedy, answer)
+        metric_keys.append('f1')
+        metric_values.append(f1)
+
     norm_greedy = [normalize_text(g) for g in greedy]
     norm_answer = [[normalize_text(a) for a in al] for al in answer]
-    nf1 = computeF1(norm_greedy, norm_answer)
-    nem = computeEM(norm_greedy, norm_answer)
-    metric_keys.extend(['nf1', 'nem'])
-    metric_values.extend([nf1, nem])
+    if 'nf1' in requested_metrics:
+        nf1 = computeF1(norm_greedy, norm_answer)
+        metric_keys.append('nf1')
+        metric_values.append(nf1)
+    if 'nem' in requested_metrics:
+        nem = computeEM(norm_greedy, norm_answer)
+        metric_keys.append('nem')
+        metric_values.append(nem)
 
     if 'corpus_f1' in requested_metrics:
         corpus_f1, precision, recall = computeCF1(norm_greedy, norm_answer)

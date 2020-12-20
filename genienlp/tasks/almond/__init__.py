@@ -120,7 +120,7 @@ class BaseAlmondTask(BaseTask):
 
     @property
     def metrics(self):
-        return ['em', 'sm', 'bleu']
+        return ['em', 'sm', 'f1']
 
     def _is_program_field(self, field_name):
         raise NotImplementedError()
@@ -227,6 +227,10 @@ class Almond(BaseAlmondTask):
 class NaturalSeq2Seq(BaseAlmondTask):
     """The Almond seqeunce to sequence task where both sequences are natural language
     i.e. no ThingTalk program. Paraphrasing and translation are examples of this task"""
+
+    @property
+    def metrics(self):
+        return ['em', 'bleu', 'f1']
 
     def _is_program_field(self, field_name):
         return False
@@ -373,7 +377,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
 
     @property
     def metrics(self):
-        return ['em', 'sm', 'bleu']
+        return ['em', 'f1']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
@@ -458,10 +462,6 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     def _is_program_field(self, field_name):
         return field_name == 'answer'
     
-    @property
-    def metrics(self):
-        return ['em', 'sm', 'bleu']
-    
     def _make_example(self, parts, dir_name, **kwargs):
         if self._almond_has_multiple_programs:
             _id, sentence, target_code = parts[:3]
@@ -485,10 +485,6 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
 
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
-
-    @property
-    def metrics(self):
-        return ['em', 'sm', 'bleu']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
