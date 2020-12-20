@@ -59,6 +59,8 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
                                                 top_k=args.top_k[hyperparameter_idx],
                                                 top_p=args.top_p[hyperparameter_idx],
                                                 num_beams=args.num_beams[hyperparameter_idx],
+                                                num_beam_groups=args.num_beam_groups[hyperparameter_idx],
+                                                diversity_penalty=args.diversity_penalty[hyperparameter_idx],
                                                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                                                 do_sample=args.temperature[hyperparameter_idx]!=0  # if temperature==0, we do not sample
                                                 )

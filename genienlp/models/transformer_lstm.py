@@ -139,6 +139,8 @@ class TransformerLSTM(GenieModel):
                  top_k,
                  top_p,
                  num_beams,
+                 num_beam_groups,
+                 diversity_penalty,
                  no_repeat_ngram_size,
                  do_sample
                  ):
@@ -163,9 +165,11 @@ class TransformerLSTM(GenieModel):
                                      top_k=top_k,
                                      top_p=top_p,
                                      num_beams=num_beams,
+                                     num_beam_groups=num_beam_groups,
+                                     diversity_penalty=diversity_penalty,
                                      no_repeat_ngram_size=no_repeat_ngram_size,
                                      do_sample=do_sample,
-                                     generation_dict={'max_output_length': max_output_length, 'num_beams': num_beams},
+                                     generation_dict={'max_output_length': max_output_length},
                                      encoder_output=encoder_output
                                     )
         generated = torch.cat((generated[:, 0:1], generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)), dim=1) # map everything to full vocabulary except BOS which already is in full vocabulary

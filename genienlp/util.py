@@ -467,7 +467,7 @@ def load_config_json(args):
         if 'num_beams' in config and not isinstance(config['num_beams'], list):
             # num_beams used to be an integer in previous versions of the code
             config['num_beams'] = [config['num_beams']]
-        overwrite = ['val_batch_size', 'num_beams', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty', 'temperature', 'reduce_metrics']
+        overwrite = ['val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty', 'temperature', 'reduce_metrics']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -490,6 +490,10 @@ def load_config_json(args):
                 setattr(args, r, True)
             elif r == 'num_beams':
                 setattr(args, r, [1])
+            elif r == 'num_beam_groups':
+                setattr(args, r, [1])
+            elif r == 'diversity_penalty':
+                setattr(args, r, [0.0])
             elif r == 'num_outputs':
                 setattr(args, r, [1])
             elif r == 'no_repeat_ngram_size':

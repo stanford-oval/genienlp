@@ -84,6 +84,8 @@ class TransformerSeq2Seq(GenieModel):
                  top_k,
                  top_p,
                  num_beams,
+                 num_beam_groups,
+                 diversity_penalty,
                  no_repeat_ngram_size,
                  do_sample
                  ):
@@ -103,6 +105,8 @@ class TransformerSeq2Seq(GenieModel):
                                         top_k=top_k,
                                         top_p=top_p,
                                         num_beams=num_beams,
+                                        num_beam_groups=num_beam_groups,
+                                        diversity_penalty=diversity_penalty,
                                         no_repeat_ngram_size=no_repeat_ngram_size,
                                         do_sample=do_sample,
                                         )
