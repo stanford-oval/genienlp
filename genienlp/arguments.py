@@ -194,10 +194,8 @@ def post_parse(args):
         for t in args.train_task_names:
             if t not in args.val_task_names:
                 args.val_task_names.append(t)
-    if 'imdb' in args.val_task_names:
-        args.val_task_names.remove('imdb')
 
-    args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+    args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime('%D-%H:%M:%S %Z')
     
     # TODO relax the following assertions by dropping samples from batches in Iterator
     if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_languages.split('+')) != 0:
