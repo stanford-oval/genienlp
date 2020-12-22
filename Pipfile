@@ -20,6 +20,7 @@ sacrebleu = "~=1.0"
 tensorboardX = "==2.0.*"
 requests = "~=2.22"
 transformers = "==4.0.0"
+sentence-transformers = "==0.4.0"
 radam = {git = "https://github.com/LiyuanLucasLiu/RAdam"}
 sentencepiece = "==0.1.91"
 mosestokenizer = '~=1.1'
