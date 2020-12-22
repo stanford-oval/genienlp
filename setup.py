@@ -59,5 +59,6 @@ setuptools.setup(
         'transformers==4.0.0',
         'sentencepiece>=0.1.91,<0.2.0',
         'mosestokenizer~=1.1',
+        'sentence-transformers==0.4.0'
     ]
 )
