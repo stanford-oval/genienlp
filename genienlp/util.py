@@ -444,8 +444,7 @@ def load_config_json(args):
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
         retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
-                    'max_output_length', 'max_generative_vocab', 'lower',
-                    'trainable_decoder_embeddings', 'use_pretrained_bert',
+                    'max_output_length', 'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
                     'override_context', 'override_question',
                     'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence',
                     'preprocess_special_tokens']
@@ -464,8 +463,6 @@ def load_config_json(args):
             # These are for backward compatibility with models that were trained before we added these arguments
             elif r in ('preprocess_special_tokens'):
                 setattr(args, r, False)
-            elif r == 'use_pretrained_bert':
-                setattr(args, r, True)
             elif r == 'num_beam_groups':
                 setattr(args, r, [1])
             elif r == 'diversity_penalty':

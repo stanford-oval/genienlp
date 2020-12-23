@@ -148,17 +148,16 @@ def parse_argv(parser):
     parser.add_argument('--preprocess_special_tokens', action='store_true',
                         help='convert special ThingTalk tokens to words')
 
-    parser.add_argument('--warmup', default=40, type=int, help='warmup for learning rate')
+    parser.add_argument('--warmup', default=1, type=int, help='warmup for learning rate. setting it to 1 disables warmup.')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
     parser.add_argument('--beta0', default=0.9, type=float,
-                        help='alternative momentum for Adam (only when not using transformer_lr)')
+                        help='alternative momentum for Adam (only when not using transformer scheduler), and RAdam')
     parser.add_argument('--optimizer', default='adam', choices=['adam', 'sgd', 'radam'], type=str,
                         help='optimizer to use')
-    parser.add_argument('--no_transformer_lr', action='store_false', dest='transformer_lr',
-                        help='turns off the transformer learning rate strategy')
-    parser.add_argument('--transformer_lr_multiply', default=0.01, type=float,
-                        help='multiplier for transformer learning rate (if using Adam)')
-    parser.add_argument('--lr_rate', default=0.001, type=float, help='fixed learning rate (if not using warmup)')
+    parser.add_argument('--lr_schedule', type=str, default='transformer', choices=['transformer', 'constant', 'linear', 'sgd'],
+                        help='The learning rate strategy. All of them can be used with or without warmup.')
+    parser.add_argument('--lr_multiply', default=0.01, type=float,
+                        help='Multiplier for the `transformer` learning rate scheduler, constant value for `constant` and maximum value for `linear` schedulers.')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
     parser.add_argument('--gradient_accumulation_steps', default=1, type=int, help='Number of accumulation steps. Useful to effectively get larger batch sizes.')
 

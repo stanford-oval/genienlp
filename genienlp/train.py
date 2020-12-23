@@ -41,6 +41,7 @@ from pprint import pformat
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
+from transformers.optimization import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup
 
 from . import arguments
 from . import models
@@ -143,8 +144,7 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
         if grad_clip > 0.0:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
         opt.step()
-        if lr_scheduler is not None:
-            lr_scheduler.step()
+        lr_scheduler.step()
 
     return non_accumulated_loss, grad_norm
 
@@ -240,7 +240,7 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
 
 
 def do_log_training_loss(iteration, loss, *,
-                         lr_scheduler, grad_norm, lr_rate,
+                         lr_scheduler, grad_norm,
                          num_examples, len_contexts, len_answers,
                          logger, train_task, round_progress, task_progress,
                          timestamp, writer, log_prefix):
@@ -253,8 +253,6 @@ def do_log_training_loss(iteration, loss, *,
 
         if lr_scheduler is not None:
             writer.add_scalar(f'{log_prefix}/lr', lr_scheduler.get_last_lr(), iteration)
-        else:
-            writer.add_scalar(f'{log_prefix}/lr', lr_rate, iteration)
         if grad_norm is not None:
             writer.add_scalar(f'{log_prefix}/norm', grad_norm, iteration)
 
@@ -394,7 +392,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 len_contexts /= log_every
                 len_answers /= log_every
                 do_log_training_loss(iteration, local_loss,
-                                     lr_scheduler=lr_scheduler, grad_norm=grad_norm, lr_rate=args.lr_rate,
+                                     lr_scheduler=lr_scheduler, grad_norm=grad_norm,
                                      num_examples=num_examples, len_contexts=len_contexts, len_answers=len_answers,
                                      logger=logger, writer=writer, train_task=task, round_progress=round_progress,
                                      task_progress=task_progress, timestamp=args.timestamp, log_prefix=log_prefix)
@@ -427,30 +425,31 @@ def get_sgd_learning_rate(i, *, warmup):
 
 def init_opt(args, model, logger):
     if args.optimizer == 'adam':
-        if args.transformer_lr:
-            opt = torch.optim.Adam(model.params, lr=args.transformer_lr_multiply, betas=(0.9, 0.98), eps=1e-9,
-                                   weight_decay=args.weight_decay)
-            lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
-            scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
+        # Adam with transformer schedule has a different set of default hyperparameters:
+        if args.lr_schedule == 'transformer':
+            opt = torch.optim.Adam(model.params, lr=args.lr_multiply, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
         else:
-            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999),
-                                   weight_decay=args.weight_decay)
-            scheduler = None
+            opt = torch.optim.Adam(model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
     elif args.optimizer == 'radam':
         import radam
-        if args.transformer_lr:
-            logger.warning('--transformer_lr has no effect with RAdam optimizer, warmup is never applied')
-        opt = radam.RAdam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
-        scheduler = None
+        if args.warmup > 1:
+            logger.warning('With RAdam optimizer, warmup is never applied')
+        opt = radam.RAdam(model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
     else:
         assert args.optimizer == 'sgd'
-        if args.transformer_lr:
-            opt = torch.optim.SGD(model.params, lr=args.transformer_lr_multiply, weight_decay=args.weight_decay, )
-            lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
-            scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
-        else:
-            opt = torch.optim.SGD(model.params, lr=args.lr_rate, weight_decay=args.weight_decay, )
-            scheduler = None
+        opt = torch.optim.SGD(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay)
+    
+    if args.lr_schedule == 'transformer':
+        lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
+    elif args.lr_schedule == 'constant':
+        lr_lambda = partial(get_constant_schedule_with_warmup, num_training_steps=sum(args.train_iterations), num_warmup_steps=args.warmup)
+    elif args.lr_schedule == 'linear':
+        lr_lambda = partial(get_linear_schedule_with_warmup, num_training_steps=sum(args.train_iterations), num_warmup_steps=args.warmup)
+    elif args.lr_schedule == 'sgd':
+        lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
+    else:
+        raise ValueError('Invalid learning rate scheduler.')
+    scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
 
     return opt, scheduler
 

@@ -37,7 +37,13 @@ from .metrics import compute_metrics
 
 def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False, original_order=None):
     """
-    original_order: List of indices. If provided, we will sort the results according to this order
+    Inputs:
+        original_order: List of indices. If provided, we will sort the results according to this order
+    Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
+        loss
+        predictions: a List of Lists of strings
+        answers
+        contexts
     """
     if isinstance(model, torch.nn.DataParallel):
         # get rid of the DataParallel wrapper
@@ -121,13 +127,8 @@ def print_results(keys, values, num_print=1):
 def validate(task, val_iter, model, numericalizer, args, num_print=10):
     with torch.no_grad():
         model.eval()
-        names = ['beam search', 'answer', 'context']
+        names = ['greedy decoding' if args.num_beams==1 else 'beam search', 'answer', 'context']
         loss, predictions, answers, contexts = generate_with_model(model, val_iter, numericalizer, task, args, prediction_file_name=None)
-
-        # predictions is a list of lists
-        for i in range(len(predictions)):
-            for j in range(len(predictions[i])):
-                predictions[i][j] = predictions[i][j].replace('UNK', 'OOV')
 
         metrics = calculate_and_reduce_metrics(predictions, answers, task.metrics, args)
         results = [predictions, answers, contexts]
