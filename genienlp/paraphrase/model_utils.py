@@ -63,7 +63,7 @@ def check_args(args):
                              'you have to specify the --src_lang flag.')
         elif args.src_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 2)[1]]:
             raise ValueError(
-                'Dource language is not in the model group languages, please specify the correct source language.')
+                'Source language is not in the model group languages, please specify the correct source language.')
     
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] not in MARIAN_GROUP_MEMBERS and args.tgt_lang:
         logger.warning('Target language should not be provided when using models with single language pairs,'

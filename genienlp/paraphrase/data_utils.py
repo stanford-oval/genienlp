@@ -10,8 +10,7 @@ from ..data_utils.progbar import progress_bar
 from ..util import detokenize, tokenize, lower_case, SpecialTokenMap, remove_thingtalk_quotes
 
 from genienlp.util import get_number_of_lines
-from ..tasks.almond.utils import is_entity, quoted_pattern_maybe_space, device_pattern
-
+from ..tasks.almond.utils import is_entity, quoted_pattern_maybe_space, device_pattern, detokenize_cjk_chars
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +270,8 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
             # just make sure source language is used when tokenizing input sentence
             # tokenizer takes care of adding language code at the end of the sentence
             tokenizer.cur_lang_code = tokenizer.lang_code_to_id[src_lang]
-            
+        
+        input_sequence = detokenize_cjk_chars(input_sequence)
         input_sequence_ids = tokenizer.encode(input_sequence, add_special_tokens=True)
         
         prompt_ids = [] # includes the first few tokens of the output

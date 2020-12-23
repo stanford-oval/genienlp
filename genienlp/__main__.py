@@ -33,6 +33,7 @@ import argparse
 from . import arguments, train, predict, server, cache_embeddings, export
 from .paraphrase import run_lm_finetuning, run_generation
 from .paraphrase.scripts import split_dataset, dialog_to_tsv, clean_paraphrasing_dataset, transform_dataset
+from .sts import sts_calculate_scores, sts_filter
 
 subcommands = {
     # main commands
@@ -48,7 +49,11 @@ subcommands = {
     'transform-dataset': ('Apply transformations to a tab-separated dataset', transform_dataset.parse_argv, transform_dataset.main),
     'clean-paraphrasing-dataset': ('Select a clean subset from the ParaBank2 dataset', clean_paraphrasing_dataset.parse_argv, clean_paraphrasing_dataset.main),
     'dialog-to-tsv': ('Convert a dialog dataset to a turn-by-turn tab-separated format', dialog_to_tsv.parse_argv, dialog_to_tsv.main),
-    'split-dataset': ('Split a dataset file into two files', split_dataset.parse_argv, split_dataset.main)
+    'split-dataset': ('Split a dataset file into two files', split_dataset.parse_argv, split_dataset.main),
+    
+    'calculate-paraphrase-sts': ('Calculate semantic similarity scores between a dataset and its paraphrase', sts_calculate_scores.parse_argv, sts_calculate_scores.main),
+    'filter-paraphrase-sts': ('Filter paraphrases based on semantic similarity scores', sts_filter.parse_argv, sts_filter.main),
+    
 }
 
 
