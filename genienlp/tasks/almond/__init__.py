@@ -293,8 +293,26 @@ class ReverseAlmond(BaseTask):
                                 preprocess=self.preprocess_field, lower=False)
 
 
+class BaseAlmondDialogueNLUTask(BaseAlmondTask):
+    def preprocess_field(self, sentence, field_name=None):
+        # remove the $ at the start of dialogue
+        # this is safe because we know we're processing dialogues, so the answer
+        # always starts with $dialogue and the context is either `null` or also
+        # starts with $dialogue
+        if field_name == 'context' and sentence.startswith('$dialogue '):
+            sentence = sentence[1:]
+        if field_name == 'answer':
+            assert(sentence.startswith('$dialogue'))
+            sentence = sentence[1:]
+
+        return super().preprocess_field(sentence, field_name)
+
+    def postprocess_answer(self, answer):
+        return '$' + answer
+
+
 @register_task('almond_dialogue_nlu')
-class AlmondDialogueNLU(BaseAlmondTask):
+class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
     """Multi-turn NLU task for Almond dialogues
     (translate the user utterance to a formal representation, given the current
     state of the conversation)
@@ -318,7 +336,7 @@ class AlmondDialogueNLU(BaseAlmondTask):
 
 
 @register_task('almond_dialogue_nlu_agent')
-class AlmondDialogueNLUAgent(BaseAlmondTask):
+class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
     """Multi-turn NLU task for Almond dialogues, for the agent utterance
     (translate the agent utterance to a formal representation, given the current
     state of the conversation).
