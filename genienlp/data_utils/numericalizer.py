@@ -30,6 +30,7 @@
 import os
 import re
 import json
+import multiprocessing
 from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
@@ -321,7 +322,40 @@ class TransformerNumericalizer(object):
             self.generative_vocab_size = len(self._tokenizer)
             self.decoder_vocab = None
 
-    def encode_single(self, sentence):
+    def encode_batch(self, sentences: List[str], multiprocessing_threshold=5000) -> List[SequentialField]:
+        """
+        Batched version of `encode_single()`. Uses multiprocessing on all CPU cores for preprocessing,
+        and multithreading for tokenization if a `FastTokenizer` is used
+        Inputs:
+            sentences: a list of sentences to encode
+            multiprocessing_threshold: for input batches smaller than this value, multiprocessing will not be used due to its overhead
+        """
+        # We need to set this so that `tokenizers` package does not complain about detecting forks.
+        os.environ['TOKENIZERS_PARALLELISM'] = "true"
+
+        if self._preprocess_special_tokens:
+            if len(sentences) > multiprocessing_threshold:
+                with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
+                    sentences = p.map(self._apply_special_token_preprocessing, sentences)
+            else:
+                sentences = list(map(self._apply_special_token_preprocessing, sentences))
+        batch_encoded = self._tokenizer.batch_encode_plus(sentences, add_special_tokens=True, max_length=None,
+                                              return_length=True, padding=False, return_attention_mask=False)
+        batch_numerical = batch_encoded.data['input_ids']
+        batch_length = batch_encoded.data['length']
+
+        if self.decoder_vocab:
+            for i in range(len(batch_numerical)):
+                batch_decoder_numerical.append(self.decoder_vocab.encode(batch_numerical))
+        else:
+            batch_decoder_numerical = [[]] * len(batch_numerical)
+
+        sequential_fields = []
+        for i in range(len(sentences)):
+            sequential_fields.append(SequentialField(value=batch_numerical[i], length=batch_length[i], limited=batch_decoder_numerical[i]))
+        return sequential_fields
+
+    def encode_single(self, sentence: str) -> SequentialField:
         if self._preprocess_special_tokens:
             sentence = self._apply_special_token_preprocessing(sentence)
 

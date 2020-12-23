@@ -127,7 +127,7 @@ def print_results(keys, values, num_print=1):
 def validate(task, val_iter, model, numericalizer, args, num_print=10):
     with torch.no_grad():
         model.eval()
-        names = ['greedy decoding' if args.num_beams==1 else 'beam search', 'answer', 'context']
+        names = ['beam search', 'answer', 'context']
         loss, predictions, answers, contexts = generate_with_model(model, val_iter, numericalizer, task, args, prediction_file_name=None)
 
         metrics = calculate_and_reduce_metrics(predictions, answers, task.metrics, args)

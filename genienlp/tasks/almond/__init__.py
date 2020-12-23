@@ -66,7 +66,7 @@ class AlmondDataset(CQA):
                     n += 1
 
             max_examples = min(n, subsample) if subsample is not None else n
-            for i, line in progress_bar(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
+            for line in progress_bar(open(path, 'r', encoding='utf-8'), total=max_examples, desc="Reading Dataset"):
                 parts = line.strip().split('\t')
                 examples.append(make_example(parts, dir_name, **kwargs))
                 if len(examples) >= max_examples:
