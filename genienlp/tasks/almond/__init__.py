@@ -34,7 +34,7 @@ from collections import defaultdict
 
 from ..base_task import BaseTask
 from ..registry import register_task
-from ..generic_dataset import CQA, context_question_len, token_batch_fn, default_batch_fn
+from ..generic_dataset import CQA, default_batch_fn
 from ...data_utils.example import Example
 from ...data_utils.progbar import progress_bar
 from .utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, is_cjk_char
@@ -442,8 +442,8 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
             sort_key_fn = process_id
             batch_size_fn = default_batch_fn
         else:
-            sort_key_fn = context_question_len
-            batch_size_fn = token_batch_fn
+            pass
+            # use default values for `sort_key_fn` and `batch_size_fn`
             
         groups = len(all_datasets) if kwargs.get('sentence_batching') else None
         

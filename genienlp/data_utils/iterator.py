@@ -56,7 +56,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             # sort while keeping track of the original order
             data_with_original_order = list(zip(data_source, range(len(data_source)))) # list of tuples of the form (data_source[i], i)
             # sort based on data_source 
-            sorted_data_with_original_order = sorted(data_with_original_order, key=lambda x: self.sort_key(x[0]))
+            sorted_data_with_original_order = sorted(data_with_original_order, key=lambda x: self.sort_key(x[0]), reverse=True) # sort from long to short
             # separate the two parts of each tuple
             self.data_source, self.original_order = tuple(zip(*sorted_data_with_original_order))
         else:
@@ -84,13 +84,24 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             raise StopIteration
         while current_batch_size < self.batch_size:
             new_example = self.data_source[i]
+            if len(batch_of_indices) > 0:
+                longest_example = self.data_source[batch_of_indices[0]] # we sorted in descending order of length, so the first one is the longest
+            else:
+                longest_example = new_example # this is the first element in batch, and therefore the longest
+            new_batch_size = current_batch_size + self.batch_size_fn(longest_example)
+            if new_batch_size > self.batch_size:
+                # the new example would put us over the batch size limit
+                break
+
             batch_of_indices.append(i)
-            current_batch_size = self.batch_size_fn(new=new_example, count=len(batch_of_indices), sofar=current_batch_size)
+            current_batch_size = new_batch_size
             i += 1
+
             if i == len(self):
                 break # don't start from i=0; there is a large difference between the length of the first and last element
 
         self.last_batch_start_index += len(batch_of_indices)
+        assert len(batch_of_indices) > 0, 'Found an example larger than batch size.'
         return batch_of_indices
 
     def _get_next_batch_start_index(self):
