@@ -152,7 +152,7 @@ def parse_argv(parser):
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
     parser.add_argument('--beta0', default=0.9, type=float,
                         help='alternative momentum for Adam (only when not using transformer scheduler), and RAdam')
-    parser.add_argument('--optimizer', default='adam', choices=['adam', 'sgd', 'radam'], type=str,
+    parser.add_argument('--optimizer', default='adam', choices=['adam', 'adamw', 'sgd', 'radam'], type=str,
                         help='optimizer to use')
     parser.add_argument('--lr_schedule', type=str, default='transformer', choices=['transformer', 'constant', 'linear', 'sgd'],
                         help='The learning rate strategy. All of them can be used with or without warmup.')

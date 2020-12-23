@@ -41,7 +41,7 @@ from pprint import pformat
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
-from transformers.optimization import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup
+from transformers import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, AdamW
 
 from . import arguments
 from . import models
@@ -430,6 +430,8 @@ def init_opt(args, model, logger):
             opt = torch.optim.Adam(model.params, lr=args.lr_multiply, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
         else:
             opt = torch.optim.Adam(model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
+    elif args.optimizer == 'adamw':
+        opt = AdamW(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay)
     elif args.optimizer == 'radam':
         import radam
         if args.warmup > 1:
@@ -441,15 +443,17 @@ def init_opt(args, model, logger):
     
     if args.lr_schedule == 'transformer':
         lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
     elif args.lr_schedule == 'constant':
-        lr_lambda = partial(get_constant_schedule_with_warmup, num_training_steps=sum(args.train_iterations), num_warmup_steps=args.warmup)
+        scheduler = get_constant_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations), num_warmup_steps=args.warmup)
     elif args.lr_schedule == 'linear':
-        lr_lambda = partial(get_linear_schedule_with_warmup, num_training_steps=sum(args.train_iterations), num_warmup_steps=args.warmup)
+        scheduler = get_linear_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations), num_warmup_steps=args.warmup)
     elif args.lr_schedule == 'sgd':
         lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
     else:
         raise ValueError('Invalid learning rate scheduler.')
-    scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
+    
 
     return opt, scheduler
 
