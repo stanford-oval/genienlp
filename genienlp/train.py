@@ -445,9 +445,9 @@ def init_opt(args, model, logger):
         lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
         scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
     elif args.lr_schedule == 'constant':
-        scheduler = get_constant_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations), num_warmup_steps=args.warmup)
+        scheduler = get_constant_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations)//args.gradient_accumulation_steps, num_warmup_steps=args.warmup)
     elif args.lr_schedule == 'linear':
-        scheduler = get_linear_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations), num_warmup_steps=args.warmup)
+        scheduler = get_linear_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations)//args.gradient_accumulation_steps, num_warmup_steps=args.warmup)
     elif args.lr_schedule == 'sgd':
         lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
         scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
