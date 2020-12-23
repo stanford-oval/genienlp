@@ -77,21 +77,21 @@ def parse_argv(parser):
                         'If sentence_batching is used, this will be interpreted as number of examples.')
     parser.add_argument('--jump_start', default=0, type=int, help='number of iterations to give jump started tasks')
     parser.add_argument('--n_jump_start', default=0, type=int, help='how many tasks to jump start (presented in order)')
-    parser.add_argument('--num_print', default=15, type=int,
+    parser.add_argument('--num_print', default=10, type=int,
                         help='how many validation examples with greedy output to print to std out')
 
     parser.add_argument('--no_tensorboard', action='store_false', dest='tensorboard',
                         help='Turn off tensorboard logging')
     parser.add_argument('--tensorboard_dir', default=None,
                         help='Directory where to save Tensorboard logs (defaults to --save)')
-    parser.add_argument('--max_to_keep', default=5, type=int, help='number of checkpoints to keep')
-    parser.add_argument('--log_every', default=int(1e2), type=int, help='how often to log results in # of iterations')
-    parser.add_argument('--save_every', default=int(1e3), type=int,
+    parser.add_argument('--max_to_keep', default=3, type=int, help='number of checkpoints to keep')
+    parser.add_argument('--log_every', default=100, type=int, help='how often to log results in # of iterations')
+    parser.add_argument('--save_every', default=1000, type=int,
                         help='how often to save a checkpoint in # of iterations')
 
     parser.add_argument('--val_tasks', nargs='+', type=str, dest='val_task_names',
                         help='tasks to collect evaluation metrics for')
-    parser.add_argument('--val_every', default=int(1e3), type=int,
+    parser.add_argument('--val_every', default=1000, type=int,
                         help='how often to run validation in # of iterations')
     parser.add_argument('--val_batch_size', nargs='+', default=[3000], type=int,
                         help='Number of tokens in each batch for validation, corresponding to tasks in --val_tasks')

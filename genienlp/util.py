@@ -435,19 +435,6 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
         return data_loader
 
 
-def pad(x, new_channel, dim, val=None):
-    if x.size(dim) > new_channel:
-        x = x.narrow(dim, 0, new_channel)
-    channels = x.size()
-    assert (new_channel >= channels[dim])
-    if new_channel == channels[dim]:
-        return x
-    size = list(channels)
-    size[dim] = new_channel - size[dim]
-    padding = x.new(*size).fill_(val)
-    return torch.cat([x, padding], dim)
-
-
 def have_multilingual(task_names):
     return any(['multilingual' in name for name in task_names])
 

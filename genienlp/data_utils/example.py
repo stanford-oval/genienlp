@@ -49,8 +49,6 @@ class Example(NamedTuple):
     answer: str
     context_plus_question: List[str]
 
-    vocab_fields = ['context', 'question', 'answer']
-
     @staticmethod
     def from_raw(example_id: str, context: str, question: str, answer: str, preprocess = identity, lower=False):
         args = [example_id]

@@ -138,7 +138,6 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
         for p in model.parameters():
             if p.grad is None:
                 continue
-            # print('p.grad = ', p.grad)
             p.grad /= accumulated_batch_lengths
         accumulated_batch_lengths = 0
         if grad_clip > 0.0:
@@ -367,8 +366,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                                          grad_clip=args.grad_clip,
                                          gradient_accumulation_steps=args.gradient_accumulation_steps)
             if loss is None:
-                logger.info(
-                    'Encountered NAN loss during training... Continue training ignoring the current batch')
+                logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
                 continue
             if loss < 1e-6:
                 zero_loss += 1

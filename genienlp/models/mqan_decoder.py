@@ -68,8 +68,8 @@ class MQANDecoder(nn.Module):
     def forward(self, batch, final_context, context_rnn_state, encoder_loss,
                 current_token_id=None, decoder_wrapper=None, expansion_factor=1, generation_dict=None):
 
-        context, context_lengths, context_limited = batch.context.value, batch.context.length, batch.context.limited
-        answer, answer_lengths, answer_limited = batch.answer.value, batch.answer.length, batch.answer.limited
+        context, context_limited = batch.context.value, batch.context.limited
+        answer, answer_limited = batch.answer.value, batch.answer.limited
         decoder_vocab = self.numericalizer.decoder_vocab
         self.map_to_full = decoder_vocab.decode
         context_padding = context.data == self.pad_idx
