@@ -326,7 +326,7 @@ class TransformerNumericalizer(object):
             sentence = self._apply_special_token_preprocessing(sentence)
 
         encoded = self._tokenizer.encode_plus(sentence, add_special_tokens=True, max_length=None,
-                                              return_length=True, padding=False)
+                                              return_length=True, padding=False, return_attention_mask=False)
 
         numerical = encoded.data['input_ids']
         length = encoded.data['length']

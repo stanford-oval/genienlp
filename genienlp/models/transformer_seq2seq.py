@@ -71,7 +71,10 @@ class TransformerSeq2Seq(GenieModel):
                 # with a lowercase letter, so we leave it
                 answer = answer[:, 1:].contiguous()
 
-            return self.model(batch.context.value, labels=answer)
+            # setting pad output tokens to -100 means they will be ignored in calculating loss
+            answer[answer==self.numericalizer.pad_id] = -100
+
+            return self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
         else:
             return self.model(**kwargs)
 
@@ -91,10 +94,10 @@ class TransformerSeq2Seq(GenieModel):
                  ):
 
         input_ids = batch.context.value
-        # TODO attention_mask
+        # when attention_mask is not provided to generate(), it will default to masking pad tokens, which is the correct thing
         generated = self.model.generate(input_ids=input_ids,
                                         max_length=max_output_length,
-                                        min_length=2,  # generate at least one token after BOS
+                                        min_length=2, # generate at least one token after BOS
                                         bos_token_id=self.numericalizer._tokenizer.bos_token_id,
                                         pad_token_id=self.numericalizer._tokenizer.pad_token_id,
                                         early_stopping=True,
