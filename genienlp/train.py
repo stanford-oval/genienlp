@@ -330,7 +330,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             task_iterations = train_iterations[task_idx] if train_iterations is not None else None
             if task_iterations == 0:
                 continue
-            if task_iterations is not None and task_iteration[task] >= task_iterations:
+            if task_iterations is not None and task_iteration[task] > task_iterations:
                 task_done[task] = True
                 continue
 
@@ -409,7 +409,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
         per_task_iterations += 1
         rnd += 1
 
-    logger.info(f'{log_prefix} is done after {per_task_iterations} iterations')
+    logger.info(f'{log_prefix} is done after {per_task_iterations-1} iterations')
 
 
 

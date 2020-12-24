@@ -344,9 +344,10 @@ class TransformerNumericalizer(object):
         batch_numerical = batch_encoded.data['input_ids']
         batch_length = batch_encoded.data['length']
 
+        batch_decoder_numerical = []
         if self.decoder_vocab:
             for i in range(len(batch_numerical)):
-                batch_decoder_numerical.append(self.decoder_vocab.encode(batch_numerical))
+                batch_decoder_numerical.append(self.decoder_vocab.encode(batch_numerical[i]))
         else:
             batch_decoder_numerical = [[]] * len(batch_numerical)
 
