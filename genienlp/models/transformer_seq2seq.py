@@ -28,7 +28,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+import torch
 from transformers import AutoModelForSeq2SeqLM, AutoConfig
+from loss_dropper import LossDropper
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from .base import GenieModel
@@ -50,6 +52,10 @@ class TransformerSeq2Seq(GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
+        if args.dropper_ratio > 0:
+            self.dropper = LossDropper(dropc=args.dropper_ratio)
+        else:
+            self.dropper = None
 
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)
@@ -74,7 +80,20 @@ class TransformerSeq2Seq(GenieModel):
             # setting pad output tokens to -100 means they will be ignored in calculating loss
             answer[answer==self.numericalizer.pad_id] = -100
 
-            return self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
+            # this is similar to what `transformers` Seq2Seq models do, but with two changes
+            # (1) loss is averaged over sequence lengths first, then over the batch size. This way,
+            # longer sequences in the batch do not drown shorter sequences.
+            # (2) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
+            outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
+            ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+            loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)
+            loss = loss.sum(dim=1) / (batch.answer.length - 1) # -1 because BOS is removed
+            if self.dropper is not None:
+                dropper_mask = self.dropper(loss)
+                loss = loss * dropper_mask
+            loss = loss.mean() # average over the batch size
+            outputs.loss = loss # replace the loss calculated by `transformers` with the new loss
+            return outputs
         else:
             return self.model(**kwargs)
 
