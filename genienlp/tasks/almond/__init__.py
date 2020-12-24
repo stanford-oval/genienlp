@@ -299,16 +299,16 @@ class BaseAlmondDialogueNLUTask(BaseAlmondTask):
         # this is safe because we know we're processing dialogues, so the answer
         # always starts with $dialogue and the context is either `null` or also
         # starts with $dialogue
-        if field_name == 'context' and sentence.startswith('$dialogue '):
-            sentence = sentence[1:]
+        if field_name == 'context' and sentence.startswith('$dialogue @org.thingpedia.dialogue.transaction . '):
+            sentence = sentence[len('$dialogue @org.thingpedia.dialogue.transaction . '):]
         if field_name == 'answer':
-            assert(sentence.startswith('$dialogue'))
-            sentence = sentence[1:]
+            assert(sentence.startswith('$dialogue @org.thingpedia.dialogue.transaction . '))
+            sentence = sentence[len('$dialogue @org.thingpedia.dialogue.transaction . '):]
 
         return super().preprocess_field(sentence, field_name)
 
     def postprocess_answer(self, answer):
-        return '$' + answer
+        return '$dialogue @org.thingpedia.dialogue.transaction . ' + answer
 
 
 @register_task('almond_dialogue_nlu')
