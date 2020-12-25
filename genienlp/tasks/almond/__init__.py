@@ -292,7 +292,7 @@ class ReverseAlmond(BaseTask):
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
 
-
+# TODO add a similar preprocessing step to Multilingual dialogue tasks as well
 class BaseAlmondDialogueNLUTask(BaseAlmondTask):
     def preprocess_field(self, sentence, field_name=None):
         # remove the $ at the start of dialogue
