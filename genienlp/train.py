@@ -346,19 +346,6 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
             round_progress = f'round_{rnd}:' if rounds else ''
 
-            # validate
-            if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
-                deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
-                                         train_task=task, round_progress=round_progress,
-                                         task_progress=task_progress, writer=writer, logger=logger)
-
-                # saving
-                if should_save(iteration, save_every):
-                    best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
-                                                saver=saver, logger=logger, train_task=task,
-                                                round_progress=round_progress, task_progress=task_progress,
-                                                timestamp=args.timestamp, log_dir=args.log_dir)
-
             # param update
             loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
                                          grad_clip=args.grad_clip,
@@ -400,6 +387,19 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 len_contexts = 0
                 len_answers = 0
                 local_loss = 0
+
+            # validate
+            if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
+                deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
+                                         train_task=task, round_progress=round_progress,
+                                         task_progress=task_progress, writer=writer, logger=logger)
+
+                # saving
+                if should_save(iteration, save_every):
+                    best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
+                                                saver=saver, logger=logger, train_task=task,
+                                                round_progress=round_progress, task_progress=task_progress,
+                                                timestamp=args.timestamp, log_dir=args.log_dir)
 
             # book keeping
             task_iteration[task] += 1
