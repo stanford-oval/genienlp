@@ -30,10 +30,10 @@
 import logging
 import os
 import shutil
-from transformers import AutoConfig
+import torch
 
-from .data_utils.numericalizer import TransformerNumericalizer
 from .util import load_config_json
+from . import models
 
 logger = logging.getLogger(__name__)
 
@@ -52,14 +52,18 @@ def main(args):
     os.makedirs(args.output, exist_ok=True)
     load_config_json(args)
 
-    numericalizer = TransformerNumericalizer(args.pretrained_model,
-                                             max_generative_vocab=args.max_generative_vocab,
-                                             cache=args.embeddings)
+    # load everything - this will ensure that we initialize the numericalizer correctly
+    Model = getattr(models, args.model)
+    model, _ = Model.from_pretrained(args.path,
+                                     model_checkpoint_file=args.checkpoint_name,
+                                     args=args,
+                                     device=torch.device('cpu'),
+                                     tasks=[],
+                                     )
 
-    # load the numericalizer from the model training directory, and immediately save it in the export directory
+    # save the numericalizer to the target directory
     # this will copy over all the necessary vocabulary and config files that the numericalizer needs
-    numericalizer.load(args.path)
-    numericalizer.save(args.output)
+    model.numericalizer.save(args.output)
 
     # now copy over the config.json and checkpoint file
     for fn in ['config.json', args.checkpoint_name]:
