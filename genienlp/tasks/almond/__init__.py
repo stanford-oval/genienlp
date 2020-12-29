@@ -295,20 +295,20 @@ class ReverseAlmond(BaseTask):
 # TODO add a similar preprocessing step to Multilingual dialogue tasks as well
 class BaseAlmondDialogueNLUTask(BaseAlmondTask):
     def preprocess_field(self, sentence, field_name=None):
-        # remove the $ at the start of dialogue
+        # remove the $dialogue at the start of the dialogue
         # this is safe because we know we're processing dialogues, so the answer
         # always starts with $dialogue and the context is either `null` or also
         # starts with $dialogue
-        if field_name == 'context' and sentence.startswith('$dialogue @org.thingpedia.dialogue.transaction . '):
-            sentence = sentence[len('$dialogue @org.thingpedia.dialogue.transaction . '):]
+        if field_name == 'context' and sentence.startswith('$dialogue '):
+            sentence = sentence[len('$dialogue '):]
         if field_name == 'answer':
-            assert(sentence.startswith('$dialogue @org.thingpedia.dialogue.transaction . '))
-            sentence = sentence[len('$dialogue @org.thingpedia.dialogue.transaction . '):]
+            assert(sentence.startswith('$dialogue '))
+            sentence = sentence[len('$dialogue '):]
 
         return super().preprocess_field(sentence, field_name)
 
     def postprocess_answer(self, answer):
-        return '$dialogue @org.thingpedia.dialogue.transaction . ' + answer
+        return '$dialogue ' + answer
 
 
 @register_task('almond_dialogue_nlu')

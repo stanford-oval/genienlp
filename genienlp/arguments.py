@@ -195,6 +195,8 @@ def post_parse(args):
         for t in args.train_task_names:
             if t not in args.val_task_names:
                 args.val_task_names.append(t)
+    if 'imdb' in args.val_task_names:
+        args.val_task_names.remove('imdb')
 
     args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime('%D-%H:%M:%S %Z')
     
