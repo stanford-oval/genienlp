@@ -53,7 +53,7 @@ class TransformerSeq2Seq(GenieModel):
 
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
         if args.dropper_ratio > 0:
-            self.dropper = LossDropper(dropc=args.dropper_ratio)
+            self.dropper = LossDropper(dropc=args.dropper_ratio, min_count=args.dropper_min_count)
         else:
             self.dropper = None
 
