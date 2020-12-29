@@ -42,8 +42,11 @@ class TransformerSeq2Seq(GenieModel):
         super().__init__(config)
         self.args = args
         args.dimension = config.d_model
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
-                                                           cache_dir=self.args.embeddings)
+        if save_directory is not None:
+            self.model = AutoModelForSeq2SeqLM.from_config(config)
+        else:
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
+                                                               cache_dir=self.args.embeddings)
         self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, max_generative_vocab=None,
                                                       preprocess_special_tokens=args.preprocess_special_tokens)
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)

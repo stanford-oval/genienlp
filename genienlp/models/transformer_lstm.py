@@ -63,7 +63,10 @@ class TransformerLSTM(GenieModel):
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
 
         logger.info(f'Initializing encoder and decoder embeddings')
-        self.encoder_embeddings = AutoModel.from_pretrained(encoder_embeddings, config=config, cache_dir=args.embeddings)
+        if save_directory is not None:
+            self.encoder_embeddings = AutoModel.from_config(config)
+        else:
+            self.encoder_embeddings = AutoModel.from_pretrained(encoder_embeddings, config=config, cache_dir=args.embeddings)
         self.encoder_embeddings.resize_token_embeddings(self.numericalizer.num_tokens)
         
         logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens')
