@@ -211,14 +211,14 @@ def do_validate(iteration, args, model, numericalizer, val_iters, *,
 
 
 def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
-               saver, logger, train_task, round_progress, task_progress, timestamp, log_dir):
+               saver, logger, train_task, round_progress, task_progress, timestamp, log_dir, model_parallel):
     should_save_best = False
     if deca_score is not None and (best_decascore is None or best_decascore < deca_score):
         best_decascore = deca_score
         should_save_best = True
 
     # DataParallel and ModelParallel are mutually exclusive
-    if model.model.model_parallel:
+    if model_parallel:
         model_state_dict = model.state_dict()
     else:
         # punch through the nn.DataParallel to access the real model, otherwise we won't be able
@@ -241,7 +241,7 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
         torch.save(save_model_state_dict, os.path.join(log_dir, 'best.pth'))
         torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
         
-        if model.model.model_parallel:
+        if model_parallel:
             model.numericalizer.save(saver._savedir)
         else:
             model.module.numericalizer.save(saver._savedir)
@@ -369,7 +369,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                     best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
                                                 saver=saver, logger=logger, train_task=task,
                                                 round_progress=round_progress, task_progress=task_progress,
-                                                timestamp=args.timestamp, log_dir=args.log_dir)
+                                                timestamp=args.timestamp, log_dir=args.log_dir, model_parallel=args.model_parallel)
 
             # param update
             loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
@@ -506,7 +506,31 @@ def main(args):
     log_model_size(logger, model, model_name)
     
     if args.model_parallel:
-        model.model.parallelize()
+        n_layers = len(model.model.encoder.block)
+        layers = list(range(n_layers))
+        
+        if args.mp_device_ratio is not None:
+            if len(args.devices) > torch.cuda.device_count() or max(args.devices) >= torch.cuda.device_count():
+                raise ValueError('Provided GPU devices exceeds the number of available GPU')
+            
+            mp_device_ratio = [(device_ratio / sum(args.mp_device_ratio)) for device_ratio in args.mp_device_ratio]
+            layers_list = []
+            beg = 0
+            for i in range(len(args.devices)):
+                end = min(beg + math.ceil(n_layers * mp_device_ratio[i]), n_layers)
+                layers_list.append(layers[beg: end])
+                beg = end
+                
+            if any([len(val_list) == 0 for val_list in layers_list]):
+                raise ValueError('One device got no layers given the mp_device_ratio you provided'
+                                 'Hint: if you do not provide mp_device_ratio, layers will be distributed evenly')
+            
+        else:
+            n_blocks = int(math.ceil(n_layers / len(args.devices)))
+            layers_list = list(layers[i: i + n_blocks] for i in range(0, n_layers, n_blocks))
+            
+        device_map = dict(zip(args.devices, layers_list))
+        model.model.parallelize(device_map)
         print('model.model.model_parallel', model.model.model_parallel)
         print('model.model.device_map', model.model.device_map)
     else:

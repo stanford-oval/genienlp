@@ -33,6 +33,7 @@ import json
 import logging
 import os
 import subprocess
+import torch
 
 from .tasks.registry import get_tasks
 from .util import have_multilingual
@@ -147,6 +148,9 @@ def parse_argv(parser):
                         help='convert special ThingTalk tokens to words')
     
     parser.add_argument('--model_parallel', action='store_true', help='Use model parallelization by spliting model weights across available gpus')
+    parser.add_argument('--mp_device_ratio', default=None, nargs='+', type=int, help='Provide the distribution ratio of model layers across gpus when using model_parallel'
+                                                                'e.g. "1 2 2 2" first device recieves half number of layers compared to other devices'
+                                                                'default is None meaning we distribute evenly on all available gpus')
 
     parser.add_argument('--warmup', default=40, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
@@ -220,6 +224,10 @@ def post_parse(args):
 
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
+        
+    if args.mp_device_ratio is not None:
+        if len(args.mp_device_ratio) != len(args.devices):
+            raise ValueError('When using model_parallel number of provided devices must match the number of mp_device_ratio')
 
     # postprocess arguments
     if args.commit:
