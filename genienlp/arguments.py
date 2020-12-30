@@ -145,6 +145,8 @@ def parse_argv(parser):
                         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
     parser.add_argument('--preprocess_special_tokens', action='store_true',
                         help='convert special ThingTalk tokens to words')
+    
+    parser.add_argument('--model_parallel', action='store_true', help='Use model parallelization by spliting model weights across available gpus')
 
     parser.add_argument('--warmup', default=40, type=int, help='warmup for learning rate')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')

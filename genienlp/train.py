@@ -123,6 +123,7 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
     model.train()
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
+        
     loss = model(batch).loss
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
@@ -138,7 +139,6 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
         for p in model.parameters():
             if p.grad is None:
                 continue
-            # print('p.grad = ', p.grad)
             p.grad /= accumulated_batch_lengths
         accumulated_batch_lengths = 0
         if grad_clip > 0.0:
@@ -217,9 +217,14 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
         best_decascore = deca_score
         should_save_best = True
 
-    # punch through the nn.DataParallel to access the real model, otherwise we won't be able
-    # to load this model later
-    model_state_dict = model.module.state_dict()
+    # DataParallel and ModelParallel are mutually exclusive
+    if model.model.model_parallel:
+        model_state_dict = model.state_dict()
+    else:
+        # punch through the nn.DataParallel to access the real model, otherwise we won't be able
+        # to load this model later
+        model_state_dict = model.module.state_dict()
+        
     model_state_dict = {k: v.cpu() for k, v in model_state_dict.items()}
 
     save_model_state_dict = {
@@ -235,7 +240,11 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
             f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}saving new best model')
         torch.save(save_model_state_dict, os.path.join(log_dir, 'best.pth'))
         torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
-        model.module.numericalizer.save(saver._savedir)
+        
+        if model.model.model_parallel:
+            model.numericalizer.save(saver._savedir)
+        else:
+            model.module.numericalizer.save(saver._savedir)
 
     return best_decascore
 
@@ -495,9 +504,14 @@ def main(args):
 
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
-
-    model.to(devices[0])
-    model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
+    
+    if args.model_parallel:
+        model.model.parallelize()
+        print('model.model.model_parallel', model.model.model_parallel)
+        print('model.model.device_map', model.model.device_map)
+    else:
+        model.to(devices[0])
+        model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
     model.params = params
     ##########
 
@@ -518,7 +532,7 @@ def main(args):
         writer = None
 
     train(args, devices, model, opt, lr_scheduler, train_sets,
-          args.train_iterations, model.module.numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
+          args.train_iterations, model.module.numericalizer if not args.model_parallel else model.numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
           log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
           rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
           best_decascore=best_decascore, log_prefix='training')
