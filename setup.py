@@ -48,13 +48,14 @@ setuptools.setup(
 
     install_requires=[
         'numpy>=1.14.5',
-        'torch~=1.6',
+        'torch~=1.7.1',
         'tqdm~=4.0',
         'tensorboardX==2.0.*',
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
         'requests~=2.22',
-        'transformers~=4.0',
-        'sentencepiece==0.1.*'
+        'transformers==4.1.1',
+        'sentencepiece==0.1.*',
+        'loss_dropper @ git+https://github.com/ddkang/loss_dropper#egg=loss_dropper'
     ]
 )

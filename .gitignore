@@ -1,33 +1,31 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+models/__pycache__/
 *.py[cod]
 *$py.class
 
 # added manually
 .data
 .embeddings
-__pycache__/
-models/__pycache__/
-multiprocess/__pycache__/
 results/
-tests/embeddings/*
 local_files
 local_scripts/*
 dataset/*
 generated/*
+*events.out.tfevents*
 
 .DS_Store
 .idea/
 .vscode/
 models/.DS_Store
-multiprocess/.DS_Store
-text/.DS_Store
 src/
 workdir/
 *save*/
 
 lightning_logs/
 pytorch_model.bin
+*.pth
+tests/embeddings/*
 tests/dataset-*
 tests/dataset/*
 tests/database/*

@@ -33,10 +33,15 @@ from tqdm import tqdm
 
 
 class LogFriendlyProgressBar:
-    def __init__(self, iterable, desc, total):
+    def __init__(self, iterable, desc, total, step: int=1):
+        """
+        Inputs:
+            step: Will print progress every `step` %
+        """
         self._desc = desc
         self._i = 0
         self._N = total
+        self.step = step
         self._progress = 0
         self._iterable = iterable
         self._iterator = None
@@ -49,7 +54,7 @@ class LogFriendlyProgressBar:
         value = next(self._iterator)
         self._i += 1
         progress = math.floor(self._i * 100 / self._N)
-        if progress > self._progress:
+        if progress > self._progress and progress % self.step == 0:
             if self._desc:
                 print(f'{self._desc} - progress: {progress}%', file=sys.stderr)
             else:
@@ -70,7 +75,7 @@ def progress_bar(iterable, desc=None, total=None, disable=False):
     if sys.stderr.isatty():
         return tqdm(iterable, desc=desc, total=total)
     else:
-        return LogFriendlyProgressBar(iterable, desc=desc, total=total)
+        return LogFriendlyProgressBar(iterable, desc=desc, total=total, step=5)
 
 
 def prange(*args, desc=None, disable=False):

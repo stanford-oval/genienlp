@@ -54,7 +54,16 @@ def context_answer_len(ex):
     return interleave_keys(ex.context.length, ex.answer.length)
 
 def context_question_len(ex):
-    return ex.context.length
+    return ex.context.length # question is already appended to context
+
+def input_then_output_len(ex):
+    """
+    sort by input length, break ties by output length
+    """
+    return (context_question_len(ex), answer_len(ex))
+
+def answer_len(ex):
+    return ex.answer.length
 
 def id_value(ex):
     id_ = ex.example_id.rsplit('/', 1)
@@ -62,21 +71,20 @@ def id_value(ex):
     return id_
 
 # batch_size funcs
-def input_tokens_fn(new, count, sofar):
-    return sofar + context_question_len(new)
+def input_tokens_fn(new):
+    return context_question_len(new)
 
-def token_batch_fn(new, count, sofar):
-    prev_max_len = sofar / (count - 1) if count > 1 else 0
-    return max(len(new.context), 5 * len(new.answer), prev_max_len) * count
+def all_tokens_fn(new):
+    return context_question_len(new) + answer_len(new)
 
-def default_batch_fn(new, count, sofar):
-    return count
+def default_batch_fn(new):
+    return 1
 
 
 
 class CQA(Dataset):
     
-    def __init__(self, examples, sort_key_fn=context_question_len, batch_size_fn=input_tokens_fn, groups=None, **kwargs):
+    def __init__(self, examples, sort_key_fn=input_then_output_len, batch_size_fn=input_tokens_fn, groups=None, **kwargs):
         self.sort_key_fn = sort_key_fn
         self.batch_size_fn = batch_size_fn
         self.groups = groups
@@ -587,7 +595,7 @@ class Summarization(CQA):
                                     if line.startswith("@highlight"):
                                         is_highlight = True
                                     elif "@highlight" in line:
-                                        raise
+                                        raise ValueError()
                                     elif is_highlight:
                                         highlight.append(line)
                                     else:
