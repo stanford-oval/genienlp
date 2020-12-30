@@ -34,7 +34,7 @@ from collections import defaultdict
 
 from ..base_task import BaseTask
 from ..registry import register_task
-from ..generic_dataset import CQA, context_question_len, token_batch_fn, default_batch_fn
+from ..generic_dataset import CQA, default_batch_fn, input_then_output_len, input_tokens_fn
 from ...data_utils.example import Example
 from ...data_utils.progbar import progress_bar
 from .utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, is_cjk_char, detokenize_cjk_chars
@@ -66,7 +66,7 @@ class AlmondDataset(CQA):
                     n += 1
 
             max_examples = min(n, subsample) if subsample is not None else n
-            for i, line in progress_bar(enumerate(open(path, 'r', encoding='utf-8')), total=max_examples):
+            for line in progress_bar(open(path, 'r', encoding='utf-8'), total=max_examples, desc="Reading Dataset"):
                 parts = line.strip().split('\t')
                 examples.append(make_example(parts, dir_name, **kwargs))
                 if len(examples) >= max_examples:
@@ -120,7 +120,7 @@ class BaseAlmondTask(BaseTask):
 
     @property
     def metrics(self):
-        return ['em', 'sm', 'bleu']
+        return ['em', 'sm', 'f1']
 
     def _is_program_field(self, field_name):
         raise NotImplementedError()
@@ -228,6 +228,10 @@ class NaturalSeq2Seq(BaseAlmondTask):
     """The Almond seqeunce to sequence task where both sequences are natural language
     i.e. no ThingTalk program. Paraphrasing and translation are examples of this task"""
 
+    @property
+    def metrics(self):
+        return ['em', 'bleu', 'f1']
+
     def _is_program_field(self, field_name):
         return False
 
@@ -288,9 +292,30 @@ class ReverseAlmond(BaseTask):
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
 
+# TODO add a similar preprocessing step to Multilingual dialogue tasks as well
+class BaseAlmondDialogueNLUTask(BaseAlmondTask):
+    def preprocess_field(self, sentence, field_name=None):
+        if not sentence:
+            return sentence
+
+        # remove the $dialogue at the start of the dialogue
+        # this is safe because we know we're processing dialogues, so the answer
+        # always starts with $dialogue and the context is either `null` or also
+        # starts with $dialogue
+        if field_name == 'context' and sentence.startswith('$dialogue '):
+            sentence = sentence[len('$dialogue '):]
+        if field_name == 'answer':
+            assert(sentence.startswith('$dialogue '))
+            sentence = sentence[len('$dialogue '):]
+
+        return super().preprocess_field(sentence, field_name)
+
+    def postprocess_answer(self, answer):
+        return '$dialogue ' + answer
+
 
 @register_task('almond_dialogue_nlu')
-class AlmondDialogueNLU(BaseAlmondTask):
+class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
     """Multi-turn NLU task for Almond dialogues
     (translate the user utterance to a formal representation, given the current
     state of the conversation)
@@ -314,7 +339,7 @@ class AlmondDialogueNLU(BaseAlmondTask):
 
 
 @register_task('almond_dialogue_nlu_agent')
-class AlmondDialogueNLUAgent(BaseAlmondTask):
+class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
     """Multi-turn NLU task for Almond dialogues, for the agent utterance
     (translate the agent utterance to a formal representation, given the current
     state of the conversation).
@@ -373,7 +398,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
 
     @property
     def metrics(self):
-        return ['em', 'sm', 'bleu']
+        return ['em', 'f1']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
@@ -438,8 +463,9 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
             sort_key_fn = process_id
             batch_size_fn = default_batch_fn
         else:
-            sort_key_fn = context_question_len
-            batch_size_fn = token_batch_fn
+            # use default values for `sort_key_fn` and `batch_size_fn`
+            sort_key_fn = input_then_output_len
+            batch_size_fn = input_tokens_fn
             
         groups = len(all_datasets) if kwargs.get('sentence_batching') else None
         
@@ -457,10 +483,6 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
 
     def _is_program_field(self, field_name):
         return field_name == 'answer'
-    
-    @property
-    def metrics(self):
-        return ['em', 'sm', 'bleu']
     
     def _make_example(self, parts, dir_name, **kwargs):
         if self._almond_has_multiple_programs:
@@ -485,10 +507,6 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
 
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
-
-    @property
-    def metrics(self):
-        return ['em', 'sm', 'bleu']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:

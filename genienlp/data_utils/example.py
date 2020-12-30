@@ -49,8 +49,6 @@ class Example(NamedTuple):
     answer: str
     context_plus_question: List[str]
 
-    vocab_fields = ['context', 'question', 'answer']
-
     @staticmethod
     def from_raw(example_id: str, context: str, question: str, answer: str, preprocess = identity, lower=False):
         args = [example_id]
@@ -76,11 +74,15 @@ class NumericalizedExamples(NamedTuple):
     @staticmethod
     def from_examples(examples, numericalizer):
         assert all(isinstance(ex.example_id, str) for ex in examples)
+        numericalized_examples = []
 
-        for ex in examples:
-            yield NumericalizedExamples([ex.example_id],
-                                        numericalizer.encode_single(ex.context_plus_question),
-                                        numericalizer.encode_single(ex.answer))
+        tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question for ex in examples])
+        tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples])
+        for i in range(len(examples)):
+            numericalized_examples.append(NumericalizedExamples([examples[i].example_id],
+                                        tokenized_contexts[i],
+                                        tokenized_answers[i]))
+        return numericalized_examples
 
     @staticmethod
     def collate_batches(batches : Iterable['NumericalizedExamples'], numericalizer, device):

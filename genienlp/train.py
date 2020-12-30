@@ -41,6 +41,7 @@ from pprint import pformat
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
+from transformers import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, AdamW
 
 from . import arguments
 from . import models
@@ -144,8 +145,7 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
         if grad_clip > 0.0:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
         opt.step()
-        if lr_scheduler is not None:
-            lr_scheduler.step()
+        lr_scheduler.step()
 
     return non_accumulated_loss, grad_norm
 
@@ -250,7 +250,7 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
 
 
 def do_log_training_loss(iteration, loss, *,
-                         lr_scheduler, grad_norm, lr_rate,
+                         lr_scheduler, grad_norm,
                          num_examples, len_contexts, len_answers,
                          logger, train_task, round_progress, task_progress,
                          timestamp, writer, log_prefix):
@@ -263,8 +263,6 @@ def do_log_training_loss(iteration, loss, *,
 
         if lr_scheduler is not None:
             writer.add_scalar(f'{log_prefix}/lr', lr_scheduler.get_last_lr(), iteration)
-        else:
-            writer.add_scalar(f'{log_prefix}/lr', lr_rate, iteration)
         if grad_norm is not None:
             writer.add_scalar(f'{log_prefix}/norm', grad_norm, iteration)
 
@@ -307,7 +305,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
         task_fraction[task] = 0.0
 
     saver = Saver(args.log_dir, args.max_to_keep)
-    epoch = 0
+    per_task_iterations = 0
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
@@ -358,26 +356,12 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
             round_progress = f'round_{rnd}:' if rounds else ''
 
-            # validate
-            if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
-                deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
-                                         train_task=task, round_progress=round_progress,
-                                         task_progress=task_progress, writer=writer, logger=logger)
-
-                # saving
-                if should_save(iteration, save_every):
-                    best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
-                                                saver=saver, logger=logger, train_task=task,
-                                                round_progress=round_progress, task_progress=task_progress,
-                                                timestamp=args.timestamp, log_dir=args.log_dir, model_parallel=args.model_parallel)
-
             # param update
             loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
                                          grad_clip=args.grad_clip,
                                          gradient_accumulation_steps=args.gradient_accumulation_steps)
             if loss is None:
-                logger.info(
-                    'Encountered NAN loss during training... Continue training ignoring the current batch')
+                logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
                 continue
             if loss < 1e-6:
                 zero_loss += 1
@@ -405,7 +389,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 len_contexts /= log_every
                 len_answers /= log_every
                 do_log_training_loss(iteration, local_loss,
-                                     lr_scheduler=lr_scheduler, grad_norm=grad_norm, lr_rate=args.lr_rate,
+                                     lr_scheduler=lr_scheduler, grad_norm=grad_norm,
                                      num_examples=num_examples, len_contexts=len_contexts, len_answers=len_answers,
                                      logger=logger, writer=writer, train_task=task, round_progress=round_progress,
                                      task_progress=task_progress, timestamp=args.timestamp, log_prefix=log_prefix)
@@ -414,15 +398,28 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 len_answers = 0
                 local_loss = 0
 
+            # validate
+            if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
+                deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
+                                         train_task=task, round_progress=round_progress,
+                                         task_progress=task_progress, writer=writer, logger=logger)
+
+                # saving
+                if should_save(iteration, save_every):
+                    best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
+                                                saver=saver, logger=logger, train_task=task,
+                                                round_progress=round_progress, task_progress=task_progress,
+                                                timestamp=args.timestamp, log_dir=args.log_dir, model_parallel=args.model_parallel)
+
             # book keeping
             task_iteration[task] += 1
             iteration += 1
 
         # book keeping
-        epoch += 1
+        per_task_iterations += 1
         rnd += 1
 
-    logger.info(f'{log_prefix} is done after {epoch} epochs')
+    logger.info(f'{log_prefix} is done after {per_task_iterations-1} iterations')
 
 
 
@@ -438,30 +435,35 @@ def get_sgd_learning_rate(i, *, warmup):
 
 def init_opt(args, model, logger):
     if args.optimizer == 'adam':
-        if args.transformer_lr:
-            opt = torch.optim.Adam(model.params, lr=args.transformer_lr_multiply, betas=(0.9, 0.98), eps=1e-9,
-                                   weight_decay=args.weight_decay)
-            lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
-            scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
+        # Adam with transformer schedule has a different set of default hyperparameters:
+        if args.lr_schedule == 'transformer':
+            opt = torch.optim.Adam(model.params, lr=args.lr_multiply, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
         else:
-            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999),
-                                   weight_decay=args.weight_decay)
-            scheduler = None
+            opt = torch.optim.Adam(model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
+    elif args.optimizer == 'adamw':
+        opt = AdamW(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay)
     elif args.optimizer == 'radam':
         import radam
-        if args.transformer_lr:
-            logger.warning('--transformer_lr has no effect with RAdam optimizer, warmup is never applied')
-        opt = radam.RAdam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
-        scheduler = None
+        if args.warmup > 1:
+            logger.warning('With RAdam optimizer, warmup is never applied')
+        opt = radam.RAdam(model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
     else:
         assert args.optimizer == 'sgd'
-        if args.transformer_lr:
-            opt = torch.optim.SGD(model.params, lr=args.transformer_lr_multiply, weight_decay=args.weight_decay, )
-            lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
-            scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
-        else:
-            opt = torch.optim.SGD(model.params, lr=args.lr_rate, weight_decay=args.weight_decay, )
-            scheduler = None
+        opt = torch.optim.SGD(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay)
+    
+    if args.lr_schedule == 'transformer':
+        lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
+    elif args.lr_schedule == 'constant':
+        scheduler = get_constant_schedule_with_warmup(opt, num_warmup_steps=args.warmup)
+    elif args.lr_schedule == 'linear':
+        scheduler = get_linear_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations)//args.gradient_accumulation_steps, num_warmup_steps=args.warmup)
+    elif args.lr_schedule == 'sgd':
+        lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
+    else:
+        raise ValueError('Invalid learning rate scheduler.')
+    
 
     return opt, scheduler
 

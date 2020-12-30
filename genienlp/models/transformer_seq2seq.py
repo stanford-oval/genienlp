@@ -28,7 +28,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+import torch
 from transformers import AutoModelForSeq2SeqLM, AutoConfig
+from loss_dropper import LossDropper
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from .base import GenieModel
@@ -53,6 +55,10 @@ class TransformerSeq2Seq(GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
+        if args.dropper_ratio > 0:
+            self.dropper = LossDropper(dropc=args.dropper_ratio)
+        else:
+            self.dropper = None
 
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)
@@ -74,7 +80,23 @@ class TransformerSeq2Seq(GenieModel):
                 # with a lowercase letter, so we leave it
                 answer = answer[:, 1:].contiguous()
 
-            return self.model(batch.context.value, labels=answer)
+            # setting pad output tokens to -100 means they will be ignored in calculating loss
+            answer[answer==self.numericalizer.pad_id] = -100
+
+            # this is similar to what `transformers` Seq2Seq models do, but with two changes
+            # (1) loss is averaged over sequence lengths first, then over the batch size. This way,
+            # longer sequences in the batch do not drown shorter sequences.
+            # (2) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
+            outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
+            ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+            loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)
+            loss = loss.sum(dim=1) / (batch.answer.length - 1) # -1 because BOS is removed
+            if self.dropper is not None:
+                dropper_mask = self.dropper(loss)
+                loss = loss * dropper_mask
+            loss = loss.mean() # average over the batch size
+            outputs.loss = loss # replace the loss calculated by `transformers` with the new loss
+            return outputs
         else:
             return self.model(**kwargs)
 
@@ -87,15 +109,17 @@ class TransformerSeq2Seq(GenieModel):
                  top_k,
                  top_p,
                  num_beams,
+                 num_beam_groups,
+                 diversity_penalty,
                  no_repeat_ngram_size,
                  do_sample
                  ):
 
         input_ids = batch.context.value
-        # TODO attention_mask
+        # when attention_mask is not provided to generate(), it will default to masking pad tokens, which is the correct thing
         generated = self.model.generate(input_ids=input_ids,
                                         max_length=max_output_length,
-                                        min_length=2,  # generate at least one token after BOS
+                                        min_length=2, # generate at least one token after BOS
                                         bos_token_id=self.numericalizer._tokenizer.bos_token_id,
                                         pad_token_id=self.numericalizer._tokenizer.pad_token_id,
                                         early_stopping=True,
@@ -106,6 +130,8 @@ class TransformerSeq2Seq(GenieModel):
                                         top_k=top_k,
                                         top_p=top_p,
                                         num_beams=num_beams,
+                                        num_beam_groups=num_beam_groups,
+                                        diversity_penalty=diversity_penalty,
                                         no_repeat_ngram_size=no_repeat_ngram_size,
                                         do_sample=do_sample,
                                         )

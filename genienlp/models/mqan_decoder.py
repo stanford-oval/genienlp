@@ -68,8 +68,8 @@ class MQANDecoder(nn.Module):
     def forward(self, batch, final_context, context_rnn_state, encoder_loss,
                 current_token_id=None, decoder_wrapper=None, expansion_factor=1, generation_dict=None):
 
-        context, context_lengths, context_limited = batch.context.value, batch.context.length, batch.context.limited
-        answer, answer_lengths, answer_limited = batch.answer.value, batch.answer.length, batch.answer.limited
+        context, context_limited = batch.context.value, batch.context.limited
+        answer, answer_limited = batch.answer.value, batch.answer.limited
         decoder_vocab = self.numericalizer.decoder_vocab
         self.map_to_full = decoder_vocab.decode
         context_padding = context.data == self.pad_idx
@@ -139,7 +139,7 @@ class MQANDecoder(nn.Module):
 
         decoder_wrapper = MQANDecoderWrapper(context, context_padding, context_indices,
                                              decoder_vocab, rnn_state, batch_size, max_decoder_time,
-                                             self, num_beams=generation_dict['num_beams'], expansion_factor=expansion_factor)
+                                             self, expansion_factor=expansion_factor)
         
         return decoder_wrapper
 
@@ -200,7 +200,7 @@ class MQANDecoderWrapper(object):
     """
 
     def __init__(self, context, context_padding, context_indices,
-                 decoder_vocab, rnn_state, batch_size, max_decoder_time, mqan_decoder: MQANDecoder, num_beams:int, expansion_factor:int):
+                 decoder_vocab, rnn_state, batch_size, max_decoder_time, mqan_decoder: MQANDecoder, expansion_factor:int):
         self.decoder_vocab = decoder_vocab
         context = self.expand_for_beam_search(context, batch_size, expansion_factor)
         context_padding = self.expand_for_beam_search(context_padding, batch_size, expansion_factor)

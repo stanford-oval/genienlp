@@ -413,7 +413,7 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
-    all_features = list(NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer))
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
@@ -435,19 +435,6 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
         return data_loader
 
 
-def pad(x, new_channel, dim, val=None):
-    if x.size(dim) > new_channel:
-        x = x.narrow(dim, 0, new_channel)
-    channels = x.size()
-    assert (new_channel >= channels[dim])
-    if new_channel == channels[dim]:
-        return x
-    size = list(channels)
-    size[dim] = new_channel - size[dim]
-    padding = x.new(*size).fill_(val)
-    return torch.cat([x, padding], dim)
-
-
 def have_multilingual(task_names):
     return any(['multilingual' in name for name in task_names])
 
@@ -457,17 +444,15 @@ def load_config_json(args):
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
         retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
-                    'max_val_context_length', 'max_output_length', 'max_generative_vocab', 'lower',
-                    'trainable_decoder_embeddings', 'locale', 'use_pretrained_bert',
+                    'max_output_length', 'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
                     'override_context', 'override_question',
                     'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence',
-                    'preprocess_special_tokens']
+                    'preprocess_special_tokens', 'dropper_ratio']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
-        if 'num_beams' in config and not isinstance(config['num_beams'], list):
-            # num_beams used to be an integer in previous versions of the code
-            config['num_beams'] = [config['num_beams']]
-        overwrite = ['val_batch_size', 'num_beams', 'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty', 'temperature', 'reduce_metrics']
+        overwrite = ['val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty',
+                     'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty',
+                     'temperature', 'reduce_metrics']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -476,34 +461,14 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
-            elif r in ('almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens'):
+            elif r in ('preprocess_special_tokens'):
                 setattr(args, r, False)
-            elif r == 'locale':
-                setattr(args, r, 'en')
-            elif r == 'trainable_decoder_embedding':
-                setattr(args, r, 0)
-            elif r == 'rnn_dimension':
-                setattr(args, r, args.dimension)
-            elif r == 'rnn_zero_state':
-                setattr(args, r, 'zero')
-            elif r == 'use_pretrained_bert':
-                setattr(args, r, True)
-            elif r == 'num_beams':
+            elif r == 'num_beam_groups':
                 setattr(args, r, [1])
-            elif r == 'num_outputs':
-                setattr(args, r, [1])
-            elif r == 'no_repeat_ngram_size':
-                setattr(args, r, [0])
-            elif r == 'top_p':
-                setattr(args, r, [1.0])
-            elif r == 'top_k':
-                setattr(args, r, [0])
-            elif r == 'repetition_penalty':
-                setattr(args, r, [1.0])
-            elif r == 'temperature':
+            elif r == 'diversity_penalty':
                 setattr(args, r, [0.0])
-            elif r == 'reduce_metrics':
-                setattr(args, r, 'max')
+            elif r == 'dropper_ratio':
+                setattr(args, r, 0.0)
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0

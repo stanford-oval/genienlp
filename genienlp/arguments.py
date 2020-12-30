@@ -78,21 +78,21 @@ def parse_argv(parser):
                         'If sentence_batching is used, this will be interpreted as number of examples.')
     parser.add_argument('--jump_start', default=0, type=int, help='number of iterations to give jump started tasks')
     parser.add_argument('--n_jump_start', default=0, type=int, help='how many tasks to jump start (presented in order)')
-    parser.add_argument('--num_print', default=15, type=int,
+    parser.add_argument('--num_print', default=10, type=int,
                         help='how many validation examples with greedy output to print to std out')
 
     parser.add_argument('--no_tensorboard', action='store_false', dest='tensorboard',
                         help='Turn off tensorboard logging')
     parser.add_argument('--tensorboard_dir', default=None,
                         help='Directory where to save Tensorboard logs (defaults to --save)')
-    parser.add_argument('--max_to_keep', default=5, type=int, help='number of checkpoints to keep')
-    parser.add_argument('--log_every', default=int(1e2), type=int, help='how often to log results in # of iterations')
-    parser.add_argument('--save_every', default=int(1e3), type=int,
+    parser.add_argument('--max_to_keep', default=3, type=int, help='number of checkpoints to keep')
+    parser.add_argument('--log_every', default=100, type=int, help='how often to log results in # of iterations')
+    parser.add_argument('--save_every', default=1000, type=int,
                         help='how often to save a checkpoint in # of iterations')
 
     parser.add_argument('--val_tasks', nargs='+', type=str, dest='val_task_names',
                         help='tasks to collect evaluation metrics for')
-    parser.add_argument('--val_every', default=int(1e3), type=int,
+    parser.add_argument('--val_every', default=1000, type=int,
                         help='how often to run validation in # of iterations')
     parser.add_argument('--val_batch_size', nargs='+', default=[3000], type=int,
                         help='Number of tokens in each batch for validation, corresponding to tasks in --val_tasks')
@@ -123,6 +123,8 @@ def parse_argv(parser):
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
+    parser.add_argument("--num_beam_groups", type=int, nargs='+', default=[1], help='1 disables diverse beam seach')
+    parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
     parser.add_argument('--model', type=str, choices=['TransformerLSTM', 'TransformerSeq2Seq'], default='TransformerLSTM', help='which model to import')
@@ -152,19 +154,20 @@ def parse_argv(parser):
                                                                 'e.g. "1 2 2 2" first device recieves half number of layers compared to other devices'
                                                                 'default is None meaning we distribute evenly on all available gpus')
 
-    parser.add_argument('--warmup', default=40, type=int, help='warmup for learning rate')
+    parser.add_argument('--warmup', default=1, type=int, help='warmup for learning rate. setting it to 1 disables warmup.')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
     parser.add_argument('--beta0', default=0.9, type=float,
-                        help='alternative momentum for Adam (only when not using transformer_lr)')
-    parser.add_argument('--optimizer', default='adam', choices=['adam', 'sgd', 'radam'], type=str,
+                        help='alternative momentum for Adam (only when not using transformer scheduler), and RAdam')
+    parser.add_argument('--optimizer', default='adam', choices=['adam', 'adamw', 'sgd', 'radam'], type=str,
                         help='optimizer to use')
-    parser.add_argument('--no_transformer_lr', action='store_false', dest='transformer_lr',
-                        help='turns off the transformer learning rate strategy')
-    parser.add_argument('--transformer_lr_multiply', default=0.01, type=float,
-                        help='multiplier for transformer learning rate (if using Adam)')
-    parser.add_argument('--lr_rate', default=0.001, type=float, help='fixed learning rate (if not using warmup)')
+    parser.add_argument('--lr_schedule', type=str, default='transformer', choices=['transformer', 'constant', 'linear', 'sgd'],
+                        help='The learning rate strategy. All of them can be used with or without warmup.')
+    parser.add_argument('--lr_multiply', default=0.01, type=float,
+                        help='Multiplier for the `transformer` learning rate scheduler, constant value for `constant` and maximum value for `linear` schedulers.')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
     parser.add_argument('--gradient_accumulation_steps', default=1, type=int, help='Number of accumulation steps. Useful to effectively get larger batch sizes.')
+    # Loss Truncation; introduced in https://arxiv.org/abs/2004.14589
+    parser.add_argument('--dropper_ratio', type=float, default=0.0, help='Ratio of dropped examples in the "Loss Truncation" algorithm. 0 disables truncation.')
 
     parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside --args.save, usually set to best.pth')
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')
@@ -201,7 +204,7 @@ def post_parse(args):
     if 'imdb' in args.val_task_names:
         args.val_task_names.remove('imdb')
 
-    args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+    args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime('%D-%H:%M:%S %Z')
     
     # TODO relax the following assertions by dropping samples from batches in Iterator
     if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_languages.split('+')) != 0:
