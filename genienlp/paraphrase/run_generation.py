@@ -494,7 +494,7 @@ def run_single_process_generation(args, config):
                     else:
                         text = tokenizer.convert_tokens_to_string(tgt_tokens)
                 else:
-                    text = tokenizer.decode(out_cropped, clean_up_tokenization_spaces=True, skip_special_tokens=True)
+                    text = tokenizer.decode(out_cropped, clean_up_tokenization_spaces=False, skip_special_tokens=True)
 
                 text = re.sub('\s\s+', ' ', text)  # remove duplicate white spaces
                 text = text.strip()
