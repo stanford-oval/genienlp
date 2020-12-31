@@ -93,62 +93,8 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
         logger.info('Added %d special tokens', num_added_tokens)
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
 
-def has_match(input_sequence, all_entities):
-    sentence = ' '.join(input_sequence)
-    for entity in all_entities:
-        if entity in sentence:
-            return True
-    return False
-
-    
-def token_masking(input_sequence, mlm_probability, mask_token, thingtalk):
-    
-    all_entities = []
-    all_device_tokens = []
-    if thingtalk:
-        all_entities = quoted_pattern_maybe_space.findall(thingtalk)
-        for token in device_pattern.findall(thingtalk):
-            all_device_tokens.extend(token.split('.'))
-    
-    input_tokens = input_sequence.split(' ')
-    input_length = len(input_tokens)
-    
-    # don't mask first and last tokens
-    for i in range(1, input_length-1):
-        if is_entity(input_tokens[i]) or input_tokens[i] in all_device_tokens or has_match(input_tokens[i:], all_entities):
-            mlm_probability /= 0.9
-            continue
-        if random.random() < mlm_probability:
-            input_tokens[i] = mask_token
-    return ' '.join(input_tokens)
-
-def token_deletion(input_sequence, mlm_probability, mask_token, thingtalk):
-    all_entities = []
-    all_device_tokens = []
-    if thingtalk:
-        all_entities = quoted_pattern_maybe_space.findall(thingtalk)
-        for token in device_pattern.findall(thingtalk):
-            all_device_tokens.extend(token.split('.'))
-    
-    input_tokens = input_sequence.split(' ')
-    input_length = len(input_tokens)
-    
-    # don't mask first and last tokens
-    for i in range(1, input_length-1):
-        if is_entity(input_tokens[i]) or input_tokens[i] in all_device_tokens or has_match(input_tokens[i:], all_entities):
-            mlm_probability /= 0.9
-            continue
-        if random.random() < mlm_probability:
-            # temporarily put a mask token here
-            input_tokens[i] = mask_token
-    
-    # go through all the tokens, and delete the ones that were masked
-    input_tokens = list(filter(lambda x: x != mask_token, input_tokens))
-
-    return ' '.join(input_tokens)
 
 def find_index(input_sequence, tokens):
-    
     for i in range(len(input_sequence)):
         found = True
         j = 0
@@ -161,13 +107,51 @@ def find_index(input_sequence, tokens):
         if found:
             return i
     return -1
-    
+
 
 def is_in_span(index, all_entity_spans):
     for span in all_entity_spans:
         if span[0] <= index < span[1]:
             return True
     return False
+
+
+def token_masking(input_sequence, mlm_probability, mask_token, thingtalk):
+    
+    input_tokens = input_sequence.split(' ')
+    
+    all_entity_spans = []
+    all_device_tokens = []
+    if thingtalk:
+        all_entities = quoted_pattern_maybe_space.findall(thingtalk)
+        
+        for entity in all_entities:
+            entity_tokens = entity.split(' ')
+            beg = find_index(input_tokens, entity_tokens)
+            if beg != -1:
+                all_entity_spans.append((beg, beg + len(entity_tokens)))
+        
+        for token in device_pattern.findall(thingtalk):
+            all_device_tokens.extend(token.split('.'))
+            
+    # don't mask first and last tokens
+    for i in range(1, len(input_tokens) - 1):
+        curr_token = input_tokens[i]
+        if is_entity(curr_token) or curr_token in all_device_tokens or is_in_span(i, all_entity_spans):
+            mlm_probability /= 0.9
+            continue
+        if random.random() < mlm_probability:
+            input_tokens[i] = mask_token
+    return ' '.join(input_tokens)
+
+def token_deletion(input_sequence, mlm_probability, mask_token, thingtalk):
+    
+    input_sequence_masked = token_masking(input_sequence, mlm_probability, mask_token, thingtalk)
+    
+    # go through all the tokens, and delete the ones that were masked
+    input_tokens = list(filter(lambda x: x != mask_token, input_sequence_masked))
+
+    return ' '.join(input_tokens)
 
 
 def text_infilling(input_sequence, num_text_spans, mask_token, thingtalk):
@@ -197,7 +181,11 @@ def text_infilling(input_sequence, num_text_spans, mask_token, thingtalk):
             continue
         if input_tokens[mask_start_index] == mask_token:
             continue
-        
+
+        # don't mask first and last tokens
+        if mask_start_index == 0 or mask_start_index == len(input_tokens) - 1:
+            continue
+            
         contains_crucial_token = False
         # check this span for a crucial token
         for j in range(0, num_tokens_to_mask):
@@ -211,7 +199,7 @@ def text_infilling(input_sequence, num_text_spans, mask_token, thingtalk):
                 input_tokens = input_tokens[:mask_start_index] + [mask_token] + input_tokens[mask_start_index + num_tokens_to_mask:]
             else: 
                 input_tokens = input_tokens[:mask_start_index] + [mask_token]
-
+        
     return ' '.join(input_tokens)
 
 def sentence_permutation(input_sequence):
