@@ -350,7 +350,7 @@ def run_single_process_generation(args, config):
                                                                 num_text_spans=args.num_text_spans,
                                                                 permute_sentences=args.permute_sentences,
                                                                 rotate_sentence=args.rotate_sentence)
-
+    
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, original_order, reverse_maps, all_prompt_ids = \
         tuple(zip(*sorted(list(zip(estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, range(len(all_context_ids)), reverse_maps, all_prompt_ids)), reverse=True)))
@@ -517,10 +517,16 @@ def run_single_process_generation(args, config):
         with open(args.output_file, 'w') as output_file:
             for i, output in enumerate(all_outputs):
                 for j, text in enumerate(output):
+                    # if num_samples is 1 keep the original id
+                    if len(output) == 1:
+                        id_ = all_example_ids[i]
+                    else:
+                        id_ = '{}-{}'.format(all_example_ids[i], j)
                     if args.output_example_ids_too:
-                        output_file.write('\t'.join(['{}-{}'.format(all_example_ids[i], j), text]) + '\n')
+                        output_file.write('\t'.join([id_, text]) + '\n')
                     else:
                         output_file.write(text + '\n')
+                    
     else:
         print(json.dumps(all_outputs, indent=2))
 
