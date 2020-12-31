@@ -93,20 +93,13 @@ def add_special_tokens(model, tokenizer, additional_special_tokens, pad_token=No
         logger.info('Added %d special tokens', num_added_tokens)
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
 
-def has_match(sentence, all_entities):
+def has_match(input_sequence, all_entities):
+    sentence = ' '.join(input_sequence)
     for entity in all_entities:
-        j = 0
-        entity_tokenized = entity.split(' ')
-        found = True
-        while j < len(entity_tokenized):
-            if sentence[j] == entity_tokenized[j]:
-                j += 1
-            else:
-                found = False
-                break
-        if found:
+        if entity in sentence:
             return True
     return False
+
     
 def token_masking(input_sequence, mlm_probability, mask_token, thingtalk):
     
@@ -154,15 +147,46 @@ def token_deletion(input_sequence, mlm_probability, mask_token, thingtalk):
 
     return ' '.join(input_tokens)
 
+def find_index(input_sequence, tokens):
+    
+    for i in range(len(input_sequence)):
+        found = True
+        j = 0
+        while j < len(tokens):
+            if input_sequence[i + j] == tokens[j]:
+                j += 1
+            else:
+                found = False
+                break
+        if found:
+            return i
+    return -1
+    
+
+def is_in_span(index, all_entity_spans):
+    for span in all_entity_spans:
+        if span[0] <= index < span[1]:
+            return True
+    return False
+
+
 def text_infilling(input_sequence, num_text_spans, mask_token, thingtalk):
-    all_entities = []
+    
+    input_tokens = input_sequence.split(' ')
+    
+    all_entity_spans = []
     all_device_tokens = []
     if thingtalk:
         all_entities = quoted_pattern_maybe_space.findall(thingtalk)
+        
+        for entity in all_entities:
+            entity_tokens = entity.split(' ')
+            beg = find_index(input_tokens, entity_tokens)
+            if beg != -1:
+                all_entity_spans.append((beg, beg+len(entity_tokens)))
+        
         for token in device_pattern.findall(thingtalk):
             all_device_tokens.extend(token.split('.'))
-
-    input_tokens = input_sequence.split(' ')
 
     num_successful_spans = 0
     while num_successful_spans < num_text_spans:
@@ -178,7 +202,7 @@ def text_infilling(input_sequence, num_text_spans, mask_token, thingtalk):
         # check this span for a crucial token
         for j in range(0, num_tokens_to_mask):
             curr_token = input_tokens[mask_start_index + j]
-            if is_entity(curr_token) or curr_token in all_device_tokens or has_match(input_tokens[j + mask_start_index:], all_entities):
+            if is_entity(curr_token) or curr_token in all_device_tokens or is_in_span(mask_start_index + j, all_entity_spans):
                 contains_crucial_token = True
                 break
         if not contains_crucial_token:
