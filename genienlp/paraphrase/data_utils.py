@@ -154,7 +154,7 @@ def token_deletion(input_sequence, mlm_probability, mask_token, thingtalk):
     return ' '.join(input_tokens)
 
 
-def text_infilling(input_sequence, num_text_spans, mask_token, thingtalk):
+def text_infilling(input_sequence, num_text_spans, max_tries, mask_token, thingtalk):
     
     input_tokens = input_sequence.split(' ')
     
@@ -173,7 +173,10 @@ def text_infilling(input_sequence, num_text_spans, mask_token, thingtalk):
             all_device_tokens.extend(token.split('.'))
 
     num_successful_spans = 0
-    while num_successful_spans < num_text_spans:
+    num_tries = 0
+    while num_successful_spans < num_text_spans and num_tries < max_tries:
+        num_tries += 1
+        
         num_tokens_to_mask = np.random.poisson(lam=3)
         mask_start_index = random.randint(0, len(input_tokens) - 1)
 
@@ -216,7 +219,7 @@ def document_rotation(input_sequence):
 def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column,
                                   copy, sep_token_id, skip_heuristics, is_cased, model_type,
                                   src_lang, subsample, task, model_input_prefix,
-                                  mask_tokens, mask_token_prob, masking_token,
+                                  mask_tokens, mask_token_prob, masking_token, infill_max_tries,
                                   delete_tokens, delete_token_prob,
                                   infill_text, num_text_spans,
                                   permute_sentences,
@@ -269,7 +272,7 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         if delete_tokens:
             input_sequence = token_deletion(input_sequence, delete_token_prob, masking_token, thingtalk)
         if infill_text:
-            input_sequence = text_infilling(input_sequence, num_text_spans, masking_token, thingtalk)
+            input_sequence = text_infilling(input_sequence, num_text_spans, infill_max_tries, masking_token, thingtalk)
         if permute_sentences:
             input_sequence = sentence_permutation(input_sequence)
         if rotate_sentence:

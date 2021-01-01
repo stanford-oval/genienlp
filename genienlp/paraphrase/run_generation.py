@@ -157,6 +157,8 @@ def parse_argv(parser):
     parser.add_argument('--delete_token_prob', type=float, default=0.15, help='Probability of an input token being deleted in the sentence')
     parser.add_argument('--infill_text', action='store_true', help='mask consecutive tokens and infill them using denoising pretrained model')
     parser.add_argument('--num_text_spans', type=int, default=3, help='number of text spans to sample for text infilling method')
+    parser.add_argument('--infill_max_tries', type=int, default=3, help='Maximum number of tries to find an appropriate span')
+    
     parser.add_argument('--permute_sentences', action='store_true', help='divide document into sentences based on fill stops and'
                                                                          'permutate them. Use this only if input has multiple sentences.')
     parser.add_argument('--rotate_sentence', action='store_true', help='a pivot token is chosen randomly, and sentence is rotated so new sentence start with pivot token')
@@ -347,6 +349,7 @@ def run_single_process_generation(args, config):
                                                                 mask_tokens=args.mask_tokens,
                                                                 mask_token_prob=args.mask_token_prob,
                                                                 masking_token=masking_token,
+                                                                infill_max_tries=args.infill_max_tries,
                                                                 delete_tokens=args.delete_tokens,
                                                                 delete_token_prob=args.delete_token_prob,
                                                                 infill_text=args.infill_text,
