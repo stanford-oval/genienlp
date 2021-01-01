@@ -44,23 +44,23 @@ from .example import SequentialField
 ALLOWED_FAST_TOKENIZERS = {
     'facebook/bart-base',
     'facebook/bart-large',
-    'google/mt5-small',
-    'google/mt5-base',
-    'google/mt5-large',
-    'google/mt5-xl',
-    'google/mt5-xxl',
     'sshleifer/bart-tiny-random'
 }
 # known NOT to work:
 # - all the BERT models
 # - all the XLM-R models
 #
-# mBART models work when preprocessing, because they're SPM/RoBERTa-based so they respect
+# mBART, t5, and mt5 models work when preprocessing, because they're SPM/RoBERTa-based so they respect
 # whitespace, but the fast tokenizers treat special tokens differently than the slow ones
 # and drop whitespace before special tokens, which breaks
 ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING = {
+    'facebook/mbart-large-cc25',
     'sshleifer/tiny-mbart',
-    'facebook/mbart-large-cc25'
+    'google/mt5-small',
+    'google/mt5-base',
+    'google/mt5-large',
+    'google/mt5-xl',
+    'google/mt5-xxl',
 }
 
 class TransformerNumericalizer(object):
