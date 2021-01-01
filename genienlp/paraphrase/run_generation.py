@@ -35,6 +35,7 @@ from torch.multiprocessing import Process, set_start_method
 from genienlp.paraphrase.data_utils import create_features_from_tsv_file, output_heuristics
 from genienlp.paraphrase.model_utils import compute_metrics, compute_attention, replace_quoted_params, force_replace_quoted_params
 from ..tasks.almond.utils import tokenize_cjk_chars
+from ..data_utils.progbar import prange
 
 try:
      set_start_method('spawn')
@@ -167,6 +168,7 @@ def parse_argv(parser):
                              "See details at https://nvidia.github.io/apex/amp.html")
     
     parser.add_argument('--verbose', action='store_true', help='log additional information for debugging purposes')
+    
 
 def main(args):
     hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
@@ -245,6 +247,7 @@ def run_multi_process_generation(args):
     if args.n_gpu > 1:
         if args.input_file is None:
             raise ValueError('Cannot use multiple GPUs when reading from stdin. You should provide an --input_file')
+        logger.info('Running generation in parallel on {} GPUs'.format(args.n_gpu))
         # Independent multi-GPU generation
         all_processes = []
         all_input_files = split_file_on_disk(args.input_file, args.n_gpu)
@@ -359,7 +362,7 @@ def run_single_process_generation(args, config):
     stop_token_ids = [tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens]
     
     batch_idx = 0
-    for batch in range(math.ceil(len(all_context_ids) / args.batch_size)):
+    for batch in prange(math.ceil(len(all_context_ids) / args.batch_size)):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_ids)))
         batch_size = batch_slice[1] - batch_slice[0]
         batch_context_tokens = all_context_ids[batch_slice[0]: batch_slice[1]]
@@ -506,7 +509,7 @@ def run_single_process_generation(args, config):
                 batch_outputs[sample_index].append(text)
                 
         all_outputs.extend(batch_outputs)
-        if batch_idx < 1 and args.verbose:
+        if batch_idx == 0 and args.verbose:
             logger.info('First batch output: %s', str(all_outputs))
         batch_idx += 1
 
