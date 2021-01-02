@@ -176,7 +176,7 @@ def text_infilling(input_sequence, num_text_spans, max_tries, mask_token, thingt
     num_tries = 0
     while num_successful_spans < num_text_spans and num_tries < max_tries:
         num_tries += 1
-        
+
         num_tokens_to_mask = np.random.poisson(lam=3)
         mask_start_index = random.randint(0, len(input_tokens) - 1)
 
@@ -218,7 +218,7 @@ def document_rotation(input_sequence):
 
 def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column,
                                   copy, sep_token_id, skip_heuristics, is_cased, model_type,
-                                  src_lang, subsample, task, model_input_prefix,
+                                  src_lang, subsample, shuffle_input, task, model_input_prefix,
                                   mask_tokens, mask_token_prob, masking_token, infill_max_tries,
                                   delete_tokens, delete_token_prob,
                                   infill_text, num_text_spans,
@@ -248,7 +248,17 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         input_file = sys.stdin
 
     line_count = 0
-    for line in progress_bar(input_file, desc='Reading Input File', total=number_of_lines, disable=disable_progbar):
+
+    if shuffle_input:
+        all_lines = []
+        for line in input_file:
+            all_lines.append(line)
+        random.shuffle(all_lines)
+        all_lines = iter(all_lines)
+    else:
+        all_lines = input_file
+        
+    for line in progress_bar(all_lines, desc='Reading Input File', total=number_of_lines, disable=disable_progbar):
         row = [r.strip() for r in line.split('\t')]
         input_sequence = row[input_column]
         gold = row[gold_column]

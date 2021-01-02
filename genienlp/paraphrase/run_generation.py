@@ -106,6 +106,9 @@ def parse_argv(parser):
     parser.add_argument("--metric_reduction", type=str, choices=['average', 'max'], default='average',
                         help="How we should calculate metrics where there are multiple generations per example.")
     
+    parser.add_argument("--shuffle_input", action='store_true', help='If set, we will shuffle input dataset before processing it'
+                                                                     'Used mainly with subsampling so we take different portion of data each time')
+    
     parser.add_argument("--pipe_mode", action='store_true', help='If set, we will generate paraphrases of paraphrases of ... as well.')
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate num_samples outputs for each set of hyperparameters.
     parser.add_argument("--num_samples", type=int, nargs='+', default=[1])
@@ -344,6 +347,7 @@ def run_single_process_generation(args, config):
                                                                 model_type=args.model_type,
                                                                 src_lang=args.src_lang,
                                                                 subsample=args.subsample,
+                                                                shuffle_input=args.shuffle_input,
                                                                 task=args.task,
                                                                 model_input_prefix=model_input_prefix,
                                                                 mask_tokens=args.mask_tokens,
