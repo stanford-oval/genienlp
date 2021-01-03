@@ -469,6 +469,8 @@ def load_config_json(args):
                 setattr(args, r, [0.0])
             elif r == 'dropper_ratio':
                 setattr(args, r, 0.0)
+            elif r == 'dropper_min_count':
+                setattr(args, r, 10000)
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0
