@@ -533,8 +533,7 @@ def main(args):
             
         device_map = dict(zip(args.devices, layers_list))
         model.model.parallelize(device_map)
-        print('model.model.model_parallel', model.model.model_parallel)
-        print('model.model.device_map', model.model.device_map)
+        print('Model parallel is used with following device map: ', model.model.device_map)
     else:
         model.to(devices[0])
         model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
