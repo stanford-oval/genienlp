@@ -38,6 +38,7 @@ import time
 import re
 import numpy as np
 import torch
+from transformers.models.mbart.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
 
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
@@ -433,7 +434,12 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
         return data_loader, sampler.original_order
     else:
         return data_loader
+    
 
+def get_mbart_lang(orig_lang):
+    for lang in FAIRSEQ_LANGUAGE_CODES:
+        if lang.startswith(orig_lang):
+            return lang
 
 def have_multilingual(task_names):
     return any(['multilingual' in name for name in task_names])

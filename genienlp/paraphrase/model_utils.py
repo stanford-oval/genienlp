@@ -11,6 +11,7 @@ from .transformers_utils import SPIECE_UNDERLINE, MARIAN_GROUP_MEMBERS
 from transformers.models.mbart.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
 
 from genienlp.metrics import computeBLEU
+from genienlp.util import get_mbart_lang
 
 logger = logging.getLogger(__name__)
 
@@ -77,17 +78,14 @@ def check_args(args):
     
     if args.model_type == 'mbart' and not (args.tgt_lang and args.src_lang):
         raise ValueError('Source and Target language should be provided when using mBART cc25 model')
-
+    
+    
     # adjust language ids for mbart models
     if args.model_type == 'mbart':
         if args.src_lang not in FAIRSEQ_LANGUAGE_CODES:
-            for lang in FAIRSEQ_LANGUAGE_CODES:
-                if lang.startswith(args.src_lang):
-                    args.src_lang = lang
+            args.src_lang = get_mbart_lang(args.src_lang)
         if args.tgt_lang not in FAIRSEQ_LANGUAGE_CODES:
-            for lang in FAIRSEQ_LANGUAGE_CODES:
-                if lang.startswith(args.tgt_lang):
-                    args.tgt_lang = lang
+            args.tgt_lang = get_mbart_lang(args.tgt_lang)
 
 def sort_checkpoints(output_dir):
     return list(sorted(glob.glob(os.path.join(output_dir, "checkpointepoch=*.ckpt"), recursive=True)))

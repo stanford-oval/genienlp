@@ -503,6 +503,7 @@ def main(args):
     else:
         logger.info(f'Initializing a new {model_name}')
         model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks)
+        model.set_decoder_start_token_id(args.train_languages.split('+')[0])
 
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)

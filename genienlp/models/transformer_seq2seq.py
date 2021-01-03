@@ -33,6 +33,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoConfig
 from loss_dropper import LossDropper
 
 from ..data_utils.numericalizer import TransformerNumericalizer
+from ..util import get_mbart_lang
 from .base import GenieModel
 
 logger = logging.getLogger(__name__)
@@ -44,25 +45,39 @@ class TransformerSeq2Seq(GenieModel):
         super().__init__(config)
         self.args = args
         args.dimension = config.d_model
+        self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
+        self._is_mbart = 'mbart' in self.args.pretrained_model
+        
         if save_directory is not None:
             self.model = AutoModelForSeq2SeqLM.from_config(config)
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
                                                                cache_dir=self.args.embeddings)
+            
         self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, max_generative_vocab=None,
                                                       preprocess_special_tokens=args.preprocess_special_tokens)
+
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
-        self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
         if args.dropper_ratio > 0:
             self.dropper = LossDropper(dropc=args.dropper_ratio)
         else:
             self.dropper = None
-
+            
+            
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
+    
+    
+    def set_decoder_start_token_id(self, lang):
+        if self._is_mbart:
+            # mBART, in contrast to MT5 or XLM-R, needs language id
+            # For now we only support single language training and evaluation with mbart models
+            lang_id = get_mbart_lang(lang)
+            self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[lang_id]
+
 
     def forward(self, *input, **kwargs):
         if self.training:
@@ -114,6 +129,10 @@ class TransformerSeq2Seq(GenieModel):
                  no_repeat_ngram_size,
                  do_sample
                  ):
+        
+        decoder_start_token_id = None
+        if self._is_mbart:
+            decoder_start_token_id = self.model.config.decoder_start_token_id
 
         input_ids = batch.context.value
         # when attention_mask is not provided to generate(), it will default to masking pad tokens, which is the correct thing
@@ -134,6 +153,7 @@ class TransformerSeq2Seq(GenieModel):
                                         diversity_penalty=diversity_penalty,
                                         no_repeat_ngram_size=no_repeat_ngram_size,
                                         do_sample=do_sample,
+                                        decoder_start_token_id=decoder_start_token_id
                                         )
 
         return generated
