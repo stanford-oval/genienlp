@@ -32,14 +32,14 @@ import torch
 import logging
 from collections import defaultdict
 
-from ..base_task import BaseTask
-from ..registry import register_task
-from ..generic_dataset import CQA, default_batch_fn, input_then_output_len, input_tokens_fn
-from ...data_utils.example import Example
-from ...data_utils.progbar import progress_bar
+from .base_task import BaseTask
+from .registry import register_task
+from .generic_dataset import CQA, default_batch_fn, input_then_output_len, input_tokens_fn
+from ..data_utils.example import Example
+from ..data_utils.progbar import progress_bar
 from .utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, is_cjk_char
 
-from ..base_dataset import Split
+from .base_dataset import Split
 
 logger = logging.getLogger(__name__)
 
