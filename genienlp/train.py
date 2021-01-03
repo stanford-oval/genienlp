@@ -361,7 +361,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             if loss < 1e-6:
                 zero_loss += 1
                 if zero_loss >= 100:
-                    logger.info('Found loss less than 1e-5 for 100 steps, stopping.')
+                    logger.info('Found loss less than 1e-6 for 100 steps, stopping.')
                     return
             else:
                 zero_loss = 0
