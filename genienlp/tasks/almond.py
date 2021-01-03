@@ -240,8 +240,10 @@ class NaturalSeq2Seq(BaseAlmondTask):
         if len(parts) == 2:
             input_sequence, target_sequence = parts
             _id = "id-null"
-        else:
+        elif len(parts) == 3:
             _id, input_sequence, target_sequence = parts
+        else:
+            raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
         question = 'translate from input to output'
         context = input_sequence
         answer = target_sequence
