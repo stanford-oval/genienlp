@@ -520,7 +520,7 @@ def main(args):
 
     if hasattr(args, 'tensorboard') and args.tensorboard:
         logger.info(f'Initializing Writer')
-        writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration)
+        writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration, flush_secs=60)
     else:
         writer = None
 
@@ -529,3 +529,6 @@ def main(args):
           log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
           rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
           best_decascore=best_decascore, log_prefix='training')
+
+    if writer is not None:
+        writer.close() # otherwise the last written value may not be flushed
