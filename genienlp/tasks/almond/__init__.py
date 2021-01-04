@@ -37,7 +37,8 @@ from ..registry import register_task
 from ..generic_dataset import CQA, default_batch_fn, input_then_output_len, input_tokens_fn
 from ...data_utils.example import Example
 from ...data_utils.progbar import progress_bar
-from .utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, is_cjk_char, detokenize_cjk_chars
+from .utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id,\
+    is_cjk_char, tokenize_cjk_chars, detokenize_cjk_chars
 
 from ..base_dataset import Split
 
@@ -132,6 +133,10 @@ class BaseAlmondTask(BaseTask):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
     def postprocess_answer(self, answer):
+    
+        if self._almond_detokenize_sentence:
+            answer = tokenize_cjk_chars(answer)
+        
         new_tokens = []
         for token in answer.split():
             if token.startswith('STRING_'):
@@ -166,6 +171,10 @@ class BaseAlmondTask(BaseTask):
         new_sentence = ' '.join(tokens)
 
         if self._almond_detokenize_sentence:
+    
+            new_sentence = detokenize_cjk_chars(new_sentence)
+            tokens = new_sentence.split(' ')
+            
             new_sentence = ''
             in_string = False
             for token in tokens:
@@ -175,9 +184,7 @@ class BaseAlmondTask(BaseTask):
                     if not in_string:
                         new_sentence += ' ' + token
                         continue
-                if token in (',', '.', '?', '!', ':', ')', ']', '}') or \
-                        (len(token) == 1 and is_cjk_char(ord(token))) or \
-                        token.startswith("'"):
+                if token in (',', '.', '?', '!', ':', ')', ']', '}') or token.startswith("'"):
                     new_sentence += token
                 else:
                     new_sentence += ' ' + token

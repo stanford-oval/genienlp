@@ -391,9 +391,7 @@ class TransformerNumericalizer(object):
 
     def reverse(self, batch, task=None, field_name=None):
         output = []
-
-        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True,
-                                              clean_up_tokenization_spaces=False):
+        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True, clean_up_tokenization_spaces=False):
             if self._preprocess_special_tokens:
                 x = self._undo_special_token_preprocessing(x)
             if task is not None and field_name == 'answer':
