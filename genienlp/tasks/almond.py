@@ -230,7 +230,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
 
     @property
     def metrics(self):
-        return ['em', 'bleu', 'f1']
+        return ['bleu', 'em', 'nf1']
 
     def _is_program_field(self, field_name):
         return False
