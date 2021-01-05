@@ -15,20 +15,26 @@ logger = logging.getLogger(__name__)
 
 
 # Feature function builders
+# drop means after applying dropout, nodrop means before
+
 def max_of(f: Callable) -> Callable:
     return lambda x: f(x).max().view(-1)
 
 def min_of(f: Callable) -> Callable:
     return lambda x: f(x).min().view(-1)
 
-def logit_cv(i: int) -> Callable:
-    return lambda x: x[i].logit_cv
+def cv_drop_logit(i: int) -> Callable:
+    def f(x):
+        a = torch.sqrt(var_drop_logit(i)(x)) / mean_drop_logit(i)(x)
+        a[a!=a] = 0 # set NaNs to zero
+        return a
+    return f
 
-def logit_var(i: int) -> Callable:
-    return lambda x: x[i].logit_variance
+def var_drop_logit(i: int) -> Callable:
+    return lambda x: torch.var(x[i].drop_logits, dim=0).view(-1)
 
-def logit_mean(i: int) -> Callable:
-    return lambda x: x[i].logit_mean
+def mean_drop_logit(i: int) -> Callable:
+    return lambda x: torch.mean(x[i].drop_logits, dim=0).view(-1)
 
 def nodrop_entropies(i: int) -> Callable:
     return lambda x: x[i].nodrop_entropies
@@ -36,27 +42,32 @@ def nodrop_entropies(i: int) -> Callable:
 def nodrop_logit(i: int) -> Callable:
     return lambda x: x[i].nodrop_logits
 
-def length(i: int) -> Callable:
-    return lambda x: torch.tensor(len(x[i].logit_mean)).view(-1)
+def prediction_length(i: int) -> Callable:
+    return lambda x: torch.tensor(len(x[i].nodrop_logits)).view(-1)
 
 def input_length(i: int) -> Callable:
     return lambda x: torch.tensor(len(x[i].context)).view(-1)
 
-def avg_logprob(i: int):
+def nodrop_avg_logprob(i: int):
     return lambda x: torch.mean(x[i].nodrop_logits).view(-1)
 
 def variance_of_beams(x):
     a = torch.var(torch.tensor([torch.mean(x[i].nodrop_logits).item() for i in range(1, 5)])).view(-1)
     return a
 
-def mean_avg_logprob(i):
-    return lambda x: torch.mean(x[i].logits).view(-1)
+def mean_drop_avg_logprob(i):
+    return lambda x: torch.mean(x[i].drop_logits).view(-1)
 
-def var_avg_logprob(i):
-    return lambda x: torch.var(torch.mean(x[i].logits, dim=1)).view(-1)
+def var_drop_avg_logprob(i):
+    return lambda x: torch.var(torch.mean(x[i].drop_logits, dim=1)).view(-1)
 
-def cv_avg_logprob(i):
-    return lambda x: torch.sqrt(var_avg_logprob(i)(x)) / mean_avg_logprob(i)(x)
+def cv_drop_avg_logprob(i):
+    def f(x):
+        a = torch.sqrt(var_drop_avg_logprob(i)(x)) / mean_drop_avg_logprob(i)(x)
+        a[a!=a] = 0 # set NaNs to zero
+        return a
+    return f
+
 
 def accuracy_at_pass_rate(labels, confidence_scores):
     sorted_confidence_scores, sorted_labels = zip(*sorted(zip(confidence_scores, labels)))
@@ -85,7 +96,7 @@ def evaluate_oracle(dev_confidences: Iterable[ConfidenceOutput]):
 
 def evaluate_logprob(dev_confidences: Iterable[ConfidenceOutput]):
     dev_labels = ConfidenceEstimator.convert_to_labels(dev_confidences)
-    dev_avg_logprobs = [avg_logprob(0)(c) for c in dev_confidences]
+    dev_avg_logprobs = [nodrop_avg_logprob(0)(c) for c in dev_confidences]
     _max = np.max(dev_avg_logprobs)
     _min = np.min(dev_avg_logprobs)
     dev_avg_logprobs = (dev_avg_logprobs - _min) / (_max - _min)
@@ -302,23 +313,23 @@ def main(args):
     train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
     for f, name in [
                     # ([None], 'oracle'),
-                    ([None], 'avg_logprob'),
-                    ([logit_mean(0)], 'mean'),
+                    # ([None], 'avg_logprob'),
+                    # ([mean_drop_logit(0)], 'mean'),
                     # ([nodrop_entropies(0)], 'entropy'),
-                    # ([(logit_mean(0), nodrop_entropies(0))], 'mean + entropy'),
-                    # ([length(0), (logit_mean(0), nodrop_entropies(0))], 'length + mean + entropy'),
-                    # ([length(0), (logit_mean(0), nodrop_entropies(0), logit_cv(0))], 'length + mean + entropy + cv'),
-                    # ([max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0))], 'max_logit + max_entropy + max_cv'),
-                    # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0))], 'length + max_logit + max_entropy + max_cv'),
-                    # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), max_of(logit_var(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0)), min_of(logit_var(0))], 'length + max_logit + max_entropy + max_cv + max_var + min_logit + min_entropy + min_cv + min_var'),
-                    # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0))], 'length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
-                    # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0)), input_length(0)], 'length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
-                    # ([avg_logprob(0), length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0)), input_length(0)], 'logprob + length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
-                    # ([avg_logprob(0), length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + length + max_logit + max_entropy + max_cv + min_logit + input_length'),
+                    ([(mean_drop_logit(0), nodrop_entropies(0))], 'mean + entropy'),
+                    ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0))], 'prediction_length + mean + entropy'),
+                    ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0), cv_drop_logit(0))], 'prediction_length + mean + entropy + cv'),
+                    ([max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'max_logit + max_entropy + max_cv'),
+                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv'),
+                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), max_of(var_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), min_of(var_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + max_var + min_logit + min_entropy + min_cv + min_var'),
+                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
+                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
+                    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
+                    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length'),
                     # ([variance_of_beams], 'var_beams'),
-                    ([mean_avg_logprob(0)], 'mean_avg_logprob'),
-                    ([var_avg_logprob(0)], 'var_avg_logprob'),
-                    ([cv_avg_logprob(0)], 'cv_avg_logprob'),
+                    # ([mean_drop_avg_logprob(0)], 'mean_drop_avg_logprob'),
+                    # ([var_drop_avg_logprob(0)], 'var_drop_avg_logprob'),
+                    # ([cv_drop_avg_logprob(0)], 'cv_drop_avg_logprob'),
                     ]:
         estimator = ConfidenceEstimator(name=name, featurizers=f, eval_metric=args.eval_metric)
         logger.info('name = %s', name)

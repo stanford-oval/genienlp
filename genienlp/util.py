@@ -110,23 +110,19 @@ class ConfidenceOutput:
     Contains all necessary features that are useful for calculating confidence of a single generated output
     """
 
-    def __init__(self, logits: List[Tensor], gold_answer: Tensor, prediction: Tensor,
+    def __init__(self, drop_logits: List[Tensor], gold_answer: Tensor, prediction: Tensor,
                  nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_entropies: Tensor, context: Tensor):
         """
         Inputs:
+            droplogits: logits after MC dropout
             gold_answer: includes BOS and EOS tokens, but no PAD tokens
             prediction: includes BOS and EOS tokens, but no PAD tokens
             nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
         """
-        self.logits = torch.stack(logits, dim=0).cpu()
+        self.drop_logits = torch.stack(drop_logits, dim=0).cpu()
         self.nodrop_logits = nodrop_logits.cpu()
         self.nodrop_probs = nodrop_probs.cpu()
         self.nodrop_entropies = nodrop_entropies.cpu()
-
-        self.logit_mean = self.logits.mean(dim=0)
-        self.logit_variance = self.logits.var(dim=0)
-        self.logit_cv = torch.sqrt(self.logit_variance) / self.logit_mean # coefficient of variation
-        self.logit_cv[self.logit_cv != self.logit_cv] = 0 # set NANs to 0
 
         self.first_mistake = ConfidenceOutput.find_first_mistake(gold_answer, prediction)
         self.context = context
@@ -155,10 +151,7 @@ class ConfidenceOutput:
         return -1
 
     def __repr__(self) -> str:
-        return '<Confidence: logits=' + str(self.logits) \
-                +', logit_mean=' + str(self.logit_mean) \
-                + ', logit_variance=' + str(self.logit_variance) \
-                + ', logit_cv=' + str(self.logit_cv) \
+        return '<Confidence: logits=' + str(self.drop_logits) \
                 + ', first_mistake=' + str(self.first_mistake) \
                 + ', nodrop_logits=' + str(self.nodrop_logits) \
                 + ', nodrop_probs=' + str(self.nodrop_probs) \

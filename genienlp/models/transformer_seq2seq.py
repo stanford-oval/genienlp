@@ -185,10 +185,10 @@ class TransformerSeq2Seq(GenieModel):
         batch_nodrop_probs = []
         batch_nodrop_entropies = []
         outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
-        logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
+        nodrop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
         for i in range(batch_size):
-            batch_nodrop_logits.append(logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))
-            probs = torch.softmax(logits[i], dim=1)
+            batch_nodrop_logits.append(nodrop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))
+            probs = torch.softmax(nodrop_logits[i], dim=1)
             batch_nodrop_probs.append(probs.gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))
             batch_nodrop_entropies.append(-torch.sum(torch.log(probs)*probs, dim=1))
         
@@ -200,17 +200,17 @@ class TransformerSeq2Seq(GenieModel):
                 should_revert_to_eval = False
             self.train()
 
-        batch_logits = [[] for _ in range(batch_size)]
+        batch_drop_logits = [[] for _ in range(batch_size)]
         for _ in range(mc_dropout_num):
             outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
-            logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
+            drop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
             for i in range(batch_size):
-                batch_logits[i].append((logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))[:prediction_lengths[i]])
+                batch_drop_logits[i].append((drop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))[:prediction_lengths[i]])
 
         confidences = []
         for i in range(batch_size):
             confidences.append(
-                        ConfidenceOutput(logits=batch_logits[i],
+                        ConfidenceOutput(drop_logits=batch_drop_logits[i],
                                          gold_answer=batch.answer.value[i//repetition_factor][:batch.answer.length[i//repetition_factor]],
                                          prediction=predictions[i][:prediction_lengths[i]+1],  # +1 to include EOS
                                          nodrop_logits=batch_nodrop_logits[i][:prediction_lengths[i]],
