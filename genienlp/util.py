@@ -116,7 +116,7 @@ class ConfidenceOutput:
             gold_answer: includes BOS and EOS tokens, but no PAD tokens
             prediction: includes BOS and EOS tokens, but no PAD tokens
         """
-        self.logits = torch.stack(logits, dim=0)
+        self.logits = torch.stack(logits, dim=0).cpu()
 
         self.logit_mean = self.logits.mean(dim=0)
         self.logit_variance = self.logits.var(dim=0)

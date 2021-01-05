@@ -170,7 +170,12 @@ def run(args, device):
             generation_outputs = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name, output_confidences=args.output_confidences, original_order=original_order)
             if args.output_confidences:
                 _, predictions, answers, contexts, confidences = generation_outputs
-                print('confidences = ', confidences)
+                # print('confidences = ', confidences)
+                
+                import pickle
+                with open('confidence.pkl', 'wb') as f:
+                    pickle.dump(confidences, f)
+
             else:
                 _, predictions, answers, contexts = generation_outputs
 
