@@ -50,7 +50,7 @@ setuptools.setup(
         'numpy>=1.14.5',
         'torch~=1.7.1',
         'tqdm~=4.0',
-        'tensorboardX==2.0.*',
+        'tensorboardX==2.1.*',
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
         'requests~=2.22',
