@@ -176,13 +176,13 @@ class TransformerSeq2Seq(GenieModel):
         pad_token_id = self.numericalizer._tokenizer.pad_token_id
         attention_mask = self.bart._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer._tokenizer.eos_token_id)
         truncated_predictions = predictions[:, 1:] # remove the BOS token since it is not actually being generated
-        output_mask = truncated_predictions.ne(pad_token_id).long()
+        # output_mask = truncated_predictions.ne(pad_token_id).long()
 
         batch_nodrop_logits = []
         outputs = self.bart(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
         logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
         for i in range(batch_size):
-            batch_nodrop_logits.append(logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1) * output_mask[i])
+            batch_nodrop_logits.append(logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))
         
         # activate dropout layers
         should_revert_to_eval = True
@@ -197,16 +197,15 @@ class TransformerSeq2Seq(GenieModel):
             outputs = self.bart(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
             logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
             for i in range(batch_size):
-                batch_logits[i].append(logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1) * output_mask[i])
+                batch_logits[i].append((logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))[:prediction_lengths[i]])
 
         confidences = []
         for i in range(batch_size):
-            # print('batch.answer.value = ', batch.answer.value)
             confidences.append(
                         ConfidenceOutput(logits=batch_logits[i],
                                          gold_answer=batch.answer.value[i//repetition_factor][:batch.answer.length[i//repetition_factor]],
                                          prediction=predictions[i][:prediction_lengths[i]+1],  # +1 to include EOS
-                                         nodrop_logits=batch_nodrop_logits[i][:prediction_lengths[i]+1],
+                                         nodrop_logits=batch_nodrop_logits[i][:prediction_lengths[i]],
                                          ))
 
         # return the model back to its previous state
