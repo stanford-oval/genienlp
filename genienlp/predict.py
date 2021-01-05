@@ -241,9 +241,6 @@ def parse_argv(parser):
     parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to save embeddings.')
     parser.add_argument('--checkpoint_name', default='best.pth',
                         help='Checkpoint file to use (relative to --path, defaults to best.pth)')
-    parser.add_argument('--bleu', action='store_true', help='whether to use the bleu metric (always on for iwslt)')
-    parser.add_argument('--rouge', action='store_true',
-                        help='whether to use the bleu metric (always on for cnn, dailymail, and cnn_dailymail)')
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
 
@@ -251,11 +248,7 @@ def parse_argv(parser):
                         help='whether use exisiting cached splits or generate new ones')
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
     parser.add_argument('--cache', default='.cache', type=str, help='where to save cached files')
-
-    parser.add_argument('--saved_models', default='./saved_models', type=str,
-                        help='directory where cached models should be loaded from')
-    parser.add_argument('--subsample', default=20000000, type=int,
-                        help='subsample the eval/test datasets (experimental)')
+    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets (experimental)')
                         
     parser.add_argument('--pred_languages', type=str, nargs='+',
                         help='used to specify dataset languages used during prediction for multilingual tasks'
@@ -282,6 +275,7 @@ def parse_argv(parser):
     parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
+    # These are used for confidence calibration
     parser.add_argument('--calibrator_path', type=str, default=None, help='If provided, will be used to output confidence scores for each prediction.')
     parser.add_argument('--save_confidence_features', action='store_true', help='If provided, will be used to output confidence scores for each prediction.')
     parser.add_argument("--confidence_feature_path", type=str, default=None, help='A .pkl file to save confidence features in.')
