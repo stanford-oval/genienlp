@@ -107,7 +107,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             if examples_size > self.batch_size:
                 logger.warning('Skipping an example larger than batch size. Consider increasing the batch size to avoid this warning')
                 self.last_batch_start_index += 1
-                i = self._get_next_batch_start_index()
+                i += 1
                 continue
                 
             new_batch_size = current_batch_size + self.batch_size_fn(longest_example)
