@@ -7,6 +7,7 @@ import torch
 import itertools
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_curve
 from matplotlib import pyplot
+import argparse
 
 def pad_features(confidences, f):
     pad_len = max([len(f(c)) for c in confidences])
@@ -59,7 +60,7 @@ def tune_and_train(train_dataset, dev_dataset, dev_labels, scale_pos_weight):
             'max_depth': m,  
             'eta': e,  
             'objective': 'binary:logistic',
-            'eval_metric': 'error',
+            'eval_metric': 'aucpr',
             'scale_pos_weight': scale_pos_weight
             }
         evals_result = {}
@@ -70,7 +71,7 @@ def tune_and_train(train_dataset, dev_dataset, dev_labels, scale_pos_weight):
                           early_stopping_rounds=50, 
                           evals_result=evals_result,
                           verbose_eval=False)
-        # print('best score = ', model.best_score, 'best iteration = ', model.best_iteration)
+        print('best dev score = ', model.best_score, 'best iteration = ', model.best_iteration)
         # print('evals_result = ', evals_result)
         prediction_probs = extract_confidence_scores(model, dev_dataset)
         predictions = np.round(np.asarray(prediction_probs))
@@ -89,28 +90,6 @@ def tune_and_train(train_dataset, dev_dataset, dev_labels, scale_pos_weight):
 def extract_confidence_scores(model, dev_dataset):
     prediction_probs = model.predict(dev_dataset, ntree_limit=model.best_ntree_limit)
     return prediction_probs
-
-
-# def precision_recall(sorted_confidences, sorted_labels):
-#     sorted_labels = np.array(sorted_labels, dtype=np.int)
-#     # print(sorted_labels)
-#     all_precisions = []
-#     all_recalls = []
-#     for threshold_idx in range(len(sorted_labels)-1):
-#         accepted = sorted_labels[threshold_idx:]
-#         rejected = sorted_labels[:threshold_idx]
-
-#         true_positive = np.sum(accepted)
-#         false_positive = np.sum(1-accepted)
-#         true_negative = np.sum(1-rejected)
-#         false_negative = np.sum(rejected)
-
-#         precision = true_positive / (true_positive + false_positive)
-#         recall = true_positive / (true_positive + false_negative)
-#         all_precisions.append(precision)
-#         all_recalls.append(recall)
-
-#     return all_precisions, all_recalls    
 
 
 def run(confidences, featurizers):
@@ -149,22 +128,48 @@ def run(confidences, featurizers):
     # print('sorted_labels = ', sorted_labels)
     
     precision, recall, _ = precision_recall_curve(all_labels_dev, confidence_scores)
+    pass_rate, accuracies = accuracy_at_pass_rate(all_labels_dev, confidence_scores)
 
-    return precision, recall
+    return precision, recall, pass_rate, accuracies
+
+
+def accuracy_at_pass_rate(labels, confidence_scores):
+    sorted_confidence_scores, sorted_labels = zip(*sorted(zip(confidence_scores, labels)))
+    sorted_labels = np.array(sorted_labels, dtype=np.int)
+    # print('sorted_confidence_scores = ', sorted_confidence_scores)
+    # print('sorted_labels = ', sorted_labels)
+    all_pass_rates = []
+    all_accuracies = []
+    for i in range(len(sorted_labels)):
+        pass_labels = sorted_labels[i:]
+        pass_rate = len(pass_labels) / len(sorted_labels)
+        all_pass_rates.append(pass_rate)
+        accuracy = np.sum(pass_labels) / len(pass_labels)
+        all_accuracies.append(accuracy)
+
+    return all_pass_rates, all_accuracies
 
 
 if __name__ == '__main__':
-    if path.isfile('confidence.pkl'):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--confidence_path', type=str, help='')
+    args = parser.parse_args()
+
+    if path.isfile(args.confidence_path):
         # load from cache
-        with open('confidence.pkl', 'rb') as f:
+        with open(args.confidence_path, 'rb') as f:
             confidences = pickle.load(f)
     else:
         exit(1)
 
     # [([logit_cv_0], 'cv'), ([logit_mean_0], 'mean'), ([logit_var_0], 'variance'), ([nodroplogit_0], 'nodrop logits')]
-    for f, name in [([logit_mean_0], 'mean'), ([max_var_0, logit_mean_0], 'mean with var max')]:
-        precision, recall = run(confidences, f)
+    for f, name in [([logit_mean_0], 'mean')]:
+        precision, recall, pass_rate, accuracies = run(confidences, f)
+        pyplot.figure(0)
         pyplot.plot(recall, precision, marker='.', label=name)
+        pyplot.figure(1)
+        pyplot.plot(pass_rate, accuracies, marker='.', label=name)
+        
 
     avg_logprobs = [avg_logprob(c) for c in confidences]
     all_labels = []
@@ -177,11 +182,18 @@ if __name__ == '__main__':
         sklearn.model_selection.train_test_split(all_labels, avg_logprobs, test_size=0.2, random_state=123)
 
     logit_precision, logit_recall, _ = precision_recall_curve(all_labels_dev, avg_logprobs_dev)
+    pyplot.figure(0)
     pyplot.plot(logit_recall, logit_precision, marker='.', label='average logprob')
     pyplot.legend()
     pyplot.xlabel('Recall')
     pyplot.ylabel('Precision')
-    pyplot.savefig('plot.svg')
+    pyplot.savefig('precision-recall.png')
 
-    
+    pass_rates, accuracies = accuracy_at_pass_rate(all_labels_dev, avg_logprobs_dev)
+    pyplot.figure(1)
+    pyplot.plot(pass_rates, accuracies, marker='.', label='average logprob')
+    pyplot.legend()
+    pyplot.xlabel('Pass Rate')
+    pyplot.ylabel('Accuracy')
+    pyplot.savefig('pass-acc.png')
     
