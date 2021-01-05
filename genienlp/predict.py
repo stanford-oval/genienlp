@@ -180,6 +180,7 @@ def run(args, device):
                 # print('confidences = ', confidences)
                 if args.calibrator_path is not None:
                     confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
+                    logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
                     confidence_scores = confidence_estimator.estimate(confidences)
                     # print('confidence_scores = ', confidence_scores)
                 if args.save_confidence_features:
