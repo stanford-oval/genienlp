@@ -13,6 +13,8 @@ from transformers.models.marian.convert_marian_to_pytorch import GROUPS
 from transformers.models.marian.convert_marian_tatoeba_to_pytorch import GROUP_MEMBERS
 
 from transformers.models.mbart.tokenization_mbart import MBartTokenizer, _all_mbart_models, SPM_URL
+from transformers.models.gpt2 import tokenization_gpt2
+from transformers.models.t5 import tokenization_t5
 
 SPIECE_UNDERLINE = "▁"
 
@@ -59,6 +61,11 @@ MARIAN_GROUPS = {item[1]: set(item[0].split('+')) for item in GROUPS}
 MARIAN_TATOEBA_GROUPS = {k: set(v[1]) for k, v in GROUP_MEMBERS.items()}
 
 MARIAN_GROUP_MEMBERS = {**MARIAN_GROUPS, **MARIAN_TATOEBA_GROUPS}
+
+
+MODEL_PARALLEL_SUPPORTED_MODELS = set(list(tokenization_gpt2.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys()) +
+                                       list(tokenization_t5.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys()) +
+                                       list(MT5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()))
 
 ###############
 

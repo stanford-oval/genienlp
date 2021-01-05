@@ -37,6 +37,8 @@ import subprocess
 from .tasks.registry import get_tasks
 from .util import have_multilingual
 
+from .paraphrase.transformers_utils import MODEL_PARALLEL_SUPPORTED_MODELS
+
 
 logger = logging.getLogger(__name__)
 
@@ -220,7 +222,13 @@ def post_parse(args):
         raise ValueError('Warmup should be a positive integer.')
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
-
+    
+    if args.model_parallel:
+        if args.model == 'TransformerLSTM':
+            raise ValueError('Model parallel is not supported for TransformerLSTM models')
+        elif args.model == 'TransformerSeq2Seq' and args.pretrained_model not in MODEL_PARALLEL_SUPPORTED_MODELS:
+            raise ValueError('Only GPT2, T5, and MT5 models have model parallel support')
+    
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
             args.train_iterations = [1]
