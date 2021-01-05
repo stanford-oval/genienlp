@@ -229,7 +229,7 @@ def post_parse(args):
         if args.model == 'TransformerLSTM':
             raise ValueError('Model parallel is not supported for TransformerLSTM models')
         elif args.model == 'TransformerSeq2Seq' and args.pretrained_model not in MODEL_PARALLEL_SUPPORTED_MODELS:
-            raise ValueError('Only GPT2, T5, and MT5 models have model parallel support')
+            raise ValueError('Only the following models have model_parallel support: ', MODEL_PARALLEL_SUPPORTED_MODELS)
     
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:

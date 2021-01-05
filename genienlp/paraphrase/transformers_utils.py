@@ -63,9 +63,9 @@ MARIAN_TATOEBA_GROUPS = {k: set(v[1]) for k, v in GROUP_MEMBERS.items()}
 MARIAN_GROUP_MEMBERS = {**MARIAN_GROUPS, **MARIAN_TATOEBA_GROUPS}
 
 
-MODEL_PARALLEL_SUPPORTED_MODELS = set(list(tokenization_gpt2.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys()) +
-                                       list(tokenization_t5.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys()) +
-                                       list(MT5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()))
+MODEL_PARALLEL_SUPPORTED_MODELS = list(tokenization_gpt2.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys()) + \
+                                    list(tokenization_t5.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys()) + \
+                                    list(MT5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
 
 ###############
 
