@@ -135,6 +135,8 @@ class BaseAlmondTask(BaseTask):
     def postprocess_answer(self, answer):
     
         if self._almond_detokenize_sentence:
+            # To make genienlp transparent to the tokenization done by genie-toolkit
+            # We tokenize answer here by adding whitespace between each CJK character
             answer = tokenize_cjk_chars(answer)
         
         new_tokens = []
@@ -171,7 +173,13 @@ class BaseAlmondTask(BaseTask):
         new_sentence = ' '.join(tokens)
 
         if self._almond_detokenize_sentence:
-    
+            
+            # BERT tokenizers by default add whitespace around any CJK character
+            # SPM-based tokenizers are trained on raw text and do better when recieve untokenized text
+            # In genienlp we detokenize CJK characters and leave tokenization to the model's tokenizer
+            # NOTE: input datasets for almond are usually pretokenized using genie-toolkit which
+            # inserts whitespace around any CJK character. This detokenization ensures that SPM-based tokenizers
+            # see the text without space between those characters
             new_sentence = detokenize_cjk_chars(new_sentence)
             tokens = new_sentence.split(' ')
             
