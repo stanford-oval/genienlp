@@ -1,9 +1,9 @@
+from ctypes import wstring_at
 from os import stat
 from typing import Callable, Iterable, List, Tuple, Union
-from torch._C import Value
 import xgboost as xgb
 import numpy as np
-import sklearn
+import dill
 import pickle
 import torch
 import itertools
@@ -16,36 +16,40 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# Feature functions
-def logit_cv_0(x):
-    return x[0].logit_cv
+# Feature function builders
+def max_of(f: Callable) -> Callable:
+    return lambda x: f(x).max().view(-1)
 
-def logit_cv_1(x):
-    return x[1].logit_cv
+def min_of(f: Callable) -> Callable:
+    return lambda x: f(x).min().view(-1)
 
-def max_var_0(x):
-    return x[0].logit_variance.max().view(-1)
+def logit_cv(i: int) -> Callable:
+    return lambda x: x[i].logit_cv
 
-def logit_mean_0(x):
-    return x[0].logit_mean
+def logit_var(i: int) -> Callable:
+    return lambda x: x[i].logit_variance
 
-def nodrop_entropies_0(x):
-    return x[0].nodrop_entropies
+def logit_mean(i: int) -> Callable:
+    return lambda x: x[i].logit_mean
 
-def nodroplogit_0(x):
-    return x[0].nodrop_logits
+def nodrop_entropies(i: int) -> Callable:
+    return lambda x: x[i].nodrop_entropies
 
-def logit_mean_1(x):
-    return x[1].logit_mean
+def nodrop_logit(i: int) -> Callable:
+    return lambda x: x[i].nodrop_logits
 
-def logit_var_0(x):
-    return x[0].logit_variance
+def length(i: int) -> Callable:
+    return lambda x: torch.tensor(len(x[i].logit_mean)).view(-1)
 
-def avg_logprob(x):
-    return torch.mean(x[0].nodrop_logits).item()
+def avg_logprob(i: int):
+    return lambda x: torch.mean(x[i].nodrop_logits).view(-1)
 
-def length_0(x):
-    return torch.tensor(len(x[0].logit_mean)).view(-1)
+def variance_of_beams(x):
+    a = torch.var(torch.tensor([torch.mean(x[i].nodrop_logits).item() for i in range(1, 5)])).view(-1)
+    # print([torch.mean(x[i].nodrop_logits).item() for i in range(1, 5)])
+    # print(a)
+    # exit()
+    return a
 
 
 def accuracy_at_pass_rate(labels, confidence_scores):
@@ -67,7 +71,7 @@ def accuracy_at_pass_rate(labels, confidence_scores):
 
 def evaluate_logprob(dev_confidences: Iterable[ConfidenceOutput]):
     dev_labels = ConfidenceEstimator.convert_to_labels(dev_confidences)
-    dev_avg_logprobs = [avg_logprob(c) for c in dev_confidences]
+    dev_avg_logprobs = [avg_logprob(0)(c) for c in dev_confidences]
     _max = np.max(dev_avg_logprobs)
     _min = np.min(dev_avg_logprobs)
     dev_avg_logprobs = (dev_avg_logprobs - _min) / (_max - _min)
@@ -80,6 +84,7 @@ def parse_argv(parser):
     parser.add_argument('--eval_metric', type=str, default='aucpr', help='An xgboost metric.'
                         'The metric which will be used to select the best model on the validation set.')
     parser.add_argument('--dev_split', type=float, default=0.2, help='The portion of the dataset to use for validation. The rest is used to train.')
+    parser.add_argument('--seed', type=int, default=123, help='Random seed to use for reproducibility')
     parser.add_argument('--save', type=str, help='A pickle file to save the calibrator model after training')
 
 
@@ -266,12 +271,12 @@ class ConfidenceEstimator():
 
     def save(self, path: str):
         with open(path, 'wb') as f:
-            pickle.dump(self, f, protocol=4)
+            dill.dump(self, f, protocol=4)
 
     @staticmethod
     def load(path: str):
         with open(path, 'rb') as f:
-            obj = pickle.load(f)
+            obj = dill.load(f)
         return obj
 
 def main(args):
@@ -280,15 +285,20 @@ def main(args):
         confidences = pickle.load(f)
 
     all_estimators = []
-    train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split)
+    train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
 
     for f, name in [
-                    ([None], 'logprob'),
-                    # ([logit_mean_0], 'mean'),
-                    # ([nodrop_entropies_0], 'entropy'),
-                    ([(logit_mean_0, nodrop_entropies_0)], 'mean+entropy'),
-                    ([length_0, (logit_mean_0, nodrop_entropies_0)], 'length+mean+entropy'),
-                    ([length_0, (nodroplogit_0, nodrop_entropies_0)], 'length+nodroplog+entropy'),
+                    # ([None], 'logprob'),
+                    # ([logit_mean(0)], 'mean'),
+                    # ([nodrop_entropies(0)], 'entropy'),
+                    # ([(logit_mean(0), nodrop_entropies(0))], 'mean + entropy'),
+                    # ([length(0), (logit_mean(0), nodrop_entropies(0))], 'length + mean + entropy'),
+                    # ([length(0), (logit_mean(0), nodrop_entropies(0), logit_cv(0))], 'length + mean + entropy + cv'),
+                    # ([max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0))], 'max_logit + max_entropy + max_cv'),
+                    # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0))], 'length + max_logit + max_entropy + max_cv'),
+                    # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), max_of(logit_var(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0)), min_of(logit_var(0))], 'length + max_logit + max_entropy + max_cv + max_var + min_logit + min_entropy + min_cv + min_var'),
+                    ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0))], 'length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
+                    # ([variance_of_beams], 'var_beams'),
                     ]:
         estimator = ConfidenceEstimator(name=name, featurizers=f, eval_metric=args.eval_metric)
         logger.info('name = %s', name)
@@ -296,6 +306,7 @@ def main(args):
         if name == 'logprob':
             precision, recall, pass_rate, accuracies, thresholds = evaluate_logprob(dev_confidences)
             score = auc(recall, precision)
+            estimator.score = score
             logger.info('dev set score = %.3f', score)
         else:
             train_features, train_labels = estimator.convert_to_dataset(train_confidences, train=True)
@@ -311,12 +322,13 @@ def main(args):
 
         all_estimators.append(estimator)
         
+    logger.info('\n'+'\n'.join([f'{e.name}: {e.score:.3f}' for e in all_estimators]))
     best_estimator = all_estimators[np.argmax([e.score for e in all_estimators])]
     logger.info('Best estimator is %s with score = %f', best_estimator.name, best_estimator.score)
     best_estimator.save(args.save)
 
     pyplot.figure('precision-recall')
-    pyplot.legend()
+    pyplot.legend(prop={'size': 6})
     pyplot.grid()
     pyplot.xticks(np.arange(0, 1, 0.1))
     pyplot.xlim(0, 1)
@@ -325,14 +337,14 @@ def main(args):
     pyplot.savefig('precision-recall.png')
 
     pyplot.figure('thresholds')
-    pyplot.legend()
+    pyplot.legend(prop={'size': 6})
     pyplot.grid()
     pyplot.xlabel('Index')
     pyplot.ylabel('Confidence Threshold')
     pyplot.savefig('threshold.png')
 
     pyplot.figure('pass_rate')
-    pyplot.legend()
+    pyplot.legend(prop={'size': 6})
     pyplot.grid()
     pyplot.xticks(np.arange(0, 1, 0.1))
     pyplot.xlim(0, 1)
