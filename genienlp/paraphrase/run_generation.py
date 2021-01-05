@@ -173,7 +173,9 @@ def parse_argv(parser):
                              "See details at https://nvidia.github.io/apex/amp.html")
     
     parser.add_argument('--verbose', action='store_true', help='log additional information for debugging purposes')
-    
+
+    parser.add_argument('--no_fast_tokenizer', action='store_true', help='Use slow version of huggingface tokenizer')
+
 
 def main(args):
     hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
@@ -299,7 +301,7 @@ def run_single_process_generation(args, config):
         model = amp.initialize(model, opt_level=args.fp16_opt_level)
 
     model.eval()
-    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir, use_fast=False)
+    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir, use_fast=not args.no_fast_tokenizer)
     eos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['eos_token'])
     sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
     
