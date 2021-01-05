@@ -1,5 +1,3 @@
-from ctypes import wstring_at
-from os import stat
 from typing import Callable, Iterable, List, Tuple, Union
 import xgboost as xgb
 import numpy as np
@@ -49,9 +47,6 @@ def avg_logprob(i: int):
 
 def variance_of_beams(x):
     a = torch.var(torch.tensor([torch.mean(x[i].nodrop_logits).item() for i in range(1, 5)])).view(-1)
-    # print([torch.mean(x[i].nodrop_logits).item() for i in range(1, 5)])
-    # print(a)
-    # exit()
     return a
 
 
@@ -71,6 +66,14 @@ def accuracy_at_pass_rate(labels, confidence_scores):
 
     return all_pass_rates, all_accuracies
 
+def evaluate_oracle(dev_confidences: Iterable[ConfidenceOutput]):
+    dev_labels = ConfidenceEstimator.convert_to_labels(dev_confidences)
+    # assign confidence scores randomly in (0, 0.5) for incorrect examples and in (0.5, 1) for correct ones.
+    # This way, all correct exampels are ranked above all incorrect examples.
+    oracle_confidences = dev_labels*(np.random.random(len(dev_labels))/2+0.5) + (1-dev_labels)*(np.random.random(len(dev_labels))/2)
+    precision, recall, thresholds = precision_recall_curve(dev_labels, oracle_confidences)
+    pass_rate, accuracies = accuracy_at_pass_rate(dev_labels, oracle_confidences)
+    return precision, recall, pass_rate, accuracies, thresholds
 
 def evaluate_logprob(dev_confidences: Iterable[ConfidenceOutput]):
     dev_labels = ConfidenceEstimator.convert_to_labels(dev_confidences)
@@ -291,6 +294,7 @@ def main(args):
     train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
 
     for f, name in [
+                    ([None], 'oracle'),
                     ([None], 'logprob'),
                     # ([logit_mean(0)], 'mean'),
                     # ([nodrop_entropies(0)], 'entropy'),
@@ -300,14 +304,21 @@ def main(args):
                     # ([max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0))], 'max_logit + max_entropy + max_cv'),
                     # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0))], 'length + max_logit + max_entropy + max_cv'),
                     # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), max_of(logit_var(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0)), min_of(logit_var(0))], 'length + max_logit + max_entropy + max_cv + max_var + min_logit + min_entropy + min_cv + min_var'),
-                    ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0))], 'length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
-                    ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0)), input_length(0)], 'length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
+                    # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0))], 'length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
+                    # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0)), input_length(0)], 'length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
+                    # ([avg_logprob(0), length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0)), input_length(0)], 'logprob + length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
+                    # ([avg_logprob(0), length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + length + max_logit + max_entropy + max_cv + min_logit + input_length'),
                     # ([variance_of_beams], 'var_beams'),
                     ]:
         estimator = ConfidenceEstimator(name=name, featurizers=f, eval_metric=args.eval_metric)
         logger.info('name = %s', name)
         
-        if name == 'logprob':
+        if name == 'oracle':
+            precision, recall, pass_rate, accuracies, thresholds = evaluate_oracle(dev_confidences)
+            score = auc(recall, precision)
+            estimator.score = score
+            logger.info('dev set score = %.3f', score)
+        elif name == 'logprob':
             precision, recall, pass_rate, accuracies, thresholds = evaluate_logprob(dev_confidences)
             score = auc(recall, precision)
             estimator.score = score
