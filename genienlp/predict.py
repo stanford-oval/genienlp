@@ -177,7 +177,6 @@ def run(args, device):
             
             if output_confidences:
                 _, example_ids, predictions, answers, contexts, confidences = generation_outputs
-                # print('confidences = ', confidences)
                 if args.calibrator_path is not None:
                     confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
                     logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)

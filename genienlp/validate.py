@@ -35,7 +35,12 @@ from collections import OrderedDict
 from .metrics import compute_metrics
 
 
-def generate_with_model(model, data_iterator, numericalizer, task, args, output_predictions_only=False, output_confidences=False, original_order=None):
+def generate_with_model(model, data_iterator, numericalizer, task,args,
+                        output_predictions_only=False,
+                        output_confidences=False,
+                        output_confidence_scores=False,
+                        original_order=None,
+                        confidence_estimator=None):
     """
     Inputs:
         original_order: List of indices. If provided, we will sort the results according to this order
@@ -45,6 +50,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, output_
         answers
         contexts
     """
+    assert not output_confidence_scores or confidence_estimator is not None, 'Cannot estimate confidences without an estimator'
     if isinstance(model, torch.nn.DataParallel):
         # get rid of the DataParallel wrapper
         model = model.module
@@ -74,13 +80,13 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, output_
                                                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                                                 do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
                                                 )
-            if output_confidences:
+            if output_confidences or output_confidence_scores:
                 partial_batch_confidences =  model.confidence(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout=args.mc_dropout, mc_dropout_num=args.mc_dropout_num)
             partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction, task=task, field_name='answer')
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
                 raw_batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(raw_partial_batch_prediction[i])
-                if output_confidences:
+                if output_confidences or output_confidence_scores:
                     batch_confidences[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_confidences[i])
         
         if not output_predictions_only:
@@ -98,13 +104,19 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, output_
     
     # TODO calculate and return loss
     loss = None
+    output = ()
 
     if output_predictions_only:
-        return predictions
-    if output_confidences:
-        return loss, example_ids, predictions, answers, contexts, confidences
+        output = (predictions, )
     else:
-        return loss, example_ids, predictions, answers, contexts
+        output = (loss, example_ids, predictions, answers, contexts)
+    if output_confidences:
+        output = output + (confidences, )
+    if output_confidence_scores:
+        confidence_scores = confidence_estimator.estimate(confidences)
+        output = output + (confidence_scores, )
+
+    return output
 
 
 def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args):
