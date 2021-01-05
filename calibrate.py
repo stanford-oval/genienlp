@@ -140,10 +140,10 @@ def run(confidences, featurizers):
     # print('sorted_logprobs = ',  sorted_logprobs)
     # print('sorted_labels = ', sorted_labels)
     
-    precision, recall, _ = precision_recall_curve(all_labels_dev, confidence_scores)
+    precision, recall, thresholds = precision_recall_curve(all_labels_dev, confidence_scores)
     pass_rate, accuracies = accuracy_at_pass_rate(all_labels_dev, confidence_scores)
 
-    return precision, recall, pass_rate, accuracies
+    return precision, recall, pass_rate, accuracies, thresholds
 
 
 def accuracy_at_pass_rate(labels, confidence_scores):
@@ -291,65 +291,77 @@ if __name__ == '__main__':
 
 
 
-    all_labels = []
-    for c in confidences:
-        all_labels.append(c[0].first_mistake)
-    
-    all_features = []
-    for featurizer in [logit_mean_0]:
-        padded_feature, feature_lengths = pad_features(confidences, featurizer)
-        all_features.append(padded_feature)
-        # print('padded_feature = ', padded_feature[:,-1].nonzero())
-
-    all_features = np.concatenate(all_features, axis=1)
-    # print('normalized all_features = ', all_features)
-
-    all_labels = np.array(all_labels) + 1 # +1 so that minimum is 0
-    all_labels = (all_labels == 0)
-    # print('all_labels = ', all_labels)
-    # avg_logprobs = [avg_logprob(c) for c in confidences]
-    all_features_train, all_features_dev, all_labels_train, all_labels_dev, feature_lengths_train, feature_lengths_dev = \
-        sklearn.model_selection.train_test_split(all_features, all_labels, feature_lengths, test_size=0.2, random_state=123)
-
-    train_LSTM(all_features_train, all_labels_train, all_features_dev, all_labels_dev, feature_lengths_train, feature_lengths_dev)
-
-
-
-
-    # # [([logit_cv_0], 'cv'), ([logit_mean_0], 'mean'), ([logit_var_0], 'variance'), ([nodroplogit_0], 'nodrop logits')]
-    # for f, name in [([logit_mean_0], 'mean'), ([length_0, logit_mean_0], 'mean, length')]:
-    #     precision, recall, pass_rate, accuracies = run(confidences, f)
-    #     pyplot.figure(0)
-    #     pyplot.plot(recall, precision, marker='.', label=name)
-    #     pyplot.figure(1)
-    #     pyplot.plot(pass_rate, accuracies, marker='.', label=name)
-        
-
-    # avg_logprobs = [avg_logprob(c) for c in confidences]
     # all_labels = []
     # for c in confidences:
     #     all_labels.append(c[0].first_mistake)
+    
+    # all_features = []
+    # for featurizer in [logit_mean_0]:
+    #     padded_feature, feature_lengths = pad_features(confidences, featurizer)
+    #     all_features.append(padded_feature)
+    #     # print('padded_feature = ', padded_feature[:,-1].nonzero())
+
+    # all_features = np.concatenate(all_features, axis=1)
+    # # print('normalized all_features = ', all_features)
+
     # all_labels = np.array(all_labels) + 1 # +1 so that minimum is 0
     # all_labels = (all_labels == 0)
+    # # print('all_labels = ', all_labels)
+    # # avg_logprobs = [avg_logprob(c) for c in confidences]
+    # all_features_train, all_features_dev, all_labels_train, all_labels_dev, feature_lengths_train, feature_lengths_dev = \
+    #     sklearn.model_selection.train_test_split(all_features, all_labels, feature_lengths, test_size=0.2, random_state=123)
 
-    # all_labels_train, all_labels_dev, avg_logprobs_train, avg_logprobs_dev = \
-    #     sklearn.model_selection.train_test_split(all_labels, avg_logprobs, test_size=0.2, random_state=123)
+    # train_LSTM(all_features_train, all_labels_train, all_features_dev, all_labels_dev, feature_lengths_train, feature_lengths_dev)
 
-    # logit_precision, logit_recall, _ = precision_recall_curve(all_labels_dev, avg_logprobs_dev)
-    # pyplot.figure(0)
-    # pyplot.plot(logit_recall, logit_precision, marker='.', label='average logprob')
-    # pyplot.legend()
-    # pyplot.grid()
-    # pyplot.xlabel('Recall')
-    # pyplot.ylabel('Precision')
-    # pyplot.savefig('precision-recall.png')
 
-    # pass_rates, accuracies = accuracy_at_pass_rate(all_labels_dev, avg_logprobs_dev)
-    # pyplot.figure(1)
-    # pyplot.plot(pass_rates, accuracies, marker='.', label='average logprob')
-    # pyplot.legend()
-    # pyplot.grid()
-    # pyplot.xlabel('Pass Rate')
-    # pyplot.ylabel('Accuracy')
-    # pyplot.savefig('pass-acc.png')
+
+
+    # [([logit_cv_0], 'cv'), ([logit_mean_0], 'mean'), ([logit_var_0], 'variance'), ([nodroplogit_0], 'nodrop logits')]
+    for f, name in [([length_0, logit_mean_0], 'mean + length')]:
+        precision, recall, pass_rate, accuracies, thresholds = run(confidences, f)
+        pyplot.figure(0)
+        pyplot.plot(recall, precision, marker='.', label=name)
+        pyplot.plot(recall, 2*(precision*recall)/(precision+recall), marker='.', label=name+' (F1)')
+        pyplot.figure(1)
+        pyplot.plot(range(len(thresholds)), thresholds, marker='*', label=name+ ' (thresholds)')
+        pyplot.figure(2)
+        pyplot.plot(pass_rate, accuracies, marker='.', label=name)
+        
+
+    avg_logprobs = [avg_logprob(c) for c in confidences]
+    all_labels = []
+    for c in confidences:
+        all_labels.append(c[0].first_mistake)
+    all_labels = np.array(all_labels) + 1 # +1 so that minimum is 0
+    all_labels = (all_labels == 0)
+
+    all_labels_train, all_labels_dev, avg_logprobs_train, avg_logprobs_dev = \
+        sklearn.model_selection.train_test_split(all_labels, avg_logprobs, test_size=0.2, random_state=123)
+
+    logit_precision, logit_recall, thresholds = precision_recall_curve(all_labels_dev, avg_logprobs_dev)
+    pyplot.figure(0)
+    pyplot.plot(logit_recall, logit_precision, marker='.', label='average logprob')
+    # thresholds = list(thresholds)+[1.0]
+    # pyplot.plot(logit_recall, thresholds, marker='*', label='average logprob (threshold)')
+    pyplot.legend()
+    pyplot.grid()
+    pyplot.xlabel('Recall')
+    pyplot.ylabel('Precision')
+    pyplot.savefig('precision-recall.png')
+
+    pyplot.figure(1)
+    pyplot.legend()
+    pyplot.grid()
+    pyplot.xlabel('Index')
+    pyplot.ylabel('Confidence Threshold')
+    pyplot.savefig('threshold.png')
+
+    pass_rates, accuracies = accuracy_at_pass_rate(all_labels_dev, avg_logprobs_dev)
+    pyplot.figure(2)
+    pyplot.plot(pass_rates, accuracies, marker='.', label='average logprob')
+    pyplot.legend()
+    pyplot.grid()
+    pyplot.xlabel('Pass Rate')
+    pyplot.ylabel('Accuracy')
+    pyplot.savefig('pass-acc.png')
     
