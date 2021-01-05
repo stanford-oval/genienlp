@@ -68,6 +68,22 @@ def cv_drop_avg_logprob(i):
         return a
     return f
 
+def nodrop_seq_prob(i):
+    return lambda x: torch.prod(x[i].nodrop_probs).view(-1)
+
+def mean_drop_seq_prob(i):
+    return lambda x: torch.mean(torch.prod(x[i].drop_probs, dim=1)).view(-1)
+
+def var_drop_seq_prob(i):
+    return lambda x: torch.var(torch.prod(x[i].drop_probs, dim=1)).view(-1)
+
+def cv_drop_seq_prob(i):
+    def f(x):
+        a = torch.sqrt(var_drop_seq_prob(i)(x)) / mean_drop_seq_prob(i)(x)
+        a[a!=a] = 0 # set NaNs to zero
+        return a
+    return f
+
 
 def accuracy_at_pass_rate(labels, confidence_scores):
     sorted_confidence_scores, sorted_labels = zip(*sorted(zip(confidence_scores, labels)))
@@ -85,18 +101,19 @@ def accuracy_at_pass_rate(labels, confidence_scores):
 
     return all_pass_rates, all_accuracies
 
-def evaluate_oracle(dev_confidences: Iterable[ConfidenceOutput]):
-    dev_labels = ConfidenceEstimator.convert_to_labels(dev_confidences)
+def oracle_score(confidence: ConfidenceOutput):
+    label = ConfidenceEstimator.convert_to_labels([confidence])[0]
     # assign confidence scores randomly in (0, 0.5) for incorrect examples and in (0.5, 1) for correct ones.
     # This way, all correct exampels are ranked above all incorrect examples.
-    oracle_confidences = dev_labels*(np.random.random(len(dev_labels))/2+0.5) + (1-dev_labels)*(np.random.random(len(dev_labels))/2)
-    precision, recall, thresholds = precision_recall_curve(dev_labels, oracle_confidences)
-    pass_rate, accuracies = accuracy_at_pass_rate(dev_labels, oracle_confidences)
-    return precision, recall, pass_rate, accuracies, thresholds
+    oracle_confidence = label*(np.random.random()/2+0.5) + (1-label)*(np.random.random()/2)
+    return oracle_confidence
 
-def evaluate_logprob(dev_confidences: Iterable[ConfidenceOutput]):
+def evaluate_raw(dev_confidences: Iterable[ConfidenceOutput], featurizer: Callable):
+    """
+    Evaluates scores directly, instead of feedeing them into a boosted tree
+    """
     dev_labels = ConfidenceEstimator.convert_to_labels(dev_confidences)
-    dev_avg_logprobs = [nodrop_avg_logprob(0)(c) for c in dev_confidences]
+    dev_avg_logprobs = [featurizer(c) for c in dev_confidences]
     _max = np.max(dev_avg_logprobs)
     _min = np.min(dev_avg_logprobs)
     dev_avg_logprobs = (dev_avg_logprobs - _min) / (_max - _min)
@@ -312,20 +329,24 @@ def main(args):
     all_estimators = []
     train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
     for f, name in [
-                    # ([None], 'oracle'),
-                    # ([None], 'avg_logprob'),
+                    # (oracle_score, 'raw_oracle'),
+                    (nodrop_avg_logprob(0), 'raw_avg_logprob'),
+                    (nodrop_seq_prob(0), 'raw_seq_prob'),
+                    (mean_drop_seq_prob(0), 'raw_mean_seq_prob'),
+                    (var_drop_seq_prob(0), 'raw_var_seq_prob'),
+                    (cv_drop_seq_prob(0), 'raw_cv_seq_prob')
                     # ([mean_drop_logit(0)], 'mean'),
                     # ([nodrop_entropies(0)], 'entropy'),
-                    ([(mean_drop_logit(0), nodrop_entropies(0))], 'mean + entropy'),
-                    ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0))], 'prediction_length + mean + entropy'),
-                    ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0), cv_drop_logit(0))], 'prediction_length + mean + entropy + cv'),
-                    ([max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'max_logit + max_entropy + max_cv'),
-                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv'),
-                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), max_of(var_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), min_of(var_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + max_var + min_logit + min_entropy + min_cv + min_var'),
-                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
-                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
-                    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
-                    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length'),
+                    # ([(mean_drop_logit(0), nodrop_entropies(0))], 'mean + entropy'),
+                    # ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0))], 'prediction_length + mean + entropy'),
+                    # ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0), cv_drop_logit(0))], 'prediction_length + mean + entropy + cv'),
+                    # ([max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'max_logit + max_entropy + max_cv'),
+                    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv'),
+                    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), max_of(var_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), min_of(var_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + max_var + min_logit + min_entropy + min_cv + min_var'),
+                    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
+                    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
+                    # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
+                    # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length'),
                     # ([variance_of_beams], 'var_beams'),
                     # ([mean_drop_avg_logprob(0)], 'mean_drop_avg_logprob'),
                     # ([var_drop_avg_logprob(0)], 'var_drop_avg_logprob'),
@@ -334,13 +355,8 @@ def main(args):
         estimator = ConfidenceEstimator(name=name, featurizers=f, eval_metric=args.eval_metric)
         logger.info('name = %s', name)
         
-        if name == 'oracle':
-            precision, recall, pass_rate, accuracies, thresholds = evaluate_oracle(dev_confidences)
-            score = auc(recall, precision)
-            estimator.score = score
-            logger.info('dev set score = %.3f', score)
-        elif name == 'avg_logprob':
-            precision, recall, pass_rate, accuracies, thresholds = evaluate_logprob(dev_confidences)
+        if name.startswith('raw'):
+            precision, recall, pass_rate, accuracies, thresholds = evaluate_raw(dev_confidences, f)
             score = auc(recall, precision)
             estimator.score = score
             logger.info('dev set score = %.3f', score)
@@ -360,7 +376,7 @@ def main(args):
         
     logger.info('\n'+'\n'.join([f'{e.name}: {e.score:.3f}' for e in all_estimators]))
     best_estimator = all_estimators[np.argmax([e.score for e in all_estimators])]
-    logger.info('Best estimator is %s with score = %f', best_estimator.name, best_estimator.score)
+    logger.info('Best estimator is %s with score = %.3f', best_estimator.name, best_estimator.score)
     best_estimator.save(args.save)
 
     pyplot.figure('precision-recall')

@@ -110,7 +110,7 @@ class ConfidenceOutput:
     Contains all necessary features that are useful for calculating confidence of a single generated output
     """
 
-    def __init__(self, drop_logits: List[Tensor], gold_answer: Tensor, prediction: Tensor,
+    def __init__(self, drop_logits: List[Tensor], drop_probs: List[Tensor], gold_answer: Tensor, prediction: Tensor,
                  nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_entropies: Tensor, context: Tensor):
         """
         Inputs:
@@ -120,6 +120,7 @@ class ConfidenceOutput:
             nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
         """
         self.drop_logits = torch.stack(drop_logits, dim=0).cpu()
+        self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
         self.nodrop_logits = nodrop_logits.cpu()
         self.nodrop_probs = nodrop_probs.cpu()
         self.nodrop_entropies = nodrop_entropies.cpu()
@@ -151,7 +152,8 @@ class ConfidenceOutput:
         return -1
 
     def __repr__(self) -> str:
-        return '<Confidence: logits=' + str(self.drop_logits) \
+        return '<Confidence: drop_logits=' + str(self.drop_logits) \
+                + ', drop_probs=' + str(self.drop_probs) \
                 + ', first_mistake=' + str(self.first_mistake) \
                 + ', nodrop_logits=' + str(self.nodrop_logits) \
                 + ', nodrop_probs=' + str(self.nodrop_probs) \

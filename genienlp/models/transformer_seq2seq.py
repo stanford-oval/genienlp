@@ -187,10 +187,10 @@ class TransformerSeq2Seq(GenieModel):
         outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
         nodrop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
         for i in range(batch_size):
-            batch_nodrop_logits.append(nodrop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))
+            batch_nodrop_logits.append(nodrop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
             probs = torch.softmax(nodrop_logits[i], dim=1)
-            batch_nodrop_probs.append(probs.gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))
-            batch_nodrop_entropies.append(-torch.sum(torch.log(probs)*probs, dim=1))
+            batch_nodrop_probs.append(probs.gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
+            batch_nodrop_entropies.append(-torch.sum(torch.log(probs)*probs, dim=1)[:prediction_lengths[i]])
         
         # activate dropout layers
         should_revert_to_eval = True
@@ -201,16 +201,20 @@ class TransformerSeq2Seq(GenieModel):
             self.train()
 
         batch_drop_logits = [[] for _ in range(batch_size)]
+        batch_drop_probs = [[] for _ in range(batch_size)]
         for _ in range(mc_dropout_num):
             outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
             drop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
             for i in range(batch_size):
                 batch_drop_logits[i].append((drop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))[:prediction_lengths[i]])
+                drop_probs = torch.softmax(drop_logits[i], dim=1).gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]]
+                batch_drop_probs[i].append(drop_probs)
 
         confidences = []
         for i in range(batch_size):
             confidences.append(
                         ConfidenceOutput(drop_logits=batch_drop_logits[i],
+                                         drop_probs=batch_drop_probs[i],
                                          gold_answer=batch.answer.value[i//repetition_factor][:batch.answer.length[i//repetition_factor]],
                                          prediction=predictions[i][:prediction_lengths[i]+1],  # +1 to include EOS
                                          nodrop_logits=batch_nodrop_logits[i][:prediction_lengths[i]],
