@@ -164,7 +164,7 @@ class TransformerSeq2Seq(GenieModel):
         return generated
 
 
-    def confidence(self, batch, predictions, prediction_lengths, mc_dropout=False, mc_dropout_num=1) -> List[ConfidenceOutput]:
+    def confidence(self, batch, predictions, mc_dropout=False, mc_dropout_num=1) -> List[ConfidenceOutput]:
         """
         predictions: Tensor of shape (batch_size, output_length)
         mc_dropout: if True, will activate dropout layers
@@ -174,6 +174,8 @@ class TransformerSeq2Seq(GenieModel):
         batch_size = predictions.shape[0]
         repetition_factor = batch_size//batch.context.value.shape[0]
         input_ids = batch.context.value.repeat_interleave(repetition_factor, dim=0) # repeat to account for multiple predictions per input
+
+        prediction_lengths = self.get_length(predictions)
 
         pad_token_id = self.numericalizer._tokenizer.pad_token_id
         attention_mask = self.model._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer._tokenizer.eos_token_id)
@@ -222,7 +224,6 @@ class TransformerSeq2Seq(GenieModel):
         
         return confidences
 
-    
     def get_length(self, prediction:Tensor):
         # skip the first token, because BOS is the same as EOS for some models
         prediction = prediction[:, 1:]

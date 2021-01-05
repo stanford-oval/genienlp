@@ -75,8 +75,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, output_
                                                 do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
                                                 )
             if output_confidences:
-                partial_batch_lengths = model.get_length(raw_partial_batch_prediction)
-                partial_batch_confidences =  model.confidence(batch=batch, predictions=raw_partial_batch_prediction, prediction_lengths=partial_batch_lengths, mc_dropout=args.mc_dropout, mc_dropout_num=args.mc_dropout_num)
+                partial_batch_confidences =  model.confidence(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout=args.mc_dropout, mc_dropout_num=args.mc_dropout_num)
             partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction, task=task, field_name='answer')
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])

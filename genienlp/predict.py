@@ -177,11 +177,12 @@ def run(args, device):
             if output_confidences:
                 _, example_ids, predictions, answers, contexts, confidences = generation_outputs
                 # print('confidences = ', confidences)
-                confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
-                confidence_scores = confidence_estimator.estimate(confidences)
-                # print('confidence_scores = ', confidence_scores)
+                if args.calibrator_path is not None:
+                    confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
+                    confidence_scores = confidence_estimator.estimate(confidences)
+                    # print('confidence_scores = ', confidence_scores)
                 if args.save_confidence_features:
-                    with open('confidence.pkl', 'wb') as f:
+                    with open(args.confidence_feature_path, 'wb') as f:
                         pickle.dump(confidences, f, protocol=4)
             else:
                 _, example_ids, predictions, answers, contexts = generation_outputs
@@ -206,7 +207,10 @@ def run(args, device):
 
                 if not args.silent:
                     for i, (c, p, a) in enumerate(zip(contexts, predictions, answers)):
-                        logger.info(f'\nContext {i+1}: {c}\nPrediction {i + 1} ({sum(args.num_outputs)} outputs): {p}\nAnswer {i + 1}: {a}\n')
+                        log_string = f'\nContext {i+1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
+                        if args.calibrator_path is not None:
+                            log_string += f'Confidence {i+1} : {confidence_scores[i]:.3f}\n'
+                        logger.info(log_string)
                     logger.info(metrics)
                     
                 task_scores[task].append((len(answers), metrics[task.metrics[0]]))
