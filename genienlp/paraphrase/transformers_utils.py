@@ -1,7 +1,7 @@
 import re
 import torch
 import torch.nn.functional as F
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 from transformers import LogitsProcessorList
@@ -99,12 +99,12 @@ class GenieMBartTokenizer(MBartTokenizer):
 
 
 class GeniePreTrainedModel(PreTrainedModel):
-    '''
+    """
     General class for PreTrainedModel which can output cross-attention weights during generation
-    '''
+    """
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-    
+
     def greedy_search(
             self,
             input_ids: torch.LongTensor,
@@ -148,11 +148,10 @@ class GeniePreTrainedModel(PreTrainedModel):
                                                        dtype=torch.float32,
                                                        fill_value=-1000000)
                                     for _ in range(num_layers)]
-   
+
         while cur_len < max_length:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            
             # forward pass to get next token
             outputs = self(**model_inputs, return_dict=True)
             next_token_logits = outputs.logits[:, -1, :]
@@ -192,15 +191,21 @@ class GeniePreTrainedModel(PreTrainedModel):
             
             # increase cur_len
             cur_len = cur_len + 1
-        
+
+        # build the tuple to return
+        outputs = (input_ids,)
+
         if output_attentions:
             # List of each encoder layer cross-attention values each with size (bsz, num_heads, tgt_len, src_len)
             all_cross_attentions = [layer_all_cross_attentions[:, :, :sequence_lengths.max().item(), :] for
                                     layer_all_cross_attentions in all_cross_attentions]
-            
-            return input_ids, all_cross_attentions
+            outputs += (all_cross_attentions,)
+        
+        # TODO change callers to always accept a tuple
+        if len(outputs) == 1:
+            return outputs[0]
         else:
-            return input_ids
+            return outputs
     
     
     def sample(

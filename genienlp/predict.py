@@ -167,8 +167,13 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            _, predictions, answers, contexts = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name, original_order=original_order)
-                
+            generation_outputs = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name, output_confidences=args.output_confidences, original_order=original_order)
+            if args.output_confidences:
+                _, predictions, answers, contexts, confidences = generation_outputs
+                print('confidences = ', confidences)
+            else:
+                _, predictions, answers, contexts = generation_outputs
+
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
                 if args.main_metric_only:
@@ -251,6 +256,11 @@ def parse_argv(parser):
     parser.add_argument("--num_beam_groups", type=int, nargs='+', default=[1], help='1 disables diverse beam seach')
     parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
+
+    parser.add_argument("--output_confidences", action='store_true', help='')
+    parser.add_argument("--mc_dropout", action='store_true', help='Monte Carlo dropout')
+    parser.add_argument("--mc_dropout_num", type=int, default=1, help='Number of samples to use for Monte Carlo dropout')
+
     parser.add_argument("--half_precision", action='store_true', help='If True, will use half precision on all tensors and calculations.')
 
 
@@ -291,6 +301,7 @@ def check_and_update_generation_args(args):
         setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
 
     logger.info('Will output %d sequences for each input.', sum(args.num_outputs))
+
 
 def main(args):
     load_config_json(args)

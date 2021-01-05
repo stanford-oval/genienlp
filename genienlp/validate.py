@@ -35,7 +35,7 @@ from collections import OrderedDict
 from .metrics import compute_metrics
 
 
-def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False, original_order=None):
+def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False, output_confidences=False, original_order=None):
     """
     Inputs:
         original_order: List of indices. If provided, we will sort the results according to this order
@@ -49,15 +49,19 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
         # get rid of the DataParallel wrapper
         model = model.module
     predictions = []
+    confidences = []
     example_ids = []
     answers = []
     contexts = []
 
     for batch in data_iterator:
         batch_size = len(batch.example_id)
-        batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
+        raw_batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
+        batch_prediction = [[] for _ in range(batch_size)]
+        batch_confidences = [[] for _ in range(batch_size)]
+
         for hyperparameter_idx in range(len(args.temperature)):
-            partial_batch_prediction = model.generate(batch,
+            raw_partial_batch_prediction = model.generate(batch,
                                                 max_output_length=args.max_output_length,
                                                 num_outputs=args.num_outputs[hyperparameter_idx],
                                                 temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
@@ -68,11 +72,17 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
                                                 num_beam_groups=args.num_beam_groups[hyperparameter_idx],
                                                 diversity_penalty=args.diversity_penalty[hyperparameter_idx],
                                                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
-                                                do_sample=args.temperature[hyperparameter_idx]!=0  # if temperature==0, we do not sample
+                                                do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
                                                 )
+            if output_confidences:
+                partial_batch_lengths = model.get_length(raw_partial_batch_prediction)
+                partial_batch_confidences =  model.confidence(batch=batch, predictions=raw_partial_batch_prediction, prediction_lengths=partial_batch_lengths, mc_dropout=args.mc_dropout, mc_dropout_num=args.mc_dropout_num)
             partial_batch_prediction = numericalizer.reverse(partial_batch_prediction, task=task, field_name='answer')
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
+                raw_batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(raw_partial_batch_prediction[i])
+                if output_confidences:
+                    batch_confidences[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_confidences[i])
         
         if not output_predictions_only:
             batch_answer = numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer')
@@ -81,10 +91,11 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
             batch_context = numericalizer.reverse(batch.context.value.data, task=task, field_name='context')
             contexts += batch_context
         predictions += batch_prediction
+        confidences += batch_confidences
     
     if original_order is not None:
         # sort back to the original order
-        original_order, example_ids, predictions, answers, contexts = tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))
+        original_order, example_ids, predictions, answers, contexts, questions, confidences = [list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, questions, confidences)))))]
 
     if prediction_file_name is not None:
         with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
@@ -96,6 +107,22 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
     # TODO calculate and return loss
     loss = None
     return loss, predictions, answers, contexts
+
+
+def calculate_confidence(model, data_iterator, predictions, args):
+    """
+    predictions: List of list of list of token ids. predictions[i] is for the ith example in the batch
+    """
+    if isinstance(model, torch.nn.DataParallel):
+        # get rid of the DataParallel wrapper
+        model = model.module
+
+    if args.mc_dropout:
+        model.train()
+    
+    for idx, batch in enumerate(data_iterator):
+        batch_size = len(batch.example_id)
+        batch_confidences = model.confidence(batch, predictions[0][0].view(batch_size, -1))
 
 
 def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args):

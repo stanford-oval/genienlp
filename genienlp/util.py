@@ -36,9 +36,11 @@ import shutil
 import random
 import time
 import re
+from typing import List
 import numpy as np
 import torch
 from transformers.models.mbart.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
+from torch.functional import Tensor
 
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
@@ -101,6 +103,59 @@ class SpecialTokenMap:
                 break
             
         return s
+
+
+class ConfidenceOutput:
+    """
+    Contains all necessary features that are useful for calculating confidence of a single generated output
+    """
+
+    def __init__(self, logits: List[Tensor], gold_answer: Tensor, prediction: Tensor):
+        """
+        Inputs:
+            gold_answer: includes BOS and EOS tokens, but no PAD tokens
+            prediction: includes BOS and EOS tokens, but no PAD tokens
+        """
+        self.logits = torch.stack(logits, dim=0)
+
+        self.logit_mean = self.logits.mean(dim=0)
+        self.logit_variance = self.logits.var(dim=0)
+        self.logit_cv = torch.sqrt(self.logit_variance) / self.logit_mean # coefficient of variation
+        self.logit_cv[self.logit_cv != self.logit_cv] = 0 # set NANs to 0
+
+        self.first_mistake = ConfidenceOutput.find_first_mistake(gold_answer, prediction)
+
+    @staticmethod
+    def find_first_mistake(gold_answer: Tensor, prediction: Tensor):
+        """
+        Inputs:
+            gold_answer: includes BOS and EOS tokens, but no PAD tokens
+            prediction: includes BOS and EOS tokens, but no PAD tokens
+        Returns:
+            The index of the first token where `gold_answer` and `prediction` differ, or -1 if they are equal. Ignores BOS, so the minimum possible value is .
+        """
+        # print('gold_answer = ', gold_answer)
+        # print('prediction = ', prediction)
+        # skip BOS
+        gold_answer = gold_answer[1:]
+        prediction = prediction[1:]
+
+        for i in range(min(len(gold_answer), len(prediction))):
+            if gold_answer[i] != prediction[i]:
+                return i
+        if len(gold_answer) != len(prediction):
+            # one is a strict prefix of the other
+            return min(len(gold_answer), len(prediction))
+        return -1
+
+    def __repr__(self) -> str:
+        return '<Confidence: logits=' + str(self.logits) \
+                +', logit_mean='+ str(self.logit_mean) \
+                + ', logit_variance='+ str(self.logit_variance) \
+                + ', logit_cv='+ str(self.logit_cv) \
+                + ', first_mistake='+ str(self.first_mistake) \
+                + '>'
+
 
 def remove_thingtalk_quotes(thingtalk):
     quote_values = []
