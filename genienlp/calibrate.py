@@ -1,3 +1,4 @@
+from os import stat
 from typing import Callable, Iterable, List, Tuple, Union
 from torch._C import Value
 import xgboost as xgb
@@ -15,6 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# Feature functions
 def logit_cv_0(x):
     return x[0].logit_cv
 
@@ -63,19 +65,35 @@ def accuracy_at_pass_rate(labels, confidence_scores):
     return all_pass_rates, all_accuracies
 
 
+def evaluate_logprob(dev_confidences: Iterable[ConfidenceOutput]):
+    dev_labels = ConfidenceEstimator.convert_to_labels(dev_confidences)
+    dev_avg_logprobs = [avg_logprob(c) for c in dev_confidences]
+    _max = np.max(dev_avg_logprobs)
+    _min = np.min(dev_avg_logprobs)
+    dev_avg_logprobs = (dev_avg_logprobs - _min) / (_max - _min)
+    precision, recall, thresholds = precision_recall_curve(dev_labels, dev_avg_logprobs)
+    pass_rate, accuracies = accuracy_at_pass_rate(dev_labels, dev_avg_logprobs)
+    return precision, recall, pass_rate, accuracies, thresholds
+
 def parse_argv(parser):
     parser.add_argument('--confidence_path', type=str, help='The path to the pickle file where the list of ConfidenceOutput objects is saved')
+    parser.add_argument('--eval_metric', type=str, default='aucpr', help='An xgboost metric.'
+                        'The metric which will be used to select the best model on the validation set.')
     parser.add_argument('--dev_split', type=float, default=0.2, help='The portion of the dataset to use for validation. The rest is used to train.')
-    parser.add_argument('--save', type=str, help='Where to save the calibrator model after training')
+    parser.add_argument('--save', type=str, help='A pickle file to save the calibrator model after training')
 
 
 class ConfidenceEstimator():
-    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]]):
+    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str):
         self.name = name
         self.featurizers = featurizers
+        self.eval_metric = eval_metric
+
         self.model = None
+        self.score = 0
         self.feature_size = 0
-        self.normalizer = None
+        self.normalizer_sub = 0
+        self.normalizer_divide = 1
 
     @staticmethod
     def _extract_confidence_scores(model, dev_dataset):
@@ -97,16 +115,19 @@ class ConfidenceEstimator():
             if normalize == 'var':
                 mean = np.nanmean(padded_features, axis=0)
                 var = np.nanvar(padded_features, axis=0)
-                self.normalizer = lambda x: (x - mean) / np.sqrt(var)
+                self.normalizer_sub = mean
+                self.normalizer_div = np.sqrt(var)
             elif normalize == 'max':
                 _max = np.max(padded_features, axis=0)
                 _min = np.min(padded_features, axis=0)
-                self.normalizer = lambda x: (x - _min) / (_max-_min)
+                self.normalizer_sub = _min
+                self.normalizer_div = _max - _min
             elif normalize == 'none':
-                self.normalizer = lambda x: x
+                self.normalizer_sub = 0
+                self.normalizer_div = 1
             else:
                 raise ValueError('Unexpected value for `normalize`')
-        padded_features = self.normalizer(padded_features)
+        padded_features = (padded_features - self.normalizer_sub) / self.normalizer_div
         padded_features[np.isnan(padded_features)] = 0
         
         return padded_features
@@ -163,7 +184,7 @@ class ConfidenceEstimator():
                 'max_depth': m,  
                 'eta': e,  
                 'objective': 'binary:logistic',
-                'eval_metric': 'aucpr',
+                'eval_metric': self.eval_metric,
                 'scale_pos_weight': scale_pos_weight
                 }
             evals_result = {}
@@ -179,7 +200,7 @@ class ConfidenceEstimator():
             predictions = np.round(np.asarray(prediction_probs))
             accuracy = accuracy_score(dev_labels, predictions)
             score = model.best_score #evals_result['dev']['aucpr'][-1]#
-            logger.info('score=%.1f \t accuracy=%.1f \t best_iteration=%d \t', score * 100, accuracy * 100, model.best_iteration)
+            logger.info('score=%.3f \t accuracy=%.1f \t best_iteration=%d \t', score, accuracy * 100, model.best_iteration)
             confusion_m = confusion_matrix(dev_labels, predictions)
             if score > best_score:
                 best_score = score
@@ -189,17 +210,22 @@ class ConfidenceEstimator():
             best_score = max(best_score, score)
 
             self.model = best_model
+            self.score = best_score
 
         return best_model, best_score, best_confusion_matrix, best_params
 
-    def convert_to_dataset(self, confidences: Iterable[ConfidenceOutput], train :bool):
+    @staticmethod
+    def convert_to_labels(confidences: Iterable[ConfidenceOutput]):
         labels = []
         for c in confidences:
             labels.append(c[0].first_mistake)
         labels = np.array(labels) + 1 # +1 so that minimum is 0
         labels = (labels == 0) # convert to binary labels
         # logger.info('labels = %s', str(labels))
-        
+        return labels
+
+    def convert_to_dataset(self, confidences: Iterable[ConfidenceOutput], train :bool):
+        labels = ConfidenceEstimator.convert_to_labels(confidences)
         features = self._convert_to_features(confidences, train)
 
         return features, labels
@@ -228,53 +254,60 @@ class ConfidenceEstimator():
         # logger.info('scale_pos_weight = %f', scale_pos_weight)
 
         best_model, best_score, best_confusion_matrix, best_params = self._tune_and_train(train_dataset=train_dataset, dev_dataset=dev_dataset, dev_labels=dev_labels, scale_pos_weight=scale_pos_weight)
-        logger.info('best dev set score = %.1f', best_score * 100)
+        logger.info('best dev set score = %.3f', best_score)
         logger.info('best confusion_matrix = %s', str(best_confusion_matrix))
         logger.info('best hyperparameters (max_depth, eta, num_iterations) = %s', str(best_params))
 
+    def save(self, path: str):
+        with open(path, 'wb') as f:
+            pickle.dump(self, f, protocol=4)
+
+    @staticmethod
+    def load(path: str):
+        with open(path, 'rb') as f:
+            obj = pickle.load(f)
+        return obj
 
 def main(args):
 
     with open(args.confidence_path, 'rb') as f:
         confidences = pickle.load(f)
 
+    all_estimators = []
+    train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split)
+
     for f, name in [
+                    ([None], 'logprob'),
                     # ([logit_mean_0], 'mean'),
                     # ([nodrop_entropies_0], 'entropy'), 
                     ([(logit_mean_0, nodrop_entropies_0)], 'mean+entropy'),
-                    # ([length_0, (logit_mean_0, nodrop_entropies_0)], 'length+mean+entropy'),
-                    # ([length_0, (nodroplogit_0, nodrop_entropies_0)], 'length+nodroplog+entropy'),
+                    ([length_0, (logit_mean_0, nodrop_entropies_0)], 'length+mean+entropy'),
+                    ([length_0, (nodroplogit_0, nodrop_entropies_0)], 'length+nodroplog+entropy'),
                     ]:
-        estimator = ConfidenceEstimator(name=name, featurizers=f)
+        estimator = ConfidenceEstimator(name=name, featurizers=f, eval_metric=args.eval_metric)
         logger.info('name = %s', name)
-        train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split)
-        train_features, train_labels = estimator.convert_to_dataset(train_confidences, train=True)
-        dev_features, dev_labels = estimator.convert_to_dataset(dev_confidences, train=False)
-        estimator.train_and_validate(train_features, train_labels, dev_features, dev_labels)
-        precision, recall, pass_rate, accuracies, thresholds = estimator.evaluate(dev_features, dev_labels)
-        pyplot.figure(0)
-        pyplot.plot(recall, precision, marker='.', label=name)
-        pyplot.figure(1)
-        pyplot.plot(range(len(thresholds)), thresholds, marker='*', label=name+ ' (thresholds)')
-        pyplot.figure(2)
-        pyplot.plot(pass_rate, accuracies, marker='.', label=name)
         
+        if name == 'logprob':
+            precision, recall, pass_rate, accuracies, thresholds = evaluate_logprob(dev_confidences)
+        else:
+            train_features, train_labels = estimator.convert_to_dataset(train_confidences, train=True)
+            dev_features, dev_labels = estimator.convert_to_dataset(dev_confidences, train=False)
+            estimator.train_and_validate(train_features, train_labels, dev_features, dev_labels)
+            precision, recall, pass_rate, accuracies, thresholds = estimator.evaluate(dev_features, dev_labels)
+        pyplot.figure('precision-recall')
+        pyplot.plot(recall, precision, marker='.', label=name)
+        pyplot.figure('thresholds')
+        pyplot.plot(range(len(thresholds)), thresholds, marker='*', label=name+ ' (thresholds)')
+        pyplot.figure('pass_rate')
+        pyplot.plot(pass_rate, accuracies, marker='.', label=name)
 
-    avg_logprobs = [avg_logprob(c) for c in confidences]
-    all_labels = []
-    for c in confidences:
-        all_labels.append(c[0].first_mistake)
-    all_labels = np.array(all_labels) + 1 # +1 so that minimum is 0
-    all_labels = (all_labels == 0)
+        all_estimators.append(estimator)
+        
+    best_estimator = all_estimators[np.argmax([e.score for e in all_estimators])]
+    logger.info('Best estimator is %s with score = %f', best_estimator.name, best_estimator.score)
+    best_estimator.save(args.save)
 
-    all_labels_train, all_labels_dev, avg_logprobs_train, avg_logprobs_dev = \
-        sklearn.model_selection.train_test_split(all_labels, avg_logprobs, test_size=0.2, random_state=123)
-
-    logit_precision, logit_recall, thresholds = precision_recall_curve(all_labels_dev, avg_logprobs_dev)
-    pyplot.figure(0)
-    pyplot.plot(logit_recall, logit_precision, marker='.', label='average logprob')
-    # thresholds = list(thresholds)+[1.0]
-    # pyplot.plot(logit_recall, thresholds, marker='*', label='average logprob (threshold)')
+    pyplot.figure('precision-recall')
     pyplot.legend()
     pyplot.grid()
     pyplot.xticks(np.arange(0, 1, 0.1))
@@ -283,16 +316,14 @@ def main(args):
     pyplot.ylabel('Precision')
     pyplot.savefig('precision-recall.png')
 
-    pyplot.figure(1)
+    pyplot.figure('thresholds')
     pyplot.legend()
     pyplot.grid()
     pyplot.xlabel('Index')
     pyplot.ylabel('Confidence Threshold')
     pyplot.savefig('threshold.png')
 
-    pass_rates, accuracies = accuracy_at_pass_rate(all_labels_dev, avg_logprobs_dev)
-    pyplot.figure(2)
-    pyplot.plot(pass_rates, accuracies, marker='.', label='average logprob')
+    pyplot.figure('pass_rate')
     pyplot.legend()
     pyplot.grid()
     pyplot.xticks(np.arange(0, 1, 0.1))

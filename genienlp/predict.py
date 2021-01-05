@@ -174,7 +174,7 @@ def run(args, device):
                 
                 import pickle
                 with open('confidence.pkl', 'wb') as f:
-                    pickle.dump(confidences, f)
+                    pickle.dump(confidences, f, protocol=4)
 
             else:
                 _, predictions, answers, contexts = generation_outputs
