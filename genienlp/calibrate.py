@@ -230,6 +230,12 @@ class ConfidenceEstimator():
 
         return features, labels
 
+    def estimate(self, confidences: Iterable[ConfidenceOutput]):
+        features, labels = self.convert_to_dataset(confidences, train=False)
+        dataset = xgb.DMatrix(data=features, label=labels)
+        confidence_scores = ConfidenceEstimator._extract_confidence_scores(self.model, dataset)
+        return confidence_scores
+
     def evaluate(self, dev_features, dev_labels):
         dev_dataset = xgb.DMatrix(data=dev_features, label=dev_labels)
         confidence_scores = ConfidenceEstimator._extract_confidence_scores(self.model, dev_dataset)

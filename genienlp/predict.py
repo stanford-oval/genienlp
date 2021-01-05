@@ -167,9 +167,10 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            generation_outputs = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name, output_confidences=args.output_confidences, original_order=original_order)
+            generation_outputs = generate_with_model(model, it, model.numericalizer, task, args, output_confidences=args.output_confidences, original_order=original_order)
+            
             if args.output_confidences:
-                _, predictions, answers, contexts, confidences = generation_outputs
+                _, example_ids, predictions, answers, contexts, confidences = generation_outputs
                 # print('confidences = ', confidences)
                 
                 import pickle
@@ -177,7 +178,12 @@ def run(args, device):
                     pickle.dump(confidences, f, protocol=4)
 
             else:
-                _, predictions, answers, contexts = generation_outputs
+                _, example_ids, predictions, answers, contexts = generation_outputs
+
+            # write into file
+            with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
+                for i in range(len(example_ids)):
+                    prediction_file.write(example_ids[i] + '\t' + '\t'.join(predictions[i]) + '\n') # write all outputs in the prediction file, separated by \t
 
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
@@ -207,7 +213,7 @@ def run(args, device):
 
 
 def parse_argv(parser):
-    parser.add_argument('--path', required=True)
+    parser.add_argument('--path', type=str, required=True, help='Folder to load the model from')
     parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'],
                         help='Which dataset to do predictions for (test or dev)')
     parser.add_argument('--pred_set_name', type=str, help='Name of dataset to run prediction for; will be ignored if --evaluate is test')

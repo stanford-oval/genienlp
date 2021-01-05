@@ -86,7 +86,7 @@ class Server:
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples(examples)
             # it is a single batch, so wrap it in []
-            predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
+            predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True)
 
             response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0] } for p in predictions] })
             return response + '\n'
@@ -103,7 +103,7 @@ class Server:
 
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples([ex])
-            predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
+            predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True)
 
             response = json.dumps(dict(id=request['id'], answer=predictions[0][0]))
             return response + '\n'

@@ -35,7 +35,7 @@ from collections import OrderedDict
 from .metrics import compute_metrics
 
 
-def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False, output_confidences=False, original_order=None):
+def generate_with_model(model, data_iterator, numericalizer, task, args, output_predictions_only=False, output_confidences=False, original_order=None):
     """
     Inputs:
         original_order: List of indices. If provided, we will sort the results according to this order
@@ -96,20 +96,16 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
     if original_order is not None:
         # sort back to the original order
         original_order, example_ids, predictions, answers, contexts, confidences = [list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidences)))))]
-
-    if prediction_file_name is not None:
-        with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
-            for i in range(len(example_ids)):
-                prediction_file.write(example_ids[i] + '\t' + '\t'.join(predictions[i]) + '\n') # write all outputs in the prediction file, separated by \t
     
-    if output_predictions_only:
-        return predictions
     # TODO calculate and return loss
     loss = None
+
+    if output_predictions_only:
+        return predictions
     if output_confidences:
-        return loss, predictions, answers, contexts, confidences
+        return loss, example_ids, predictions, answers, contexts, confidences
     else:
-        return loss, predictions, answers, contexts
+        return loss, example_ids, predictions, answers, contexts
 
 
 def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args):
@@ -142,7 +138,7 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
     with torch.no_grad():
         model.eval()
         names = ['beam search', 'answer', 'context']
-        loss, predictions, answers, contexts = generate_with_model(model, val_iter, numericalizer, task, args, prediction_file_name=None)
+        loss, _, predictions, answers, contexts = generate_with_model(model, val_iter, numericalizer, task, args)
 
         metrics = calculate_and_reduce_metrics(predictions, answers, task.metrics, args)
         results = [predictions, answers, contexts]
