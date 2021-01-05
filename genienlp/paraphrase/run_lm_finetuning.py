@@ -530,6 +530,8 @@ def parse_argv(parser):
     parser.add_argument('--num_input_chunks', default=1, type=int, help='We split input into multiple chunks, then load and train on each chunk individually')
     parser.add_argument('--delete_after_chunking', action='store_true', help='Delete input file after chunking it')
 
+    parser.add_argument('--no_fast_tokenizer', action='store_true', help='Use slow version of huggingface tokenizer')
+
 
 
 def main(args):
@@ -589,7 +591,8 @@ def main(args):
                                           cache_dir=args.cache_dir if args.cache_dir else None)
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
                                                 do_lower_case=args.do_lower_case,
-                                                cache_dir=args.cache_dir if args.cache_dir else None)
+                                                cache_dir=args.cache_dir if args.cache_dir else None,
+                                                use_fast=not args.no_fast_tokenizer)
     if args.block_size <= 0:
         args.block_size = tokenizer.max_len_single_sentence  # Our input block size will be the max possible for the model
     args.block_size = min(args.block_size, tokenizer.max_len_single_sentence)

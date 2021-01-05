@@ -44,23 +44,23 @@ from .example import SequentialField
 ALLOWED_FAST_TOKENIZERS = {
     'facebook/bart-base',
     'facebook/bart-large',
-    'google/mt5-small',
-    'google/mt5-base',
-    'google/mt5-large',
-    'google/mt5-xl',
-    'google/mt5-xxl',
     'sshleifer/bart-tiny-random'
 }
 # known NOT to work:
 # - all the BERT models
 # - all the XLM-R models
 #
-# mBART models work when preprocessing, because they're SPM/RoBERTa-based so they respect
+# mBART, t5, and mt5 models work when preprocessing, because they're SPM/RoBERTa-based so they respect
 # whitespace, but the fast tokenizers treat special tokens differently than the slow ones
 # and drop whitespace before special tokens, which breaks
 ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING = {
+    'facebook/mbart-large-cc25',
     'sshleifer/tiny-mbart',
-    'facebook/mbart-large-cc25'
+    'google/mt5-small',
+    'google/mt5-base',
+    'google/mt5-large',
+    'google/mt5-xl',
+    'google/mt5-xxl',
 }
 
 class TransformerNumericalizer(object):
@@ -391,9 +391,7 @@ class TransformerNumericalizer(object):
 
     def reverse(self, batch, task=None, field_name=None):
         output = []
-
-        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True,
-                                              clean_up_tokenization_spaces=False):
+        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True, clean_up_tokenization_spaces=False):
             if self._preprocess_special_tokens:
                 x = self._undo_special_token_preprocessing(x)
             if task is not None and field_name == 'answer':

@@ -5,6 +5,7 @@ set -e
 set -x
 SRCDIR=`dirname $0`
 
+
 on_error () {
     rm -fr $workdir
     rm -rf $SRCDIR/torch-shm-file-*
@@ -17,6 +18,8 @@ else
   mkdir -p $SRCDIR/embeddings
   embedding_dir="$SRCDIR/embeddings"
 fi
+
+export SENTENCE_TRANSFORMERS_HOME="$embedding_dir"
 
 TMPDIR=`pwd`
 workdir=`mktemp -d $TMPDIR/genieNLP-tests-XXXXXX`
@@ -130,7 +133,17 @@ for model in "sshleifer/bart-tiny-random" "sshleifer/tiny-mbart" ; do
   # use a pre-trained model
   pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $model --length 15 --temperature 0 --repetition_penalty 1.0 --num_samples 1 --batch_size 3 --input_file $workdir/masked_paraphrasing/dev.tsv --input_column 0 --gold_column 1 --output_file $workdir/generated_"$model_type".tsv  --skip_heuristics --task paraphrase --infill_text --num_text_spans 1 --src_lang en --tgt_lang en
 
-  if test ! -f $workdir/generated_"$model_type".tsv   ; then
+  # create input file for sts filtering
+  paste <(cut -f1-2 $workdir/masked_paraphrasing/dev.tsv) <(cut -f2 $workdir/generated_"$model_type".tsv) <(cut -f3 $workdir/masked_paraphrasing/dev.tsv) > $workdir/sts_input_"$model_type".tsv
+
+  # calculate sts score for paraphrases
+  pipenv run python3 -m genienlp calculate-paraphrase-sts --input_file $workdir/sts_input_"$model_type".tsv --output_file $workdir/sts_output_score_"$model_type".tsv
+
+  # filter paraphrases based on sts score
+  pipenv run python3 -m genienlp filter-paraphrase-sts --input_file $workdir/sts_output_score_"$model_type".tsv --output_file $workdir/sts_output_"$model_type".tsv --filtering_metric constant --filtering_threshold 0.98
+
+
+  if ! [ -f $workdir/generated_"$model_type".tsv && -f $workdir/sts_output_"$model_type".tsv  ]   ; then
       echo "File not found!"
       exit
   fi

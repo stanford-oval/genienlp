@@ -166,6 +166,7 @@ def parse_argv(parser):
                         help='Checkpoint file to use (relative to --path, defaults to best.pth)')
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
+    parser.add_argument('--locale', default='en', help='locale tag of the language to parse')
 
 
 def main(args):
@@ -184,6 +185,8 @@ def main(args):
                                      args=args,
                                      device=device
                                     )
+
+    model.set_decoder_start_token_id(args.locale)
 
     
     model.to(device)

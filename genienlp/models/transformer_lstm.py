@@ -79,6 +79,11 @@ class TransformerLSTM(GenieModel):
         self.encoder_embeddings.resize_token_embeddings(self.numericalizer.num_tokens)
         if resize_decoder:
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
+            
+            
+    def set_decoder_start_token_id(self, lang):
+        pass
+    
 
     def forward(self, batch, current_token_id=None, past_key_values=None,
                 expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):

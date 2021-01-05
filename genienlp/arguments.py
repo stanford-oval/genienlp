@@ -37,6 +37,8 @@ import subprocess
 from .tasks.registry import get_tasks
 from .util import have_multilingual
 
+from .paraphrase.transformers_utils import MODEL_PARALLEL_SUPPORTED_MODELS
+
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +63,11 @@ def parse_argv(parser):
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
 
-    parser.add_argument('--train_languages', type=str,
-                        help='used to specify dataset languages used during training for multilingual tasks'
+    parser.add_argument('--train_languages', type=str, default='en',
+                        help='Specify dataset languages used during training for multilingual tasks'
                              'multiple languages for each task should be concatenated with +')
-    parser.add_argument('--eval_languages', type=str,
-                        help='used to specify dataset languages used during validation for multilingual tasks'
+    parser.add_argument('--eval_languages', type=str, default='en',
+                        help='Specify dataset languages used during validation for multilingual tasks'
                              'multiple languages for each task should be concatenated with +')
 
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training',
@@ -147,6 +149,11 @@ def parse_argv(parser):
                         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
     parser.add_argument('--preprocess_special_tokens', action='store_true',
                         help='convert special ThingTalk tokens to words')
+    
+    parser.add_argument('--model_parallel', action='store_true', help='Use model parallelization by spliting model weights across available gpus')
+    parser.add_argument('--mp_device_ratio', default=None, nargs='+', type=int, help='Provide the distribution ratio of model layers across gpus when using model_parallel'
+                                                                'e.g. "1 2 2 2" first device recieves half number of layers compared to other devices'
+                                                                'default is None meaning we distribute evenly on all available gpus')
 
     parser.add_argument('--warmup', default=1, type=int, help='warmup for learning rate. setting it to 1 disables warmup.')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
@@ -208,11 +215,22 @@ def post_parse(args):
     if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
         raise ValueError('Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
     
+    # TODO relax this assertion by allowing training on multiple languages
+    if 'mbart' in args.pretrained_model:
+        if len(args.train_languages.split('+')) != 1 or set(args.train_languages.split('+')) != set(args.eval_languages.split('+')):
+             raise ValueError('For now we only support single language training and evaluation with mbart models')
+    
     if args.warmup < 1:
         raise ValueError('Warmup should be a positive integer.')
-    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1) :
+    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
-
+    
+    if args.model_parallel:
+        if args.model == 'TransformerLSTM':
+            raise ValueError('Model parallel is not supported for TransformerLSTM models')
+        elif args.model == 'TransformerSeq2Seq' and args.pretrained_model not in MODEL_PARALLEL_SUPPORTED_MODELS:
+            raise ValueError('Only the following models have model_parallel support: ', MODEL_PARALLEL_SUPPORTED_MODELS)
+    
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
             args.train_iterations = [1]
@@ -223,6 +241,10 @@ def post_parse(args):
 
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
+        
+    if args.mp_device_ratio is not None:
+        if len(args.mp_device_ratio) != len(args.devices):
+            raise ValueError('When using model_parallel number of provided devices must match the number of mp_device_ratio')
 
     # postprocess arguments
     if args.commit:

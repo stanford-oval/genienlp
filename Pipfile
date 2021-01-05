@@ -18,6 +18,7 @@ sacrebleu = "~=1.0"
 tensorboardX = "==2.1.*"
 requests = "~=2.22"
 transformers = "==4.1.1"
+sentence-transformers = "==0.4.0"
 radam = {git = "https://github.com/LiyuanLucasLiu/RAdam"}
 loss_dropper = {git = "https://github.com/ddkang/loss_dropper"}
 matplotlib = '~=3.1'

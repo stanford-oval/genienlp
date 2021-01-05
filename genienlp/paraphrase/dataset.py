@@ -9,6 +9,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from ..util import get_number_of_lines
 from ..data_utils.progbar import progress_bar
+from ..tasks.almond_utils import detokenize_cjk_chars
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,10 @@ class TextDataset(Dataset):
     def _add_example(self, input_sequence, output_sequence, args):
         # TODO we should make use of tokenizer.build_inputs_with_special_tokens(sequence1, sequence2). Add special tokens manualy only if our model does not support two sequences (like GPT2).
         
+        input_sequence = detokenize_cjk_chars(input_sequence)
+        if output_sequence is not None:
+            output_sequence = detokenize_cjk_chars(output_sequence)
+        
         input_token_ids = self.tokenizer.encode(input_sequence, add_special_tokens=False) + [self.tokenizer.convert_tokens_to_ids(args.start_special_token)]
         if output_sequence is None:
             output_token_ids = []
@@ -127,6 +132,10 @@ class TextDataset(Dataset):
         self.attention_mask.append([1]*len(input_ids))
 
     def _add_seq2seq_example(self, input_sequence, output_sequence, args):
+        
+        input_sequence = detokenize_cjk_chars(input_sequence)
+        if output_sequence is not None:
+            output_sequence = detokenize_cjk_chars(output_sequence)
         
         if args.model_type == 'mbart':
             model_inputs = self.tokenizer.prepare_seq2seq_batch([input_sequence], args.src_lang, [output_sequence], args.tgt_lang)

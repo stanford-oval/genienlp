@@ -30,7 +30,10 @@
 
 import torch
 import random
+import logging
 
+
+logger = logging.getLogger(__name__)
 
 class LengthSortedIterator(torch.utils.data.Sampler):
     """
@@ -100,6 +103,13 @@ class LengthSortedIterator(torch.utils.data.Sampler):
                 longest_example = self.data_source[batch_of_indices[0]] # we sorted in descending order of length, so the first one is the longest
             else:
                 longest_example = new_example # this is the first element in batch, and therefore the longest
+            examples_size = self.batch_size_fn(longest_example)
+            if examples_size > self.batch_size:
+                logger.warning('Skipping an example larger than batch size. Consider increasing the batch size to avoid this warning')
+                self.last_batch_start_index += 1
+                i += 1
+                continue
+                
             new_batch_size = current_batch_size + self.batch_size_fn(longest_example)
             if new_batch_size > self.batch_size:
                 # the new example would put us over the batch size limit
@@ -113,7 +123,6 @@ class LengthSortedIterator(torch.utils.data.Sampler):
                 break # don't start from i=0; there is a large difference between the length of the first and last element
 
         self.last_batch_start_index += len(batch_of_indices)
-        assert len(batch_of_indices) > 0, 'Found an example larger than batch size.'
         return batch_of_indices
 
     def _get_next_batch_start_index(self):

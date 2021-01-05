@@ -37,7 +37,7 @@ from .registry import register_task
 from .generic_dataset import CQA, default_batch_fn, input_then_output_len, input_tokens_fn
 from ..data_utils.example import Example
 from ..data_utils.progbar import progress_bar
-from .utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, is_cjk_char
+from .almond_utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, tokenize_cjk_chars, detokenize_cjk_chars
 
 from .base_dataset import Split
 
@@ -132,6 +132,12 @@ class BaseAlmondTask(BaseTask):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
     def postprocess_answer(self, answer):
+    
+        if self._almond_detokenize_sentence:
+            # To make genienlp transparent to the tokenization done by genie-toolkit
+            # We tokenize answer here by adding whitespace between each CJK character
+            answer = tokenize_cjk_chars(answer)
+        
         new_tokens = []
         for token in answer.split():
             if token.startswith('STRING_'):
@@ -166,6 +172,16 @@ class BaseAlmondTask(BaseTask):
         new_sentence = ' '.join(tokens)
 
         if self._almond_detokenize_sentence:
+            
+            # BERT tokenizers by default add whitespace around any CJK character
+            # SPM-based tokenizers are trained on raw text and do better when recieve untokenized text
+            # In genienlp we detokenize CJK characters and leave tokenization to the model's tokenizer
+            # NOTE: input datasets for almond are usually pretokenized using genie-toolkit which
+            # inserts whitespace around any CJK character. This detokenization ensures that SPM-based tokenizers
+            # see the text without space between those characters
+            new_sentence = detokenize_cjk_chars(new_sentence)
+            tokens = new_sentence.split(' ')
+            
             new_sentence = ''
             in_string = False
             for token in tokens:
@@ -175,9 +191,7 @@ class BaseAlmondTask(BaseTask):
                     if not in_string:
                         new_sentence += ' ' + token
                         continue
-                if token in (',', '.', '?', '!', ':', ')', ']', '}') or \
-                        (len(token) == 1 and is_cjk_char(ord(token))) or \
-                        token.startswith("'"):
+                if token in (',', '.', '?', '!', ':', ')', ']', '}') or token.startswith("'"):
                     new_sentence += token
                 else:
                     new_sentence += ' ' + token

@@ -124,6 +124,7 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
     model.train()
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
+        
     loss = model(batch).loss
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
@@ -210,15 +211,20 @@ def do_validate(iteration, args, model, numericalizer, val_iters, *,
 
 
 def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
-               saver, logger, train_task, round_progress, task_progress, timestamp, log_dir):
+               saver, logger, train_task, round_progress, task_progress, timestamp, log_dir, model_parallel):
     should_save_best = False
     if deca_score is not None and (best_decascore is None or best_decascore < deca_score):
         best_decascore = deca_score
         should_save_best = True
 
-    # punch through the nn.DataParallel to access the real model, otherwise we won't be able
-    # to load this model later
-    model_state_dict = model.module.state_dict()
+    # DataParallel and ModelParallel are mutually exclusive
+    if model_parallel:
+        model_state_dict = model.state_dict()
+    else:
+        # punch through the nn.DataParallel to access the real model, otherwise we won't be able
+        # to load this model later
+        model_state_dict = model.module.state_dict()
+        
     model_state_dict = {k: v.cpu() for k, v in model_state_dict.items()}
 
     save_model_state_dict = {
@@ -231,10 +237,14 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
     saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
     if should_save_best:
         logger.info(
-            f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}found new best model')
+            f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}saving new best model')
         torch.save(save_model_state_dict, os.path.join(log_dir, 'best.pth'))
         torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
-        model.module.numericalizer.save(saver._savedir)
+        
+        if model_parallel:
+            model.numericalizer.save(saver._savedir)
+        else:
+            model.module.numericalizer.save(saver._savedir)
 
     return best_decascore
 
@@ -404,7 +414,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                     best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
                                                 saver=saver, logger=logger, train_task=task,
                                                 round_progress=round_progress, task_progress=task_progress,
-                                                timestamp=args.timestamp, log_dir=args.log_dir)
+                                                timestamp=args.timestamp, log_dir=args.log_dir, model_parallel=args.model_parallel)
 
             # book keeping
             task_iteration[task] += 1
@@ -498,12 +508,41 @@ def main(args):
     else:
         logger.info(f'Initializing a new {model_name}')
         model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks)
+        model.set_decoder_start_token_id(args.train_languages.split('+')[0])
 
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
-
-    model.to(devices[0])
-    model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
+    
+    if args.model_parallel:
+        n_layers = len(model.model.encoder.block)
+        layers = list(range(n_layers))
+        
+        if args.mp_device_ratio is not None:
+            if len(args.devices) > torch.cuda.device_count() or max(args.devices) >= torch.cuda.device_count():
+                raise ValueError('Provided GPU devices exceeds the number of available GPU')
+            
+            mp_device_ratio = [(device_ratio / sum(args.mp_device_ratio)) for device_ratio in args.mp_device_ratio]
+            layers_list = []
+            beg = 0
+            for i in range(len(args.devices)):
+                end = min(beg + math.ceil(n_layers * mp_device_ratio[i]), n_layers)
+                layers_list.append(layers[beg: end])
+                beg = end
+                
+            if any([len(val_list) == 0 for val_list in layers_list]):
+                raise ValueError('One device got no layers given the mp_device_ratio you provided'
+                                 'Hint: if you do not provide mp_device_ratio, layers will be distributed evenly')
+            
+        else:
+            n_blocks = int(math.ceil(n_layers / len(args.devices)))
+            layers_list = list(layers[i: i + n_blocks] for i in range(0, n_layers, n_blocks))
+            
+        device_map = dict(zip(args.devices, layers_list))
+        model.model.parallelize(device_map)
+        print('Model parallel is used with following device map: ', model.model.device_map)
+    else:
+        model.to(devices[0])
+        model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
     model.params = params
     ##########
 
@@ -525,7 +564,7 @@ def main(args):
         writer = None
 
     train(args, devices, model, opt, lr_scheduler, train_sets,
-          args.train_iterations, model.module.numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
+          args.train_iterations, model.module.numericalizer if not args.model_parallel else model.numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
           log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
           rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
           best_decascore=best_decascore, log_prefix='training')

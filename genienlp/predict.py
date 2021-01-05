@@ -121,6 +121,12 @@ def run(args, device):
                                      device=device,
                                      tasks=args.tasks,
                                     )
+    
+    if args.pred_languages[0] is not None:
+        model.set_decoder_start_token_id(args.pred_languages[0].split('+')[0])
+    else:
+        # use English as default
+        model.set_decoder_start_token_id('en')
 
     val_sets = get_all_splits(args)
     model.add_new_vocab_from_data(args.tasks)
@@ -256,6 +262,10 @@ def adjust_multilingual_eval(args):
 
     if args.pred_languages is None:
         args.pred_languages = [None for _ in range(len(args.task_names))]
+        
+    if 'mbart' in args.pretrained_model:
+        if args.pred_languages[0] and len(args.pred_languages[0].split('+')) != 1:
+            raise ValueError('For now we only support single language prediction with mbart models')
 
     # preserve backward compatibility for single language tasks
     for i, task_name in enumerate(args.task_names):
