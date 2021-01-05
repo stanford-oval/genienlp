@@ -32,15 +32,14 @@ import torch
 import logging
 from collections import defaultdict
 
-from ..base_task import BaseTask
-from ..registry import register_task
-from ..generic_dataset import CQA, default_batch_fn, input_then_output_len, input_tokens_fn
-from ...data_utils.example import Example
-from ...data_utils.progbar import progress_bar
-from .utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id,\
-    is_cjk_char, tokenize_cjk_chars, detokenize_cjk_chars
+from .base_task import BaseTask
+from .registry import register_task
+from .generic_dataset import CQA, default_batch_fn, input_then_output_len, input_tokens_fn
+from ..data_utils.example import Example
+from ..data_utils.progbar import progress_bar
+from .almond_utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, tokenize_cjk_chars, detokenize_cjk_chars
 
-from ..base_dataset import Split
+from .base_dataset import Split
 
 logger = logging.getLogger(__name__)
 
@@ -150,9 +149,9 @@ class BaseAlmondTask(BaseTask):
         return new_answer
 
     def preprocess_field(self, sentence, field_name=None):
-        if self.override_context and field_name == 'context':
+        if self.override_context is not None and field_name == 'context':
             return self.override_context
-        if self.override_question and field_name == 'question':
+        if self.override_question is not None and field_name == 'question':
             return self.override_question
         if not sentence:
             return ''
@@ -245,7 +244,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
 
     @property
     def metrics(self):
-        return ['em', 'bleu', 'f1']
+        return ['bleu', 'em', 'nf1']
 
     def _is_program_field(self, field_name):
         return False
@@ -255,8 +254,10 @@ class NaturalSeq2Seq(BaseAlmondTask):
         if len(parts) == 2:
             input_sequence, target_sequence = parts
             _id = "id-null"
-        else:
+        elif len(parts) == 3:
             _id, input_sequence, target_sequence = parts
+        else:
+            raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
         question = 'translate from input to output'
         context = input_sequence
         answer = target_sequence
@@ -264,7 +265,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/natural_seq2seq'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
 
 @register_task('contextual_almond')

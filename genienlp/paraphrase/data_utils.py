@@ -10,7 +10,7 @@ from ..data_utils.progbar import progress_bar
 from ..util import detokenize, tokenize, lower_case, SpecialTokenMap, remove_thingtalk_quotes
 
 from genienlp.util import get_number_of_lines
-from ..tasks.almond.utils import is_entity, quoted_pattern_maybe_space, device_pattern, detokenize_cjk_chars
+from ..tasks.almond_utils import is_entity, quoted_pattern_maybe_space, device_pattern, detokenize_cjk_chars
 
 logger = logging.getLogger(__name__)
 

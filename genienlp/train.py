@@ -291,7 +291,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
           log_every, val_every, save_every, rounds, val_sets, aux_sets, writer, logger, log_prefix,
           start_iteration=1, rnd=1, best_decascore, use_curriculum):
     """main training function"""
-    local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, start_iteration
+    local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, 1
 
     train_iter_deep = deepcopy(train_iterations)
 
@@ -344,6 +344,9 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 task_done[task] = True
                 continue
 
+            # load batches even if (args.resume == True) and we are going to skip the iteration
+            # this makes runs that are resumed have the exact same behavior as runs that are
+            # finished in one pass (given that the random seed is the same).
             batch = get_next_batch(train_iter, aux_iters, task=task, task_idx=task_idx,
                                    task_fraction=task_fraction, use_curriculum=use_curriculum)
 
@@ -351,7 +354,9 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 # skip this iteration (this is done to ensure iterators are at the same position when resuming)
                 task_iteration[task] += 1
                 iteration += 1
-                return
+                if (iteration+1) % args.gradient_accumulation_steps == 0:
+                    lr_scheduler.step() # update the learning rate
+                continue
 
             task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
             round_progress = f'round_{rnd}:' if rounds else ''
@@ -366,7 +371,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             if loss < 1e-6:
                 zero_loss += 1
                 if zero_loss >= 100:
-                    logger.info('Found loss less than 1e-5 for 100 steps, stopping.')
+                    logger.info('Found loss less than 1e-6 for 100 steps, stopping.')
                     return
             else:
                 zero_loss = 0
@@ -546,14 +551,15 @@ def main(args):
 
     if args.resume:
         logger.info(f'Resuming training from {os.path.splitext(args.load)[0]}_optim.pth')
-        opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'))
+        # load optimizer's state_dict to cpu first to avoid GPU memory surge. Will crash with OOM if `map_location='cpu'` is not specified.
+        opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'), map_location='cpu')
         start_iteration = opt_state_dict.pop('start_iteration')
         logger.info(f'Starting iteration is {start_iteration}')
         opt.load_state_dict(opt_state_dict)
 
     if hasattr(args, 'tensorboard') and args.tensorboard:
         logger.info(f'Initializing Writer')
-        writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration)
+        writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration, flush_secs=60)
     else:
         writer = None
 
@@ -562,3 +568,6 @@ def main(args):
           log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
           rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
           best_decascore=best_decascore, log_prefix='training')
+
+    if writer is not None:
+        writer.close() # otherwise the last written value may not be flushed

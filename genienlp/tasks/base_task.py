@@ -69,9 +69,9 @@ class BaseTask:
         return answer
 
     def preprocess_field(self, sentence, field_name=None):
-        if self.override_context and field_name == 'context':
+        if self.override_context is not None and field_name == 'context':
             return self.override_context
-        if self.override_question and field_name == 'question':
+        if self.override_question is not None and field_name == 'question':
             return self.override_question
         return sentence
 

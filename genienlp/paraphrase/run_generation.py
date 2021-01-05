@@ -34,7 +34,7 @@ from torch.multiprocessing import Process, set_start_method
 
 from genienlp.paraphrase.data_utils import create_features_from_tsv_file, output_heuristics
 from genienlp.paraphrase.model_utils import compute_metrics, compute_attention, replace_quoted_params, force_replace_quoted_params
-from ..tasks.almond.utils import tokenize_cjk_chars
+from ..tasks.almond_utils import tokenize_cjk_chars
 from ..data_utils.progbar import prange
 
 try:
