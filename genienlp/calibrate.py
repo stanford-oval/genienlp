@@ -23,6 +23,9 @@ def max_of(f: Callable) -> Callable:
 def min_of(f: Callable) -> Callable:
     return lambda x: f(x).min().view(-1)
 
+def neg_of(f: Callable) -> Callable:
+    return lambda x: -f(x)
+
 def cv_drop_logit(i: int) -> Callable:
     def f(x):
         a = torch.sqrt(var_drop_logit(i)(x)) / mean_drop_logit(i)(x)
@@ -51,8 +54,12 @@ def input_length(i: int) -> Callable:
 def nodrop_avg_logprob(i: int):
     return lambda x: torch.mean(x[i].nodrop_logits).view(-1)
 
-def variance_of_beams(x):
+def variance_of_beam_logits(x):
     a = torch.var(torch.tensor([torch.mean(x[i].nodrop_logits).item() for i in range(1, 5)])).view(-1)
+    return a
+
+def variance_of_beam_probs(x):
+    a = torch.var(torch.tensor([torch.mean(x[i].nodrop_probs).item() for i in range(1, 5)])).view(-1)
     return a
 
 def mean_drop_avg_logprob(i):
@@ -74,12 +81,38 @@ def nodrop_seq_prob(i):
 def mean_drop_seq_prob(i):
     return lambda x: torch.mean(torch.prod(x[i].drop_probs, dim=1)).view(-1)
 
+def mean_drop_prob(i):
+    return lambda x: torch.mean(x[i].drop_probs, dim=0).view(-1)
+
 def var_drop_seq_prob(i):
     return lambda x: torch.var(torch.prod(x[i].drop_probs, dim=1)).view(-1)
+
+def var_drop_prob(i):
+    return lambda x: torch.var(x[i].drop_probs, dim=0).view(-1)
 
 def cv_drop_seq_prob(i):
     def f(x):
         a = torch.sqrt(var_drop_seq_prob(i)(x)) / mean_drop_seq_prob(i)(x)
+        a[a!=a] = 0 # set NaNs to zero
+        return a
+    return f
+
+def cev_drop_seq_prob(i):
+    """
+    Introduced in https://arxiv.org/pdf/1909.00157.pdf
+    """
+    def f(x):
+        a = torch.square(1 - (var_drop_seq_prob(i)(x) / mean_drop_seq_prob(i)(x)))
+        a[a!=a] = 0 # set NaNs to zero
+        return a
+    return f
+
+def cev_drop_prob(i):
+    """
+    Introduced in https://arxiv.org/pdf/1909.00157.pdf
+    """
+    def f(x):
+        a = torch.square(1 - (var_drop_prob(i)(x) / mean_drop_prob(i)(x)))
         a[a!=a] = 0 # set NaNs to zero
         return a
     return f
@@ -330,11 +363,15 @@ def main(args):
     train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
     for f, name in [
                     # (oracle_score, 'raw_oracle'),
-                    (nodrop_avg_logprob(0), 'raw_avg_logprob'),
-                    (nodrop_seq_prob(0), 'raw_seq_prob'),
+                    # (nodrop_avg_logprob(0), 'raw_avg_logprob'),
+                    # (nodrop_seq_prob(0), 'raw_seq_prob'),
                     (mean_drop_seq_prob(0), 'raw_mean_seq_prob'),
-                    (var_drop_seq_prob(0), 'raw_var_seq_prob'),
-                    (cv_drop_seq_prob(0), 'raw_cv_seq_prob')
+                    (neg_of(var_drop_seq_prob(0)), 'raw_var_seq_prob'),
+                    # (neg_of(cv_drop_seq_prob(0)), 'raw_cv_seq_prob'),
+                    # (cev_drop_seq_prob(0), 'raw_cev_drop_seq_prob'),
+                    # ([mean_drop_prob(0)], 'mean_prob'),
+                    # ([var_drop_prob(0)], 'var_prob'),
+                    # ([cev_drop_prob(0)], 'cev_drop_prob'),
                     # ([mean_drop_logit(0)], 'mean'),
                     # ([nodrop_entropies(0)], 'entropy'),
                     # ([(mean_drop_logit(0), nodrop_entropies(0))], 'mean + entropy'),
@@ -347,10 +384,13 @@ def main(args):
                     # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
                     # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
                     # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length'),
-                    # ([variance_of_beams], 'var_beams'),
+                    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
+                    # ([variance_of_beam_logits], 'var_beam_logits'),
+                    # ([variance_of_beam_probs], 'var_beam_probs'),
                     # ([mean_drop_avg_logprob(0)], 'mean_drop_avg_logprob'),
                     # ([var_drop_avg_logprob(0)], 'var_drop_avg_logprob'),
                     # ([cv_drop_avg_logprob(0)], 'cv_drop_avg_logprob'),
+
                     ]:
         estimator = ConfidenceEstimator(name=name, featurizers=f, eval_metric=args.eval_metric)
         logger.info('name = %s', name)
