@@ -7,7 +7,6 @@ import torch
 import itertools
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_curve, auc
 from sklearn.model_selection import train_test_split
-from matplotlib import pyplot
 from .util import ConfidenceOutput
 import logging
 
@@ -161,6 +160,7 @@ def parse_argv(parser):
     parser.add_argument('--dev_split', type=float, default=0.2, help='The portion of the dataset to use for validation. The rest is used to train.')
     parser.add_argument('--seed', type=int, default=123, help='Random seed to use for reproducibility')
     parser.add_argument('--save', type=str, help='A pickle file to save the calibrator model after training')
+    parser.add_argument('--plot', action='store_true', help='If True, will plot metrics and save them. Requires Matplotlib installation.')
 
 
 class ConfidenceEstimator():
@@ -355,6 +355,8 @@ class ConfidenceEstimator():
         return obj
 
 def main(args):
+    if args.plot:
+        from matplotlib import pyplot # lazy import
 
     with open(args.confidence_path, 'rb') as f:
         confidences = pickle.load(f)
@@ -385,6 +387,7 @@ def main(args):
                     # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
                     # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length'),
                     ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
+                    # ([nodrop_seq_prob(0), prediction_length(0), max_of(mean_drop_prob(0)), max_of(nodrop_entropies(0)), max_of(cev_drop_prob(0)), min_of(mean_drop_prob(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'prob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
                     # ([variance_of_beam_logits], 'var_beam_logits'),
                     # ([variance_of_beam_probs], 'var_beam_probs'),
                     # ([mean_drop_avg_logprob(0)], 'mean_drop_avg_logprob'),
@@ -405,12 +408,13 @@ def main(args):
             dev_features, dev_labels = estimator.convert_to_dataset(dev_confidences, train=False)
             estimator.train_and_validate(train_features, train_labels, dev_features, dev_labels)
             precision, recall, pass_rate, accuracies, thresholds = estimator.evaluate(dev_features, dev_labels)
-        pyplot.figure('precision-recall')
-        pyplot.plot(recall, precision, marker='.', label=name)
-        pyplot.figure('thresholds')
-        pyplot.plot(range(len(thresholds)), thresholds, marker='*', label=name+ ' (thresholds)')
-        pyplot.figure('pass_rate')
-        pyplot.plot(pass_rate, accuracies, marker='.', label=name)
+        if args.plot:
+            pyplot.figure('precision-recall')
+            pyplot.plot(recall, precision, marker='.', label=name)
+            pyplot.figure('thresholds')
+            pyplot.plot(range(len(thresholds)), thresholds, marker='*', label=name+ ' (thresholds)')
+            pyplot.figure('pass_rate')
+            pyplot.plot(pass_rate, accuracies, marker='.', label=name)
 
         all_estimators.append(estimator)
         
@@ -419,28 +423,29 @@ def main(args):
     logger.info('Best estimator is %s with score = %.3f', best_estimator.name, best_estimator.score)
     best_estimator.save(args.save)
 
-    pyplot.figure('precision-recall')
-    pyplot.legend(prop={'size': 6})
-    pyplot.grid()
-    pyplot.xticks(np.arange(0, 1, 0.1))
-    pyplot.xlim(0, 1)
-    pyplot.xlabel('Recall')
-    pyplot.ylabel('Precision')
-    pyplot.savefig('precision-recall.png')
+    if args.plot:
+        pyplot.figure('precision-recall')
+        pyplot.legend(prop={'size': 6})
+        pyplot.grid()
+        pyplot.xticks(np.arange(0, 1, 0.1))
+        pyplot.xlim(0, 1)
+        pyplot.xlabel('Recall')
+        pyplot.ylabel('Precision')
+        pyplot.savefig('precision-recall.png')
 
-    pyplot.figure('thresholds')
-    pyplot.legend(prop={'size': 6})
-    pyplot.grid()
-    pyplot.xlabel('Index')
-    pyplot.ylabel('Confidence Threshold')
-    pyplot.savefig('threshold.png')
+        pyplot.figure('thresholds')
+        pyplot.legend(prop={'size': 6})
+        pyplot.grid()
+        pyplot.xlabel('Index')
+        pyplot.ylabel('Confidence Threshold')
+        pyplot.savefig('threshold.png')
 
-    pyplot.figure('pass_rate')
-    pyplot.legend(prop={'size': 6})
-    pyplot.grid()
-    pyplot.xticks(np.arange(0, 1, 0.1))
-    pyplot.xlim(0, 1)
-    pyplot.xlabel('Pass Rate')
-    pyplot.ylabel('Accuracy')
-    pyplot.savefig('pass-accuracy.png')
+        pyplot.figure('pass_rate')
+        pyplot.legend(prop={'size': 6})
+        pyplot.grid()
+        pyplot.xticks(np.arange(0, 1, 0.1))
+        pyplot.xlim(0, 1)
+        pyplot.xlabel('Pass Rate')
+        pyplot.ylabel('Accuracy')
+        pyplot.savefig('pass-accuracy.png')
     
