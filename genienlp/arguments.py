@@ -107,7 +107,7 @@ def parse_argv(parser):
                         help='multiplicative constant choosing the weight of encoder_loss in total loss')
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
 
-    parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
+    parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
     parser.add_argument('--max_generative_vocab', default=50000, type=int,
                         help='max vocabulary for the generative softmax')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')

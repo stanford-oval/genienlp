@@ -171,7 +171,6 @@ class TransformerSeq2Seq(GenieModel):
         mc_droput_num: number of Monte Carlo samples used for the MC Dropout method
         """
         assert mc_dropout or mc_dropout_num == 1, 'MC Dropout is disabled, but mc_droput_num is not 1'
-
         batch_size = predictions.shape[0]
         repetition_factor = batch_size//batch.context.value.shape[0]
         input_ids = batch.context.value.repeat_interleave(repetition_factor, dim=0) # repeat to account for multiple predictions per input
@@ -179,13 +178,17 @@ class TransformerSeq2Seq(GenieModel):
         pad_token_id = self.numericalizer._tokenizer.pad_token_id
         attention_mask = self.model._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer._tokenizer.eos_token_id)
         truncated_predictions = predictions[:, 1:] # remove the BOS token since it is not actually being generated
-        # output_mask = truncated_predictions.ne(pad_token_id).long()
 
         batch_nodrop_logits = []
+        batch_nodrop_probs = []
+        batch_nodrop_entropies = []
         outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
         logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
         for i in range(batch_size):
             batch_nodrop_logits.append(logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))
+            probs = torch.softmax(logits[i], dim=1)
+            batch_nodrop_probs.append(probs.gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))
+            batch_nodrop_entropies.append(-torch.sum(torch.log(probs)*probs, dim=1))
         
         # activate dropout layers
         should_revert_to_eval = True
@@ -209,6 +212,8 @@ class TransformerSeq2Seq(GenieModel):
                                          gold_answer=batch.answer.value[i//repetition_factor][:batch.answer.length[i//repetition_factor]],
                                          prediction=predictions[i][:prediction_lengths[i]+1],  # +1 to include EOS
                                          nodrop_logits=batch_nodrop_logits[i][:prediction_lengths[i]],
+                                         nodrop_probs=batch_nodrop_probs[i][:prediction_lengths[i]],
+                                         nodrop_entropies=batch_nodrop_entropies[i][:prediction_lengths[i]],
                                          ))
 
         # return the model back to its previous state
@@ -221,6 +226,9 @@ class TransformerSeq2Seq(GenieModel):
     def get_length(self, prediction:Tensor):
         # skip the first token, because BOS is the same as EOS for some models
         prediction = prediction[:, 1:]
+
+        # add EOS at the end in case the prediction doesn't have any
+        prediction = torch.cat([prediction, torch.ones((prediction.shape[0], 1), dtype=torch.long, device=prediction.device)*self.numericalizer.eos_id], dim=1)
 
         # find the index of the first eos
         first_eos_one_hot = (torch.cumsum((prediction == self.numericalizer.eos_id).long(), dim=1) == 1) & (prediction == self.numericalizer.eos_id)

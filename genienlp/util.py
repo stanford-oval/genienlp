@@ -110,7 +110,8 @@ class ConfidenceOutput:
     Contains all necessary features that are useful for calculating confidence of a single generated output
     """
 
-    def __init__(self, logits: List[Tensor], gold_answer: Tensor, prediction: Tensor, nodrop_logits: Tensor):
+    def __init__(self, logits: List[Tensor], gold_answer: Tensor, prediction: Tensor,
+                 nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_entropies: Tensor):
         """
         Inputs:
             gold_answer: includes BOS and EOS tokens, but no PAD tokens
@@ -119,6 +120,8 @@ class ConfidenceOutput:
         """
         self.logits = torch.stack(logits, dim=0).cpu()
         self.nodrop_logits = nodrop_logits.cpu()
+        self.nodrop_probs = nodrop_probs.cpu()
+        self.nodrop_entropies = nodrop_entropies.cpu()
 
         self.logit_mean = self.logits.mean(dim=0)
         self.logit_variance = self.logits.var(dim=0)
@@ -152,10 +155,13 @@ class ConfidenceOutput:
 
     def __repr__(self) -> str:
         return '<Confidence: logits=' + str(self.logits) \
-                +', logit_mean='+ str(self.logit_mean) \
-                + ', logit_variance='+ str(self.logit_variance) \
-                + ', logit_cv='+ str(self.logit_cv) \
-                + ', first_mistake='+ str(self.first_mistake) \
+                +', logit_mean=' + str(self.logit_mean) \
+                + ', logit_variance=' + str(self.logit_variance) \
+                + ', logit_cv=' + str(self.logit_cv) \
+                + ', first_mistake=' + str(self.first_mistake) \
+                + ', nodrop_logits=' + str(self.nodrop_logits) \
+                + ', nodrop_probs=' + str(self.nodrop_probs) \
+                + ', nodrop_entropies=' + str(self.nodrop_entropies) \
                 + '>'
 
 
