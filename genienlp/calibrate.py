@@ -49,6 +49,14 @@ def variance_of_beams(x):
     a = torch.var(torch.tensor([torch.mean(x[i].nodrop_logits).item() for i in range(1, 5)])).view(-1)
     return a
 
+def mean_avg_logprob(i):
+    return lambda x: torch.mean(x[i].logits).view(-1)
+
+def var_avg_logprob(i):
+    return lambda x: torch.var(torch.mean(x[i].logits, dim=1)).view(-1)
+
+def cv_avg_logprob(i):
+    return lambda x: torch.sqrt(var_avg_logprob(i)(x)) / mean_avg_logprob(i)(x)
 
 def accuracy_at_pass_rate(labels, confidence_scores):
     sorted_confidence_scores, sorted_labels = zip(*sorted(zip(confidence_scores, labels)))
@@ -292,11 +300,10 @@ def main(args):
 
     all_estimators = []
     train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
-
     for f, name in [
-                    ([None], 'oracle'),
-                    ([None], 'logprob'),
-                    # ([logit_mean(0)], 'mean'),
+                    # ([None], 'oracle'),
+                    ([None], 'avg_logprob'),
+                    ([logit_mean(0)], 'mean'),
                     # ([nodrop_entropies(0)], 'entropy'),
                     # ([(logit_mean(0), nodrop_entropies(0))], 'mean + entropy'),
                     # ([length(0), (logit_mean(0), nodrop_entropies(0))], 'length + mean + entropy'),
@@ -309,6 +316,9 @@ def main(args):
                     # ([avg_logprob(0), length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0)), input_length(0)], 'logprob + length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
                     # ([avg_logprob(0), length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + length + max_logit + max_entropy + max_cv + min_logit + input_length'),
                     # ([variance_of_beams], 'var_beams'),
+                    ([mean_avg_logprob(0)], 'mean_avg_logprob'),
+                    ([var_avg_logprob(0)], 'var_avg_logprob'),
+                    ([cv_avg_logprob(0)], 'cv_avg_logprob'),
                     ]:
         estimator = ConfidenceEstimator(name=name, featurizers=f, eval_metric=args.eval_metric)
         logger.info('name = %s', name)
@@ -318,7 +328,7 @@ def main(args):
             score = auc(recall, precision)
             estimator.score = score
             logger.info('dev set score = %.3f', score)
-        elif name == 'logprob':
+        elif name == 'avg_logprob':
             precision, recall, pass_rate, accuracies, thresholds = evaluate_logprob(dev_confidences)
             score = auc(recall, precision)
             estimator.score = score
