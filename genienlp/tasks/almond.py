@@ -251,7 +251,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/natural_seq2seq'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
 
 @register_task('contextual_almond')
