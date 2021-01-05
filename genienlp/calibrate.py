@@ -5,8 +5,6 @@ import sklearn
 import pickle
 from os import path
 import torch
-from torch import nn
-from torch import optim
 import itertools
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_curve
 from matplotlib import pyplot
@@ -204,45 +202,18 @@ def accuracy_at_pass_rate(labels, confidence_scores):
     return all_pass_rates, all_accuracies
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+def parse_argv(parser):
     parser.add_argument('--confidence_path', type=str, help='The path to the pickle file where the list of ConfidenceOutput objects is saved')
     # parser.add_argument('--save', type=str, help='Where to save the calibrator model after training')
-    args = parser.parse_args()
 
+
+def main(args):
     if path.isfile(args.confidence_path):
         # load from cache
         with open(args.confidence_path, 'rb') as f:
             confidences = pickle.load(f)
     else:
         exit(1)
-
-
-
-    # all_labels = []
-    # for c in confidences:
-    #     all_labels.append(c[0].first_mistake)
-    
-    # all_features = []
-    # for featurizer in [logit_mean_0]:
-    #     padded_feature, feature_lengths = pad_features(confidences, featurizer)
-    #     all_features.append(padded_feature)
-    #     # print('padded_feature = ', padded_feature[:,-1].nonzero())
-
-    # all_features = np.concatenate(all_features, axis=1)
-    # # print('normalized all_features = ', all_features)
-
-    # all_labels = np.array(all_labels) + 1 # +1 so that minimum is 0
-    # all_labels = (all_labels == 0)
-    # # print('all_labels = ', all_labels)
-    # # avg_logprobs = [avg_logprob(c) for c in confidences]
-    # all_features_train, all_features_dev, all_labels_train, all_labels_dev, feature_lengths_train, feature_lengths_dev = \
-    #     sklearn.model_selection.train_test_split(all_features, all_labels, feature_lengths, test_size=0.2, random_state=123)
-
-    # train_LSTM(all_features_train, all_labels_train, all_features_dev, all_labels_dev, feature_lengths_train, feature_lengths_dev)
-
-
-
 
     for f, name in [
                     ([logit_mean_0], 'mean'),

@@ -30,7 +30,7 @@
 
 import argparse
 
-from . import arguments, train, predict, server, cache_embeddings, export
+from . import arguments, train, predict, server, cache_embeddings, export, calibrate
 from .paraphrase import run_lm_finetuning, run_generation
 from .paraphrase.scripts import split_dataset, dialog_to_tsv, clean_paraphrasing_dataset, transform_dataset
 from .sts import sts_calculate_scores, sts_filter
@@ -44,6 +44,7 @@ subcommands = {
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
     'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.parse_argv, run_lm_finetuning.main),
     'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main),
+    'calibrate': ('Train a confidence calibration model', calibrate.parse_argv, calibrate.main),
 
     # commands that work with datasets
     'transform-dataset': ('Apply transformations to a tab-separated dataset', transform_dataset.parse_argv, transform_dataset.main),
