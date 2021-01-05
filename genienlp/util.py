@@ -110,13 +110,15 @@ class ConfidenceOutput:
     Contains all necessary features that are useful for calculating confidence of a single generated output
     """
 
-    def __init__(self, logits: List[Tensor], gold_answer: Tensor, prediction: Tensor):
+    def __init__(self, logits: List[Tensor], gold_answer: Tensor, prediction: Tensor, nodrop_logits: Tensor):
         """
         Inputs:
             gold_answer: includes BOS and EOS tokens, but no PAD tokens
             prediction: includes BOS and EOS tokens, but no PAD tokens
+            nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
         """
         self.logits = torch.stack(logits, dim=0).cpu()
+        self.nodrop_logits = nodrop_logits.cpu()
 
         self.logit_mean = self.logits.mean(dim=0)
         self.logit_variance = self.logits.var(dim=0)
