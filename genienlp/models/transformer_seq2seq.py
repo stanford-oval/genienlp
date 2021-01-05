@@ -69,6 +69,7 @@ class TransformerSeq2Seq(GenieModel):
             batch = input[0]
 
             answer = batch.answer.value
+            answer_length = batch.answer.length
             if self._is_bart_large:
                 # remove BOS from the answer to BART-Large because BART-Large was not trained to predict BOS
                 # (unlike BART-Base or mBART)
@@ -79,6 +80,7 @@ class TransformerSeq2Seq(GenieModel):
                 # but empirically, BOS in the input works slightly better, pehraps because our sentences start
                 # with a lowercase letter, so we leave it
                 answer = answer[:, 1:].contiguous()
+                answer_length = answer_length - 1
 
             # setting pad output tokens to -100 means they will be ignored in calculating loss
             answer[answer==self.numericalizer.pad_id] = -100
@@ -90,7 +92,7 @@ class TransformerSeq2Seq(GenieModel):
             outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
             ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
             loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)
-            loss = loss.sum(dim=1) / (batch.answer.length - 1) # -1 because BOS is removed
+            loss = loss.sum(dim=1) / answer_length # accounts for the case where BOS is removed
             if self.dropper is not None:
                 dropper_mask = self.dropper(loss)
                 loss = loss * dropper_mask

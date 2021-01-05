@@ -361,7 +361,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             if loss < 1e-6:
                 zero_loss += 1
                 if zero_loss >= 100:
-                    logger.info('Found loss less than 1e-5 for 100 steps, stopping.')
+                    logger.info('Found loss less than 1e-6 for 100 steps, stopping.')
                     return
             else:
                 zero_loss = 0
@@ -520,7 +520,7 @@ def main(args):
 
     if hasattr(args, 'tensorboard') and args.tensorboard:
         logger.info(f'Initializing Writer')
-        writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration)
+        writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration, flush_secs=60)
     else:
         writer = None
 
@@ -529,3 +529,6 @@ def main(args):
           log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
           rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
           best_decascore=best_decascore, log_prefix='training')
+
+    if writer is not None:
+        writer.close() # otherwise the last written value may not be flushed
