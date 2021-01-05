@@ -111,7 +111,7 @@ class ConfidenceOutput:
     """
 
     def __init__(self, logits: List[Tensor], gold_answer: Tensor, prediction: Tensor,
-                 nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_entropies: Tensor):
+                 nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_entropies: Tensor, context: Tensor):
         """
         Inputs:
             gold_answer: includes BOS and EOS tokens, but no PAD tokens
@@ -129,6 +129,7 @@ class ConfidenceOutput:
         self.logit_cv[self.logit_cv != self.logit_cv] = 0 # set NANs to 0
 
         self.first_mistake = ConfidenceOutput.find_first_mistake(gold_answer, prediction)
+        self.context = context
 
     @staticmethod
     def find_first_mistake(gold_answer: Tensor, prediction: Tensor):
@@ -162,6 +163,7 @@ class ConfidenceOutput:
                 + ', nodrop_logits=' + str(self.nodrop_logits) \
                 + ', nodrop_probs=' + str(self.nodrop_probs) \
                 + ', nodrop_entropies=' + str(self.nodrop_entropies) \
+                + ', context=' + str(self.context) \
                 + '>'
 
 

@@ -216,6 +216,7 @@ class TransformerSeq2Seq(GenieModel):
                                          nodrop_logits=batch_nodrop_logits[i][:prediction_lengths[i]],
                                          nodrop_probs=batch_nodrop_probs[i][:prediction_lengths[i]],
                                          nodrop_entropies=batch_nodrop_entropies[i][:prediction_lengths[i]],
+                                         context=batch.context.value[i//repetition_factor][:batch.context.length[i//repetition_factor]],
                                          ))
 
         # return the model back to its previous state

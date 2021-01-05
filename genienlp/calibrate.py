@@ -41,6 +41,9 @@ def nodrop_logit(i: int) -> Callable:
 def length(i: int) -> Callable:
     return lambda x: torch.tensor(len(x[i].logit_mean)).view(-1)
 
+def input_length(i: int) -> Callable:
+    return lambda x: torch.tensor(len(x[i].context)).view(-1)
+
 def avg_logprob(i: int):
     return lambda x: torch.mean(x[i].nodrop_logits).view(-1)
 
@@ -288,7 +291,7 @@ def main(args):
     train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
 
     for f, name in [
-                    # ([None], 'logprob'),
+                    ([None], 'logprob'),
                     # ([logit_mean(0)], 'mean'),
                     # ([nodrop_entropies(0)], 'entropy'),
                     # ([(logit_mean(0), nodrop_entropies(0))], 'mean + entropy'),
@@ -298,6 +301,7 @@ def main(args):
                     # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0))], 'length + max_logit + max_entropy + max_cv'),
                     # ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), max_of(logit_var(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0)), min_of(logit_var(0))], 'length + max_logit + max_entropy + max_cv + max_var + min_logit + min_entropy + min_cv + min_var'),
                     ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0))], 'length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
+                    ([length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(logit_cv(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(logit_cv(0)), input_length(0)], 'length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
                     # ([variance_of_beams], 'var_beams'),
                     ]:
         estimator = ConfidenceEstimator(name=name, featurizers=f, eval_metric=args.eval_metric)
