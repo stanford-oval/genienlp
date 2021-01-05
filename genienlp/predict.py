@@ -44,12 +44,14 @@ except RuntimeError:
     pass
 
 import torch
+import pickle
 
 from . import models
 from .tasks.registry import get_tasks
 from .util import set_seed, load_config_json, make_data_loader, log_model_size, init_devices, \
     have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
 from .validate import generate_with_model, calculate_and_reduce_metrics
+from .calibrate import ConfidenceEstimator
 
 logger = logging.getLogger(__name__)
 
@@ -167,23 +169,31 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            generation_outputs = generate_with_model(model, it, model.numericalizer, task, args, output_confidences=args.output_confidences, original_order=original_order)
+            output_confidences = args.save_confidence_features or args.calibrator_path is not None
+            generation_outputs = generate_with_model(model, it, model.numericalizer, task, args,
+                                                     output_confidences=output_confidences,
+                                                     original_order=original_order)
             
-            if args.output_confidences:
+            if output_confidences:
                 _, example_ids, predictions, answers, contexts, confidences = generation_outputs
                 # print('confidences = ', confidences)
-                
-                import pickle
-                with open('confidence.pkl', 'wb') as f:
-                    pickle.dump(confidences, f, protocol=4)
-
+                confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
+                confidence_scores = confidence_estimator.estimate(confidences)
+                # print('confidence_scores = ', confidence_scores)
+                if args.save_confidence_features:
+                    with open('confidence.pkl', 'wb') as f:
+                        pickle.dump(confidences, f, protocol=4)
             else:
                 _, example_ids, predictions, answers, contexts = generation_outputs
 
             # write into file
+            # TODO change to jsonl format
             with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
                 for i in range(len(example_ids)):
-                    prediction_file.write(example_ids[i] + '\t' + '\t'.join(predictions[i]) + '\n') # write all outputs in the prediction file, separated by \t
+                    line = example_ids[i] + '\t' + '\t'.join(predictions[i]) # all outputs separated by '\t'
+                    if args.calibrator_path is not None:
+                        line += '\t' + str(confidence_scores[i])
+                    prediction_file.write(line + '\n')
 
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
@@ -268,7 +278,9 @@ def parse_argv(parser):
     parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
-    parser.add_argument("--output_confidences", action='store_true', help='')
+    parser.add_argument('--calibrator_path', type=str, default=None, help='If provided, will be used to output confidence scores for each prediction.')
+    parser.add_argument('--save_confidence_features', action='store_true', help='If provided, will be used to output confidence scores for each prediction.')
+    parser.add_argument("--confidence_feature_path", type=str, default=None, help='A .pkl file to save confidence features in.')
     parser.add_argument("--mc_dropout", action='store_true', help='Monte Carlo dropout')
     parser.add_argument("--mc_dropout_num", type=int, default=1, help='Number of samples to use for Monte Carlo dropout')
 
@@ -314,10 +326,20 @@ def check_and_update_generation_args(args):
     logger.info('Will output %d sequences for each input.', sum(args.num_outputs))
 
 
+def set_default_values(args):
+    """
+    sets default values that depend on other input arguments
+    """
+    if args.confidence_feature_path is None:
+        args.confidence_feature_path = os.path.join(args.path, 'confidence_features.pkl')
+
+
 def main(args):
     load_config_json(args)
     check_and_update_generation_args(args)
     adjust_multilingual_eval(args)
+    set_default_values(args)
+
     set_seed(args)
     args.tasks = list(get_tasks(args.task_names, args).values())
 
