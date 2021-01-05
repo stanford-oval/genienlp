@@ -7,7 +7,7 @@ import sklearn
 import pickle
 import torch
 import itertools
-from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_curve
+from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_curve, auc
 from sklearn.model_selection import train_test_split
 from matplotlib import pyplot
 from .util import ConfidenceOutput
@@ -285,7 +285,7 @@ def main(args):
     for f, name in [
                     ([None], 'logprob'),
                     # ([logit_mean_0], 'mean'),
-                    # ([nodrop_entropies_0], 'entropy'), 
+                    # ([nodrop_entropies_0], 'entropy'),
                     ([(logit_mean_0, nodrop_entropies_0)], 'mean+entropy'),
                     ([length_0, (logit_mean_0, nodrop_entropies_0)], 'length+mean+entropy'),
                     ([length_0, (nodroplogit_0, nodrop_entropies_0)], 'length+nodroplog+entropy'),
@@ -295,6 +295,8 @@ def main(args):
         
         if name == 'logprob':
             precision, recall, pass_rate, accuracies, thresholds = evaluate_logprob(dev_confidences)
+            score = auc(recall, precision)
+            logger.info('dev set score = %.3f', score)
         else:
             train_features, train_labels = estimator.convert_to_dataset(train_confidences, train=True)
             dev_features, dev_labels = estimator.convert_to_dataset(dev_confidences, train=False)
