@@ -28,13 +28,16 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+from typing import List
 import torch
+from torch.tensor import Tensor
 from transformers import AutoModelForSeq2SeqLM, AutoConfig
 from loss_dropper import LossDropper
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import get_mbart_lang
 from .base import GenieModel
+from ..util import ConfidenceOutput
 
 logger = logging.getLogger(__name__)
 
@@ -174,12 +177,12 @@ class TransformerSeq2Seq(GenieModel):
         input_ids = batch.context.value.repeat_interleave(repetition_factor, dim=0) # repeat to account for multiple predictions per input
 
         pad_token_id = self.numericalizer._tokenizer.pad_token_id
-        attention_mask = self.bart._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer._tokenizer.eos_token_id)
+        attention_mask = self.model._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer._tokenizer.eos_token_id)
         truncated_predictions = predictions[:, 1:] # remove the BOS token since it is not actually being generated
         # output_mask = truncated_predictions.ne(pad_token_id).long()
 
         batch_nodrop_logits = []
-        outputs = self.bart(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
+        outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
         logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
         for i in range(batch_size):
             batch_nodrop_logits.append(logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))
@@ -194,7 +197,7 @@ class TransformerSeq2Seq(GenieModel):
 
         batch_logits = [[] for _ in range(batch_size)]
         for _ in range(mc_dropout_num):
-            outputs = self.bart(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
+            outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
             logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
             for i in range(batch_size):
                 batch_logits[i].append((logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))[:prediction_lengths[i]])
@@ -213,3 +216,13 @@ class TransformerSeq2Seq(GenieModel):
             self.eval()
         
         return confidences
+
+    
+    def get_length(self, prediction:Tensor):
+        # skip the first token, because BOS is the same as EOS for some models
+        prediction = prediction[:, 1:]
+
+        # find the index of the first eos
+        first_eos_one_hot = (torch.cumsum((prediction == self.numericalizer.eos_id).long(), dim=1) == 1) & (prediction == self.numericalizer.eos_id)
+        first_eos = first_eos_one_hot.nonzero(as_tuple=False)[:, 1] + 1 # +1 to account for the first token that we ignored
+        return first_eos

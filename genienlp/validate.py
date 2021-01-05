@@ -77,7 +77,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
             if output_confidences:
                 partial_batch_lengths = model.get_length(raw_partial_batch_prediction)
                 partial_batch_confidences =  model.confidence(batch=batch, predictions=raw_partial_batch_prediction, prediction_lengths=partial_batch_lengths, mc_dropout=args.mc_dropout, mc_dropout_num=args.mc_dropout_num)
-            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction, task=task, field_name='answer')
+            partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction, task=task, field_name='answer')
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
                 raw_batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(raw_partial_batch_prediction[i])
@@ -95,7 +95,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
     
     if original_order is not None:
         # sort back to the original order
-        original_order, example_ids, predictions, answers, contexts, questions, confidences = [list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, questions, confidences)))))]
+        original_order, example_ids, predictions, answers, contexts, confidences = [list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidences)))))]
 
     if prediction_file_name is not None:
         with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
@@ -106,23 +106,10 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
         return predictions
     # TODO calculate and return loss
     loss = None
-    return loss, predictions, answers, contexts
-
-
-def calculate_confidence(model, data_iterator, predictions, args):
-    """
-    predictions: List of list of list of token ids. predictions[i] is for the ith example in the batch
-    """
-    if isinstance(model, torch.nn.DataParallel):
-        # get rid of the DataParallel wrapper
-        model = model.module
-
-    if args.mc_dropout:
-        model.train()
-    
-    for idx, batch in enumerate(data_iterator):
-        batch_size = len(batch.example_id)
-        batch_confidences = model.confidence(batch, predictions[0][0].view(batch_size, -1))
+    if output_confidences:
+        return loss, predictions, answers, contexts, confidences
+    else:
+        return loss, predictions, answers, contexts
 
 
 def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args):
