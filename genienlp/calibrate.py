@@ -146,17 +146,17 @@ def evaluate_raw(dev_confidences: Iterable[ConfidenceOutput], featurizer: Callab
     """
     dev_labels = ConfidenceEstimator.convert_to_labels(dev_confidences)
     dev_avg_logprobs = [featurizer(c) for c in dev_confidences]
-    _max = np.max(dev_avg_logprobs)
-    _min = np.min(dev_avg_logprobs)
-    dev_avg_logprobs = (dev_avg_logprobs - _min) / (_max - _min)
+    # _max = np.max(dev_avg_logprobs)
+    # _min = np.min(dev_avg_logprobs)
+    # dev_avg_logprobs = (dev_avg_logprobs - _min) / (_max - _min)
     precision, recall, thresholds = precision_recall_curve(dev_labels, dev_avg_logprobs)
     pass_rate, accuracies = accuracy_at_pass_rate(dev_labels, dev_avg_logprobs)
     return precision, recall, pass_rate, accuracies, thresholds
 
 def parse_argv(parser):
     parser.add_argument('--confidence_path', type=str, help='The path to the pickle file where the list of ConfidenceOutput objects is saved')
-    parser.add_argument('--eval_metric', type=str, default='aucpr', help='An xgboost metric.'
-                        'The metric which will be used to select the best model on the validation set.')
+    parser.add_argument('--eval_metric', type=str, default='aucpr', choices=['aucpr'],
+                        help='An xgboost metric. The metric which will be used to select the best model on the validation set.')
     parser.add_argument('--dev_split', type=float, default=0.2, help='The portion of the dataset to use for validation. The rest is used to train.')
     parser.add_argument('--seed', type=int, default=123, help='Random seed to use for reproducibility')
     parser.add_argument('--save', type=str, help='A pickle file to save the calibrator model after training')
@@ -164,6 +164,79 @@ def parse_argv(parser):
 
 
 class ConfidenceEstimator():
+    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str):
+        raise NotImplementedError()
+
+    def convert_to_features(self, confidences: Iterable[ConfidenceOutput], train: bool = False):
+        raise NotImplementedError()
+
+    @staticmethod
+    def convert_to_labels(confidences: Iterable[ConfidenceOutput]):
+        labels = []
+        for c in confidences:
+            labels.append(c[0].first_mistake)
+        labels = np.array(labels) + 1 # +1 so that minimum is 0
+        labels = (labels == 0) # convert to binary labels
+        # logger.info('labels = %s', str(labels))
+        return labels
+
+    def convert_to_dataset(self, confidences: Iterable[ConfidenceOutput], train :bool):
+        labels = ConfidenceEstimator.convert_to_labels(confidences)
+        features = self.convert_to_features(confidences, train)
+
+        return features, labels
+
+    def train_and_validate(self, train_features, train_labels, dev_features, dev_labels):
+        raise NotImplementedError()
+
+    def estimate(self, confidences: Iterable[ConfidenceOutput]):
+        raise NotImplementedError()
+
+    def evaluate(self, dev_features, dev_labels):
+        raise NotImplementedError()
+
+    def save(self, path: str):
+        with open(path, 'wb') as f:
+            dill.dump(self, f, protocol=4)
+
+    @staticmethod
+    def load(path: str):
+        with open(path, 'rb') as f:
+            obj = dill.load(f)
+        return obj
+
+class RawConfidenceEstimator(ConfidenceEstimator):
+    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str):
+        # don't change the interface, to match the parent class
+        assert len(featurizers) == 1, 'RawConfidenceEstimator only works with a single featurizer that outputs a single numerical value'
+        self.name = name
+        self.featurizer = featurizers[0]
+        self.eval_metric = eval_metric
+
+        self.score = 0
+
+    def estimate(self, confidences: Iterable[ConfidenceOutput]):
+        confidence_scores = self.convert_to_features(confidences)
+        return confidence_scores
+
+    def convert_to_features(self, confidences: Iterable[ConfidenceOutput], train: bool = False):
+        features = [self.featurizer(c) for c in confidences]
+        return features
+
+    def train_and_validate(self, train_features, train_labels, dev_features, dev_labels):
+        # no training to be done
+        precision, recall, pass_rate, accuracies, thresholds = self.evaluate(dev_features, dev_labels)
+        score = auc(recall, precision)
+        self.score = score
+        logger.info('best dev set score = %.3f', score)
+
+    def evaluate(self, dev_features, dev_labels):
+        confidence_scores = dev_features
+        precision, recall, thresholds = precision_recall_curve(dev_labels, confidence_scores)
+        pass_rate, accuracies = accuracy_at_pass_rate(dev_labels, confidence_scores)
+        return precision, recall, pass_rate, accuracies, thresholds
+
+class TreeConfidenceEstimator(ConfidenceEstimator):
     def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str):
         self.name = name
         self.featurizers = featurizers
@@ -233,16 +306,16 @@ class ConfidenceEstimator():
 
         return all_concats
 
-    def _convert_to_features(self, confidences: Iterable[ConfidenceOutput], train: bool):
+    def convert_to_features(self, confidences: Iterable[ConfidenceOutput], train: bool = False):
         # TODO check to make sure padding is always on the right hand side, not in the middle of features
         features = []
         for featurizer in self.featurizers:
             if isinstance(featurizer, tuple):
-                feature = ConfidenceEstimator._interleave_features([[f(c) for c in confidences] for f in featurizer]) # list of np.arrays
+                feature = TreeConfidenceEstimator._interleave_features([[f(c) for c in confidences] for f in featurizer]) # list of np.arrays
             else:
                 feature = [featurizer(c) for c in confidences] # list of np.arrays
             features.append(feature)
-        features = ConfidenceEstimator._concatenate(features)
+        features = TreeConfidenceEstimator._concatenate(features)
         padded_features = self._pad_and_normalize(features, train=train)
         # print('concatentated features = ', features)
         # print('padded_features = ', padded_features)
@@ -276,7 +349,7 @@ class ConfidenceEstimator():
                             evals_result=evals_result,
                             verbose_eval=False)
             # print('evals_result = ', evals_result)
-            prediction_probs = ConfidenceEstimator._extract_confidence_scores(model, dev_dataset)
+            prediction_probs = TreeConfidenceEstimator._extract_confidence_scores(model, dev_dataset)
             predictions = np.round(np.asarray(prediction_probs))
             accuracy = accuracy_score(dev_labels, predictions)
             score = model.best_score #evals_result['dev']['aucpr'][-1]#
@@ -306,28 +379,19 @@ class ConfidenceEstimator():
 
     def convert_to_dataset(self, confidences: Iterable[ConfidenceOutput], train :bool):
         labels = ConfidenceEstimator.convert_to_labels(confidences)
-        features = self._convert_to_features(confidences, train)
+        features = self.convert_to_features(confidences, train)
 
         return features, labels
 
     def estimate(self, confidences: Iterable[ConfidenceOutput]):
         features, labels = self.convert_to_dataset(confidences, train=False)
         dataset = xgb.DMatrix(data=features, label=labels)
-        confidence_scores = ConfidenceEstimator._extract_confidence_scores(self.model, dataset)
+        confidence_scores = TreeConfidenceEstimator._extract_confidence_scores(self.model, dataset)
         return confidence_scores
 
     def evaluate(self, dev_features, dev_labels):
         dev_dataset = xgb.DMatrix(data=dev_features, label=dev_labels)
-        confidence_scores = ConfidenceEstimator._extract_confidence_scores(self.model, dev_dataset)
-
-        # order = range(len(dev_labels))
-        # sorted_confidence_scores, sorted_labels, original_order = list(zip(*sorted(zip(confidence_scores, dev_labels, order))))
-        # sorted_features = [dev_features[i] for i in original_order]
-        # print('sorted_features = ', sorted_features[-6:-4])
-        # print('sorted_confidence_scores = ',  sorted_confidence_scores[-6:-4])
-        # print('sorted_confidence_scores = ',  sorted_confidence_scores)
-        # print('sorted_labels = ', sorted_labels[-6:-4])
-        
+        confidence_scores = TreeConfidenceEstimator._extract_confidence_scores(self.model, dev_dataset)
         precision, recall, thresholds = precision_recall_curve(dev_labels, confidence_scores)
         pass_rate, accuracies = accuracy_at_pass_rate(dev_labels, confidence_scores)
 
@@ -344,15 +408,6 @@ class ConfidenceEstimator():
         logger.info('best confusion_matrix = %s', str(best_confusion_matrix))
         logger.info('best hyperparameters (max_depth, eta, num_iterations) = %s', str(best_params))
 
-    def save(self, path: str):
-        with open(path, 'wb') as f:
-            dill.dump(self, f, protocol=4)
-
-    @staticmethod
-    def load(path: str):
-        with open(path, 'rb') as f:
-            obj = dill.load(f)
-        return obj
 
 def main(args):
     if args.plot:
@@ -364,13 +419,13 @@ def main(args):
     all_estimators = []
     train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
     for f, name in [
-                    # (oracle_score, 'raw_oracle'),
-                    # (nodrop_avg_logprob(0), 'raw_avg_logprob'),
-                    # (nodrop_seq_prob(0), 'raw_seq_prob'),
-                    (mean_drop_seq_prob(0), 'raw_mean_seq_prob'),
-                    (neg_of(var_drop_seq_prob(0)), 'raw_var_seq_prob'),
-                    # (neg_of(cv_drop_seq_prob(0)), 'raw_cv_seq_prob'),
-                    # (cev_drop_seq_prob(0), 'raw_cev_drop_seq_prob'),
+                    # ([oracle_score], 'raw_oracle'),
+                    # ([nodrop_avg_logprob(0)], 'raw_avg_logprob'),
+                    # ([nodrop_seq_prob(0)], 'raw_seq_prob'),
+                    ([mean_drop_seq_prob(0)], 'raw_mean_seq_prob'),
+                    # ([neg_of(var_drop_seq_prob(0))], 'raw_var_seq_prob'),
+                    # ([neg_of(cv_drop_seq_prob(0))], 'raw_cv_seq_prob'),
+                    # ([cev_drop_seq_prob(0)], 'raw_cev_drop_seq_prob'),
                     # ([mean_drop_prob(0)], 'mean_prob'),
                     # ([var_drop_prob(0)], 'var_prob'),
                     # ([cev_drop_prob(0)], 'cev_drop_prob'),
@@ -386,7 +441,7 @@ def main(args):
                     # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
                     # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
                     # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length'),
-                    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
+                    # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
                     # ([nodrop_seq_prob(0), prediction_length(0), max_of(mean_drop_prob(0)), max_of(nodrop_entropies(0)), max_of(cev_drop_prob(0)), min_of(mean_drop_prob(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'prob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
                     # ([variance_of_beam_logits], 'var_beam_logits'),
                     # ([variance_of_beam_probs], 'var_beam_probs'),
@@ -395,19 +450,17 @@ def main(args):
                     # ([cv_drop_avg_logprob(0)], 'cv_drop_avg_logprob'),
 
                     ]:
-        estimator = ConfidenceEstimator(name=name, featurizers=f, eval_metric=args.eval_metric)
+        if name.startswith('raw'):
+            estimator_class = RawConfidenceEstimator
+        else:
+            estimator_class = TreeConfidenceEstimator
+        estimator = estimator_class(name=name, featurizers=f, eval_metric=args.eval_metric)
         logger.info('name = %s', name)
         
-        if name.startswith('raw'):
-            precision, recall, pass_rate, accuracies, thresholds = evaluate_raw(dev_confidences, f)
-            score = auc(recall, precision)
-            estimator.score = score
-            logger.info('dev set score = %.3f', score)
-        else:
-            train_features, train_labels = estimator.convert_to_dataset(train_confidences, train=True)
-            dev_features, dev_labels = estimator.convert_to_dataset(dev_confidences, train=False)
-            estimator.train_and_validate(train_features, train_labels, dev_features, dev_labels)
-            precision, recall, pass_rate, accuracies, thresholds = estimator.evaluate(dev_features, dev_labels)
+        train_features, train_labels = estimator.convert_to_dataset(train_confidences, train=True)
+        dev_features, dev_labels = estimator.convert_to_dataset(dev_confidences, train=False)
+        estimator.train_and_validate(train_features, train_labels, dev_features, dev_labels)
+        precision, recall, pass_rate, accuracies, thresholds = estimator.evaluate(dev_features, dev_labels)
         if args.plot:
             pyplot.figure('precision-recall')
             pyplot.plot(recall, precision, marker='.', label=name)
