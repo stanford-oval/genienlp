@@ -7,8 +7,9 @@ import torch
 import itertools
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_curve, auc
 from sklearn.model_selection import train_test_split
-from .util import ConfidenceOutput
 import logging
+import os
+from .util import ConfidenceOutput
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +165,7 @@ def parse_argv(parser):
                         help='An xgboost metric. The metric which will be used to select the best model on the validation set.')
     parser.add_argument('--dev_split', type=float, default=0.2, help='The portion of the dataset to use for validation. The rest is used to train.')
     parser.add_argument('--seed', type=int, default=123, help='Random seed to use for reproducibility')
-    parser.add_argument('--save', type=str, help='A pickle file to save the calibrator model after training')
+    parser.add_argument('--save', type=str, help='The directory to save the calibrator model and plots after training')
     parser.add_argument('--plot', action='store_true', help='If True, will plot metrics and save them. Requires Matplotlib installation.')
 
 
@@ -479,7 +480,7 @@ def main(args):
     logger.info('\n'+'\n'.join([f'{e.name}: {e.score:.3f}' for e in all_estimators]))
     best_estimator = all_estimators[np.argmax([e.score for e in all_estimators])]
     logger.info('Best estimator is %s with score = %.3f', best_estimator.name, best_estimator.score)
-    best_estimator.save(args.save)
+    best_estimator.save(os.path.join(args.save, 'calibrator.pkl'))
 
     if args.plot:
         pyplot.figure('precision-recall')
@@ -489,14 +490,14 @@ def main(args):
         pyplot.xlim(0, 1)
         pyplot.xlabel('Recall')
         pyplot.ylabel('Precision')
-        pyplot.savefig('precision-recall.png')
+        pyplot.savefig(os.path.join(args.save, 'precision-recall.svg'))
 
         pyplot.figure('thresholds')
         pyplot.legend(prop={'size': 6})
         pyplot.grid()
         pyplot.xlabel('Index')
         pyplot.ylabel('Confidence Threshold')
-        pyplot.savefig('threshold.png')
+        pyplot.savefig(os.path.join(args.save, 'threshold.svg'))
 
         pyplot.figure('pass_rate')
         pyplot.legend(prop={'size': 6})
@@ -505,5 +506,5 @@ def main(args):
         pyplot.xlim(0, 1)
         pyplot.xlabel('Pass Rate')
         pyplot.ylabel('Accuracy')
-        pyplot.savefig('pass-accuracy.png')
+        pyplot.savefig(os.path.join(args.save, 'pass-accuracy.svg'))
     
