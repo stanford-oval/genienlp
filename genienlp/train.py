@@ -503,12 +503,13 @@ def main(args):
                                                             model_checkpoint_file=args.load,
                                                             vocab_sets=train_sets+val_sets,
                                                             tasks=tasks,
-                                                            device=devices[0])
+                                                            device=devices[0],
+                                                            locale=args.train_languages.split('+')[0]
+                                                            )
         model.add_new_vocab_from_data(tasks=tasks, resize_decoder=True)
     else:
         logger.info(f'Initializing a new {model_name}')
-        model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks)
-        model.set_decoder_start_token_id(args.train_languages.split('+')[0])
+        model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks, locale=args.train_languages.split('+')[0])
 
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)

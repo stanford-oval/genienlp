@@ -114,19 +114,19 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
 
 
 def run(args, device):
+    if args.pred_languages[0] is not None:
+        locale = args.pred_languages[0].split('+')[0]
+    else:
+        locale = 'en'
+
     Model = getattr(models, args.model)
     model, _ = Model.from_pretrained(args.path,
                                      model_checkpoint_file=args.checkpoint_name,
                                      args=args,
                                      device=device,
                                      tasks=args.tasks,
-                                    )
-    
-    if args.pred_languages[0] is not None:
-        model.set_decoder_start_token_id(args.pred_languages[0].split('+')[0])
-    else:
-        # use English as default
-        model.set_decoder_start_token_id('en')
+                                     locale=locale
+                                     )
 
     val_sets = get_all_splits(args)
     model.add_new_vocab_from_data(args.tasks)

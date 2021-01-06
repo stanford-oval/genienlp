@@ -53,9 +53,14 @@ class TransformerSeq2Seq(GenieModel):
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
                                                                cache_dir=self.args.embeddings)
-            
+                                    
         self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, max_generative_vocab=None,
                                                       preprocess_special_tokens=args.preprocess_special_tokens)
+
+        self.numericalizer.get_tokenizer(save_directory)
+        
+        if self._is_mbart:
+            self._adjust_mbart(kwargs.get('locale', 'en'))
 
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
@@ -64,20 +69,19 @@ class TransformerSeq2Seq(GenieModel):
             self.dropper = LossDropper(dropc=args.dropper_ratio, min_count=args.dropper_min_count)
         else:
             self.dropper = None
-            
+
+    def _adjust_mbart(self, lang):
+        # We need to set language id for mBART models as it is used during tokenization and generation
+        # For now we only support single language training and evaluation with mbart models
+        lang_id = get_mbart_lang(lang)
+        self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[lang_id]
+        self.numericalizer._tokenizer.set_src_lang_special_tokens(lang_id)
+
             
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
     
-    
-    def set_decoder_start_token_id(self, lang):
-        if self._is_mbart:
-            # mBART, in contrast to MT5 or XLM-R, needs language id
-            # For now we only support single language training and evaluation with mbart models
-            lang_id = get_mbart_lang(lang)
-            self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[lang_id]
-
 
     def forward(self, *input, **kwargs):
         if self.training:
