@@ -191,7 +191,7 @@ def parse_argv(parser):
     # for confidence estimation:
     parser.add_argument('--calibrator_path', type=str, default=None, help='If provided, will be used to output confidence scores for each prediction.')
     parser.add_argument("--mc_dropout", action='store_true', help='Monte Carlo dropout')
-    parser.add_argument("--mc_dropout_num", type=int, default=1, help='Number of samples to use for Monte Carlo dropout')
+    parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo dropout')
 
 def main(args):
     load_config_json(args)

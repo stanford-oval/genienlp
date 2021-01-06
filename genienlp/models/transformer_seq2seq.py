@@ -164,13 +164,13 @@ class TransformerSeq2Seq(GenieModel):
         return generated
 
 
-    def confidence(self, batch, predictions, mc_dropout=False, mc_dropout_num=1) -> List[ConfidenceOutput]:
+    def confidence(self, batch, predictions, mc_dropout=False, mc_dropout_num=0) -> List[ConfidenceOutput]:
         """
         predictions: Tensor of shape (batch_size, output_length)
         mc_dropout: if True, will activate dropout layers
         mc_droput_num: number of Monte Carlo samples used for the MC Dropout method
         """
-        assert mc_dropout or mc_dropout_num == 1, 'MC Dropout is disabled, but mc_droput_num is not 1'
+        assert mc_dropout or mc_dropout_num == 0, 'MC Dropout is disabled, but mc_droput_num is not 0'
         batch_size = predictions.shape[0]
         repetition_factor = batch_size//batch.context.value.shape[0]
         input_ids = batch.context.value.repeat_interleave(repetition_factor, dim=0) # repeat to account for multiple predictions per input
