@@ -275,22 +275,6 @@ def post_parse_general(args):
     if len(args.features) != len(args.features_size):
         raise ValueError('You should specify max feature size for each feature you provided')
 
-    # TODO relax this assertion by allowing training on multiple languages
-    if 'mbart' in args.pretrained_model:
-        if len(args.train_languages.split('+')) != 1 or set(args.train_languages.split('+')) != set(args.eval_languages.split('+')):
-             raise ValueError('For now we only support single language training and evaluation with mbart models')
-    
-    if args.warmup < 1:
-        raise ValueError('Warmup should be a positive integer.')
-    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
-        raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
-    
-    if args.model_parallel:
-        if args.model == 'TransformerLSTM':
-            raise ValueError('Model parallel is not supported for TransformerLSTM models')
-        elif args.model == 'TransformerSeq2Seq' and args.pretrained_model not in MODEL_PARALLEL_SUPPORTED_MODELS:
-            raise ValueError('Only the following models have model_parallel support: ', MODEL_PARALLEL_SUPPORTED_MODELS)
-    
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
             args.train_iterations = [1]
@@ -303,10 +287,6 @@ def post_parse_general(args):
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
         
-    if args.mp_device_ratio is not None:
-        if len(args.mp_device_ratio) != len(args.devices):
-            raise ValueError('When using model_parallel number of provided devices must match the number of mp_device_ratio')
-
     # postprocess arguments
     if args.commit:
         args.commit = get_commit()
@@ -337,6 +317,22 @@ def post_parse_general(args):
 
 def post_parse_train_specific(args):
     
+    # TODO relax this assertion by allowing training on multiple languages
+    if 'mbart' in args.pretrained_model:
+        if len(args.train_languages.split('+')) != 1 or set(args.train_languages.split('+')) != set(
+                args.eval_languages.split('+')):
+            raise ValueError('For now we only support single language training and evaluation with mbart models')
+    
+    if args.model_parallel:
+        if args.model == 'TransformerLSTM':
+            raise ValueError('Model parallel is not supported for TransformerLSTM models')
+        elif args.model == 'TransformerSeq2Seq' and args.pretrained_model not in MODEL_PARALLEL_SUPPORTED_MODELS:
+            raise ValueError('Only the following models have model_parallel support: ', MODEL_PARALLEL_SUPPORTED_MODELS)
+    
+    if args.mp_device_ratio is not None:
+        if len(args.mp_device_ratio) != len(args.devices):
+            raise ValueError('When using model_parallel number of provided devices must match the number of mp_device_ratio')
+
     if args.warmup < 1:
         raise ValueError('Warmup should be a positive integer.')
 
