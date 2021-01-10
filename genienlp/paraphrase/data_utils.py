@@ -218,7 +218,7 @@ def document_rotation(input_sequence):
 
 def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_column, id_column, prompt_column, thingtalk_column,
                                   copy, sep_token_id, skip_heuristics, is_cased, model_type,
-                                  src_lang, subsample, shuffle_input, task, model_input_prefix,
+                                  src_lang, subsample, shuffle_input, task, model_input_prefix, max_input_length,
                                   mask_tokens, mask_token_prob, masking_token, infill_max_tries,
                                   delete_tokens, delete_token_prob,
                                   infill_text, num_text_spans,
@@ -298,6 +298,11 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         
         input_sequence = detokenize_cjk_chars(input_sequence)
         input_sequence_ids = tokenizer.encode(input_sequence, add_special_tokens=True)
+
+        if len(input_sequence_ids) > max_input_length:
+            # keep eos token. This is approximate cause there might be other special tokens appended,
+            # but in practice we rarely face examples longer than 512 sub tokens
+            input_sequence_ids = input_sequence_ids[:max_input_length-2] + input_sequence_ids[-1:]
         
         prompt_ids = [] # includes the first few tokens of the output
         if prompt_column is not None and len(row) > prompt_column:

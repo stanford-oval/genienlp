@@ -98,6 +98,7 @@ def parse_argv(parser):
 
     parser.add_argument('--output_prompt', action='store_true',
                         help='Whether we should include the prompt (specified via --prompt_column or --copy) in the output sequence')
+    parser.add_argument("--max_input_length", type=int, default=512, help='Crop longer sentences by this maximum length')
     parser.add_argument("--length", type=int, default=15, help='The generated sentences will have a maximum length of len(input) + arg.length')
     parser.add_argument("--min_output_length", type=int, default=2, help='Will prevent stop tokens from appearing in the first --min_output_length tokens of the generated sentences.')
     parser.add_argument("--skip_heuristics", action='store_true', help='If True, will not replace special word such as NUMBER_0 in the input.')
@@ -352,6 +353,7 @@ def run_single_process_generation(args, config):
                                                                 shuffle_input=args.shuffle_input,
                                                                 task=args.task,
                                                                 model_input_prefix=model_input_prefix,
+                                                                max_input_length=args.max_input_length,
                                                                 mask_tokens=args.mask_tokens,
                                                                 mask_token_prob=args.mask_token_prob,
                                                                 masking_token=masking_token,

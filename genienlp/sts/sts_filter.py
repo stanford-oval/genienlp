@@ -27,7 +27,7 @@ def main(args):
     elif args.filtering_metric == 'mean+std':
         accepted_ids = all_scores >= (scores_mean + scoers_std)
     elif args.filtering_metric == 'constant':
-        assert args.filtering_threshold
+        assert args.filtering_threshold is not None
         accepted_ids = all_scores >= args.filtering_threshold
     # accept all
     else:

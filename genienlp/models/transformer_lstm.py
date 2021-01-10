@@ -60,6 +60,7 @@ class TransformerLSTM(GenieModel):
                                                       max_generative_vocab=args.max_generative_vocab,
                                                       cache=args.embeddings,
                                                       preprocess_special_tokens=args.preprocess_special_tokens)
+        self.numericalizer.get_tokenizer(save_directory)
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
 
         logger.info(f'Initializing encoder and decoder embeddings')
@@ -79,12 +80,7 @@ class TransformerLSTM(GenieModel):
         self.encoder_embeddings.resize_token_embeddings(self.numericalizer.num_tokens)
         if resize_decoder:
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
-            
-            
-    def set_decoder_start_token_id(self, lang):
-        pass
     
-
     def forward(self, batch, current_token_id=None, past_key_values=None,
                 expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
         if encoder_output is None:

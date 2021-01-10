@@ -194,10 +194,10 @@ def main(args):
     model, _ = Model.from_pretrained(args.path,
                                      model_checkpoint_file=args.checkpoint_name,
                                      args=args,
-                                     device=device
-                                    )
+                                     device=device,
+                                     locale=args.locale
+                                     )
 
-    model.set_decoder_start_token_id(args.locale)
 
     
     model.to(device)

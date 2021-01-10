@@ -54,6 +54,8 @@ def check_args(args):
         elif args.tgt_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 1)[1]]:
             if args.tgt_lang == 'pl':
                 args.tgt_lang = 'pol'
+            elif args.tgt_lang == 'fa':
+                args.tgt_lang = 'pes'
             else:
                 raise ValueError(
                     'Target language is not in the model group languages, please specify the correct target language.')
@@ -63,6 +65,10 @@ def check_args(args):
             raise ValueError('For translation task using Marian model, if source language is a group of languages, '
                              'you have to specify the --src_lang flag.')
         elif args.src_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 2)[1]]:
+            if args.src_lang == 'pl':
+                args.src_lang = 'pol'
+            elif args.src_lang == 'fa':
+                args.src_lang = 'pes'
             raise ValueError(
                 'Source language is not in the model group languages, please specify the correct source language.')
     

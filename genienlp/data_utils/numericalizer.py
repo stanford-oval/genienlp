@@ -114,15 +114,24 @@ class TransformerNumericalizer(object):
         return self._pretrained_name in ALLOWED_FAST_TOKENIZERS or \
                (self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING)
     
+
+    def get_tokenizer(self, save_dir):
+        if save_dir is not None:
+            config = AutoConfig.from_pretrained(self._pretrained_name)
+            self._tokenizer = AutoTokenizer.from_pretrained(save_dir,
+                                                            do_lower_case=False,
+                                                            do_basic_tokenize=False,
+                                                            config=config,
+                                                            cache_dir=self._cache,
+                                                            use_fast=self._use_fast())
+        else:
+            self._tokenizer = AutoTokenizer.from_pretrained(self._pretrained_name,
+                                                            do_lower_case=False,
+                                                            do_basic_tokenize=False,
+                                                            cache_dir=self._cache,
+                                                            use_fast=self._use_fast())
+
     def load(self, save_dir):
-        config = AutoConfig.from_pretrained(self._pretrained_name)
-        self._tokenizer = AutoTokenizer.from_pretrained(save_dir,
-                                                        do_lower_case=False,
-                                                        do_basic_tokenize=False,
-                                                        config=config,
-                                                        cache_dir=self._cache,
-                                                        use_fast=self._use_fast())
-        
         if self.max_generative_vocab is not None:
             with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'r') as fp:
                 self._decoder_words = [(line.rstrip('\n'), self._tokenizer.convert_tokens_to_ids(line.rstrip('\n')))
@@ -154,12 +163,6 @@ class TransformerNumericalizer(object):
                 json.dump(self._special_tokens_to_word_map, fp)
     
     def build_vocab(self, vocab_sets, tasks):
-        self._tokenizer = AutoTokenizer.from_pretrained(self._pretrained_name,
-                                                        do_lower_case=False,
-                                                        do_basic_tokenize=False,
-                                                        cache_dir=self._cache,
-                                                        use_fast=self._use_fast())
-        
         special_tokens = []
         for task in tasks:
             special_tokens += list(task.special_tokens)
