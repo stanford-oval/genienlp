@@ -40,7 +40,7 @@ import re
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
-from .tasks.almond.utils import quoted_pattern_maybe_space
+from .tasks.almond_utils import quoted_pattern_maybe_space
 
 try:
      set_start_method('spawn')

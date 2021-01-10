@@ -344,14 +344,6 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
-    shared_kwargs = {
-        'append_question_to_context_too': args.append_question_to_context_too,
-        'override_question': args.override_question,
-        'override_context': args.override_context,
-        'features': args.features,
-        'features_size': args.features_size,
-        'features_default_val': args.features_default_val
-    }
 
     train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, train=True))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
