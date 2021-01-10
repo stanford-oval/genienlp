@@ -35,29 +35,18 @@ import math
 import multiprocessing as mp
 import ujson
 import marisa_trie
-import re
 from wordfreq import zipf_frequency
 
-from .base_task import BaseTask
-from .registry import register_task
 from ..data_utils.example import Feature
 from ..data_utils.database import Database
 from ..data_utils.database_utils import DOMAIN_TYPE_MAPPING
 from ..data_utils.bootleg import Bootleg
-from .generic_dataset import CQA, context_question_len, token_batch_fn, default_batch_fn
-from ..data_utils.example import Example
-from almond_utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
-from ..util import multiwoz_specific_preprocess
-
-from .base_dataset import Split
-from almond_utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char, process, chunk_file, quoted_pattern_maybe_space
 
 from .base_task import BaseTask
 from .registry import register_task
 from .generic_dataset import CQA, default_batch_fn, input_then_output_len, input_tokens_fn
 from ..data_utils.example import Example
-from ..data_utils.progbar import progress_bar
-from .almond_utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, tokenize_cjk_chars, detokenize_cjk_chars
+from .almond_utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, tokenize_cjk_chars, detokenize_cjk_chars, is_cjk_char, process, chunk_file, quoted_pattern_with_space
 
 from .base_dataset import Split
 
@@ -81,6 +70,7 @@ class AlmondDataset(CQA):
         features_size = kwargs.get('features_size')
         features_default_val = kwargs.get('features_default_val')
         verbose = kwargs.get('verbose', False)
+        preprocess_special_tokens = kwargs.get('preprocess_special_tokens', False)
         
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         dir_name = os.path.basename(os.path.dirname(path))
@@ -124,7 +114,10 @@ class AlmondDataset(CQA):
                                 'kwargs': kwargs}
                 examples = process(process_args)
                 
+            
+                
             if bootleg:
+                
                 config_ovrrides = bootleg.fixed_overrides
                 
                 input_file_dir = os.path.dirname(path)
@@ -292,23 +285,6 @@ class BaseAlmondTask(BaseTask):
                 i += 1
         return "".join(output)
 
-    def preprocess_context(self, sentence):
-        preprocessed_context = []
-        for token in sentence.split(' '):
-            if len(token) == 0:
-                continue
-            if token.startswith('@') and '.' in token:
-                word = '_'.join(token.rsplit('.', maxsplit=2)[1:3]).lower()
-                preprocessed_context += word.split('_')
-            elif token.startswith('param:'):
-                word = token[len('param:'):]
-                preprocessed_context += word.split('_')
-            elif token.startswith('enum:'):
-                word = token[len('enum:'):]
-                preprocessed_context += word.split('_')
-            else:
-                preprocessed_context.append(token)
-        return preprocessed_context
 
     def collect_answer_entity_types(self, answer):
         entity2type = dict()
@@ -421,7 +397,7 @@ class BaseAlmondTask(BaseTask):
         new_answer = ' '.join(new_tokens)
         return new_answer
 
-    def preprocess_field(self, sentence, field_name=None):
+    def preprocess_field(self, sentence, field_name=None, answer=None):
         if self.override_context is not None and field_name == 'context':
             return self.override_context
         if self.override_question is not None and field_name == 'question':
@@ -482,15 +458,21 @@ class BaseAlmondTask(BaseTask):
                         not is_device(token):
                     for word in token.split('_'):
                         new_tokens.append(word)
+                else:
+                    new_tokens.append(token)
+            new_sentence = ' '.join(new_tokens)
+            
+        new_sentence = new_sentence.strip()
+        new_sentence_length = len(new_sentence.split(' '))
 
         tokens_type_ids, tokens_type_probs, tokens_word_freqs = None, None, None
         
         if 'type_id' in self.args.features:
-            tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokens))]
+            tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(new_sentence_length)]
         if 'type_prob' in self.args.features:
-            tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(len(tokens))]
+            tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(new_sentence_length)]
         if 'word_freq' in self.args.features:
-            tokens_word_freqs = [[self.args.features_default_val[2]] * self.args.features_size[2] for _ in range(len(tokens))]
+            tokens_word_freqs = [[self.args.features_default_val[2]] * self.args.features_size[2] for _ in range(new_sentence_length)]
 
         if self.args.do_ner and self.bootleg is None and field_name not in self.no_feature_fields:
             if 'type_id' in self.args.features:
@@ -506,17 +488,17 @@ class BaseAlmondTask(BaseTask):
              
         zip_list = []
         if tokens_type_ids:
-            assert len(tokens) == len(tokens_type_ids)
+            assert len(tokens_type_ids) == new_sentence_length
             zip_list.append(tokens_type_ids)
         if tokens_type_probs:
-            assert len(tokens) == len(tokens_type_probs)
+            assert len(tokens_type_probs) == new_sentence_length
             zip_list.append(tokens_type_probs)
         if tokens_word_freqs:
-            assert len(tokens) == len(tokens_word_freqs)
+            assert len(tokens_word_freqs) == new_sentence_length
             zip_list.append(tokens_word_freqs)
         features = [Feature(*tup) for tup in zip(*zip_list)]
         
-        return tokens, features
+        return new_sentence, features
 
 
 @register_task('almond')
