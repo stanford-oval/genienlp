@@ -5,6 +5,7 @@ set -e
 set -x
 SRCDIR=`dirname $0`
 
+
 on_error () {
     rm -fr $workdir
     rm -rf $SRCDIR/torch-shm-file-*
@@ -16,13 +17,9 @@ if test -d $(dirname ${SRCDIR})/.embeddings; then
 else
   mkdir -p $SRCDIR/embeddings
   embedding_dir="$SRCDIR/embeddings"
-
-  for v in glove.6B.50d charNgram ; do
-      for f in vectors itos table ; do
-          wget -c "https://parmesan.stanford.edu/glove/${v}.txt.${f}.npy" -O $SRCDIR/embeddings/${v}.txt.${f}.npy
-      done
-  done
 fi
+
+export SENTENCE_TRANSFORMERS_HOME="$embedding_dir"
 
 TMPDIR=`pwd`
 workdir=`mktemp -d $TMPDIR/genieNLP-tests-XXXXXX`
@@ -31,20 +28,18 @@ trap on_error ERR INT TERM
 
 i=0
 for hparams in \
-      "--seq2seq_decoder sshleifer/bart-tiny-random --model Bart" \
-      "--seq2seq_decoder sshleifer/tiny-mbart --model MBart" \
-      "--seq2seq_decoder google/mt5-small --model MT5" \
-      "--encoder_embeddings=small_glove+char --decoder_embeddings=small_glove+char" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder MQANEncoder" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=BiLSTM --dimension=768" \
-      "--encoder_embeddings=xlm-roberta-base --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --eval_set_name aux" ;
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/tiny-mbart" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --preprocess_special_tokens" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --almond_detokenize_sentence" \
+      "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50 --num_beams 4 --num_beam_groups 4 --num_outputs 4 --diversity_penalty 1.0" \
+      "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50" \
+      "--model TransformerLSTM --pretrained_model xlm-roberta-base --trainable_decoder_embeddings=50" \
+      "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50 --eval_set_name aux" ;
 do
 
     # train
-    pipenv run python3 -m genienlp train --train_tasks almond  --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
+    pipenv run python3 -m genienlp train --train_tasks almond --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
 
     # greedy prediction
     pipenv run python3 -m genienlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $embedding_dir --skip_cache
@@ -55,27 +50,27 @@ do
         exit
     fi
 
+    # test exporting
+    pipenv run python3 -m genienlp export --path $workdir/model_$i --output $workdir/model_$i_exported
+
     if [ $i == 0 ] ; then
       echo "Testing the server mode"
       echo '{"id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | pipenv run python3 -m genienlp server --path $workdir/model_$i --stdin
     fi
 
-    rm -rf $workdir/model_$i
+    rm -rf $workdir/model_$i $workdir/model_$i_exported
 
     i=$((i+1))
 done
 
 # test almond_multilingual task
 for hparams in \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --sentence_batching --train_batch_tokens 4 --val_batch_size 4 --use_encoder_loss" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --sentence_batching --train_batch_tokens 4 --val_batch_size 4 --use_encoder_loss --paired" \
-      "--encoder_embeddings=bert-base-multilingual-uncased --decoder_embeddings= --trainable_decoder_embeddings=50 --seq2seq_encoder=Identity --dimension=768 --rnn_zero_state cls --almond_lang_as_question" ;
-
-do
+      "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50" \
+      "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50 --sentence_batching --use_encoder_loss" \
+      "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50 --rnn_zero_state cls --almond_lang_as_question" ; do
 
     # train
-    pipenv run python3 -m genienlp train --train_tasks almond_multilingual --train_languages fa+en --eval_languages fa+en --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
+    pipenv run python3 -m genienlp train --train_tasks almond_multilingual --train_languages fa+en --eval_languages fa+en --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
 
     # greedy decode
     # combined evaluation
@@ -138,7 +133,17 @@ for model in "sshleifer/bart-tiny-random" "sshleifer/tiny-mbart" ; do
   # use a pre-trained model
   pipenv run python3 -m genienlp run-paraphrase --model_name_or_path $model --length 15 --temperature 0 --repetition_penalty 1.0 --num_samples 1 --batch_size 3 --input_file $workdir/masked_paraphrasing/dev.tsv --input_column 0 --gold_column 1 --output_file $workdir/generated_"$model_type".tsv  --skip_heuristics --task paraphrase --infill_text --num_text_spans 1 --src_lang en --tgt_lang en
 
-  if test ! -f $workdir/generated_"$model_type".tsv   ; then
+  # create input file for sts filtering
+  paste <(cut -f1-2 $workdir/masked_paraphrasing/dev.tsv) <(cut -f2 $workdir/generated_"$model_type".tsv) <(cut -f3 $workdir/masked_paraphrasing/dev.tsv) > $workdir/sts_input_"$model_type".tsv
+
+  # calculate sts score for paraphrases
+  pipenv run python3 -m genienlp calculate-paraphrase-sts --input_file $workdir/sts_input_"$model_type".tsv --output_file $workdir/sts_output_score_"$model_type".tsv
+
+  # filter paraphrases based on sts score
+  pipenv run python3 -m genienlp filter-paraphrase-sts --input_file $workdir/sts_output_score_"$model_type".tsv --output_file $workdir/sts_output_"$model_type".tsv --filtering_metric constant --filtering_threshold 0.98
+
+
+  if ! [ -f $workdir/generated_"$model_type".tsv && -f $workdir/sts_output_"$model_type".tsv  ]   ; then
       echo "File not found!"
       exit
   fi

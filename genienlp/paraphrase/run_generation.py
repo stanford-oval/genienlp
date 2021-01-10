@@ -34,6 +34,8 @@ from torch.multiprocessing import Process, set_start_method
 
 from genienlp.paraphrase.data_utils import create_features_from_tsv_file, output_heuristics
 from genienlp.paraphrase.model_utils import compute_metrics, compute_attention, replace_quoted_params, force_replace_quoted_params
+from ..tasks.almond_utils import tokenize_cjk_chars
+from ..data_utils.progbar import prange
 
 try:
     set_start_method('spawn')
@@ -104,6 +106,9 @@ def parse_argv(parser):
     parser.add_argument("--metric_reduction", type=str, choices=['average', 'max'], default='average',
                         help="How we should calculate metrics where there are multiple generations per example.")
     
+    parser.add_argument("--shuffle_input", action='store_true', help='If set, we will shuffle input dataset before processing it'
+                                                                     'Used mainly with subsampling so we take different portion of data each time')
+    
     parser.add_argument("--pipe_mode", action='store_true', help='If set, we will generate paraphrases of paraphrases of ... as well.')
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate num_samples outputs for each set of hyperparameters.
     parser.add_argument("--num_samples", type=int, nargs='+', default=[1])
@@ -155,6 +160,8 @@ def parse_argv(parser):
     parser.add_argument('--delete_token_prob', type=float, default=0.15, help='Probability of an input token being deleted in the sentence')
     parser.add_argument('--infill_text', action='store_true', help='mask consecutive tokens and infill them using denoising pretrained model')
     parser.add_argument('--num_text_spans', type=int, default=3, help='number of text spans to sample for text infilling method')
+    parser.add_argument('--infill_max_tries', type=int, default=3, help='Maximum number of tries to find an appropriate span')
+    
     parser.add_argument('--permute_sentences', action='store_true', help='divide document into sentences based on fill stops and'
                                                                          'permutate them. Use this only if input has multiple sentences.')
     parser.add_argument('--rotate_sentence', action='store_true', help='a pivot token is chosen randomly, and sentence is rotated so new sentence start with pivot token')
@@ -166,6 +173,9 @@ def parse_argv(parser):
                              "See details at https://nvidia.github.io/apex/amp.html")
     
     parser.add_argument('--verbose', action='store_true', help='log additional information for debugging purposes')
+
+    parser.add_argument('--no_fast_tokenizer', action='store_true', help='Use slow version of huggingface tokenizer')
+
 
 def main(args):
     hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
@@ -244,6 +254,7 @@ def run_multi_process_generation(args):
     if args.n_gpu > 1:
         if args.input_file is None:
             raise ValueError('Cannot use multiple GPUs when reading from stdin. You should provide an --input_file')
+        logger.info('Running generation in parallel on {} GPUs'.format(args.n_gpu))
         # Independent multi-GPU generation
         all_processes = []
         all_input_files = split_file_on_disk(args.input_file, args.n_gpu)
@@ -290,7 +301,7 @@ def run_single_process_generation(args, config):
         model = amp.initialize(model, opt_level=args.fp16_opt_level)
 
     model.eval()
-    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
+    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir, use_fast=not args.no_fast_tokenizer)
     eos_token_id = tokenizer.convert_tokens_to_ids(special_tokens['eos_token'])
     sep_token_id = tokenizer.convert_tokens_to_ids(special_tokens['sep_token'])
     
@@ -338,18 +349,20 @@ def run_single_process_generation(args, config):
                                                                 model_type=args.model_type,
                                                                 src_lang=args.src_lang,
                                                                 subsample=args.subsample,
+                                                                shuffle_input=args.shuffle_input,
                                                                 task=args.task,
                                                                 model_input_prefix=model_input_prefix,
                                                                 mask_tokens=args.mask_tokens,
                                                                 mask_token_prob=args.mask_token_prob,
                                                                 masking_token=masking_token,
+                                                                infill_max_tries=args.infill_max_tries,
                                                                 delete_tokens=args.delete_tokens,
                                                                 delete_token_prob=args.delete_token_prob,
                                                                 infill_text=args.infill_text,
                                                                 num_text_spans=args.num_text_spans,
                                                                 permute_sentences=args.permute_sentences,
                                                                 rotate_sentence=args.rotate_sentence)
-
+    
     # sort contexts based on their context length so that less generated tokens are thrown away and generation can be done faster
     estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, original_order, reverse_maps, all_prompt_ids = \
         tuple(zip(*sorted(list(zip(estimated_output_lengths, all_input_sequence_lengths, all_input_sequences, all_context_ids, range(len(all_context_ids)), reverse_maps, all_prompt_ids)), reverse=True)))
@@ -358,7 +371,7 @@ def run_single_process_generation(args, config):
     stop_token_ids = [tokenizer.convert_tokens_to_ids(stop_token) for stop_token in args.stop_tokens]
     
     batch_idx = 0
-    for batch in range(math.ceil(len(all_context_ids) / args.batch_size)):
+    for batch in prange(math.ceil(len(all_context_ids) / args.batch_size)):
         batch_slice = (batch*args.batch_size, min((batch+1)*args.batch_size, len(all_context_ids)))
         batch_size = batch_slice[1] - batch_slice[0]
         batch_context_tokens = all_context_ids[batch_slice[0]: batch_slice[1]]
@@ -494,17 +507,19 @@ def run_single_process_generation(args, config):
                     else:
                         text = tokenizer.convert_tokens_to_string(tgt_tokens)
                 else:
-                    text = tokenizer.decode(out_cropped, clean_up_tokenization_spaces=True, skip_special_tokens=True)
+                    text = tokenizer.decode(out_cropped, clean_up_tokenization_spaces=False, skip_special_tokens=True)
 
                 text = re.sub('\s\s+', ' ', text)  # remove duplicate white spaces
                 text = text.strip()
+                
+                text = tokenize_cjk_chars(text)
                 
                 if not args.skip_heuristics:
                     text = output_heuristics(text, batch_reverse_maps[sample_index])
                 batch_outputs[sample_index].append(text)
                 
         all_outputs.extend(batch_outputs)
-        if batch_idx < 1 and args.verbose:
+        if batch_idx == 0 and args.verbose:
             logger.info('First batch output: %s', str(all_outputs))
         batch_idx += 1
 
@@ -515,10 +530,16 @@ def run_single_process_generation(args, config):
         with open(args.output_file, 'w') as output_file:
             for i, output in enumerate(all_outputs):
                 for j, text in enumerate(output):
+                    # if num_samples is 1 keep the original id
+                    if len(output) == 1:
+                        id_ = all_example_ids[i]
+                    else:
+                        id_ = '{}-{}'.format(all_example_ids[i], j)
                     if args.output_example_ids_too:
-                        output_file.write('\t'.join(['{}-{}'.format(all_example_ids[i], j), text]) + '\n')
+                        output_file.write('\t'.join([id_, text]) + '\n')
                     else:
                         output_file.write(text + '\n')
+                    
     else:
         print(json.dumps(all_outputs, indent=2))
 

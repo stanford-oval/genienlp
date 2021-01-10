@@ -28,17 +28,22 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
+import sys
 import torch
 from collections import OrderedDict
 
 from .metrics import compute_metrics
-from .util import multiwoz_specific_postprocess
 
 
 def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False, original_order=None):
     """
-    original_order: List of indices. If provided, we will sort the results according to this order
+    Inputs:
+        original_order: List of indices. If provided, we will sort the results according to this order
+    Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
+        loss
+        predictions: a List of Lists of strings
+        answers
+        contexts
     """
     if isinstance(model, torch.nn.DataParallel):
         # get rid of the DataParallel wrapper
@@ -47,8 +52,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
     example_ids = []
     answers = []
     contexts = []
-    questions = []
-    
+
     for batch in data_iterator:
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
@@ -61,30 +65,26 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
                                                 top_k=args.top_k[hyperparameter_idx],
                                                 top_p=args.top_p[hyperparameter_idx],
                                                 num_beams=args.num_beams[hyperparameter_idx],
+                                                num_beam_groups=args.num_beam_groups[hyperparameter_idx],
+                                                diversity_penalty=args.diversity_penalty[hyperparameter_idx],
                                                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                                                 do_sample=args.temperature[hyperparameter_idx]!=0  # if temperature==0, we do not sample
                                                 )
-            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction, detokenize=task.detokenize, field_name='answer')
-            if args.almond_dataset_specific_preprocess == 'multiwoz':
-                partial_batch_prediction = [multiwoz_specific_postprocess(a) for a in partial_batch_prediction]
+            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction, task=task, field_name='answer')
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
         
         if not output_predictions_only:
-            batch_answer = numericalizer.reverse(batch.answer.value.data, detokenize=task.detokenize, field_name='answer')
-            if args.almond_dataset_specific_preprocess == 'multiwoz':
-                batch_answer = [multiwoz_specific_postprocess(a) for a in batch_answer]
+            batch_answer = numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer')
             example_ids += batch.example_id
             answers += batch_answer
-            batch_question = numericalizer.reverse(batch.question.value.data, detokenize=task.detokenize, field_name='question')
-            questions += batch_question
-            batch_context = numericalizer.reverse(batch.context.value.data, detokenize=task.detokenize, field_name='context')
+            batch_context = numericalizer.reverse(batch.context.value.data, task=task, field_name='context')
             contexts += batch_context
         predictions += batch_prediction
     
     if original_order is not None:
         # sort back to the original order
-        original_order, example_ids, predictions, answers, contexts, questions = tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, questions)))))
+        original_order, example_ids, predictions, answers, contexts = tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))
 
     if prediction_file_name is not None:
         with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
@@ -95,7 +95,8 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
         return predictions
     # TODO calculate and return loss
     loss = None
-    return loss, predictions, answers, contexts, questions
+    return loss, predictions, answers, contexts
+
 
 def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args):
     metrics = OrderedDict()
@@ -108,6 +109,7 @@ def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args)
                 raise ValueError('Invalid reduce_metrics argument')
     return metrics
 
+
 def print_results(keys, values, num_print=1):
     print()
     start = 0
@@ -119,21 +121,17 @@ def print_results(keys, values, num_print=1):
             v = value[0] if isinstance(value, list) else value
             print(f'{key}: {repr(v)}')
         print()
+    sys.stdout.flush()
 
 
 def validate(task, val_iter, model, numericalizer, args, num_print=10):
     with torch.no_grad():
         model.eval()
-        names = ['beam search', 'answer', 'context', 'question']
-        loss, predictions, answers, contexts, questions = generate_with_model(model, val_iter, numericalizer, task, args, prediction_file_name=None)
-
-        # predictions is a list of lists
-        for i in range(len(predictions)):
-            for j in range(len(predictions[i])):
-                predictions[i][j] = predictions[i][j].replace('UNK', 'OOV')
+        names = ['beam search', 'answer', 'context']
+        loss, predictions, answers, contexts = generate_with_model(model, val_iter, numericalizer, task, args, prediction_file_name=None)
 
         metrics = calculate_and_reduce_metrics(predictions, answers, task.metrics, args)
-        results = [predictions, answers, contexts, questions]
+        results = [predictions, answers, contexts]
         print_results(names, results, num_print=num_print)
 
         return loss, metrics

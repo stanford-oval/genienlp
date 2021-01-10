@@ -30,30 +30,32 @@
 import torch
 from torch import nn
 
-from .common import CombinedEmbedding, LayerNorm, LinearFeedforward
 from transformers.models.bert.modeling_bert import BertConfig
-from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions as EmbeddingOutput
 from ..paraphrase.transformers_utils import BootlegBertEncoder
+from .common import LayerNorm, LinearFeedforward
 
 
 class IdentityEncoder(nn.Module):
-    def __init__(self, numericalizer, args, context_embeddings, question_embeddings):
+    def __init__(self, numericalizer, args, config, context_embeddings):
         super().__init__()
         self.args = args
         self.pad_idx = numericalizer.pad_id
 
-        self.encoder_embeddings = CombinedEmbedding(numericalizer, context_embeddings, args.dimension,
-                                                    finetune_pretrained=args.train_context_embeddings,
-                                                    trained_dimension=0, project=False)
-        if self.args.rnn_layers > 0 and self.args.rnn_dimension != self.args.dimension:
+        if args.rnn_dimension is None:
+            args.rnn_dimension = config.hidden_size
+
+        self.encoder_embeddings = context_embeddings
+
+        if self.args.rnn_layers > 0 and self.args.rnn_dimension != config.hidden_size:
             self.dropout = nn.Dropout(args.dropout_ratio)
-            self.projection = nn.Linear(self.encoder_embeddings.dimension, self.args.rnn_dimension, bias=False)
+            self.projection = nn.Linear(config.hidden_size, self.args.rnn_dimension, bias=False)
         else:
             self.dropout = None
             self.projection = None
 
         if self.args.rnn_layers > 0 and self.args.rnn_zero_state in ['average', 'cls']:
-            self.pool = LinearFeedforward(args.dimension, args.dimension, 2 * args.rnn_dimension * args.rnn_layers,
+            self.pool = LinearFeedforward(config.hidden_size, config.hidden_size,
+                                          2 * args.rnn_dimension * args.rnn_layers,
                                           dropout=args.dropout_ratio)
             self.norm = LayerNorm(2 * args.rnn_dimension * args.rnn_layers)
         else:
@@ -66,72 +68,49 @@ class IdentityEncoder(nn.Module):
             
             self.context_BootlegBertEncoder = BootlegBertEncoder(config, self.encoder_embeddings.dimension, self.args.rnn_dimension,
                                                          ent_emb_file=f'{self.args.bootleg_output_dir}/bootleg/eval/{self.args.bootleg_model}/ent_embedding.npy')
-            self.question_BootlegBertEncoder = BootlegBertEncoder(config, self.encoder_embeddings.dimension, self.args.rnn_dimension,
-                                                         ent_emb_file=f'{self.args.bootleg_output_dir}/bootleg/eval/{self.args.bootleg_model}/ent_embedding.npy')
 
-    def set_train_context_embeddings(self, trainable):
-        self.encoder_embeddings.set_trainable(trainable)
 
-    def set_train_question_embeddings(self, trainable):
-        pass
-
-    def compute_final_embeddings(self, context, question, context_entity_ids, question_entity_ids,
-                                 context_padding, question_padding, context_lengths,
-                                 context_entity_masking=None, question_entity_masking=None,
-                                 context_entity_probs=None, question_entity_probs=None,
-                                 mask_entities=True):
+    def compute_final_embeddings(self, context, context_lengths, context_padding, context_entity_ids, context_entity_probs=None, context_entity_masking=None, mask_entities=True):
                 
         
         if self.args.retrieve_method == 'bootleg' and self.args.bootleg_integration == 2:
             # do not embed type_ids yet; in level 2 they are aggregated after contextual embeddings are formed
             # still pass entity_masking and mask_entities so that encoder loss would work (if used)
             context_embedded = self.encoder_embeddings(context, entity_masking=context_entity_masking, mask_entities=mask_entities, padding=context_padding)
-            question_embedded = self.encoder_embeddings(question, entity_masking=question_entity_masking, mask_entities=mask_entities, padding=question_padding)
 
             context_embedded_last_hidden_state, _pooled, context_embedded_hidden_states = self.context_BootlegBertEncoder(inputs_embeds=context_embedded.last_hidden_state, input_ent_ids=context_entity_ids)
-            question_embedded_last_hidden_state, _pooled, question_embedded_hidden_states = self.question_BootlegBertEncoder(inputs_embeds=question_embedded.last_hidden_state, input_ent_ids=question_entity_ids)
 
-            context_embedded = EmbeddingOutput(hidden_states=context_embedded_hidden_states, last_hidden_state=context_embedded_last_hidden_state)
-            question_embedded = EmbeddingOutput(hidden_states=question_embedded_hidden_states, last_hidden_state=question_embedded_last_hidden_state)
+            context_embedded = context_embedded_last_hidden_state
         
         else:
             context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking, entity_probs=context_entity_probs, mask_entities=mask_entities, padding=context_padding)
-            question_embedded = self.encoder_embeddings(question, entity_ids=question_entity_ids, entity_masking=question_entity_masking, entity_probs=question_entity_probs, mask_entities=mask_entities, padding=question_padding,)
         
-        # pick the top-most N transformer layers to pass to the decoder for cross-attention
-        # (add 1 to account for the embedding layer - the decoder will drop it later)
-        self_attended_context = context_embedded.hidden_states[-(self.args.transformer_layers + 1):]
         final_context = context_embedded.last_hidden_state
-        final_question = question_embedded.last_hidden_state
 
         if self.projection is not None:
             final_context = self.dropout(final_context)
             final_context = self.projection(final_context)
-        
-            final_question = self.dropout(final_question)
-            final_question = self.projection(final_question)
-            
+
         context_rnn_state = None
-        question_rnn_state = None
         if self.args.rnn_layers > 0:
             batch_size = context.size(0)
             if self.args.rnn_zero_state == 'zero':
-
+        
                 zero = torch.zeros(self.args.rnn_layers, batch_size, self.args.rnn_dimension,
                                    dtype=torch.float, requires_grad=False, device=context.device)
                 context_rnn_state = (zero, zero)
-                question_rnn_state = (zero, zero)
             else:
                 if self.args.rnn_zero_state == 'cls':
-                    packed_rnn_state = self.norm(self.pool(context_embedded.last_hidden_state[:, 0, :]))
-
-                elif self.args.rnn_zero_state == 'average':
-                    masked_final_context = context_embedded.last_hidden_state.masked_fill(context_padding.unsqueeze(2), 0)
+                    packed_rnn_state = self.norm(self.pool(final_context[:, 0, :]))
+        
+                else:
+                    assert self.args.rnn_zero_state == 'average'
+                    masked_final_context = final_context.masked_fill(context_padding.unsqueeze(2), 0)
                     summed_context = torch.sum(masked_final_context, dim=1)
                     average_context = summed_context / context_lengths.unsqueeze(1)
-
+            
                     packed_rnn_state = self.norm(self.pool(average_context))
-
+        
                 # packed_rnn_state is (batch, 2 * rnn_layers * rnn_dim)
                 packed_rnn_state = packed_rnn_state.reshape(batch_size, 2, self.args.rnn_layers,
                                                             self.args.rnn_dimension)
@@ -142,48 +121,24 @@ class IdentityEncoder(nn.Module):
                 # convert to a tuple of two (rnn_layers, batch, rnn_dimension) tensors
                 packed_rnn_state = packed_rnn_state.chunk(2, dim=0)
                 context_rnn_state = (packed_rnn_state[0].squeeze(0), packed_rnn_state[1].squeeze(0))
-    
-        return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state
+                
+        return final_context, context_rnn_state
 
     def forward(self, batch):
         context, context_lengths = batch.context.value, batch.context.length
-        question, question_lengths = batch.question.value, batch.question.length
+        context_padding = torch.eq(context.data, self.pad_idx)
 
-        context_padding = context.data == self.pad_idx
-        question_padding = question.data == self.pad_idx
-        
-        context_entity_ids, question_entity_ids = None, None
-        context_entity_masking, question_entity_masking = None, None
-        context_entity_probs, question_entity_probs = None, None
+        context_entity_ids, context_entity_probs, context_entity_masking = None, None, None
+
         if self.args.num_db_types > 0:
             context_entity_ids = batch.context.feature[:, :, :self.args.features_size[0]].long()
-            question_entity_ids = batch.question.feature[:, :, :self.args.features_size[0]].long()
-
-            context_entity_masking = (context_entity_ids != self.args.features_default_val[0]).int()
-            question_entity_masking = (question_entity_ids != self.args.features_default_val[0]).int()
             
+            context_entity_masking = (context_entity_ids != self.args.features_default_val[0]).int()
+
             if self.args.entity_type_agg_method == 'weighted':
                 context_entity_probs = batch.context.feature[:, :, self.args.features_size[0]:self.args.features_size[0] + self.args.features_size[1]].long()
-                question_entity_probs = batch.question.feature[:, :, self.args.features_size[0]:self.args.features_size[0] + self.args.features_size[1]].long()
+
+        final_context, context_rnn_state = self.compute_final_embeddings(context, context_lengths, context_padding, context_entity_ids, context_entity_probs, context_entity_masking, mask_entities=False)
         
-        self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state = \
-            self.compute_final_embeddings(context, question,
-                                          context_entity_ids, question_entity_ids,
-                                          context_padding, question_padding,
-                                          context_lengths,
-                                          context_entity_masking, question_entity_masking,
-                                          context_entity_probs, question_entity_probs)
-
-        context_rnn_state_entities_masked = None
-        if self.args.use_encoder_loss:
-            _, _, context_rnn_state_entities_masked, _, _ = \
-                self.compute_final_embeddings(context, question,
-                                              context_entity_ids, question_entity_ids,
-                                              context_padding, question_padding,
-                                              context_lengths,
-                                              context_entity_masking, question_entity_masking,
-                                              context_entity_probs, question_entity_probs,
-                                              mask_entities=True)
-
-
-        return self_attended_context, final_context, context_rnn_state, final_question, question_rnn_state, context_rnn_state_entities_masked
+        return final_context, context_rnn_state
+        

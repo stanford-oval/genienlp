@@ -1,3 +1,35 @@
+0.6.0a1
+=======
+
+* Preprocessing of code inputs have changed, and code tokens are no longer treated specially.
+  Instead, they are treated as normal words and preprocessed using BPE. This allows using any
+  Huggingface tokenizer without changes. Tasks can still define certain tokens that should be
+  treated as special tokens. These are either added as new tokens, or further preprocessed
+  into non-ambiguous sequences of words.
+* Old models (MQAN and baselines) were removed. The GloVe vectors and other non-contextual
+  word embeddings were also removed. Old training options that were ineffective or unused
+  were removed.
+* The internals of the library have been refactored to simplify development allow using any
+  Huggingface Seq2Seq or MLM model. As a result, the name of the models have changed: `Seq2Seq`
+  is now `TransformerLSTM` and `Bart` is now `TransformerSeq2Seq`. Command-line flags changed as well.
+  
+NOTE: due to the change in model names and commnd-line flags, this release is not backward
+compatible with models trained with genienlp <= 0.5.0
+
+0.5.0
+=====
+
+* Paraphrasing and training was made much faster, with improved GPU usage and by removing
+  redundant tokenization in the hot-paraphrase path [#37, #38, #47].
+* The transformers library was updated to 4.0; PyTorch dependency increased to 1.6 [#44, #59, #62].
+* New models: BART, mBART, mT5. As part of this work, the model code was refactored to be more consistent
+  with Huggingface models and generation code [#46, #62].
+* Paraphrasing scripts are now proper subcommands of genienlp [#53].
+* It is now possible to fine-tune MBart and Marian models for neural machine translation
+  and sentence denoising [#54].
+* genienlp server can now operate in batch mode, improving GPU utilization [#58].
+* Misc bug and documentation fixes [#39, #40, #41, #43, #48, #55, #58].
+
 0.4.0
 =====
 

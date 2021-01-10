@@ -32,11 +32,21 @@ CJK_ADDONS = [ord(u"\u3001")]
 def is_cjk_char(cp):
   return cp in CJK_ADDONS or any([range[0] <= cp <= range[1] for range in CJK_RANGES])
 
+
+ENTITY_REGEX = re.compile('^[A-Z]+_')
+
+
 def is_entity(token):
-    return token[0].isupper()
+    return ENTITY_REGEX.match(token) is not None
+
 
 def is_device(token):
     return token[0] == '@'
+
+
+def is_entity_marker(token):
+    return token.startswith('^^')
+
 
 def process_id(ex):
     # Example instance
@@ -54,6 +64,38 @@ def process_id(ex):
     return id_
 
 
+def tokenize_cjk_chars(sentence):
+    output = []
+    i = 0
+    while i < len(sentence):
+        output.append(sentence[i])
+        if is_cjk_char(ord(sentence[i])) and i + 1 < len(sentence) and sentence[i + 1] != ' ':
+            output.append(' ')
+        elif not is_cjk_char(ord(sentence[i])) and i + 1 < len(sentence) and is_cjk_char(ord(sentence[i + 1])):
+            output.append(' ')
+        i += 1
+    
+    output = "".join(output)
+    output = output.replace('  ', ' ')
+    
+    return output
+
+def detokenize_cjk_chars(sentence):
+    output = []
+    i = 0
+    while i < len(sentence):
+        output.append(sentence[i])
+        # skip space after cjk chars only if followed by another cjk char
+        if is_cjk_char(ord(sentence[i])) and \
+                i+1 < len(sentence) and sentence[i+1] == ' ' and \
+                i+2 < len(sentence) and is_cjk_char(ord(sentence[i+2])):
+            i += 2
+        else:
+            i += 1
+            
+    return "".join(output)
+
+
 def chunk_file(input_src, chunk_files, chunk_size, num_chunks):
     chunk_id = 0
     num_lines_in_chunk = 0
@@ -67,7 +109,6 @@ def chunk_file(input_src, chunk_files, chunk_size, num_chunks):
                 num_lines_in_chunk = 0
                 if chunk_id == num_chunks:
                     break
-
     for file in all_out_files:
         file.close()
 
@@ -101,3 +142,4 @@ def process(args):
             break
     
     return chunk_examples
+

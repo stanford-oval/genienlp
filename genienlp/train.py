@@ -41,10 +41,11 @@ from pprint import pformat
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
+from transformers import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, AdamW
 
 from . import arguments
 from . import models
-from .util import elapsed_time, set_seed, preprocess_examples, get_trainable_params, make_data_loader,\
+from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader,\
     log_model_size, init_devices
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
@@ -145,32 +146,21 @@ def prepare_data(args, logger):
                     emb_file_list += ['aux']
                 task.bootleg.merge_embeds(emb_file_list)
 
-    if args.use_curriculum:
-        logger.info('Preprocessing auxiliary data for curriculum')
-        preprocess_examples(args, args.train_tasks, aux_sets, logger, train=True)
-    logger.info('Preprocessing training data')
-    preprocess_examples(args, args.train_tasks, train_sets, logger, train=True)
-    logger.info('Preprocessing validation data')
-    preprocess_examples(args, args.val_tasks, val_sets, logger, train=args.val_filter)
-
     return train_sets, val_sets, aux_sets
+
 
 accumulated_batch_lengths = 0
 
-def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None, pretraining=False,
-               train_context_embeddings_after=None, train_question_embeddings_after=None,
+
+def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None,
                gradient_accumulation_steps=1):
     # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of
     # the total batch size
     global accumulated_batch_lengths
     model.train()
-    model.module.set_train_context_embeddings(train_context_embeddings_after is not None and
-                                              iteration > train_context_embeddings_after)
-    model.module.set_train_question_embeddings(train_question_embeddings_after is not None and
-                                               iteration > train_question_embeddings_after)
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
-    loss = model(batch, pretraining=pretraining).loss
+    loss = model(batch).loss
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
     if len(devices) > 1:
@@ -185,14 +175,12 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
         for p in model.parameters():
             if p.grad is None:
                 continue
-            # print('p.grad = ', p.grad)
             p.grad /= accumulated_batch_lengths
         accumulated_batch_lengths = 0
         if grad_clip > 0.0:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
         opt.step()
-        if lr_scheduler is not None:
-            lr_scheduler.step()
+        lr_scheduler.step()
 
     return non_accumulated_loss, grad_norm
 
@@ -258,15 +246,20 @@ def do_validate(iteration, args, model, numericalizer, val_iters, *,
 
 
 def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
-               saver, logger, train_task, round_progress, task_progress, timestamp, log_dir):
+               saver, logger, train_task, round_progress, task_progress, timestamp, log_dir, model_parallel):
     should_save_best = False
     if deca_score is not None and (best_decascore is None or best_decascore < deca_score):
         best_decascore = deca_score
         should_save_best = True
 
-    # punch through the nn.DataParallel to access the real model, otherwise we won't be able
-    # to load this model later
-    model_state_dict = model.module.state_dict()
+    # DataParallel and ModelParallel are mutually exclusive
+    if model_parallel:
+        model_state_dict = model.state_dict()
+    else:
+        # punch through the nn.DataParallel to access the real model, otherwise we won't be able
+        # to load this model later
+        model_state_dict = model.module.state_dict()
+        
     model_state_dict = {k: v.cpu() for k, v in model_state_dict.items()}
 
     save_model_state_dict = {
@@ -279,16 +272,20 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
     saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
     if should_save_best:
         logger.info(
-            f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}found new best model')
+            f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}saving new best model')
         torch.save(save_model_state_dict, os.path.join(log_dir, 'best.pth'))
         torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
-        model.module.numericalizer.save(saver._savedir)
+        
+        if model_parallel:
+            model.numericalizer.save(saver._savedir)
+        else:
+            model.module.numericalizer.save(saver._savedir)
 
     return best_decascore
 
 
 def do_log_training_loss(iteration, loss, *,
-                         lr_scheduler, grad_norm, lr_rate,
+                         lr_scheduler, grad_norm,
                          num_examples, len_contexts, len_answers,
                          logger, train_task, round_progress, task_progress,
                          timestamp, writer, log_prefix):
@@ -301,8 +298,6 @@ def do_log_training_loss(iteration, loss, *,
 
         if lr_scheduler is not None:
             writer.add_scalar(f'{log_prefix}/lr', lr_scheduler.get_last_lr(), iteration)
-        else:
-            writer.add_scalar(f'{log_prefix}/lr', lr_rate, iteration)
         if grad_norm is not None:
             writer.add_scalar(f'{log_prefix}/norm', grad_norm, iteration)
 
@@ -329,9 +324,9 @@ def get_next_batch(train_iter, aux_iters, *, task, task_idx, task_fraction, use_
 
 def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations, numericalizer, *,
           log_every, val_every, save_every, rounds, val_sets, aux_sets, writer, logger, log_prefix,
-          start_iteration=1, rnd=1, best_decascore, use_curriculum, pretraining, db_unk_id):
+          start_iteration=1, rnd=1, best_decascore, use_curriculum):
     """main training function"""
-    local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, start_iteration
+    local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, 1
 
     train_iter_deep = deepcopy(train_iterations)
 
@@ -345,7 +340,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
         task_fraction[task] = 0.0
 
     saver = Saver(args.log_dir, args.max_to_keep)
-    epoch = 0
+    per_task_iterations = 0
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
@@ -357,17 +352,18 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
         'features_size': args.features_size,
         'features_default_val': args.features_default_val
     }
-    
-    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, paired=args.paired,max_pairs=args.max_pairs, train=True, **shared_kwargs))
+
+    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, train=True))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False, **shared_kwargs))
+    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     aux_iters = []
     if use_curriculum:
-        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True,**shared_kwargs))
+
+        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         
@@ -393,6 +389,9 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 task_done[task] = True
                 continue
 
+            # load batches even if (args.resume == True) and we are going to skip the iteration
+            # this makes runs that are resumed have the exact same behavior as runs that are
+            # finished in one pass (given that the random seed is the same).
             batch = get_next_batch(train_iter, aux_iters, task=task, task_idx=task_idx,
                                    task_fraction=task_fraction, use_curriculum=use_curriculum)
 
@@ -400,40 +399,24 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 # skip this iteration (this is done to ensure iterators are at the same position when resuming)
                 task_iteration[task] += 1
                 iteration += 1
-                return
+                if (iteration+1) % args.gradient_accumulation_steps == 0:
+                    lr_scheduler.step() # update the learning rate
+                continue
 
             task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
             round_progress = f'round_{rnd}:' if rounds else ''
 
-            # validate
-            if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
-                deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
-                                         train_task=task, round_progress=round_progress,
-                                         task_progress=task_progress, writer=writer, logger=logger)
-
-                # saving
-                if should_save(iteration, save_every):
-                    best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
-                                                saver=saver, logger=logger, train_task=task,
-                                                round_progress=round_progress, task_progress=task_progress,
-                                                timestamp=args.timestamp, log_dir=args.log_dir)
-
             # param update
             loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
-                                         grad_clip=args.grad_clip, pretraining=pretraining,
-                                         gradient_accumulation_steps=args.gradient_accumulation_steps,
-                                         train_context_embeddings_after=args.train_context_embeddings_after if
-                                                                        args.train_context_embeddings else None,
-                                         train_question_embeddings_after=args.train_question_embeddings_after if
-                                                                         args.train_question_embeddings else None)
+                                         grad_clip=args.grad_clip,
+                                         gradient_accumulation_steps=args.gradient_accumulation_steps)
             if loss is None:
-                logger.info(
-                    'Encountered NAN loss during training... Continue training ignoring the current batch')
+                logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
                 continue
             if loss < 1e-6:
                 zero_loss += 1
                 if zero_loss >= 100:
-                    logger.info('Found loss less than 1e-5 for 100 steps, stopping.')
+                    logger.info('Found loss less than 1e-6 for 100 steps, stopping.')
                     return
             else:
                 zero_loss = 0
@@ -456,7 +439,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 len_contexts /= log_every
                 len_answers /= log_every
                 do_log_training_loss(iteration, local_loss,
-                                     lr_scheduler=lr_scheduler, grad_norm=grad_norm, lr_rate=args.lr_rate,
+                                     lr_scheduler=lr_scheduler, grad_norm=grad_norm,
                                      num_examples=num_examples, len_contexts=len_contexts, len_answers=len_answers,
                                      logger=logger, writer=writer, train_task=task, round_progress=round_progress,
                                      task_progress=task_progress, timestamp=args.timestamp, log_prefix=log_prefix)
@@ -465,15 +448,28 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 len_answers = 0
                 local_loss = 0
 
+            # validate
+            if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
+                deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
+                                         train_task=task, round_progress=round_progress,
+                                         task_progress=task_progress, writer=writer, logger=logger)
+
+                # saving
+                if should_save(iteration, save_every):
+                    best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
+                                                saver=saver, logger=logger, train_task=task,
+                                                round_progress=round_progress, task_progress=task_progress,
+                                                timestamp=args.timestamp, log_dir=args.log_dir, model_parallel=args.model_parallel)
+
             # book keeping
             task_iteration[task] += 1
             iteration += 1
 
         # book keeping
-        epoch += 1
+        per_task_iterations += 1
         rnd += 1
 
-    logger.info(f'{log_prefix} is done after {epoch} epochs')
+    logger.info(f'{log_prefix} is done after {per_task_iterations-1} iterations')
 
 
 
@@ -489,30 +485,35 @@ def get_sgd_learning_rate(i, *, warmup):
 
 def init_opt(args, model, logger):
     if args.optimizer == 'adam':
-        if args.transformer_lr:
-            opt = torch.optim.Adam(model.params, lr=args.transformer_lr_multiply, betas=(0.9, 0.98), eps=1e-9,
-                                   weight_decay=args.weight_decay)
-            lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
-            scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
+        # Adam with transformer schedule has a different set of default hyperparameters:
+        if args.lr_schedule == 'transformer':
+            opt = torch.optim.Adam(model.params, lr=args.lr_multiply, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
         else:
-            opt = torch.optim.Adam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999),
-                                   weight_decay=args.weight_decay)
-            scheduler = None
+            opt = torch.optim.Adam(model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
+    elif args.optimizer == 'adamw':
+        opt = AdamW(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay)
     elif args.optimizer == 'radam':
         import radam
-        if args.transformer_lr:
-            logger.warning('--transformer_lr has no effect with RAdam optimizer, warmup is never applied')
-        opt = radam.RAdam(model.params, lr=args.lr_rate, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
-        scheduler = None
+        if args.warmup > 1:
+            logger.warning('With RAdam optimizer, warmup is never applied')
+        opt = radam.RAdam(model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
     else:
         assert args.optimizer == 'sgd'
-        if args.transformer_lr:
-            opt = torch.optim.SGD(model.params, lr=args.transformer_lr_multiply, weight_decay=args.weight_decay, )
-            lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
-            scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
-        else:
-            opt = torch.optim.SGD(model.params, lr=args.lr_rate, weight_decay=args.weight_decay, )
-            scheduler = None
+        opt = torch.optim.SGD(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay)
+    
+    if args.lr_schedule == 'transformer':
+        lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
+    elif args.lr_schedule == 'constant':
+        scheduler = get_constant_schedule_with_warmup(opt, num_warmup_steps=args.warmup)
+    elif args.lr_schedule == 'linear':
+        scheduler = get_linear_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations)//args.gradient_accumulation_steps, num_warmup_steps=args.warmup)
+    elif args.lr_schedule == 'sgd':
+        lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
+    else:
+        raise ValueError('Invalid learning rate scheduler.')
+    
 
     return opt, scheduler
 
@@ -531,6 +532,7 @@ def main(args):
     model_name = args.model
     model_class = getattr(models, model_name)
 
+    tasks = set(args.train_tasks) | set(args.val_tasks)
     train_sets, val_sets, aux_sets = prepare_data(args, logger)
 
     if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets) > 0):
@@ -546,17 +548,47 @@ def main(args):
                                                             args=args,
                                                             model_checkpoint_file=args.load,
                                                             vocab_sets=train_sets+val_sets,
+                                                            tasks=tasks,
                                                             device=devices[0])
+        model.add_new_vocab_from_data(tasks=tasks, resize_decoder=True)
     else:
         logger.info(f'Initializing a new {model_name}')
-        model = model_class(args=args, vocab_sets=train_sets+val_sets)
-    
-    model.add_new_vocab_from_data([train_sets+val_sets], resize_decoder=True)
+        model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks)
+        model.set_decoder_start_token_id(args.train_languages.split('+')[0])
+
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
-
-    model.to(devices[0])
-    model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
+    
+    if args.model_parallel:
+        n_layers = len(model.model.encoder.block)
+        layers = list(range(n_layers))
+        
+        if args.mp_device_ratio is not None:
+            if len(args.devices) > torch.cuda.device_count() or max(args.devices) >= torch.cuda.device_count():
+                raise ValueError('Provided GPU devices exceeds the number of available GPU')
+            
+            mp_device_ratio = [(device_ratio / sum(args.mp_device_ratio)) for device_ratio in args.mp_device_ratio]
+            layers_list = []
+            beg = 0
+            for i in range(len(args.devices)):
+                end = min(beg + math.ceil(n_layers * mp_device_ratio[i]), n_layers)
+                layers_list.append(layers[beg: end])
+                beg = end
+                
+            if any([len(val_list) == 0 for val_list in layers_list]):
+                raise ValueError('One device got no layers given the mp_device_ratio you provided'
+                                 'Hint: if you do not provide mp_device_ratio, layers will be distributed evenly')
+            
+        else:
+            n_blocks = int(math.ceil(n_layers / len(args.devices)))
+            layers_list = list(layers[i: i + n_blocks] for i in range(0, n_layers, n_blocks))
+            
+        device_map = dict(zip(args.devices, layers_list))
+        model.model.parallelize(device_map)
+        print('Model parallel is used with following device map: ', model.model.device_map)
+    else:
+        model.to(devices[0])
+        model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
     model.params = params
     ##########
 
@@ -565,29 +597,23 @@ def main(args):
 
     if args.resume:
         logger.info(f'Resuming training from {os.path.splitext(args.load)[0]}_optim.pth')
-        opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'))
+        # load optimizer's state_dict to cpu first to avoid GPU memory surge. Will crash with OOM if `map_location='cpu'` is not specified.
+        opt_state_dict = torch.load(os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_optim.pth'), map_location='cpu')
         start_iteration = opt_state_dict.pop('start_iteration')
         logger.info(f'Starting iteration is {start_iteration}')
         opt.load_state_dict(opt_state_dict)
 
     if hasattr(args, 'tensorboard') and args.tensorboard:
         logger.info(f'Initializing Writer')
-        writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration)
+        writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration, flush_secs=60)
     else:
         writer = None
 
-    if not args.resume and args.pretrain_context > 0:
-        pretrain_opt, pretrain_lr_scheduler = init_opt(args, model, logger)
-        train_iterations = [args.pretrain_context for _ in args.train_tasks]
-        train(args, devices, model, pretrain_opt, pretrain_lr_scheduler, train_sets,
-              train_iterations, model.module.numericalizer, val_sets=[], aux_sets=[], logger=logger, writer=writer,
-              log_every=args.log_every, val_every=None, save_every=None, use_curriculum=False,
-              rounds=len(train_sets) > 1, start_iteration=start_iteration, best_decascore=0,
-              pretraining=True, log_prefix='pretrain', db_unk_id=args.db_unk_id)
-
     train(args, devices, model, opt, lr_scheduler, train_sets,
-          args.train_iterations, model.module.numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
+          args.train_iterations, model.module.numericalizer if not args.model_parallel else model.numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
           log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
           rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
-          best_decascore=best_decascore,
-          pretraining=False, log_prefix='training', db_unk_id=args.db_unk_id)
+          best_decascore=best_decascore, log_prefix='training')
+
+    if writer is not None:
+        writer.close() # otherwise the last written value may not be flushed

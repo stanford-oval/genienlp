@@ -51,7 +51,7 @@ import torch
 
 from . import models
 from .tasks.registry import get_tasks
-from .util import set_seed, preprocess_examples, load_config_json, make_data_loader, log_model_size, init_devices, \
+from .util import set_seed, load_config_json, make_data_loader, log_model_size, init_devices, \
     have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
 from .validate import generate_with_model, calculate_and_reduce_metrics
 
@@ -93,7 +93,6 @@ def get_all_splits(args):
         for split in task_splits:
             assert (split.eval or split.test) and not split.train and not split.aux
             split = split.eval if split.eval else split.test
-            preprocess_examples(args, [task], [split], train=False)
             task_split_processed.append(split)
         splits.append(task_split_processed)
 
@@ -122,11 +121,11 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
             for index, set_ in enumerate(val_set):
-                loader, original_order = make_data_loader(set_, numericalizer, bs, device, train=False, **shared_kwargs)
+                loader, original_order = make_data_loader(set_, numericalizer, bs, device, train=False, return_original_order=True)
                 task_iter.append((task, task_languages[index], loader, original_order))
         # single language task or no separate eval
         else:
-           loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device, train=False, **shared_kwargs)
+           loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device, train=False, return_original_order=True)
            task_iter.append((task, task_languages, loader, original_order))
 
         iters.extend(task_iter)
@@ -134,16 +133,24 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
 
     return iters
 
+
 def run(args, device):
     Model = getattr(models, args.model)
     model, _ = Model.from_pretrained(args.path,
                                      model_checkpoint_file=args.checkpoint_name,
                                      args=args,
-                                     device=device
+                                     device=device,
+                                     tasks=args.tasks,
                                     )
+    
+    if args.pred_languages[0] is not None:
+        model.set_decoder_start_token_id(args.pred_languages[0].split('+')[0])
+    else:
+        # use English as default
+        model.set_decoder_start_token_id('en')
 
     val_sets = get_all_splits(args)
-    model.add_new_vocab_from_data(val_sets)
+    model.add_new_vocab_from_data(args.tasks)
     if args.half_precision:
         model.half()
 
@@ -181,7 +188,7 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            _, predictions, answers, contexts, _ = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name, original_order=original_order)
+            _, predictions, answers, contexts = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name, original_order=original_order)
                 
             if len(answers) > 0:
                 metrics_to_compute = task.metrics
@@ -276,6 +283,8 @@ def parse_argv(parser):
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
+    parser.add_argument("--num_beam_groups", type=int, nargs='+', default=[1], help='1 disables diverse beam seach')
+    parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
     parser.add_argument("--half_precision", action='store_true', help='If True, will use half precision on all tensors and calculations.')
 
@@ -288,6 +297,10 @@ def adjust_multilingual_eval(args):
 
     if args.pred_languages is None:
         args.pred_languages = [None for _ in range(len(args.task_names))]
+        
+    if 'mbart' in args.pretrained_model:
+        if args.pred_languages[0] and len(args.pred_languages[0].split('+')) != 1:
+            raise ValueError('For now we only support single language prediction with mbart models')
 
     # preserve backward compatibility for single language tasks
     for i, task_name in enumerate(args.task_names):

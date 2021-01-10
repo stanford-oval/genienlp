@@ -27,4 +27,5 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from .general_seq2seq import Transformer2LSTM, Bart, MBart, MT5
+from .transformer_lstm import TransformerLSTM
+from .transformer_seq2seq import TransformerSeq2Seq

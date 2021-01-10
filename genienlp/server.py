@@ -38,9 +38,7 @@ from pprint import pformat
 import torch
 
 from . import models
-from .data_utils.example import NumericalizedExamples
-from .data_utils.numericalizer.sequential_field import SequentialField
-from .tasks.generic_dataset import Example
+from .data_utils.example import Example, NumericalizedExamples
 from .tasks.registry import get_tasks
 from .util import set_seed, init_devices, load_config_json, log_model_size
 from .validate import generate_with_model
@@ -58,27 +56,10 @@ class Server:
         self._cached_tasks = dict()
 
     def numericalize_examples(self, ex):
-        self.model.add_new_vocab_from_data([[ex]])
 
-        all_numericalized = NumericalizedExamples.from_examples(ex, self.numericalizer, device=self.device,
-                                   append_question_to_context_too=self.args.append_question_to_context_too,
-                                   override_question=self.args.override_question,
-                                   override_context=self.args.override_context,
-                                   features=self.args.features,
-                                   features_size=self.args.features_size,
-                                   features_default_val=self.args.features_default_val
-                                   )
-
-        all_f = []
-        for i in range(len(all_numericalized.example_id)):
-            all_f.append(NumericalizedExamples(example_id=[all_numericalized.example_id[i]],
-                                context=SequentialField(value=all_numericalized.context.value[i], length=all_numericalized.context.length[i], limited=all_numericalized.context.limited[i], feature=all_numericalized.context.feature[i]),
-                                question=SequentialField(value=all_numericalized.question.value[i], length=all_numericalized.question.length[i], limited=all_numericalized.question.limited[i], feature=all_numericalized.question.feature[i]),
-                                answer=SequentialField(value=all_numericalized.answer.value[i], length=all_numericalized.answer.length[i], limited=all_numericalized.answer.limited[i], feature=all_numericalized.answer.feature[i]),
-                                decoder_vocab=all_numericalized.decoder_vocab, device=self.device, padding_function=self.numericalizer.pad))
-
-        # batch of size 1
-        return NumericalizedExamples.collate_batches(all_f)
+        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer)
+        # make a single batch with all examples
+        return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
 
     def handle_request(self, line):
         request = json.loads(line)
@@ -100,9 +81,10 @@ class Server:
                 if not question:
                     question = task.default_question
 
-                ex = Example.from_raw(str(example_id), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
+                ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
                 examples.append(ex)
 
+            self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples(examples)
             # it is a single batch, so wrap it in []
             predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
@@ -116,13 +98,15 @@ class Server:
             question = request['question']
             if not question:
                 question = task.default_question
-                
+
             if 'answer' in request.keys():
                 answer = request['answer']
             else:
                 answer = ''
-            ex = Example.from_raw(str(request['id']), context, question, answer, tokenize=task.tokenize, lower=self.args.lower)
 
+            ex = Example.from_raw(str(request['id']), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
+
+            self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples([ex])
             predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
 
@@ -188,6 +172,7 @@ def parse_argv(parser):
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
+    parser.add_argument('--locale', default='en', help='locale tag of the language to parse')
 
 
 def main(args):
@@ -211,6 +196,8 @@ def main(args):
                                      args=args,
                                      device=device
                                     )
+
+    model.set_decoder_start_token_id(args.locale)
 
     
     model.to(device)

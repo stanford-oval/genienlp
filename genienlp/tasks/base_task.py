@@ -29,7 +29,6 @@
 
 
 from . import generic_dataset
-import revtok
 
 
 class BaseTask:
@@ -42,8 +41,10 @@ class BaseTask:
 
     def __init__(self, name, args):
         self.name = name
-        self.force_subword_tokenize = args.force_subword_tokenize
-        self.append_question_to_context_too = args.append_question_to_context_too
+        # special task-specific tokens that should not be subword tokenized
+        self.special_tokens = set()
+        self.override_context = args.override_context
+        self.override_question = args.override_question
 
     @property
     def default_question(self):
@@ -52,14 +53,6 @@ class BaseTask:
     @property
     def default_context(self):
         return ''
-
-    def tokenize(self, sentence, field_name=None):
-        if not sentence:
-            return [], None
-        return revtok.tokenize(sentence), None
-
-    def detokenize(self, tokenized, field_name=None):
-        return revtok.detokenize(tokenized)
 
     def get_splits(self, root, **kwargs):
         """
@@ -70,18 +63,17 @@ class BaseTask:
         :param kwargs: other arguments to pass to the Dataset
         :return: a list of text.Dataset
         """
-        return generic_dataset.JSON.splits(root=root, name=self.name, tokenize=self.tokenize, **kwargs)
+        return generic_dataset.JSON.splits(root=root, name=self.name, **kwargs)
 
-    def preprocess_example(self, ex, train=False, max_context_length=None):
-        """
-        Preprocess a given example, in a task specific way.
+    def postprocess_answer(self, answer):
+        return answer
 
-        Returns the modified example, or None if the example should be dropped from the dataset
-
-        :param ex: the text.Example to preprocess
-        :return: a new Example or None
-        """
-        return ex
+    def preprocess_field(self, sentence, field_name=None):
+        if self.override_context is not None and field_name == 'context':
+            return self.override_context
+        if self.override_question is not None and field_name == 'question':
+            return self.override_question
+        return sentence
 
     @property
     def metrics(self):

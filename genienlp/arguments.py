@@ -37,7 +37,8 @@ import subprocess
 from .tasks.registry import get_tasks
 from .util import have_multilingual
 from .data_utils.example import VALID_FEATURE_FIELDS
-from .paraphrase.transformers_utils import BART_MODEL_LIST, MBART_MODEL_LIST, MT5_MODEL_LIST
+
+from .paraphrase.transformers_utils import MODEL_PARALLEL_SUPPORTED_MODELS
 
 
 logger = logging.getLogger(__name__)
@@ -68,48 +69,40 @@ def parse_argv(parser):
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
 
-    parser.add_argument('--train_languages', type=str,
-                        help='used to specify dataset languages used during training for multilingual tasks'
+    parser.add_argument('--train_languages', type=str, default='en',
+                        help='Specify dataset languages used during training for multilingual tasks'
                              'multiple languages for each task should be concatenated with +')
-    parser.add_argument('--eval_languages', type=str,
-                        help='used to specify dataset languages used during validation for multilingual tasks'
+    parser.add_argument('--eval_languages', type=str, default='en',
+                        help='Specify dataset languages used during validation for multilingual tasks'
                              'multiple languages for each task should be concatenated with +')
 
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training',
                         required=True)
     parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
-    #TODO rename to train_batch_size; keeping it for now for backward compatibility
-    parser.add_argument('--train_batch_tokens', nargs='+', default=[4000], type=int,
+    # TODO rename to train_batch_size; keeping it for now for backward compatibility
+    parser.add_argument('--train_batch_tokens', nargs='+', default=[400], type=int,
                         help='Number of tokens to use for dynamic batching, corresponding to tasks in train tasks.'
                         'If sentence_batching is used, this will be interpreted as number of examples.')
     parser.add_argument('--jump_start', default=0, type=int, help='number of iterations to give jump started tasks')
     parser.add_argument('--n_jump_start', default=0, type=int, help='how many tasks to jump start (presented in order)')
-    parser.add_argument('--num_print', default=15, type=int,
+    parser.add_argument('--num_print', default=10, type=int,
                         help='how many validation examples with greedy output to print to std out')
 
     parser.add_argument('--no_tensorboard', action='store_false', dest='tensorboard',
                         help='Turn off tensorboard logging')
     parser.add_argument('--tensorboard_dir', default=None,
                         help='Directory where to save Tensorboard logs (defaults to --save)')
-    parser.add_argument('--max_to_keep', default=5, type=int, help='number of checkpoints to keep')
-    parser.add_argument('--log_every', default=int(1e2), type=int, help='how often to log results in # of iterations')
-    parser.add_argument('--save_every', default=int(1e3), type=int,
+    parser.add_argument('--max_to_keep', default=3, type=int, help='number of checkpoints to keep')
+    parser.add_argument('--log_every', default=100, type=int, help='how often to log results in # of iterations')
+    parser.add_argument('--save_every', default=1000, type=int,
                         help='how often to save a checkpoint in # of iterations')
 
     parser.add_argument('--val_tasks', nargs='+', type=str, dest='val_task_names',
                         help='tasks to collect evaluation metrics for')
-    parser.add_argument('--val_every', default=int(1e3), type=int,
+    parser.add_argument('--val_every', default=1000, type=int,
                         help='how often to run validation in # of iterations')
-    parser.add_argument('--val_no_filter', action='store_false', dest='val_filter',
-                        help='whether to allow filtering on the validation sets')
-    parser.add_argument('--val_batch_size', nargs='+', default=[4000], type=int,
+    parser.add_argument('--val_batch_size', nargs='+', default=[3000], type=int,
                         help='Number of tokens in each batch for validation, corresponding to tasks in --val_tasks')
-    
-    parser.add_argument('--paired', action='store_true',
-                        help='Pair related examples before numericalizing the input (e.g. training with synthetic and paraphrase '
-                             'sentence pairs for almond task)')
-    parser.add_argument('--max_pairs', type=int, default=1000000,
-                        help='Maximum number of pairs to make for each example group')
     
     parser.add_argument('--sentence_batching', action='store_true',
                         help='Batch same sentences together (used for multilingual tasks)')
@@ -123,12 +116,6 @@ def parse_argv(parser):
     parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
     parser.add_argument('--max_generative_vocab', default=50000, type=int,
                         help='max vocabulary for the generative softmax')
-    parser.add_argument('--max_train_context_length', default=500, type=int,
-                        help='maximum length of the contexts during training')
-    parser.add_argument('--max_val_context_length', default=500, type=int,
-                        help='maximum length of the contexts during validation')
-    parser.add_argument('--max_answer_length', default=50, type=int,
-                        help='maximum length of answers during training and validation')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument('--preserve_case', action='store_false', dest='lower',
                         help='whether to preserve casing for all text')
@@ -143,24 +130,13 @@ def parse_argv(parser):
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
+    parser.add_argument("--num_beam_groups", type=int, nargs='+', default=[1], help='1 disables diverse beam seach')
+    parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
-    parser.add_argument("--almond_has_multiple_programs", action='store_true', help='Indicate if almond dataset has multiple programs for each sentence')
-
-    parser.add_argument('--model', type=str, choices=['Transformer2LSTM', 'Bart', 'MT5', 'MBart'], default='Transformer2LSTM', help='which model to import')
-    parser.add_argument('--seq2seq_encoder', type=str, choices=['MQANEncoder', 'BiLSTM', 'Identity', 'Coattention'],
-                        default='MQANEncoder', help='which encoder to use for the Seq2Seq model')
-    parser.add_argument('--seq2seq_decoder', type=str, choices=['MQANDecoder'] + BART_MODEL_LIST + MBART_MODEL_LIST + MT5_MODEL_LIST, default='MQANDecoder',
-                        help='which decoder to use for the Seq2Seq model')
-    parser.add_argument('--dimension', default=200, type=int, help='output dimensions for all layers')
-    parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers')
-    parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules')
-    parser.add_argument('--rnn_zero_state', default='average', choices=['zero', 'average', 'cls'],
-                        help='how to construct RNN zero state (for Identity encoder)')
-    parser.add_argument('--transformer_layers', default=2, type=int, help='number of layers for transformer modules')
-    parser.add_argument('--transformer_hidden', default=150, type=int, help='hidden size of the transformer modules')
-    parser.add_argument('--transformer_heads', default=3, type=int, help='number of heads for transformer modules')
-    parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model')
+    parser.add_argument('--model', type=str, choices=['TransformerLSTM', 'TransformerSeq2Seq'], default='TransformerLSTM', help='which model to import')
+    parser.add_argument('--pretrained_model', default=None,
+                        help='which pretrained model to use on the encoder side; choose a name from Huggingface models')
     
     parser.add_argument('--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)')
     
@@ -206,62 +182,48 @@ def parse_argv(parser):
     parser.add_argument('--features_size', nargs='+', type=int, default=[1, 1, 1], help='Max length of each feature vector. All features are padded up to this length')
     parser.add_argument('--features_default_val', nargs='+', type=float, default=[26933, 1.0, 1.0], help='Max length of each feature vector. All features are padded up to this length')
 
-    parser.add_argument('--encoder_embeddings', default=None,
-                        help='which word embedding to use on the encoder side; use `glove+char`, a bert-* model for pretrained BERT; or a xlm-roberta* model for Multi-lingual RoBERTa; '
-                             'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
-    parser.add_argument('--context_embeddings', default=None,
-                        help='which word embedding to use for the context; use a bert-* pretrained model for BERT; '
-                             'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
-    parser.add_argument('--question_embeddings', default=None,
-                        help='which word embedding to use for the question; use a bert-* pretrained model for BERT; '
-                             'multiple embeddings can be concatenated with +; use @0, @1 to specify untied copies')
-    parser.add_argument('--train_encoder_embeddings', action='store_true', default=False,
-                        help='back propagate into pretrained encoder embedding (recommended for BERT and XLM-RoBERTa)')
-    parser.add_argument('--train_context_embeddings', action='store_true', default=None,
-                        help='back propagate into pretrained context embedding (recommended for BERT and XLM-RoBERTa)')
-    parser.add_argument('--train_context_embeddings_after', type=int, default=0,
-                        help='back propagate into pretrained context embedding after the given iteration (default: '
-                             'immediately)')
-    parser.add_argument('--train_question_embeddings', action='store_true', default=None,
-                        help='back propagate into pretrained question embedding (recommended for BERT)')
-    parser.add_argument('--train_question_embeddings_after', type=int, default=0,
-                        help='back propagate into pretrained context embedding after the given iteration (default: '
-                             'immediately)')
-    parser.add_argument('--decoder_embeddings', default='glove+char',
-                        help='which pretrained word embedding to use on the decoder side')
-    parser.add_argument('--trainable_encoder_embeddings', default=0, type=int,
-                        help='size of trainable portion of encoder embedding (only for Coattention encoder)')
+    parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers (for TransformerLSTM)')
+    parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules ')
+    parser.add_argument('--rnn_zero_state', default='zero', choices=['zero', 'average', 'cls'],
+                        help='how to construct RNN zero state (for TransformerLSTM)')
+
     parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
-                        help='size of trainable portion of decoder embedding (0 or omit to disable)')
-    parser.add_argument('--pretrain_context', default=0, type=int,
-                        help='number of pretraining steps for the context encoder')
-    parser.add_argument('--pretrain_mlm_probability', default=0.15, type=int,
-                        help='probability of replacing a token with mask for MLM pretraining')
-    parser.add_argument('--force_subword_tokenize', action='store_true', default=False,
-                        help='force subword tokenization of code tokens too')
-    parser.add_argument('--append_question_to_context_too', action='store_true', default=False,
-                        help='')
-    parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
+                        help='size of decoder embedding (for TransformerLSTM)')
+    parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model (for TransformerLSTM)')
+
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
-    parser.add_argument('--almond_preprocess_context', action='store_true', default=False, help='')
-    parser.add_argument('--almond_dataset_specific_preprocess', type=str, default='none', choices=['none', 'multiwoz'],
-                        help='Applies dataset-sepcific preprocessing to context and answer fields, and postprocesses the model outputs back to the original form.')
+    parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
+    parser.add_argument("--almond_has_multiple_programs", action='store_true', help='Indicate if almond dataset has multiple programs for each sentence')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
+    parser.add_argument('--almond_detokenize_sentence', action='store_true',
+                        help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
+    parser.add_argument('--preprocess_special_tokens', action='store_true',
+                        help='convert special ThingTalk tokens to words')
+    
+    parser.add_argument('--model_parallel', action='store_true', help='Use model parallelization by spliting model weights across available gpus')
+    parser.add_argument('--mp_device_ratio', default=None, nargs='+', type=int, help='Provide the distribution ratio of model layers across gpus when using model_parallel'
+                                                                'e.g. "1 2 2 2" first device recieves half number of layers compared to other devices'
+                                                                'default is None meaning we distribute evenly on all available gpus')
 
-    parser.add_argument('--warmup', default=800, type=int, help='warmup for learning rate')
+    parser.add_argument('--warmup', default=1, type=int, help='warmup for learning rate. setting it to 1 disables warmup.')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
     parser.add_argument('--beta0', default=0.9, type=float,
-                        help='alternative momentum for Adam (only when not using transformer_lr)')
-    parser.add_argument('--optimizer', default='adam', choices=['adam', 'sgd', 'radam'], type=str,
+                        help='alternative momentum for Adam (only when not using transformer scheduler), and RAdam')
+    parser.add_argument('--optimizer', default='adam', choices=['adam', 'adamw', 'sgd', 'radam'], type=str,
                         help='optimizer to use')
-    parser.add_argument('--no_transformer_lr', action='store_false', dest='transformer_lr',
-                        help='turns off the transformer learning rate strategy')
-    parser.add_argument('--transformer_lr_multiply', default=1.0, type=float,
-                        help='multiplier for transformer learning rate (if using Adam)')
-    parser.add_argument('--lr_rate', default=0.001, type=float, help='fixed learning rate (if not using warmup)')
+    parser.add_argument('--lr_schedule', type=str, default='transformer', choices=['transformer', 'constant', 'linear', 'sgd'],
+                        help='The learning rate strategy. All of them can be used with or without warmup.')
+    parser.add_argument('--lr_multiply', default=0.01, type=float,
+                        help='Multiplier for the `transformer` learning rate scheduler, constant value for `constant` and maximum value for `linear` schedulers.')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
     parser.add_argument('--gradient_accumulation_steps', default=1, type=int, help='Number of accumulation steps. Useful to effectively get larger batch sizes.')
+
+    # Loss Truncation; introduced in https://arxiv.org/abs/2004.14589
+    parser.add_argument('--dropper_ratio', type=float, default=0.0, help='Ratio of dropped examples in the "Loss Truncation" algorithm. 0 disables truncation.')
+    parser.add_argument('--dropper_min_count', type=int, default=10000,
+                        help='Number of examples to see in the "Loss Truncation" algorithm before starting to drop high-loss examples.')
+
     parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside --args.save, usually set to best.pth')
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')
 
@@ -300,17 +262,10 @@ def post_parse_general(args):
                 args.val_task_names.append(t)
     if 'imdb' in args.val_task_names:
         args.val_task_names.remove('imdb')
+
+    args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime('%D-%H:%M:%S %Z')
     
-    args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
-    
-    def indices_of_multilingual(train_task_names):
-        indices = []
-        for i, task in enumerate(train_task_names):
-            if 'multilingual' in task:
-                indices.append(i)
-        return indices
-    
-    #TODO relax the following assertions by dropping samples from batches in Iterator
+    # TODO relax the following assertions by dropping samples from batches in Iterator
     if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_languages.split('+')) != 0:
         raise ValueError('Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
     if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
@@ -320,14 +275,22 @@ def post_parse_general(args):
     if len(args.features) != len(args.features_size):
         raise ValueError('You should specify max feature size for each feature you provided')
 
-    if args.override_context and args.append_question_to_context_too:
-        raise ValueError('You cannot use append_question_to_context_too when overriding context')
+    # TODO relax this assertion by allowing training on multiple languages
+    if 'mbart' in args.pretrained_model:
+        if len(args.train_languages.split('+')) != 1 or set(args.train_languages.split('+')) != set(args.eval_languages.split('+')):
+             raise ValueError('For now we only support single language training and evaluation with mbart models')
     
-    if args.paired and not args.sentence_batching:
-        logger.warning('Paired training only works if sentence_batching is used as well.'
-                       'Activating sentence_batching...')
-        args.sentence_batching = True
-
+    if args.warmup < 1:
+        raise ValueError('Warmup should be a positive integer.')
+    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
+        raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
+    
+    if args.model_parallel:
+        if args.model == 'TransformerLSTM':
+            raise ValueError('Model parallel is not supported for TransformerLSTM models')
+        elif args.model == 'TransformerSeq2Seq' and args.pretrained_model not in MODEL_PARALLEL_SUPPORTED_MODELS:
+            raise ValueError('Only the following models have model_parallel support: ', MODEL_PARALLEL_SUPPORTED_MODELS)
+    
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
             args.train_iterations = [1]
@@ -336,19 +299,14 @@ def post_parse_general(args):
         if len(args.train_batch_tokens) < len(args.train_task_names):
 
             args.train_batch_tokens = len(args.train_task_names) * args.train_batch_tokens
-    if args.sentence_batching:
-        if args.paired:
-            # TODO unify train_batch_tokens and train_batch_size
-            train_batch_size = int(args.train_batch_tokens[0])
-            num_train_langs = len(args.train_languages.split('+'))
-            new_batch_size = int(train_batch_size *
-                                 (1 + min(num_train_langs**2 - num_train_langs, args.max_pairs) / num_train_langs))
-            logger.warning('Using paired example training will increase effective batch size from {} to {}'.
-                            format(train_batch_size, new_batch_size))
-        
+
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
-    
+        
+    if args.mp_device_ratio is not None:
+        if len(args.mp_device_ratio) != len(args.devices):
+            raise ValueError('When using model_parallel number of provided devices must match the number of mp_device_ratio')
+
     # postprocess arguments
     if args.commit:
         args.commit = get_commit()
@@ -389,18 +347,7 @@ def post_parse_train_specific(args):
         raise ValueError('You should specify max feature size for each feature you provided')
 
 
-    if args.rnn_dimension is None:
-        args.rnn_dimension = args.dimension
-
-    if args.context_embeddings is None:
-        args.context_embeddings = args.encoder_embeddings
-    if args.question_embeddings is None:
-        args.question_embeddings = args.context_embeddings
-    if args.train_context_embeddings is None:
-        args.train_context_embeddings = args.train_encoder_embeddings
-    if args.train_question_embeddings is None:
-        args.train_question_embeddings = args.train_encoder_embeddings
-
+    args.log_dir = args.save
     if args.tensorboard_dir is None:
         args.tensorboard_dir = args.log_dir
     

@@ -30,7 +30,10 @@
 
 import torch
 import random
+import logging
 
+
+logger = logging.getLogger(__name__)
 
 class LengthSortedIterator(torch.utils.data.Sampler):
     """
@@ -56,7 +59,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             # sort while keeping track of the original order
             data_with_original_order = list(zip(data_source, range(len(data_source)))) # list of tuples of the form (data_source[i], i)
             # sort based on data_source 
-            sorted_data_with_original_order = sorted(data_with_original_order, key=lambda x: self.sort_key(x[0]))
+            sorted_data_with_original_order = sorted(data_with_original_order, key=lambda x: self.sort_key(x[0]), reverse=True) # sort from long to short
             # separate the two parts of each tuple
             self.data_source, self.original_order = tuple(zip(*sorted_data_with_original_order))
         else:
@@ -65,9 +68,21 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         self.shuffle_and_repeat = shuffle_and_repeat
         self.last_batch_start_index = 0
         self.last_batch_start_index = self._get_next_batch_start_index()
+        
+        if not self.shuffle_and_repeat:
+            # quickly iterate over self to calculate length
+            self.length = 0
+            for _ in self:
+                self.length += 1
+            # reset state
+            self.last_batch_start_index = 0
+            self.last_batch_start_index = self._get_next_batch_start_index()
+        else:
+            self.length = len(self.data_source)
+            
 
     def __len__(self):
-        return len(self.data_source)
+        return self.length
 
     def __iter__(self):
         self.last_batch_start_index = 0
@@ -78,16 +93,33 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         batch_of_indices = []
         current_batch_size = 0
         i = self._get_next_batch_start_index()
-        if i >= len(self):
+        if i >= len(self.data_source):
             # This is the end of the iterator
             assert not self.shuffle_and_repeat
             raise StopIteration
         while current_batch_size < self.batch_size:
             new_example = self.data_source[i]
+            if len(batch_of_indices) > 0:
+                longest_example = self.data_source[batch_of_indices[0]] # we sorted in descending order of length, so the first one is the longest
+            else:
+                longest_example = new_example # this is the first element in batch, and therefore the longest
+            examples_size = self.batch_size_fn(longest_example)
+            if examples_size > self.batch_size:
+                logger.warning('Skipping an example larger than batch size. Consider increasing the batch size to avoid this warning')
+                self.last_batch_start_index += 1
+                i += 1
+                continue
+                
+            new_batch_size = current_batch_size + self.batch_size_fn(longest_example)
+            if new_batch_size > self.batch_size:
+                # the new example would put us over the batch size limit
+                break
+
             batch_of_indices.append(i)
-            current_batch_size = self.batch_size_fn(new=new_example, count=len(batch_of_indices), sofar=current_batch_size)
+            current_batch_size = new_batch_size
             i += 1
-            if i == len(self):
+
+            if i == len(self.data_source):
                 break # don't start from i=0; there is a large difference between the length of the first and last element
 
         self.last_batch_start_index += len(batch_of_indices)
@@ -96,7 +128,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
     def _get_next_batch_start_index(self):
         if self.shuffle_and_repeat:
             # if self.groups > 1, this ensures that the start of each batch is a multiply of self.groups, i.e. where a group starts
-            return random.randrange(0, len(self) / self.groups) * self.groups
+            return random.randrange(0, len(self.data_source) / self.groups) * self.groups
         else:
             return self.last_batch_start_index
    

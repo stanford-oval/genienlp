@@ -54,7 +54,16 @@ def context_answer_len(ex):
     return interleave_keys(ex.context.length, ex.answer.length)
 
 def context_question_len(ex):
-    return ex.context.length + ex.question.length
+    return ex.context.length # question is already appended to context
+
+def input_then_output_len(ex):
+    """
+    sort by input length, break ties by output length
+    """
+    return (context_question_len(ex), answer_len(ex))
+
+def answer_len(ex):
+    return ex.answer.length
 
 def id_value(ex):
     id_ = ex.example_id.rsplit('/', 1)
@@ -62,21 +71,20 @@ def id_value(ex):
     return id_
 
 # batch_size funcs
-def input_tokens_fn(new, count, sofar):
-    return sofar + context_question_len(new)
+def input_tokens_fn(new):
+    return context_question_len(new)
 
-def token_batch_fn(new, count, sofar):
-    prev_max_len = sofar / (count - 1) if count > 1 else 0
-    return max(len(new.context), 5 * len(new.answer), prev_max_len) * count
+def all_tokens_fn(new):
+    return context_question_len(new) + answer_len(new)
 
-def default_batch_fn(new, count, sofar):
-    return count
+def default_batch_fn(new):
+    return 1
 
 
 
 class CQA(Dataset):
     
-    def __init__(self, examples, sort_key_fn=context_question_len, batch_size_fn=input_tokens_fn, groups=None, **kwargs):
+    def __init__(self, examples, sort_key_fn=input_then_output_len, batch_size_fn=input_tokens_fn, groups=None, **kwargs):
         self.sort_key_fn = sort_key_fn
         self.batch_size_fn = batch_size_fn
         self.groups = groups
@@ -88,7 +96,7 @@ class IMDb(CQA):
     name = 'imdb'
     dirname = 'aclImdb'
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         examples = []
         labels = {'neg': 'negative', 'pos': 'positive'}
         question = 'Is this review negative or positive?'
@@ -105,7 +113,7 @@ class IMDb(CQA):
                     answer = labels[label]
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=tokenize, lower=lower))
+                                                     lower=lower))
                     if subsample is not None and len(examples) > subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -143,7 +151,7 @@ class SST(CQA):
     name = 'sst'
     dirname = ''
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         examples = []
@@ -162,7 +170,7 @@ class SST(CQA):
                     answer = labels[int(parsed[0])]
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=tokenize, lower=lower))
+                                                     lower=lower))
 
                     if subsample is not None and len(examples) > subsample:
                         break
@@ -200,7 +208,7 @@ class SST(CQA):
 
 
 class TranslationDataset(CQA):
-    def __init__(self, path, exts, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False,
+    def __init__(self, path, exts, subsample=None, lower=False, cached_path=None, skip_cache=False,
                  **kwargs):
         """Create a TranslationDataset given paths and fields.
 
@@ -231,7 +239,7 @@ class TranslationDataset(CQA):
                         answer = trg_line
                         examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                          context, question, answer,
-                                                         tokenize=tokenize, lower=lower))
+                                                         lower=lower))
                         if subsample is not None and len(examples) >= subsample:
                             break
 
@@ -375,7 +383,7 @@ class SQuAD(CQA):
     name = 'squad'
     dirname = ''
 
-    def __init__(self, path, subsample=None, lower=False, tokenize=None, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         examples, all_answers, q_ids = [], [], []
@@ -399,7 +407,7 @@ class SQuAD(CQA):
                                 context = ' '.join(context.split())
                                 ex = Example.from_raw(make_example_id(self, qa['id']),
                                                       context, question, answer,
-                                                      tokenize=tokenize, lower=lower)
+                                                      lower=lower)
                             else:
                                 answer = qa['answers'][0]['text']
                                 all_answers.append([a['text'] for a in qa['answers']])
@@ -458,7 +466,7 @@ class SQuAD(CQA):
 
                                 ex = Example.from_raw(make_example_id(self, qa['id']),
                                                       ' '.join(tagged_context), question, ' '.join(tokenized_answer),
-                                                      tokenize=tokenize, lower=lower)
+                                                      lower=lower)
 
                             examples.append(ex)
                             if subsample is not None and len(examples) > subsample:
@@ -528,7 +536,7 @@ def fix_missing_period(line):
 
 
 class Summarization(CQA):
-    def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False,
+    def __init__(self, path, one_answer=True, subsample=None, lower=False,
                  cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
@@ -544,7 +552,7 @@ class Summarization(CQA):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=tokenize, lower=lower))
+                                                     lower=lower))
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -587,7 +595,7 @@ class Summarization(CQA):
                                     if line.startswith("@highlight"):
                                         is_highlight = True
                                     elif "@highlight" in line:
-                                        raise
+                                        raise ValueError()
                                     elif is_highlight:
                                         highlight.append(line)
                                     else:
@@ -685,7 +693,7 @@ class WikiSQL(CQA):
     name = 'wikisql'
     dirname = 'data'
 
-    def __init__(self, path, query_as_question=False, subsample=None, tokenize=None, lower=False,
+    def __init__(self, path, query_as_question=False, subsample=None, lower=False,
                  cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, 'query_as_question' if query_as_question else 'query_as_context',
                                   os.path.basename(path), str(subsample))
@@ -721,7 +729,7 @@ class WikiSQL(CQA):
                         context += f'-- {human_query}'
                     examples.append(Example.from_raw(make_example_id(self, idx),
                                                      context, question, answer,
-                                                     tokenize=tokenize, lower=lower))
+                                                     lower=lower))
                     all_answers.append({'sql': sql, 'header': header, 'answer': answer, 'table': table})
                     if subsample is not None and len(examples) > subsample:
                         break
@@ -801,7 +809,7 @@ class SRL(CQA):
         s = s.replace(" '", '')
         return ' '.join(s.split()).strip()
 
-    def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False,
+    def __init__(self, path, one_answer=True, subsample=None, lower=False,
                  cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
@@ -817,7 +825,7 @@ class SRL(CQA):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(all_answers)),
                                                      context, question, answer,
-                                                     tokenize=tokenize, lower=lower))
+                                                     lower=lower))
                     all_answers.append(aa)
                     if subsample is not None and len(examples) >= subsample:
                         break
@@ -951,7 +959,7 @@ class WinogradSchema(CQA):
     name = 'schema'
     dirname = ''
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False,
+    def __init__(self, path, subsample=None, lower=False,
                  cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         if os.path.exists(cache_name) and not skip_cache:
@@ -965,7 +973,7 @@ class WinogradSchema(CQA):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=tokenize, lower=lower))
+                                                     lower=lower))
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -1064,7 +1072,7 @@ class WOZ(CQA):
     name = 'woz'
     dirname = ''
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, description='woz.en',
+    def __init__(self, path, subsample=None, lower=False, description='woz.en',
                  cached_path=None, skip_cache=False, **kwargs):
         examples, all_answers = [], []
         cache_name = os.path.join(cached_path, os.path.basename(path),
@@ -1081,7 +1089,7 @@ class WOZ(CQA):
                         all_answers.append((ex['lang_dialogue_turn'], answer))
                         examples.append(Example.from_raw(make_example_id(self, woz_id),
                                                          context, question, answer,
-                                                         tokenize=tokenize, lower=lower))
+                                                         lower=lower))
 
                     if subsample is not None and len(examples) >= subsample:
                         break
@@ -1184,7 +1192,7 @@ class MultiNLI(CQA):
     name = 'multinli'
     dirname = 'multinli_1.0'
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, description='multinli.in.out',
+    def __init__(self, path, subsample=None, lower=False, description='multinli.in.out',
                  cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample), description)
         if os.path.exists(cache_name) and not skip_cache:
@@ -1199,7 +1207,7 @@ class MultiNLI(CQA):
                         context, question, answer = ex['context'], ex['question'], ex['answer']
                         examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                          context, question, answer,
-                                                         tokenize=tokenize, lower=lower))
+                                                         lower=lower))
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -1265,7 +1273,7 @@ class ZeroShotRE(CQA):
     dirname = 'relation_splits'
     name = 'zre'
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
@@ -1278,7 +1286,7 @@ class ZeroShotRE(CQA):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=tokenize, lower=lower))
+                                                     lower=lower))
 
                     if subsample is not None and len(examples) >= subsample:
                         break
@@ -1393,7 +1401,7 @@ class OntoNotesNER(CQA):
 
         return ' '.join(raw.split()).strip()
 
-    def __init__(self, path, one_answer=True, subsample=None, tokenize=None, lower=False,
+    def __init__(self, path, one_answer=True, subsample=None, lower=False,
                  path_to_files='.data/ontonotes-release-5.0/data/files',
                  subtask='all', nones=True, cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample), subtask, str(nones))
@@ -1413,7 +1421,7 @@ class OntoNotesNER(CQA):
                             context, question, answer = ex['context'], ex['question'], ex['answer']
                             examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                              context, question, answer,
-                                                             tokenize=tokenize, lower=lower))
+                                                             lower=lower))
 
                     if subsample is not None and len(examples) >= subsample:
                         break
@@ -1580,7 +1588,7 @@ class SNLI(CQA):
     dirname = 'snli_1.0'
     name = 'snli'
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
@@ -1594,7 +1602,7 @@ class SNLI(CQA):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=tokenize, lower=lower))
+                                                     lower=lower))
 
                     if subsample is not None and len(examples) >= subsample:
                         break
@@ -1649,7 +1657,7 @@ class SNLI(CQA):
 class JSON(CQA):
     name = 'json'
 
-    def __init__(self, path, subsample=None, tokenize=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         examples = []
@@ -1664,7 +1672,7 @@ class JSON(CQA):
                     context, question, answer = ex['context'], ex['question'], ex['answer']
                     examples.append(Example.from_raw(make_example_id(self, len(examples)),
                                                      context, question, answer,
-                                                     tokenize=tokenize, lower=lower))
+                                                     lower=lower))
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)

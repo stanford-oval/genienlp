@@ -29,9 +29,8 @@
 
 
 import logging
-from pprint import pformat
+from transformers import AutoModel, AutoTokenizer
 
-from .data_utils.embeddings import load_embeddings
 from .util import set_seed
 
 logger = logging.getLogger(__name__)
@@ -40,11 +39,12 @@ logger = logging.getLogger(__name__)
 def parse_argv(parser):
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('-d', '--destdir', default='.embeddings/', type=str, help='where to save embeddings.')
-    parser.add_argument('--embeddings', default='glove+char', help='which embeddings to download')
+    parser.add_argument('--embeddings', required=True, help='which embeddings to download')
 
 
 def main(args):
-    logger.info(f'Arguments:\n{pformat(vars(args))}')
-
     set_seed(args)
-    load_embeddings(args.destdir, args.embeddings, '', '', cache_only=True)
+
+    for embedding in args.embeddings.split('+'):
+        AutoTokenizer.from_pretrained(embedding, cache_dir=args.destdir)
+        AutoModel.from_pretrained(embedding, cache_dir=args.destdir)

@@ -34,7 +34,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='genienlp',
-    version='0.4.0',
+    version='0.6.0a1',
     
     packages=setuptools.find_packages(exclude=['tests']),
     entry_points= {
@@ -48,24 +48,23 @@ setuptools.setup(
 
     install_requires=[
         'numpy>=1.14.5',
-        'python-dateutil>=2.7.3',
-        'torch~=1.6',
-        'revtok==0.0.3',
+        'torch~=1.7.1',
         'tqdm~=4.0',
-        'tensorboardX==2.0.*',
+        'tensorboardX==2.1.*',
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
         'requests~=2.22',
-        'transformers==4.0.0',
-        'sentencepiece>=0.1.91,<0.2.0',
+        'transformers==4.1.1',
+        'sentencepiece==0.1.*',
         'mosestokenizer~=1.1',
         'matplotlib~=3.1',
         'seaborn~=0.9',
         'nltk~=3.4',
         'pytrie==0.3.1',
-        'wordfreq==2.3.2',
         'elasticsearch==7.9.1',
         'ujson==1.35',
         'marisa_trie==0.7.5'
+        'sentence-transformers==0.4.0',
+        'loss_dropper @ git+https://github.com/ddkang/loss_dropper#egg=loss_dropper'
     ]
 )

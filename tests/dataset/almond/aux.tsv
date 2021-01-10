@@ -1,6 +1,6 @@
-RS4000102404-3	show me what is its start times of a snapshot of my security camera	now => @security-camera.current_event => notify
-RP1594466-2	post new ig images subtitled tap to add caption to twitter	monitor ( @com.instagram.get_pictures ) => @com.twitter.post_picture param:caption:String = " tap to add caption " on param:picture_url:Entity(tt:picture) = param:picture_url:Entity(tt:picture)
-R1613083-0	alert me if sunset differs from TIME_0 and watch the work location of sunrise and sunset	edge ( monitor ( @org.thingpedia.weather.sunrise param:location:Location = location:work ) ) on not param:sunset_time:Time == TIME_0 => notify
-RS5000504454-2	send its captions of my recent instagram pictures via email	now => @com.instagram.get_pictures => @com.gmail.send_email on param:message:String = param:caption:String
-R1629363-5	what is the headline of a random xkcd comic ?	now => @com.xkcd.random_comic => notify
-RS5000308428-2	send me a pop up notification if my security camera change and the start time becomes DURATION_0 before this month	edge ( monitor ( @security-camera.current_event ) ) on param:start_time:Date == start_of unit:mon - DURATION_0 => notify
+RS4000102404-3	show me what is its start times of a snapshot of my security camera	@security-camera . current_event ( ) ;
+RP1594466-2	post new ig images subtitled tap to add caption to twitter	monitor ( @com.instagram . get_pictures ( ) ) => @com.twitter . post_picture ( caption = " tap to add caption " , picture_url = picture_url ) ;
+R1613083-0	alert me if sunset differs from TIME_0 and watch the work location of sunrise and sunset	monitor ( @org.thingpedia.weather . sunrise ( location = $location . work ) ) filter ! ( sunset_time == TIME_0 ) ;
+RS5000504454-2	send its captions of my recent instagram pictures via email	@com.instagram . get_pictures ( ) => @com.gmail . send_email ( message = caption ) ;
+R1629363-5	what is the headline of a random xkcd comic ?	@com.xkcd . random_comic ( ) ;
+RS5000308428-2	send me a pop up notification if my security camera change and the start time becomes DURATION_0 before this month	monitor ( @security-camera . current_event ( ) ) filter start_time == $start_of ( mon ) - DURATION_0 ;

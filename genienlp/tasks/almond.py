@@ -38,21 +38,28 @@ import marisa_trie
 import re
 from wordfreq import zipf_frequency
 
-from ..base_task import BaseTask
-from ..registry import register_task
-from ...data_utils.example import Feature
-from ...data_utils.database import Database
-from ...data_utils.database_utils import DOMAIN_TYPE_MAPPING
-from ...data_utils.bootleg import Bootleg
-from ..generic_dataset import CQA, context_question_len, token_batch_fn, default_batch_fn
-from ...data_utils.example import Example
-from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
-from ...util import multiwoz_specific_preprocess
+from .base_task import BaseTask
+from .registry import register_task
+from ..data_utils.example import Feature
+from ..data_utils.database import Database
+from ..data_utils.database_utils import DOMAIN_TYPE_MAPPING
+from ..data_utils.bootleg import Bootleg
+from .generic_dataset import CQA, context_question_len, token_batch_fn, default_batch_fn
+from ..data_utils.example import Example
+from almond_utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char
+from ..util import multiwoz_specific_preprocess
 
-from ..base_dataset import Split
-from .utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char, process, chunk_file
+from .base_dataset import Split
+from almond_utils import ISO_to_LANG, is_device, is_entity, process_id, is_cjk_char, process, chunk_file, quoted_pattern_maybe_space
 
-quoted_pattern_with_space = re.compile(r'\"\s([^"]*?)\s\"')
+from .base_task import BaseTask
+from .registry import register_task
+from .generic_dataset import CQA, default_batch_fn, input_then_output_len, input_tokens_fn
+from ..data_utils.example import Example
+from ..data_utils.progbar import progress_bar
+from .almond_utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, tokenize_cjk_chars, detokenize_cjk_chars
+
+from .base_dataset import Split
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +95,6 @@ class AlmondDataset(CQA):
                     n += 1
 
             max_examples = min(n, subsample) if subsample is not None else n
-            
             if num_workers > 0:
                 num_processes = min(num_workers, int(mp.cpu_count()))
                 logger.info(f'Using {num_processes} workers...')
@@ -210,16 +216,15 @@ class BaseAlmondTask(BaseTask):
     def __init__(self, name, args):
         super().__init__(name, args)
         self.args = args
-        self._preprocess_context = args.almond_preprocess_context
-        self._dataset_specific_preprocess = args.almond_dataset_specific_preprocess
-        self._almond_has_multiple_programs = args.almond_has_multiple_programs
-        
         no_feature_fields = ['answer']
         if self.is_contextual():
             no_feature_fields.append('context')
         else:
             no_feature_fields.append('question')
         self.no_feature_fields = no_feature_fields
+
+        self._almond_has_multiple_programs = args.almond_has_multiple_programs
+        self._almond_detokenize_sentence = args.almond_detokenize_sentence
 
         # initialize the database
         self.db = None
@@ -262,7 +267,7 @@ class BaseAlmondTask(BaseTask):
     
     @property
     def metrics(self):
-        return ['em', 'sm', 'bleu']
+        return ['em', 'sm', 'f1']
 
     def _is_program_field(self, field_name):
         raise NotImplementedError()
@@ -349,7 +354,7 @@ class BaseAlmondTask(BaseTask):
     
     def pad_features(self, features, max_size, pad_id):
         if len(features) > max_size:
-            tokens = features[:max_size]
+            features = features[:max_size]
         else:
             features += [pad_id] * (max_size - len(features))
         return features
@@ -399,37 +404,84 @@ class BaseAlmondTask(BaseTask):
         token_freqs = [default_val] * len(tokens)
         return token_freqs
 
-    def tokenize(self, sentence, field_name=None, answer=None):
+    def postprocess_answer(self, answer):
+    
+        if self._almond_detokenize_sentence:
+            # To make genienlp transparent to the tokenization done by genie-toolkit
+            # We tokenize answer here by adding whitespace between each CJK character
+            answer = tokenize_cjk_chars(answer)
+        
+        new_tokens = []
+        for token in answer.split():
+            if token.startswith('STRING_'):
+                token = 'QUOTED_' + token
+            elif token.startswith('ENTITY_'):
+                token = 'GENERIC_' + token
+            new_tokens.append(token)
+        new_answer = ' '.join(new_tokens)
+        return new_answer
+
+    def preprocess_field(self, sentence, field_name=None):
+        if self.override_context is not None and field_name == 'context':
+            return self.override_context
+        if self.override_question is not None and field_name == 'question':
+            return self.override_question
         if not sentence:
-            return [], [], []
+            return ''
 
-        if self.force_subword_tokenize:
-            return sentence.split(' '), None
-        
-        sentence = self._detokenize_cjk_chars(sentence)
-        
-        if self._dataset_specific_preprocess == 'multiwoz' and self._is_program_field(field_name):
-            sentence = multiwoz_specific_preprocess(sentence)
-            tokens = [t for t in sentence.split(' ') if len(t) > 0]
-        else:
-            tokens = [t for t in sentence.split(' ') if len(t) > 0]
-            if self._preprocess_context and field_name in ('context'):
-                tokens = self.preprocess_context(sentence)
+        tokens = sentence.split(' ')
+        is_program = self._is_program_field(field_name)
+        new_tokens = []
+        for token in tokens:
+            if is_entity(token) or (is_program and (is_device(token) or is_entity_marker(token))):
+                if token.startswith('QUOTED_STRING_'):
+                    token = token[len('QUOTED_'):]
+                elif token.startswith('GENERIC_ENTITY_'):
+                    token = token[len('GENERIC_'):]
 
-        if self._is_program_field(field_name):
-            mask = []
+                self.special_tokens.add(token)
+            new_tokens.append(token)
+        tokens = new_tokens
+        new_sentence = ' '.join(tokens)
+
+        if self._almond_detokenize_sentence:
+            
+            # BERT tokenizers by default add whitespace around any CJK character
+            # SPM-based tokenizers are trained on raw text and do better when recieve untokenized text
+            # In genienlp we detokenize CJK characters and leave tokenization to the model's tokenizer
+            # NOTE: input datasets for almond are usually pretokenized using genie-toolkit which
+            # inserts whitespace around any CJK character. This detokenization ensures that SPM-based tokenizers
+            # see the text without space between those characters
+            new_sentence = detokenize_cjk_chars(new_sentence)
+            tokens = new_sentence.split(' ')
+            
+            new_sentence = ''
+            in_string = False
+            for token in tokens:
+                if is_program:
+                    if token == '"':
+                        in_string = not in_string
+                    if not in_string:
+                        new_sentence += ' ' + token
+                        continue
+                if token in (',', '.', '?', '!', ':', ')', ']', '}') or token.startswith("'"):
+                    new_sentence += token
+                else:
+                    new_sentence += ' ' + token
+        elif is_program and field_name != 'answer':
+            new_tokens = []
             in_string = False
             for token in tokens:
                 if token == '"':
                     in_string = not in_string
-                    mask.append(False)
-                else:
-                    mask.append(in_string)
+                if in_string:
+                    new_tokens.append(token)
+                    continue
 
-            assert len(tokens) == len(mask)
-
-        else:
-            mask = [not is_entity(token) and not is_device(token) for token in tokens]
+                if not is_entity(token) and not is_entity_marker(token) and \
+                        not is_device(token):
+                    for word in token.split('_'):
+                        new_tokens.append(word)
 
         tokens_type_ids, tokens_type_probs, tokens_word_freqs = None, None, None
         
@@ -464,10 +516,7 @@ class BaseAlmondTask(BaseTask):
             zip_list.append(tokens_word_freqs)
         features = [Feature(*tup) for tup in zip(*zip_list)]
         
-        return tokens, mask, features
-
-    def detokenize(self, tokenized, field_name=None):
-        return ' '.join(tokenized)
+        return tokens, features
 
 
 @register_task('almond')
@@ -492,12 +541,16 @@ class Almond(BaseAlmondTask):
         context = sentence
         answer = target_code
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                preprocess=self.preprocess_field, lower=False)
 
 @register_task('natural_seq2seq')
 class NaturalSeq2Seq(BaseAlmondTask):
     """The Almond seqeunce to sequence task where both sequences are natural language
     i.e. no ThingTalk program. Paraphrasing and translation are examples of this task"""
+
+    @property
+    def metrics(self):
+        return ['bleu', 'em', 'nf1']
 
     def _is_program_field(self, field_name):
         return False
@@ -507,23 +560,19 @@ class NaturalSeq2Seq(BaseAlmondTask):
         if len(parts) == 2:
             input_sequence, target_sequence = parts
             _id = "id-null"
-        else:
+        elif len(parts) == 3:
             _id, input_sequence, target_sequence = parts
+        else:
+            raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
         question = 'translate from input to output'
         context = input_sequence
         answer = target_sequence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/natural_seq2seq'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
-    def tokenize(self, sentence, field_name=None):
-        if not sentence:
-            return [], []
-
-        tokens = [t for t in sentence.split(' ') if len(t) > 0]
-        return tokens, None # no mask since it will be ignored
 
 @register_task('contextual_almond')
 class ContextualAlmond(BaseAlmondTask):
@@ -543,7 +592,7 @@ class ContextualAlmond(BaseAlmondTask):
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                preprocess=self.preprocess_field, lower=False)
 
 
 @register_task('reverse_almond')
@@ -569,11 +618,32 @@ class ReverseAlmond(BaseTask):
         context = target_code
         answer = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                preprocess=self.preprocess_field, lower=False)
+
+# TODO add a similar preprocessing step to Multilingual dialogue tasks as well
+class BaseAlmondDialogueNLUTask(BaseAlmondTask):
+    def preprocess_field(self, sentence, field_name=None):
+        if not sentence:
+            return sentence
+
+        # remove the $dialogue at the start of the dialogue
+        # this is safe because we know we're processing dialogues, so the answer
+        # always starts with $dialogue and the context is either `null` or also
+        # starts with $dialogue
+        if field_name == 'context' and sentence.startswith('$dialogue '):
+            sentence = sentence[len('$dialogue '):]
+        if field_name == 'answer':
+            assert(sentence.startswith('$dialogue '))
+            sentence = sentence[len('$dialogue '):]
+
+        return super().preprocess_field(sentence, field_name)
+
+    def postprocess_answer(self, answer):
+        return '$dialogue ' + answer
 
 
 @register_task('almond_dialogue_nlu')
-class AlmondDialogueNLU(BaseAlmondTask):
+class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
     """Multi-turn NLU task for Almond dialogues
     (translate the user utterance to a formal representation, given the current
     state of the conversation)
@@ -593,14 +663,14 @@ class AlmondDialogueNLU(BaseAlmondTask):
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example, **kwargs)
 
 
 @register_task('almond_dialogue_nlu_agent')
-class AlmondDialogueNLUAgent(BaseAlmondTask):
+class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
     """Multi-turn NLU task for Almond dialogues, for the agent utterance
     (translate the agent utterance to a formal representation, given the current
     state of the conversation).
@@ -620,7 +690,7 @@ class AlmondDialogueNLUAgent(BaseAlmondTask):
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
@@ -649,7 +719,7 @@ class AlmondDialogueNLG(BaseAlmondTask):
         context = context + ' ' + target_code
         answer = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
@@ -668,7 +738,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
 
     @property
     def metrics(self):
-        return ['em', 'sm', 'bleu']
+        return ['em', 'f1']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
@@ -677,7 +747,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
         context = context
         answer = target_code
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
@@ -733,8 +803,9 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
             sort_key_fn = process_id
             batch_size_fn = default_batch_fn
         else:
-            sort_key_fn = context_question_len
-            batch_size_fn = token_batch_fn
+            # use default values for `sort_key_fn` and `batch_size_fn`
+            sort_key_fn = input_then_output_len
+            batch_size_fn = input_tokens_fn
             
         groups = len(all_datasets) if kwargs.get('sentence_batching') else None
         
@@ -746,7 +817,10 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
 
 @register_task('almond_multilingual')
 class AlmondMultiLingual(BaseAlmondMultiLingualTask):
-    
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self.lang_as_question = args.almond_lang_as_question
+
     def _is_program_field(self, field_name):
         return field_name == 'answer'
 
@@ -763,14 +837,14 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
         else:
             _id, sentence, target_code = parts
         language = ISO_to_LANG.get(dir_name, 'English').lower()
-        if kwargs.get('lang_as_question'):
+        if self.lang_as_question:
             question = 'translate from {} to thingtalk'.format(language)
         else:
             question = 'translate from english to thingtalk'
         context = sentence
         answer = target_code
         return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                preprocess=self.preprocess_field, lower=False)
 
 
 @register_task('almond_dialogue_multilingual_nlu')
@@ -796,7 +870,7 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                preprocess=self.preprocess_field, lower=False)
 
 
 @register_task('almond_dialogue_multilingual_nlg')
@@ -820,5 +894,5 @@ class AlmondDialogMultiLingualNLG(BaseAlmondTask):
         context = context + ' ' + target_code
         answer = sentence
         return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
-                                tokenize=self.tokenize, lower=False)
+                                preprocess=self.preprocess_field, lower=False)
 

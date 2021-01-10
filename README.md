@@ -11,9 +11,9 @@ The library is suitable for all NLP tasks that can be framed as Contextual Quest
 - text input as _question_
 - text or structured output as _answer_
 
-As the [decaNLP paper](https://arxiv.org/abs/1806.08730) shows, many different NLP tasks can be framed in this way.
-Genie primarily uses the library for semantic parsing, dialogue state tracking, and natural language generation 
-given a formal dialogue state, and this is what the models work best for.
+As the work by [McCann et al.](https://arxiv.org/abs/1806.08730) shows, many different NLP tasks can be framed in this way.
+Genie primarily uses the library for paraphrasing, translation, semantic parsing, and dialogue state tracking, and this is
+what the models work best for.
 
 ## Installation
 
@@ -24,23 +24,59 @@ pip3 install genienlp
 
 After installation, a `genienlp` command becomes available.
 
-Likely, you will also want to download the word embeddings ahead of time:
-
-```bash
-genienlp cache-embeddings --embeddings glove+char -d <embeddingdir>
-```
-
 ## Usage
 
-Train a model:
+### Training a semantic parser
+
+The general form is:
 ```bash
-genienlp train --tasks almond --train_iterations 50000 --embeddings <embeddingdir> --data <datadir> --save <modeldir>
+genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <modeldir> <flags>
 ```
 
-Generate predictions:
+The `<datadir>` should contain a single folder called "almond" (the name of the task). That folder should
+contain the files "train.tsv" and "eval.tsv" for train and dev set respectively.
+
+To train a BERT-LSTM (or other MLM-based model) use:
 ```bash
-genienlp predict --tasks almond --data <datadir> --path <modeldir>
+genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <modeldir> \
+  --model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embedding 50
 ```
+
+To train a BART or other Seq2Seq model, use:
+```bash
+genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <modeldir> \
+  --model TransformerSeq2Seq --pretrained_model facebook/bart-large --gradient_accumulation_steps 20
+```
+
+The default batch sizes are tuned for training on a single V100 GPU. Use `--train_batch_tokens` and `--val_batch_size`
+to control the batch sizes. See `genienlp train --help` for the full list of options.
+
+**NOTE**: the BERT-LSTM model used by the current version of the library is not comparable with the
+one used in our published paper (cited below), because the input preprocessing is different. If you
+wish to compare with published results you should use genienlp <= 0.5.0.
+
+### Inference on a semantic parser
+
+In batch mode:
+```bash
+genienlp predict --tasks almond --data <datadir> --path <modeldir> --eval_dir <output>
+```
+
+The `<datadir>` should contain a single folder called "almond" (the name of the task). That folder should
+contain the files "train.tsv" and "eval.tsv" for train and dev set respectively. The result of batch prediction
+will be saved in `<output>/almond/valid.tsv`, as a TSV file containing ID and prediction.
+
+In interactive mode:
+```bash
+genienlp server --path <modeldir>
+```
+
+Opens a TCP server that listens to requests, formatted as JSON objects containing `id` (the ID of the request),
+`task` (the name of the task), `context` and `question`. The server writes out JSON objects containing `id` and
+`answer`. The server listens to port 8401 by default, use `--port` to specify a different port or `--stdin` to
+use standard input/output instead of TCP.
+
+### Paraphrasing
 
 Train a paraphrasing model:
 ```bash
