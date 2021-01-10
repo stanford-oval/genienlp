@@ -79,14 +79,14 @@ class TransformerSeq2Seq(GenieModel):
         # We need to set language id for mBART models as it is used during tokenization and generation
         # For now we only support single language training and evaluation with mbart models
         lang_id = get_mbart_lang(lang)
-        self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[lang_id]
         self.numericalizer._tokenizer.set_src_lang_special_tokens(lang_id)
+        self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.cur_lang_code
+        
 
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
     
-
     def forward(self, *input, **kwargs):
         if self.training:
             batch = input[0]
@@ -112,7 +112,11 @@ class TransformerSeq2Seq(GenieModel):
             # (1) loss is averaged over sequence lengths first, then over the batch size. This way,
             # longer sequences in the batch do not drown shorter sequences.
             # (2) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
+            
+            
             outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
+            
+            
             ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
             loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)
             loss = loss.sum(dim=1) / answer_length # accounts for the case where BOS is removed
