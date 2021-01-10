@@ -56,9 +56,9 @@ class Bootleg(object):
         with open(jsonl_input_path, 'w') as fout:
             for ex in examples:
                 if self.is_contextual:
-                    fout.write(ujson.dumps({"sentence": ' '.join(ex.question)}) + '\n')
+                    fout.write(ujson.dumps({"sentence": ex.question}) + '\n')
                 else:
-                    fout.write(ujson.dumps({"sentence": ' '.join(ex.context)}) + '\n')
+                    fout.write(ujson.dumps({"sentence": ex.context}) + '\n')
 
     def extract_mentions(self, input_path):
         jsonl_input_path = input_path.rsplit('.', 1)[0] + '.jsonl'

@@ -40,11 +40,22 @@ class SequentialField(NamedTuple):
     value: Union[torch.tensor, List[int]]
     length: Union[torch.tensor, int]
     limited: Union[torch.tensor, List[int]]
-    feature: Union[torch.tensor, List[List[int]]]
+    feature: Union[torch.tensor, List[List[int]], None]
 
+# Feature is defined per token
+# Each field contains a list of possible values for that feature
 class Feature(NamedTuple):
     type_id: List[int] = None
     type_prob: List[float] = None
+
+    def __mul__(self, n):
+        return [self for _ in range(n)]
+
+    def flatten(self):
+        result = []
+        for field in VALID_FEATURE_FIELDS:
+            result += getattr(self, field)
+        return result
     
 VALID_FEATURE_FIELDS = tuple(Feature._fields)
 
@@ -52,29 +63,29 @@ VALID_FEATURE_FIELDS = tuple(Feature._fields)
 class Example(NamedTuple):
     example_id: str
     context: str
-    context_feature: Feature
+    context_feature: List[Feature]
     question: str
-    question_feature: Feature
+    question_feature: List[Feature]
     answer: str
-    answer_feature: Feature
+    answer_feature: List[Feature]
     context_plus_question: str
-    context_plus_question: Feature
+    context_plus_question_feature: List[Feature]
 
     @staticmethod
-    def from_raw(example_id: str, context: str, question: str, answer: str, preprocess = identity, lower=False):
+    def from_raw(example_id: str, context: str, question: str, answer: str, preprocess=identity, lower=False):
         args = [example_id]
 
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
             arg = unicodedata.normalize('NFD', arg)
-            sentence, features = preprocess(arg.rstrip('\n'), field_name=argname).strip()
+            sentence, features = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)
             if lower:
                 sentence = sentence.lower()
             args.append(sentence)
             args.append(features)
 
-        # create context_plus_question fields by appending context and question words
+        # create context_plus_question fields by concatenating context and question fields
         args.append(args[1] + ' ' + args[3])
-        args.append(args[2] + ' ' + args[4])
+        args.append(args[2] + args[4])
 
         return Example(*args)
     
@@ -102,8 +113,9 @@ class NumericalizedExamples(NamedTuple):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
 
-        tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question for ex in examples])
-        tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples])
+        tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question for ex in examples],
+                                                        [ex.context_plus_question_feature for ex in examples])
+        tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], None)
         for i in range(len(examples)):
             numericalized_examples.append(NumericalizedExamples([examples[i].example_id],
                                         tokenized_contexts[i],
@@ -114,7 +126,7 @@ class NumericalizedExamples(NamedTuple):
     def collate_batches(batches : Iterable['NumericalizedExamples'], numericalizer, device):
         example_id = []
 
-        context_values, context_lengths, context_limiteds, context_features= [], [], [], []
+        context_values, context_lengths, context_limiteds, context_features = [], [], [], []
         answer_values, answer_lengths, answer_limiteds, answer_features = [], [], [], []
 
         for batch in batches:
@@ -122,23 +134,24 @@ class NumericalizedExamples(NamedTuple):
             context_values.append(torch.tensor(batch.context.value, device=device))
             context_lengths.append(torch.tensor(batch.context.length, device=device))
             context_limiteds.append(torch.tensor(batch.context.limited, device=device))
-            context_features.append(torch.tensor(batch.context.feature, device=batch.device))
+            context_features.append(torch.tensor(batch.context.feature, device=device))
 
             answer_values.append(torch.tensor(batch.answer.value, device=device))
             answer_lengths.append(torch.tensor(batch.answer.length, device=device))
             answer_limiteds.append(torch.tensor(batch.answer.limited, device=device))
-            answer_features.append(torch.tensor(batch.answer.feature, device=batch.device))
+            # answer_features.append(torch.tensor(batch.answer.feature, device=device))
 
         context_values = numericalizer.pad(context_values, pad_id=numericalizer.pad_id)
         context_limiteds = numericalizer.pad(context_limiteds, pad_id=numericalizer.decoder_pad_id)
         context_lengths = torch.stack(context_lengths, dim=0)
-        context_features = padding_function(context_features)
-        answer_values = padding_function(answer_values)
-        answer_limiteds = padding_function(answer_limiteds)
+        
+        # change pad_id later
+        context_features = numericalizer.pad(context_features, pad_id=0)
+        
         answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
         answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)
         answer_lengths = torch.stack(answer_lengths, dim=0)
-        answer_features = padding_function(answer_features)
+        # answer_features = padding_function(answer_features)
 
         context = SequentialField(value=context_values,
                                   length=context_lengths,
@@ -149,7 +162,7 @@ class NumericalizedExamples(NamedTuple):
         answer = SequentialField(value=answer_values,
                                  length=answer_lengths,
                                  limited=answer_limiteds,
-                                 feature=answer_features)
+                                 feature=None)
 
 
         return NumericalizedExamples(example_id=example_id,

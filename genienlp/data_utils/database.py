@@ -29,7 +29,7 @@
 
 import logging
 import nltk
-nltk.download('averaged_perceptron_tagger')
+nltk.download('averaged_perceptron_tagger', quiet=True)
 
 from .database_utils import is_special_case, normalize_text, has_overlap
 
