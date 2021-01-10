@@ -34,12 +34,6 @@ def parse_argv(parser):
     parser.add_argument('--val_batch_size', nargs='+', default=[256], type=int,
                         help='Batch size for validation corresponding to tasks in val tasks')
 
-    parser.add_argument('--paired', action='store_true',
-                        help='Pair related examples before numericalizing the input (e.g. training with synthetic and paraphrase '
-                             'sentence pairs for almond task)')
-    parser.add_argument('--max_pairs', type=int, default=1000000,
-                        help='Maximum number of pairs to make for each example group')
-
     parser.add_argument('--sentence_batching', action='store_true',
                         help='Batch same sentences together (used for multilingual tasks)')
     parser.add_argument('--train_batch_size', type=int, default=0,
@@ -100,15 +94,14 @@ def parse_argv(parser):
     parser.add_argument('--features_default_val', nargs='+', type=float, default=[0, 1.0],
                         help='Max length of each feature vector. All features are padded up to this length')
     
-    parser.add_argument('--force_subword_tokenize', action='store_true', default=False,
-                        help='force subword tokenization of code tokens too')
-    parser.add_argument('--append_question_to_context_too', action='store_true', default=False,
-                        help='')
     parser.add_argument('--override_question', default=None, help='Override the question for all tasks')
     parser.add_argument('--override_context', default=None, help='Override the context for all tasks')
-    parser.add_argument('--almond_preprocess_context', action='store_true', default=False, help='')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
+    parser.add_argument('--almond_detokenize_sentence', action='store_true',
+                        help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
+    parser.add_argument('--preprocess_special_tokens', action='store_true',
+                        help='convert special ThingTalk tokens to words')
 
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     
@@ -136,7 +129,7 @@ def dump_bootleg_features(args, logger):
                                 'almond_lang_as_question': args.almond_lang_as_question,
                                 'num_workers': args.num_workers, 'features_size': args.features_size,
                                 'features_default_val': args.features_default_val,
-                                'verbose': args.verbose
+                                'verbose': args.verbose, 'preprocess_special_tokens': args.preprocess_special_tokens
                                 }
     
     for task in args.train_tasks:
@@ -147,7 +140,7 @@ def dump_bootleg_features(args, logger):
         kwargs['cached_path'] = os.path.join(args.cache, task.name)
         if args.use_curriculum:
             kwargs['curriculum'] = True
-        
+            
         logger.info(f'Adding {task.name} to training datasets')
         t0 = time.time()
         split = task.get_splits(args.data, lower=args.lower, **kwargs)
