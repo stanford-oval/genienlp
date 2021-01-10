@@ -35,7 +35,6 @@ import math
 import multiprocessing as mp
 import ujson
 import marisa_trie
-from wordfreq import zipf_frequency
 
 from ..data_utils.example import Feature
 from ..data_utils.database import Database
