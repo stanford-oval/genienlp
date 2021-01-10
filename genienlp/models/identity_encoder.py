@@ -31,8 +31,8 @@ import torch
 from torch import nn
 
 from transformers.models.bert.modeling_bert import BertConfig
-from ..paraphrase.transformers_utils import BootlegBertEncoder
 from .common import LayerNorm, LinearFeedforward
+from ..paraphrase.transformers_utils import BootlegBertEncoder
 
 
 class IdentityEncoder(nn.Module):
@@ -66,7 +66,7 @@ class IdentityEncoder(nn.Module):
             config = BertConfig.from_pretrained('bert-base-uncased', cache_dir=self.args.embeddings)
             config.num_hidden_layers = self.args.bootleg_kg_encoder_layer
             
-            self.context_BootlegBertEncoder = BootlegBertEncoder(config, self.encoder_embeddings.dimension, self.args.rnn_dimension,
+            self.context_BootlegBertEncoder = BootlegBertEncoder(config, config.hidden_size, self.args.rnn_dimension,
                                                          ent_emb_file=f'{self.args.bootleg_output_dir}/bootleg/eval/{self.args.bootleg_model}/ent_embedding.npy')
 
 
@@ -76,16 +76,16 @@ class IdentityEncoder(nn.Module):
         if self.args.retrieve_method == 'bootleg' and self.args.bootleg_integration == 2:
             # do not embed type_ids yet; in level 2 they are aggregated after contextual embeddings are formed
             # still pass entity_masking and mask_entities so that encoder loss would work (if used)
-            context_embedded = self.encoder_embeddings(context, entity_masking=context_entity_masking, mask_entities=mask_entities, padding=context_padding)
+            # context_embedded = self.encoder_embeddings(context, entity_masking=context_entity_masking, mask_entities=mask_entities, padding=context_padding)
+            context_embedded = self.encoder_embeddings(context)
 
             context_embedded_last_hidden_state, _pooled, context_embedded_hidden_states = self.context_BootlegBertEncoder(inputs_embeds=context_embedded.last_hidden_state, input_ent_ids=context_entity_ids)
 
-            context_embedded = context_embedded_last_hidden_state
         
         else:
             context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking, entity_probs=context_entity_probs, mask_entities=mask_entities, padding=context_padding)
         
-        final_context = context_embedded.last_hidden_state
+        final_context = context_embedded_last_hidden_state
 
         if self.projection is not None:
             final_context = self.dropout(final_context)

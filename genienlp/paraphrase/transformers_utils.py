@@ -764,3 +764,25 @@ class BootlegBertEncoder(BertPreTrainedModel):
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
 ###############
+
+
+# from ..models.common import Feedforward
+#
+# class BootlegEmbedding(torch.nn.Module):
+#     def __init__(self, ent_emb_file, output_dim, freeze=True):
+#         super().__init__()
+#         self.ent_emb_file = ent_emb_file
+#         ent_emb_matrix = torch.from_numpy(np.load(ent_emb_file))
+#         self.ent_embeddings = torch.nn.Embedding(*ent_emb_matrix.size(), padding_idx=0)
+#         self.ent_embeddings.weight.data.copy_(ent_emb_matrix)
+#
+#         if freeze:
+#             for param in self.ent_embeddings.parameters():
+#                 param.requires_grad = False
+#         self.ent_proj = Feedforward(ent_emb_matrix.size()[1], output_dim, bias=False)
+#
+#     def forward(self, input_ent_ids: torch.Tensor):
+#         ents_embeddings = self.ent_embeddings(input_ent_ids)
+#         ents_embeddings = self.ent_proj(ents_embeddings)
+#
+#         return ents_embeddings

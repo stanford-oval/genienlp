@@ -53,9 +53,14 @@ class TransformerSeq2Seq(GenieModel):
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
                                                                cache_dir=self.args.embeddings)
-                                    
-        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, max_generative_vocab=None,
-                                                      preprocess_special_tokens=args.preprocess_special_tokens)
+            
+        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model,
+                                                      max_generative_vocab=None,
+                                                      cache=args.embeddings,
+                                                      preprocess_special_tokens=args.preprocess_special_tokens,
+                                                      features_default_val=args.features_default_val,
+                                                      features_size=args.features_size
+                                                      )
 
         self.numericalizer.get_tokenizer(save_directory)
         
@@ -77,7 +82,6 @@ class TransformerSeq2Seq(GenieModel):
         self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[lang_id]
         self.numericalizer._tokenizer.set_src_lang_special_tokens(lang_id)
 
-            
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
