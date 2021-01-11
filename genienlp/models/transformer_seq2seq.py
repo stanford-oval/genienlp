@@ -37,7 +37,7 @@ from loss_dropper import LossDropper
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import get_mbart_lang
 from .base import GenieModel
-from ..util import ConfidenceOutput
+from ..util import ConfidenceFeatures
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +164,7 @@ class TransformerSeq2Seq(GenieModel):
         return generated
 
 
-    def confidence(self, batch, predictions, mc_dropout=False, mc_dropout_num=0) -> List[ConfidenceOutput]:
+    def confidence_features(self, batch, predictions, mc_dropout=False, mc_dropout_num=0) -> List[ConfidenceFeatures]:
         """
         predictions: Tensor of shape (batch_size, output_length)
         mc_dropout: if True, will activate dropout layers
@@ -213,10 +213,10 @@ class TransformerSeq2Seq(GenieModel):
                 drop_probs = torch.softmax(drop_logits[i], dim=1).gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]]
                 batch_drop_probs[i].append(drop_probs)
 
-        confidences = []
+        confidence_features = []
         for i in range(batch_size):
-            confidences.append(
-                        ConfidenceOutput(drop_logits=batch_drop_logits[i] if mc_dropout else None,
+            confidence_features.append(
+                        ConfidenceFeatures(drop_logits=batch_drop_logits[i] if mc_dropout else None,
                                          drop_probs=batch_drop_probs[i] if mc_dropout else None,
                                          gold_answer=batch.answer.value[i//repetition_factor][:batch.answer.length[i//repetition_factor]],
                                          prediction=predictions[i][:prediction_lengths[i]+1],  # +1 to include EOS
@@ -230,7 +230,7 @@ class TransformerSeq2Seq(GenieModel):
         if mc_dropout and should_revert_to_eval:
             self.eval()
         
-        return confidences
+        return confidence_features
 
     def get_length(self, prediction:Tensor):
         # skip the first token, because BOS is the same as EOS for some models

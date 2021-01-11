@@ -37,7 +37,7 @@ from .metrics import compute_metrics
 
 def generate_with_model(model, data_iterator, numericalizer, task,args,
                         output_predictions_only=False,
-                        output_confidences=False,
+                        output_confidence_features=False,
                         output_confidence_scores=False,
                         original_order=None,
                         confidence_estimator=None):
@@ -55,7 +55,7 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
         # get rid of the DataParallel wrapper
         model = model.module
     predictions = []
-    confidences = []
+    confidence_features = []
     example_ids = []
     answers = []
     contexts = []
@@ -64,7 +64,7 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
         batch_size = len(batch.example_id)
         raw_batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
         batch_prediction = [[] for _ in range(batch_size)]
-        batch_confidences = [[] for _ in range(batch_size)]
+        batch_confidence_features = [[] for _ in range(batch_size)]
 
         for hyperparameter_idx in range(len(args.temperature)):
             raw_partial_batch_prediction = model.generate(batch,
@@ -80,14 +80,14 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
                                                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                                                 do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
                                                 )
-            if output_confidences or output_confidence_scores:
-                partial_batch_confidences =  model.confidence(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout=args.mc_dropout, mc_dropout_num=args.mc_dropout_num)
+            if output_confidence_features or output_confidence_scores:
+                partial_batch_confidence_features =  model.confidence_features(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout=args.mc_dropout, mc_dropout_num=args.mc_dropout_num)
             partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction, task=task, field_name='answer')
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
                 raw_batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(raw_partial_batch_prediction[i])
-                if output_confidences or output_confidence_scores:
-                    batch_confidences[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_confidences[i])
+                if output_confidence_features or output_confidence_scores:
+                    batch_confidence_features[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_confidence_features[i])
         
         if not output_predictions_only:
             batch_answer = numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer')
@@ -96,11 +96,11 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
             batch_context = numericalizer.reverse(batch.context.value.data, task=task, field_name='context')
             contexts += batch_context
         predictions += batch_prediction
-        confidences += batch_confidences
+        confidence_features += batch_confidence_features
     
     if original_order is not None:
         # sort back to the original order
-        original_order, example_ids, predictions, answers, contexts, confidences = [list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidences)))))]
+        original_order, example_ids, predictions, answers, contexts, confidence_features = [list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidence_features)))))]
     
     # TODO calculate and return loss
     loss = None
@@ -110,10 +110,10 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
         output = (predictions, )
     else:
         output = (loss, example_ids, predictions, answers, contexts)
-    if output_confidences:
-        output = output + (confidences, )
+    if output_confidence_features:
+        output = output + (confidence_features, )
     if output_confidence_scores:
-        confidence_scores = confidence_estimator.estimate(confidences)
+        confidence_scores = confidence_estimator.estimate(confidence_features)
         output = output + (confidence_scores, )
 
     return output

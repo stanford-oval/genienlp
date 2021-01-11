@@ -105,7 +105,7 @@ class SpecialTokenMap:
         return s
 
 
-class ConfidenceOutput:
+class ConfidenceFeatures:
     """
     Contains all necessary features that are useful for calculating confidence of a single generated output
     """
@@ -131,7 +131,7 @@ class ConfidenceOutput:
         self.nodrop_probs = nodrop_probs.cpu()
         self.nodrop_entropies = nodrop_entropies.cpu()
 
-        self.first_mistake = ConfidenceOutput.find_first_mistake(gold_answer, prediction)
+        self.first_mistake = ConfidenceFeatures.find_first_mistake(gold_answer, prediction)
         self.context = context
 
     @staticmethod

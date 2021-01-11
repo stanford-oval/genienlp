@@ -38,7 +38,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_c
 from sklearn.model_selection import train_test_split
 import logging
 import os
-from .util import ConfidenceOutput
+from .util import ConfidenceFeatures
 
 logger = logging.getLogger(__name__)
 
@@ -168,14 +168,14 @@ def accuracy_at_pass_rate(labels, confidence_scores):
 
     return all_pass_rates, all_accuracies
 
-def oracle_score(confidence: ConfidenceOutput):
+def oracle_score(confidence: ConfidenceFeatures):
     label = ConfidenceEstimator.convert_to_labels([confidence])[0]
     # assign confidence scores randomly in (0, 0.5) for incorrect examples and in (0.5, 1) for correct ones.
     # This way, all correct exampels are ranked above all incorrect examples.
     oracle_confidence = label*(np.random.random()/2+0.5) + (1-label)*(np.random.random()/2)
     return oracle_confidence
 
-def evaluate_raw(dev_confidences: Iterable[ConfidenceOutput], featurizer: Callable):
+def evaluate_raw(dev_confidences: Iterable[ConfidenceFeatures], featurizer: Callable):
     """
     Evaluates scores directly, instead of feedeing them into a boosted tree
     """
@@ -189,7 +189,7 @@ def evaluate_raw(dev_confidences: Iterable[ConfidenceOutput], featurizer: Callab
     return precision, recall, pass_rate, accuracies, thresholds
 
 def parse_argv(parser):
-    parser.add_argument('--confidence_path', type=str, help='The path to the pickle file where the list of ConfidenceOutput objects is saved')
+    parser.add_argument('--confidence_path', type=str, help='The path to the pickle file where the list of ConfidenceFeatures objects is saved')
     parser.add_argument('--eval_metric', type=str, default='aucpr', choices=['aucpr'],
                         help='An xgboost metric. The metric which will be used to select the best model on the validation set.')
     parser.add_argument('--dev_split', type=float, default=0.2, help='The portion of the dataset to use for validation. The rest is used to train.')
@@ -202,11 +202,11 @@ class ConfidenceEstimator():
     def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str):
         raise NotImplementedError()
 
-    def convert_to_features(self, confidences: Iterable[ConfidenceOutput], train: bool = False):
+    def convert_to_features(self, confidences: Iterable[ConfidenceFeatures], train: bool = False):
         raise NotImplementedError()
 
     @staticmethod
-    def convert_to_labels(confidences: Iterable[ConfidenceOutput]):
+    def convert_to_labels(confidences: Iterable[ConfidenceFeatures]):
         labels = []
         for c in confidences:
             labels.append(c[0].first_mistake)
@@ -215,7 +215,7 @@ class ConfidenceEstimator():
         # logger.info('labels = %s', str(labels))
         return labels
 
-    def convert_to_dataset(self, confidences: Iterable[ConfidenceOutput], train :bool):
+    def convert_to_dataset(self, confidences: Iterable[ConfidenceFeatures], train :bool):
         labels = ConfidenceEstimator.convert_to_labels(confidences)
         features = self.convert_to_features(confidences, train)
 
@@ -224,7 +224,7 @@ class ConfidenceEstimator():
     def train_and_validate(self, train_features, train_labels, dev_features, dev_labels):
         raise NotImplementedError()
 
-    def estimate(self, confidences: Iterable[ConfidenceOutput]):
+    def estimate(self, confidences: Iterable[ConfidenceFeatures]):
         raise NotImplementedError()
 
     def evaluate(self, dev_features, dev_labels):
@@ -250,11 +250,11 @@ class RawConfidenceEstimator(ConfidenceEstimator):
 
         self.score = 0
 
-    def estimate(self, confidences: Iterable[ConfidenceOutput]):
+    def estimate(self, confidences: Iterable[ConfidenceFeatures]):
         confidence_scores = self.convert_to_features(confidences)
         return confidence_scores
 
-    def convert_to_features(self, confidences: Iterable[ConfidenceOutput], train: bool = False):
+    def convert_to_features(self, confidences: Iterable[ConfidenceFeatures], train: bool = False):
         features = [self.featurizer(c) for c in confidences]
         return features
 
@@ -341,7 +341,7 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
 
         return all_concats
 
-    def convert_to_features(self, confidences: Iterable[ConfidenceOutput], train: bool = False):
+    def convert_to_features(self, confidences: Iterable[ConfidenceFeatures], train: bool = False):
         # TODO check to make sure padding is always on the right hand side, not in the middle of features
         features = []
         for featurizer in self.featurizers:
@@ -403,7 +403,7 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
         return best_model, best_score, best_confusion_matrix, best_params
 
     @staticmethod
-    def convert_to_labels(confidences: Iterable[ConfidenceOutput]):
+    def convert_to_labels(confidences: Iterable[ConfidenceFeatures]):
         labels = []
         for c in confidences:
             labels.append(c[0].first_mistake)
@@ -412,13 +412,13 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
         # logger.info('labels = %s', str(labels))
         return labels
 
-    def convert_to_dataset(self, confidences: Iterable[ConfidenceOutput], train :bool):
+    def convert_to_dataset(self, confidences: Iterable[ConfidenceFeatures], train :bool):
         labels = ConfidenceEstimator.convert_to_labels(confidences)
         features = self.convert_to_features(confidences, train)
 
         return features, labels
 
-    def estimate(self, confidences: Iterable[ConfidenceOutput]):
+    def estimate(self, confidences: Iterable[ConfidenceFeatures]):
         features, labels = self.convert_to_dataset(confidences, train=False)
         dataset = xgb.DMatrix(data=features, label=labels)
         confidence_scores = TreeConfidenceEstimator._extract_confidence_scores(self.model, dataset)
