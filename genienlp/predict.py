@@ -170,50 +170,47 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            output_confidences = args.save_confidence_features or args.calibrator_path is not None
-            generation_outputs = generate_with_model(model, it, model.numericalizer, task, args,
-                                                     output_confidence_features=output_confidences,
-                                                     original_order=original_order)
-            
-            if output_confidences:
-                _, example_ids, predictions, answers, contexts, confidence_features = generation_outputs
-                if args.calibrator_path is not None:
-                    confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
-                    logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
-                    confidence_scores = confidence_estimator.estimate(confidence_features)
-                if args.save_confidence_features:
-                    with open(args.confidence_feature_path, 'wb') as f:
-                        pickle.dump(confidence_features, f, protocol=4)
+            if args.calibrator_path is not None:
+                confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
+                logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
             else:
-                _, example_ids, predictions, answers, contexts = generation_outputs
+                confidence_estimator = None
+            generation_output = generate_with_model(model, it, model.numericalizer, task, args,
+                                                     original_order=original_order,
+                                                     output_confidence_features=args.save_confidence_features,
+                                                     confidence_estimator=confidence_estimator)
+            
+            if args.save_confidence_features:
+                with open(args.confidence_feature_path, 'wb') as f:
+                    pickle.dump(generation_output.confidence_features, f, protocol=4)
 
             # write into file
             # TODO change to jsonl format
             with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
-                for i in range(len(example_ids)):
-                    line = example_ids[i] + '\t' + '\t'.join(predictions[i]) # all outputs separated by '\t'
+                for i in range(len(generation_output.example_ids)):
+                    line = generation_output.example_ids[i] + '\t' + '\t'.join(generation_output.predictions[i]) # all outputs separated by '\t'
                     if args.calibrator_path is not None:
-                        line += '\t' + str(confidence_scores[i])
+                        line += '\t' + str(generation_output.confidence_scores[i])
                     prediction_file.write(line + '\n')
 
-            if len(answers) > 0:
+            if len(generation_output.answers) > 0:
                 metrics_to_compute = task.metrics
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
-                metrics = calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args)
+                metrics = calculate_and_reduce_metrics(generation_output.predictions, generation_output.answers, metrics_to_compute, args)
 
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')
 
                 if not args.silent:
-                    for i, (c, p, a) in enumerate(zip(contexts, predictions, answers)):
+                    for i, (c, p, a) in enumerate(zip(generation_output.contexts, generation_output.predictions, generation_output.answers)):
                         log_string = f'\nContext {i+1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
                         if args.calibrator_path is not None:
-                            log_string += f'Confidence {i+1} : {confidence_scores[i]:.3f}\n'
+                            log_string += f'Confidence {i+1} : {generation_output.confidence_scores[i]:.3f}\n'
                         logger.info(log_string)
                     logger.info(metrics)
                     
-                task_scores[task].append((len(answers), metrics[task.metrics[0]]))
+                task_scores[task].append((len(generation_output.answers), metrics[task.metrics[0]]))
     
     for task in task_scores.keys():
         decaScore.append(sum([length * score for length, score in task_scores[task]]) / sum([length for length, score in task_scores[task]]))

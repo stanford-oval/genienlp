@@ -32,25 +32,26 @@ import sys
 import torch
 from collections import OrderedDict
 
+from .util import GenerationOutput
 from .metrics import compute_metrics
 
 
 def generate_with_model(model, data_iterator, numericalizer, task,args,
                         output_predictions_only=False,
                         output_confidence_features=False,
-                        output_confidence_scores=False,
                         original_order=None,
-                        confidence_estimator=None):
+                        confidence_estimator=None) -> GenerationOutput:
     """
     Inputs:
         original_order: List of indices. If provided, we will sort the results according to this order
+        confidence_estimator: if provided, will use it to calculate and output confidence scores
     Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
         loss
         predictions: a List of Lists of strings
         answers
         contexts
     """
-    assert not output_confidence_scores or confidence_estimator is not None, 'Cannot estimate confidences without an estimator'
+    output_confidence_scores = confidence_estimator is not None
     if isinstance(model, torch.nn.DataParallel):
         # get rid of the DataParallel wrapper
         model = model.module
@@ -104,17 +105,17 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
     
     # TODO calculate and return loss
     loss = None
-    output = ()
+    output = GenerationOutput(loss=loss)
 
     if output_predictions_only:
-        output = (predictions, )
+        output.predictions = predictions
     else:
-        output = (loss, example_ids, predictions, answers, contexts)
+        output.example_ids, output.predictions, output.answers, output.contexts = example_ids, predictions, answers, contexts
     if output_confidence_features:
-        output = output + (confidence_features, )
+        output.confidence_features = confidence_features
     if output_confidence_scores:
         confidence_scores = confidence_estimator.estimate(confidence_features)
-        output = output + (confidence_scores, )
+        output.confidence_scores = confidence_scores
 
     return output
 
@@ -149,10 +150,10 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
     with torch.no_grad():
         model.eval()
         names = ['beam search', 'answer', 'context']
-        loss, _, predictions, answers, contexts = generate_with_model(model, val_iter, numericalizer, task, args)
+        output = generate_with_model(model, val_iter, numericalizer, task, args)
 
-        metrics = calculate_and_reduce_metrics(predictions, answers, task.metrics, args)
-        results = [predictions, answers, contexts]
+        metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args)
+        results = [output.predictions, output.answers, output.contexts]
         print_results(names, results, num_print=num_print)
 
-        return loss, metrics
+        return output.loss, metrics

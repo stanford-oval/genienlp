@@ -89,18 +89,16 @@ class Server:
             batch = self.numericalize_examples(examples)
             # it is a single batch, so wrap it in []
             if self.args.calibrator_path is not None:
-                predictions, scores = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                   output_predictions_only=True,
-                                                  output_confidence_scores=True,
                                                   confidence_estimator=self.confidence_estimator)
 
-                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0], 'score': s} for (p, s) in zip(predictions, scores)]})
+                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0], 'score': s} for (p, s) in zip(output.predictions, output.confidence_scores)]})
             else:
-                predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                  output_predictions_only=True,
-                                                  output_confidence_scores=False)
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                  output_predictions_only=True)
 
-                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0]} for p in predictions]})
+                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0]} for p in output.predictions]})
             return response + '\n'
         else:
             context = request['context']
@@ -116,16 +114,14 @@ class Server:
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples([ex])
             if self.args.calibrator_path is not None:
-                predictions, scores = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                   output_predictions_only=True,
-                                                  output_confidence_scores=True,
                                                   confidence_estimator=self.confidence_estimator)
-                response = json.dumps(dict(id=request['id'], answer=predictions[0][0], score=scores[0]))
+                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=output.confidence_scores[0]))
             else:
-                predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                  output_predictions_only=True,
-                                                  output_confidence_scores=False)
-                response = json.dumps(dict(id=request['id'], answer=predictions[0][0]))
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                  output_predictions_only=True)
+                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0]))
             return response + '\n'
 
     async def handle_client(self, client_reader, client_writer):

@@ -36,7 +36,7 @@ import shutil
 import random
 import time
 import re
-from typing import List
+from typing import List, Optional
 import numpy as np
 import torch
 from transformers.models.mbart.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
@@ -166,6 +166,28 @@ class ConfidenceFeatures:
                 + ', nodrop_entropies=' + str(self.nodrop_entropies) \
                 + ', context=' + str(self.context) \
                 + '>'
+
+
+class GenerationOutput():
+    """
+    Contains all the information that the generation function may need to output
+    """
+
+    def __init__(self,
+                 loss: Optional[float] = None,
+                 example_ids: Optional[List] = None,
+                 predictions: Optional[List] = None,
+                 answers: Optional[List] = None,
+                 contexts: Optional[List] = None,
+                 confidence_features: Optional[List] = None,
+                 confidence_scores: Optional[List] = None):
+        self.loss = loss
+        self.example_ids = example_ids
+        self.predictions = predictions
+        self.answers = answers
+        self.contexts = contexts
+        self.confidence_features = confidence_features
+        self.confidence_scores = confidence_scores
 
 
 def remove_thingtalk_quotes(thingtalk):
