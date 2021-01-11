@@ -34,6 +34,7 @@ from genienlp.calibrate import ConfidenceEstimator
 import json
 import logging
 import sys
+import os
 from pprint import pformat
 
 import torch
@@ -211,6 +212,12 @@ def main(args):
     
     model.to(device)
     model.eval()
+
+    # set the default path for calibrator if it exists
+    if args.calibrator_path is None:
+        default_path = os.path.join(args.path, 'calibrator.pkl')
+        if os.path.isfile(default_path):
+            args.calibrator_path = default_path
 
     confidence_estimator = None
     if args.calibrator_path is not None:
