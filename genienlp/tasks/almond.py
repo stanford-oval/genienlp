@@ -69,7 +69,6 @@ class AlmondDataset(CQA):
         features_size = kwargs.get('features_size')
         features_default_val = kwargs.get('features_default_val')
         verbose = kwargs.get('verbose', False)
-        preprocess_special_tokens = kwargs.get('preprocess_special_tokens', False)
         
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         dir_name = os.path.basename(os.path.dirname(path))
@@ -552,7 +551,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
 
 
 @register_task('contextual_almond')
@@ -603,7 +602,7 @@ class ReverseAlmond(BaseTask):
 
 # TODO add a similar preprocessing step to Multilingual dialogue tasks as well
 class BaseAlmondDialogueNLUTask(BaseAlmondTask):
-    def preprocess_field(self, sentence, field_name=None):
+    def preprocess_field(self, sentence, field_name=None, answer=None):
         if not sentence:
             return sentence
 
@@ -617,7 +616,7 @@ class BaseAlmondDialogueNLUTask(BaseAlmondTask):
             assert(sentence.startswith('$dialogue '))
             sentence = sentence[len('$dialogue '):]
 
-        return super().preprocess_field(sentence, field_name)
+        return super().preprocess_field(sentence, field_name, answer)
 
     def postprocess_answer(self, answer):
         return '$dialogue ' + answer
@@ -647,7 +646,7 @@ class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
 
 
 @register_task('almond_dialogue_nlu_agent')
@@ -674,7 +673,7 @@ class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
 
 
 @register_task('almond_dialogue_nlg')
@@ -703,7 +702,7 @@ class AlmondDialogueNLG(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
 
 
 @register_task('almond_dialogue_policy')
@@ -731,7 +730,7 @@ class AlmondDialoguePolicy(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
     
 
 class BaseAlmondMultiLingualTask(BaseAlmondTask):
