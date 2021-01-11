@@ -321,14 +321,15 @@ class BaseAlmondDialogueNLUTask(BaseAlmondTask):
         if field_name == 'context' and sentence.startswith('$dialogue '):
             sentence = sentence[len('$dialogue '):]
         if field_name == 'answer':
-            assert(sentence.startswith('$dialogue '))
-            sentence = sentence[len('$dialogue '):]
+            if sentence.startswith('$dialogue '):
+                sentence = sentence[len('$dialogue '):]
 
         return super().preprocess_field(sentence, field_name)
 
     def postprocess_answer(self, answer):
-        return '$dialogue ' + answer
-
+        if not answer.startswith('$'):
+            return '$dialogue ' + answer
+        return answer
 
 @register_task('almond_dialogue_nlu')
 class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
