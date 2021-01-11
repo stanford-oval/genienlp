@@ -57,6 +57,7 @@ class TransformerSeq2Seq(GenieModel):
         self.numericalizer = TransformerNumericalizer(self.args.pretrained_model,
                                                       max_generative_vocab=None,
                                                       cache=args.embeddings,
+                                                      no_fast_tokenizer=args.no_fast_tokenizer,
                                                       preprocess_special_tokens=args.preprocess_special_tokens,
                                                       features_default_val=args.features_default_val,
                                                       features_size=args.features_size
@@ -113,9 +114,7 @@ class TransformerSeq2Seq(GenieModel):
             # longer sequences in the batch do not drown shorter sequences.
             # (2) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
             
-            
             outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
-            
             
             ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
             loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)

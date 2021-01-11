@@ -75,7 +75,7 @@ class TransformerNumericalizer(object):
     _special_tokens_to_word_regexes: List[Tuple[re.Pattern, str]]
     _special_tokens_to_token_regexes: List[Tuple[re.Pattern, str]]
     
-    def __init__(self, pretrained_tokenizer, max_generative_vocab, cache=None,
+    def __init__(self, pretrained_tokenizer, max_generative_vocab, cache=None, no_fast_tokenizer=False,
                  preprocess_special_tokens=False, features_default_val=None, features_size=None):
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
@@ -95,6 +95,8 @@ class TransformerNumericalizer(object):
         self.features_default_val = features_default_val
         self.features_size = features_size
         
+        self.no_fast_tokenizer = no_fast_tokenizer
+        
     @property
     def vocab(self):
         return self._tokenizer
@@ -111,8 +113,9 @@ class TransformerNumericalizer(object):
             return self.pad_id
     
     def _use_fast(self):
-        return self._pretrained_name in ALLOWED_FAST_TOKENIZERS or \
-               (self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING)
+        return not self.no_fast_tokenizer and \
+               (self._pretrained_name in ALLOWED_FAST_TOKENIZERS or
+               (self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING))
     
 
     def get_tokenizer(self, save_dir):

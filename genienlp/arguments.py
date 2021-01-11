@@ -235,6 +235,8 @@ def parse_argv(parser):
                         help='do not track the git commit associated with this training run')
     parser.add_argument('--exist_ok', action='store_true',
                         help='Ok if the save directory already exists, i.e. overwrite is ok')
+    
+    parser.add_argument('--no_fast_tokenizer', action='store_true', help='Use slow version of huggingface tokenizer')
 
     parser.add_argument('--skip_cache', action='store_true',
                         help='whether to use existing cached splits or generate new ones')

@@ -59,6 +59,7 @@ class TransformerLSTM(GenieModel):
         self.numericalizer = TransformerNumericalizer(encoder_embeddings,
                                                       max_generative_vocab=args.max_generative_vocab,
                                                       cache=args.embeddings,
+                                                      no_fast_tokenizer=args.no_fast_tokenizer,
                                                       preprocess_special_tokens=args.preprocess_special_tokens,
                                                       features_default_val=args.features_default_val,
                                                       features_size=args.features_size
