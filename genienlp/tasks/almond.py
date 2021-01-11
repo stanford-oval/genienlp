@@ -62,6 +62,8 @@ class AlmondDataset(CQA):
         #TODO fix cache_path for multilingual task
         subsample = kwargs.get('subsample')
         cached_path = kwargs.get('cached_path')
+        is_contextual = kwargs.get('is_contextual')
+        
         skip_cache = kwargs.get('skip_cache', True)
         cache_input_data = kwargs.get('cache_input_data', False)
         bootleg = kwargs.get('bootleg', None)
@@ -112,10 +114,8 @@ class AlmondDataset(CQA):
                                 'kwargs': kwargs}
                 examples = process(process_args)
                 
-            
                 
             if bootleg:
-                
                 config_ovrrides = bootleg.fixed_overrides
                 
                 input_file_dir = os.path.dirname(path)
@@ -132,7 +132,7 @@ class AlmondDataset(CQA):
                 
                 # create jsonl files from input examples
                 # jsonl is the input format bootleg expects
-                bootleg.create_jsonl(path, examples)
+                bootleg.create_jsonl(path, examples, is_contextual)
                 
                 # extract mentions and mention spans in the sentence and write them to output jsonl files
                 bootleg.extract_mentions(path)
@@ -144,7 +144,7 @@ class AlmondDataset(CQA):
                 # override examples features with bootleg features
                 assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
                 for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
-                    if bootleg.is_contextual:
+                    if is_contextual:
                         for i in range(len(tokens_type_ids)):
                             examples[n].question_feature[i] = ex.question_feature[i]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
                             examples[n].context_plus_question_feature[i + len(ex.context)] = ex.context_plus_question_feature[i + len(ex.context)]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
@@ -157,7 +157,7 @@ class AlmondDataset(CQA):
                 if verbose:
                     print()
                     for ex in examples:
-                        if bootleg.is_contextual:
+                        if is_contextual:
                             print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(ex.question_tokens, ex.question_feature)], sep='\n')
                         else:
                             print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(ex.context, ex.context_feature)], sep='\n')
@@ -251,7 +251,7 @@ class BaseAlmondTask(BaseTask):
         #         es_dump_canonical2type(self.db)
 
     def _init_bootleg(self):
-        self.bootleg = Bootleg(self.args, self.is_contextual())
+        self.bootleg = Bootleg(self.args)
 
     def is_contextual(self):
         return NotImplementedError
@@ -267,7 +267,9 @@ class BaseAlmondTask(BaseTask):
         raise NotImplementedError()
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
+        kwargs['bootleg'] = self.bootleg
+        kwargs['is_contextual'] = self.is_contextual()
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
     
     def _detokenize_cjk_chars(self, sentence):
         output = []
@@ -551,7 +553,9 @@ class NaturalSeq2Seq(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
+        kwargs['bootleg'] = self.bootleg
+        kwargs['is_contextual'] = False
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
 
 @register_task('contextual_almond')
@@ -646,6 +650,8 @@ class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
+        kwargs['bootleg'] = self.bootleg
+        kwargs['is_contextual'] = True
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
 
 
@@ -673,7 +679,9 @@ class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
+        kwargs['bootleg'] = self.bootleg
+        kwargs['is_contextual'] = True
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
 
 
 @register_task('almond_dialogue_nlg')
@@ -702,7 +710,9 @@ class AlmondDialogueNLG(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
+        kwargs['bootleg'] = self.bootleg
+        kwargs['is_contextual'] = True
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
 
 
 @register_task('almond_dialogue_policy')
@@ -730,7 +740,9 @@ class AlmondDialoguePolicy(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
+        kwargs['bootleg'] = self.bootleg
+        kwargs['is_contextual'] = True
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
     
 
 class BaseAlmondMultiLingualTask(BaseAlmondTask):
@@ -758,13 +770,17 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
                      aux=splits.get('aux'))
 
     def get_splits(self, root, **kwargs):
+        
+        kwargs['bootleg'] = self.bootleg
+        kwargs['is_contextual'] = self.is_contextual()
+        
         all_datasets = []
         # number of directories to read data from
         all_dirs = kwargs['all_dirs'].split('+')
         
         for dir in all_dirs:
             almond_dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
-                                                         make_example=self._make_example, bootleg=self.bootleg, **kwargs)
+                                                         make_example=self._make_example, **kwargs)
             all_datasets.append(almond_dataset)
             
         used_fields = [field for field in all_datasets[0]._fields if getattr(all_datasets[0], field) is not None]

@@ -47,11 +47,13 @@ logger = logging.getLogger(__name__)
 
 
 class Server:
-    def __init__(self, args, numericalizer, model, device):
+    def __init__(self, args, numericalizer, model, device, bootleg_annotator):
         self.args = args
         self.device = device
         self.numericalizer = numericalizer
         self.model = model
+        
+        self.bootleg_annotator = bootleg_annotator
 
         self._cached_tasks = dict()
 
@@ -105,6 +107,12 @@ class Server:
                 answer = ''
 
             ex = Example.from_raw(str(request['id']), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
+
+            context_plus_question_feature = self.bootleg_annotator.bootleg_annotator.label_mentions(ex.context_plus_question)
+            if task.is_contextual():
+                question_feature = self.bootleg_annotator.bootleg_annotator.label_mentions(ex.question)
+            else:
+                context_feature = self.bootleg_annotator.bootleg_annotator.label_mentions(ex.context)
 
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples([ex])
@@ -175,13 +183,22 @@ def parse_argv(parser):
     parser.add_argument('--locale', default='en', help='locale tag of the language to parse')
 
 
+from bootleg.annotator import Annotator
+from .data_utils.bootleg import Bootleg
+
 def main(args):
     load_config_json(args)
     set_seed(args)
     
     if args.do_ner and args.retrieve_method == 'bootleg':
         # instantiate the annotator class
-        pass
+        bootleg = Bootleg(args)
+        bootleg_config = bootleg.create_config()
+        bootleg_annotator = Annotator(config_args=bootleg_config,
+                                      device='cuda' if torch.cuda.is_available() else 'cpu',
+                                      max_alias_len=args.max_entity_len,
+                                      cand_map=bootleg.cand_map,
+                                      threshold=args.bootleg_prob_threshold)
         
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
@@ -203,6 +220,6 @@ def main(args):
     model.to(device)
     model.eval()
 
-    server = Server(args, model.numericalizer, model, device)
+    server = Server(args, model.numericalizer, model, device, bootleg_annotator=None)
 
     server.run()

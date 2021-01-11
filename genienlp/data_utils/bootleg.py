@@ -10,9 +10,8 @@ from ..util import reverse_bisect_left
 
 class Bootleg(object):
     
-    def __init__(self, args, is_contextual):
+    def __init__(self, args):
         self.args = args
-        self.is_contextual = is_contextual
         
         self.model = f'{self.args.bootleg_input_dir}/{self.args.bootleg_model}'
         self.config_path = f'{self.model}/bootleg_config.json'
@@ -47,16 +46,16 @@ class Bootleg(object):
         ]
         
     
-    def create_config(self, overrides):
+    def create_config(self, overrides=[]):
         config_args = get_full_config(self.config_path, overrides)
         return config_args
 
-    def create_jsonl(self, input_path, examples):
+    def create_jsonl(self, input_path, examples, is_contextual):
         # create jsonl file for examples
         jsonl_input_path = input_path.rsplit('.', 1)[0] + '.jsonl'
         with open(jsonl_input_path, 'w') as fout:
             for ex in examples:
-                if self.is_contextual:
+                if is_contextual:
                     fout.write(ujson.dumps({"sentence": ex.question}) + '\n')
                 else:
                     fout.write(ujson.dumps({"sentence": ex.context}) + '\n')
@@ -111,7 +110,7 @@ class Bootleg(object):
                         tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
             
                 else:
-                    for all_qids, all_probs, span in zip(line['cand_qids'], line['cand_probs'], line['spans']):
+                    for all_qids, all_probs, span in zip(line['cands'], line['cand_probs'], line['spans']):
                         # filter qids with confidence lower than a threshold
                         idx = reverse_bisect_left(all_probs, threshold, lo=0)
                         all_qids = all_qids[:idx]
