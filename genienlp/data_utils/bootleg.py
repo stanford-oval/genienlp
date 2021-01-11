@@ -32,6 +32,7 @@ class Bootleg(object):
         self.cur_entity_embed_size = 0
 
         self.fixed_overrides = [
+             "--run_config.timestamp", 'None',
              "--data_config.entity_dir", self.entity_dir,
              "--run_config.eval_batch_size", str(self.args.bootleg_batch_size),
              "--run_config.save_dir", self.args.bootleg_output_dir,
@@ -41,8 +42,8 @@ class Bootleg(object):
              "--data_config.emb_dir", self.embed_dir,
              "--data_config.alias_cand_map", 'alias2qids_wiki.json',
              "--data_config.word_embedding.cache_dir", self.pretrained_bert,
-             '--run_config.dataset_threads', str(self.args.bootleg_dataset_threads),
-             '--run_config.dataloader_threads', str(self.args.bootleg_dataloader_threads)
+             "--run_config.dataset_threads", str(self.args.bootleg_dataset_threads),
+             "--run_config.dataloader_threads", str(self.args.bootleg_dataloader_threads)
         ]
         
     
