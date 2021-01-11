@@ -106,15 +106,6 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
     iters = []
     task_index = 0
     for task, bs, val_set in zip(args.tasks, args.val_batch_size, val_sets):
-        shared_kwargs = {
-            'append_question_to_context_too': args.append_question_to_context_too,
-            'override_question': args.override_question,
-            'override_context': args.override_context,
-            'return_original_order': True,
-            'features': args.features,
-            'features_size': args.features_size,
-            'features_default_val': args.features_default_val
-        }
         task_iter = []
         task_languages = args.pred_languages[task_index]
         if task_languages is not None and args.separate_eval:

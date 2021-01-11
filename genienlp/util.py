@@ -470,15 +470,15 @@ def load_config_json(args):
                     'override_context', 'override_question',
                     'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence',
                     'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count',
-                    'use_encoder_loss', 'num_workers',
+                    'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
                     'override_question', 'override_context',
                     'do_ner', 'database_type', 'elastic_config', 'min_entity_len', 'max_entity_len',
                     'entity_type_agg_method',
                     'num_db_types', 'db_unk_id', 'retrieve_method', 'lookup_method', 'almond_domains',
                     'features', 'features_size', 'features_default_val',
                     'bootleg_input_dir', 'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
-                    'bootleg_kg_encoder_layer',
-                    'bootleg_integration', 'bootleg_load_prepped_data', 'bootleg_dump_mode'
+                    'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads',
+                    'bootleg_integration', 'bootleg_load_prepped_data', 'bootleg_dump_mode', 'bootleg_prob_threshold'
                     ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
