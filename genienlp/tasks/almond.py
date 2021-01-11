@@ -45,7 +45,8 @@ from .base_task import BaseTask
 from .registry import register_task
 from .generic_dataset import CQA, default_batch_fn, input_then_output_len, input_tokens_fn
 from ..data_utils.example import Example
-from .almond_utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id, tokenize_cjk_chars, detokenize_cjk_chars, is_cjk_char, process, chunk_file, quoted_pattern_with_space
+from .almond_utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id,\
+    tokenize_cjk_chars, detokenize_cjk_chars, is_cjk_char, process, chunk_file, quoted_pattern_with_space
 
 from .base_dataset import Split
 
@@ -147,7 +148,7 @@ class AlmondDataset(CQA):
                     if is_contextual:
                         for i in range(len(tokens_type_ids)):
                             examples[n].question_feature[i] = ex.question_feature[i]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
-                            examples[n].context_plus_question_feature[i + len(ex.context)] = ex.context_plus_question_feature[i + len(ex.context)]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
+                            examples[n].context_plus_question_feature[i + len(ex.context.split(' '))] = ex.context_plus_question_feature[i + len(ex.context.split(' '))]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
                             
                     else:
                         for i in range(len(tokens_type_ids)):
@@ -652,7 +653,7 @@ class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
     def get_splits(self, root, **kwargs):
         kwargs['bootleg'] = self.bootleg
         kwargs['is_contextual'] = True
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example, bootleg=self.bootleg, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example, **kwargs)
 
 
 @register_task('almond_dialogue_nlu_agent')

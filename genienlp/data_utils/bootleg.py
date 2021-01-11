@@ -13,8 +13,8 @@ class Bootleg(object):
     def __init__(self, args):
         self.args = args
         
-        self.model = f'{self.args.bootleg_input_dir}/{self.args.bootleg_model}'
-        self.config_path = f'{self.model}/bootleg_config.json'
+        self.model_dir = f'{self.args.bootleg_input_dir}/{self.args.bootleg_model}'
+        self.config_path = f'{self.model_dir}/bootleg_config.json'
         self.cand_map = f'{self.args.bootleg_input_dir}/wiki_entity_data/entity_mappings/alias2qids_wiki.json'
 
         self.entity_dir = f'{self.args.bootleg_input_dir}/wiki_entity_data'
@@ -29,13 +29,26 @@ class Bootleg(object):
         self.pretrained_bert = f'{self.args.bootleg_input_dir}/emb_data/pretrained_bert_models'
         
         self.cur_entity_embed_size = 0
+        
+        # find model checkpoint within model folder
+        # due to naming inconsistency of bootleg models we should find it manually
+        init_checkpoint = None
+        for file in os.listdir(self.model_dir):
+            if '.pt' in file:
+                init_checkpoint = os.path.join(self.model_dir, file)
+                
+        if init_checkpoint is None:
+            raise ValueError('No model checkpoints were found within {} directory'.format(self.model_dir))
+        
+        self.ckpt_name = os.path.basename(init_checkpoint)[:-len('.pt')]
+        self.model_ckpt_path = init_checkpoint
 
         self.fixed_overrides = [
              "--run_config.timestamp", 'None',
              "--data_config.entity_dir", self.entity_dir,
              "--run_config.eval_batch_size", str(self.args.bootleg_batch_size),
              "--run_config.save_dir", self.args.bootleg_output_dir,
-             "--run_config.init_checkpoint", self.model,
+             "--run_config.init_checkpoint", self.model_ckpt_path,
              "--run_config.loglevel", 'debug',
              "--train_config.load_optimizer_from_ckpt", 'False',
              "--data_config.emb_dir", self.embed_dir,
@@ -46,7 +59,7 @@ class Bootleg(object):
         ]
         
     
-    def create_config(self, overrides=[]):
+    def create_config(self, overrides):
         config_args = get_full_config(self.config_path, overrides)
         return config_args
 
@@ -82,7 +95,7 @@ class Bootleg(object):
         
         threshold = self.args.bootleg_prob_threshold
 
-        with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/eval/{self.args.bootleg_model}/bootleg_labels.jsonl', 'r') as fin:
+        with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/eval/{self.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
             for i, line in enumerate(fin):
                 line = ujson.loads(line)
                 tokenized = line['sentence'].split(' ')
@@ -140,7 +153,7 @@ class Bootleg(object):
                 all_tokens_type_probs.append(tokens_type_probs)
 
         if self.args.bootleg_load_prepped_data:
-            with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/eval/{self.args.bootleg_model}/bootleg_embs.npy', 'rb') as fin:
+            with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/eval/{self.ckpt_name}/bootleg_embs.npy', 'rb') as fin:
                 emb_data = np.load(fin)
                 self.cur_entity_embed_size += emb_data.shape[0]
                 
@@ -150,7 +163,7 @@ class Bootleg(object):
     def merge_embeds(self, file_list):
         all_emb_data = []
         for file_name in file_list:
-            emb_file = f'{self.args.bootleg_output_dir}/{file_name}_bootleg/eval/{self.args.bootleg_model}/bootleg_embs.npy'
+            emb_file = f'{self.args.bootleg_output_dir}/{file_name}_bootleg/eval/{self.ckpt_name}/bootleg_embs.npy'
             with open(emb_file, 'rb') as fin:
                 emb_data = np.load(fin)
                 all_emb_data.append(emb_data)
@@ -160,6 +173,6 @@ class Bootleg(object):
         # add embeddings for the padding and unknown special tokens
         new_emb = np.concatenate([np.zeros([2, all_emb_data.shape[1]], dtype='float'), all_emb_data], axis=0)
         
-        os.makedirs(f'{self.args.bootleg_output_dir}/bootleg/eval/{self.args.bootleg_model}', exist_ok=True)
-        np.save(f'{self.args.bootleg_output_dir}/bootleg/eval/{self.args.bootleg_model}/ent_embedding.npy', new_emb)
+        os.makedirs(f'{self.args.bootleg_output_dir}/bootleg/eval/{self.ckpt_name}', exist_ok=True)
+        np.save(f'{self.args.bootleg_output_dir}/bootleg/eval/{self.ckpt_name}/ent_embedding.npy', new_emb)
 

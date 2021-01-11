@@ -47,13 +47,13 @@ logger = logging.getLogger(__name__)
 
 
 class Server:
-    def __init__(self, args, numericalizer, model, device, bootleg_annotator):
+    def __init__(self, args, numericalizer, model, device, ner_annotator=None):
         self.args = args
         self.device = device
         self.numericalizer = numericalizer
         self.model = model
         
-        self.bootleg_annotator = bootleg_annotator
+        self.ner_annotator = ner_annotator
 
         self._cached_tasks = dict()
 
@@ -108,11 +108,11 @@ class Server:
 
             ex = Example.from_raw(str(request['id']), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
 
-            context_plus_question_feature = self.bootleg_annotator.bootleg_annotator.label_mentions(ex.context_plus_question)
+            context_plus_question_feature = self.ner_annotator.bootleg_annotator.label_mentions(ex.context_plus_question)
             if task.is_contextual():
-                question_feature = self.bootleg_annotator.bootleg_annotator.label_mentions(ex.question)
+                question_feature = self.ner_annotator.bootleg_annotator.label_mentions(ex.question)
             else:
-                context_feature = self.bootleg_annotator.bootleg_annotator.label_mentions(ex.context)
+                context_feature = self.ner_annotator.bootleg_annotator.label_mentions(ex.context)
 
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples([ex])
@@ -193,7 +193,7 @@ def main(args):
     if args.do_ner and args.retrieve_method == 'bootleg':
         # instantiate the annotator class
         bootleg = Bootleg(args)
-        bootleg_config = bootleg.create_config()
+        bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
         bootleg_annotator = Annotator(config_args=bootleg_config,
                                       device='cuda' if torch.cuda.is_available() else 'cpu',
                                       max_alias_len=args.max_entity_len,
@@ -220,6 +220,6 @@ def main(args):
     model.to(device)
     model.eval()
 
-    server = Server(args, model.numericalizer, model, device, bootleg_annotator=None)
+    server = Server(args, model.numericalizer, model, device, ner_annotator=bootleg_annotator)
 
     server.run()
