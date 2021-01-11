@@ -287,7 +287,7 @@ class ContextualAlmond(BaseAlmondTask):
 
 
 @register_task('reverse_almond')
-class ReverseAlmond(BaseTask):
+class ReverseAlmond(BaseAlmondTask):
     """Reverse Almond semantic parsing task
     i.e. formal language to natural language mapping"""
 
