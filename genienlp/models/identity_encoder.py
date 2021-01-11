@@ -77,14 +77,14 @@ class IdentityEncoder(nn.Module):
             # do not embed type_ids yet; in level 2 they are aggregated after contextual embeddings are formed
             # still pass entity_masking and mask_entities so that encoder loss would work (if used)
             # context_embedded = self.encoder_embeddings(context, entity_masking=context_entity_masking, mask_entities=mask_entities, padding=context_padding)
-            context_embedded = self.encoder_embeddings(context)
+            context_embedded_last_hidden_state = self.encoder_embeddings(context, attention_mask=(~context_padding).to(dtype=torch.float)).last_hidden_state
 
-            context_embedded_last_hidden_state, _pooled, context_embedded_hidden_states = self.context_BootlegBertEncoder(inputs_embeds=context_embedded.last_hidden_state, input_ent_ids=context_entity_ids)
+            context_embedded_last_hidden_state, _pooled, context_embedded_hidden_states = self.context_BootlegBertEncoder(inputs_embeds=context_embedded_last_hidden_state, input_ent_ids=context_entity_ids)
 
-        
         else:
-            context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking, entity_probs=context_entity_probs, mask_entities=mask_entities, padding=context_padding)
-        
+            # context_embedded = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking, entity_probs=context_entity_probs, mask_entities=mask_entities, padding=context_padding)
+            context_embedded_last_hidden_state = self.encoder_embeddings(context, attention_mask=(~context_padding).to(dtype=torch.float)).last_hidden_state
+            
         final_context = context_embedded_last_hidden_state
 
         if self.projection is not None:

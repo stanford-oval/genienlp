@@ -112,7 +112,10 @@ def prepare_data(args, logger):
         logger.info(f'{task.name} has {len(split.train)} training examples')
             
         if task.name.startswith('almond'):
-            args.db_unk_id = int(args.features_default_val[0])
+            if args.features_default_val:
+                args.db_unk_id = int(args.features_default_val[0])
+            else:
+                args.db_unk_id = 0
             if args.do_ner:
                 if getattr(task, 'db', None):
                     args.num_db_types = len(task.db.type2id)

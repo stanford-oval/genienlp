@@ -114,8 +114,8 @@ class NumericalizedExamples(NamedTuple):
         numericalized_examples = []
 
         tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question for ex in examples],
-                                                        [ex.context_plus_question_feature for ex in examples])
-        tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], None)
+                                                        [ex.context_plus_question_feature for ex in examples if ex.context_plus_question_feature])
+        tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], [])
         for i in range(len(examples)):
             numericalized_examples.append(NumericalizedExamples([examples[i].example_id],
                                         tokenized_contexts[i],
@@ -134,7 +134,8 @@ class NumericalizedExamples(NamedTuple):
             context_values.append(torch.tensor(batch.context.value, device=device))
             context_lengths.append(torch.tensor(batch.context.length, device=device))
             context_limiteds.append(torch.tensor(batch.context.limited, device=device))
-            context_features.append(torch.tensor(batch.context.feature, device=device))
+            if batch.context.feature:
+                context_features.append(torch.tensor(batch.context.feature, device=device))
 
             answer_values.append(torch.tensor(batch.answer.value, device=device))
             answer_lengths.append(torch.tensor(batch.answer.length, device=device))
@@ -145,8 +146,9 @@ class NumericalizedExamples(NamedTuple):
         context_limiteds = numericalizer.pad(context_limiteds, pad_id=numericalizer.decoder_pad_id)
         context_lengths = torch.stack(context_lengths, dim=0)
         
-        # change pad_id later
-        context_features = numericalizer.pad(context_features, pad_id=0)
+        if batch.context.feature:
+            # change pad_id later
+            context_features = numericalizer.pad(context_features, pad_id=0)
         
         answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
         answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)

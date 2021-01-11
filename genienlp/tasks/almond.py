@@ -497,6 +497,7 @@ class BaseAlmondTask(BaseTask):
         if tokens_word_freqs:
             assert len(tokens_word_freqs) == new_sentence_length
             zip_list.append(tokens_word_freqs)
+            
         features = [Feature(*tup) for tup in zip(*zip_list)]
         
         return new_sentence, features

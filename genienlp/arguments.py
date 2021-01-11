@@ -177,10 +177,10 @@ def parse_argv(parser):
     
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
-    parser.add_argument('--features', nargs='+', type=str, default=['type_id', 'type_prob', 'word_freq'], help='Features that will be extracted for each entity.'
-                                                                        ' Order is important')
-    parser.add_argument('--features_size', nargs='+', type=int, default=[1, 1, 1], help='Max length of each feature vector. All features are padded up to this length')
-    parser.add_argument('--features_default_val', nargs='+', type=float, default=[26933, 1.0, 1.0], help='Max length of each feature vector. All features are padded up to this length')
+    parser.add_argument('--features', nargs='+', type=str, default=[],
+                        help='Features that will be extracted for each entity. Order is important')
+    parser.add_argument('--features_size', nargs='+', type=int, default=[], help='Max length of each feature vector. All features are padded up to this length')
+    parser.add_argument('--features_default_val', nargs='+', type=float, default=[], help='Default value used for each feature')
 
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers (for TransformerLSTM)')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules ')
