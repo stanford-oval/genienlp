@@ -119,8 +119,14 @@ class ConfidenceOutput:
             prediction: includes BOS and EOS tokens, but no PAD tokens
             nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
         """
-        self.drop_logits = torch.stack(drop_logits, dim=0).cpu()
-        self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
+        if drop_logits is not None:
+            self.drop_logits = torch.stack(drop_logits, dim=0).cpu()
+        else:
+            self.drop_logits = None
+        if drop_probs is not None:
+            self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
+        else:
+            self.drop_probs = None
         self.nodrop_logits = nodrop_logits.cpu()
         self.nodrop_probs = nodrop_probs.cpu()
         self.nodrop_entropies = nodrop_entropies.cpu()
