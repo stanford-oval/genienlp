@@ -184,6 +184,8 @@ class TransformerSeq2Seq(GenieModel):
         attention_mask = self.model._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer._tokenizer.eos_token_id)
         truncated_predictions = predictions[:, 1:] # remove the BOS token since it is not actually being generated
 
+        assert not self.training, 'Model should be in eval() mode before generation can start.'
+
         batch_nodrop_logits = []
         batch_nodrop_probs = []
         batch_nodrop_entropies = []
@@ -196,12 +198,7 @@ class TransformerSeq2Seq(GenieModel):
             batch_nodrop_entropies.append(-torch.sum(torch.log(probs)*probs, dim=1)[:prediction_lengths[i]])
         
         # activate dropout layers
-        should_revert_to_eval = True
-        if mc_dropout:
-            if self.training:
-                # already in training mode, so no need to change it back at the end of the function
-                should_revert_to_eval = False
-            self.train()
+        self.train()
 
         batch_drop_logits = [[] for _ in range(batch_size)]
         batch_drop_probs = [[] for _ in range(batch_size)]
@@ -227,8 +224,7 @@ class TransformerSeq2Seq(GenieModel):
                                          ))
 
         # return the model back to its previous state
-        if mc_dropout and should_revert_to_eval:
-            self.eval()
+        self.eval()
         
         return confidence_features
 
