@@ -118,7 +118,7 @@ class Server:
                 output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                   output_predictions_only=True,
                                                   confidence_estimator=self.confidence_estimator)
-                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=output.confidence_scores[0]))
+                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=float(output.confidence_scores[0])))
             else:
                 output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                   output_predictions_only=True)

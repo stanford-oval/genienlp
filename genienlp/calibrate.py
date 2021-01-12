@@ -196,6 +196,7 @@ def parse_argv(parser):
     parser.add_argument('--seed', type=int, default=123, help='Random seed to use for reproducibility')
     parser.add_argument('--save', type=str, help='The directory to save the calibrator model and plots after training')
     parser.add_argument('--plot', action='store_true', help='If True, will plot metrics and save them. Requires Matplotlib installation.')
+    parser.add_argument('--testing', action='store_true', help='If True, will change labels so that not all of them are equal. This is only used for testing purposes.')
 
 
 class ConfidenceEstimator():
@@ -492,17 +493,20 @@ def main(args):
                     ]:
         if name.startswith('raw'):
             estimator_class = RawConfidenceEstimator
-            mc_dropout = False
-            mc_dropout_num = 0
         else:
             estimator_class = TreeConfidenceEstimator
-            mc_dropout = train_confidences[0][0].mc_dropout
-            mc_dropout_num = train_confidences[0][0].mc_dropout_num
+        mc_dropout = train_confidences[0][0].mc_dropout
+        mc_dropout_num = train_confidences[0][0].mc_dropout_num
         estimator = estimator_class(name=name, featurizers=f, eval_metric=args.eval_metric, mc_dropout=mc_dropout, mc_dropout_num=mc_dropout_num)
         logger.info('name = %s', name)
         
         train_features, train_labels = estimator.convert_to_dataset(train_confidences, train=True)
         dev_features, dev_labels = estimator.convert_to_dataset(dev_confidences, train=False)
+        if args.testing:
+            if train_labels.all() or (~train_labels).all():
+                train_labels[0] = ~train_labels[0]
+            if dev_labels.all() or (~dev_labels).all():
+                dev_labels[0] = ~dev_labels[0]
         estimator.train_and_validate(train_features, train_labels, dev_features, dev_labels)
         precision, recall, pass_rate, accuracies, thresholds = estimator.evaluate(dev_features, dev_labels)
         if args.plot:
