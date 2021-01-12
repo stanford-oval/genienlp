@@ -44,12 +44,15 @@ except RuntimeError:
     pass
 
 import torch
+import pickle
 
 from . import models
 from .tasks.registry import get_tasks
 from .util import set_seed, load_config_json, make_data_loader, log_model_size, init_devices, \
     have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
 from .validate import generate_with_model, calculate_and_reduce_metrics
+from .calibrate import ConfidenceEstimator
+from .arguments import check_and_update_generation_args
 
 logger = logging.getLogger(__name__)
 
@@ -167,23 +170,47 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            _, predictions, answers, contexts = generate_with_model(model, it, model.numericalizer, task, args, prediction_file_name, original_order=original_order)
-                
-            if len(answers) > 0:
+            if args.calibrator_path is not None:
+                confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
+                logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
+            else:
+                confidence_estimator = None
+            generation_output = generate_with_model(model, it, model.numericalizer, task, args,
+                                                     original_order=original_order,
+                                                     output_confidence_features=args.save_confidence_features,
+                                                     confidence_estimator=confidence_estimator)
+            
+            if args.save_confidence_features:
+                with open(args.confidence_feature_path, 'wb') as f:
+                    pickle.dump(generation_output.confidence_features, f, protocol=4)
+
+            # write into file
+            # TODO change to jsonl format
+            with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
+                for i in range(len(generation_output.example_ids)):
+                    line = generation_output.example_ids[i] + '\t' + '\t'.join(generation_output.predictions[i]) # all outputs separated by '\t'
+                    if args.calibrator_path is not None:
+                        line += '\t' + str(generation_output.confidence_scores[i])
+                    prediction_file.write(line + '\n')
+
+            if len(generation_output.answers) > 0:
                 metrics_to_compute = task.metrics
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
-                metrics = calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args)
+                metrics = calculate_and_reduce_metrics(generation_output.predictions, generation_output.answers, metrics_to_compute, args)
 
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')
 
                 if not args.silent:
-                    for i, (c, p, a) in enumerate(zip(contexts, predictions, answers)):
-                        logger.info(f'\nContext {i+1}: {c}\nPrediction {i + 1} ({sum(args.num_outputs)} outputs): {p}\nAnswer {i + 1}: {a}\n')
+                    for i, (c, p, a) in enumerate(zip(generation_output.contexts, generation_output.predictions, generation_output.answers)):
+                        log_string = f'\nContext {i+1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
+                        if args.calibrator_path is not None:
+                            log_string += f'Confidence {i+1} : {generation_output.confidence_scores[i]:.3f}\n'
+                        logger.info(log_string)
                     logger.info(metrics)
                     
-                task_scores[task].append((len(answers), metrics[task.metrics[0]]))
+                task_scores[task].append((len(generation_output.answers), metrics[task.metrics[0]]))
     
     for task in task_scores.keys():
         decaScore.append(sum([length * score for length, score in task_scores[task]]) / sum([length for length, score in task_scores[task]]))
@@ -197,7 +224,7 @@ def run(args, device):
 
 
 def parse_argv(parser):
-    parser.add_argument('--path', required=True)
+    parser.add_argument('--path', type=str, required=True, help='Folder to load the model from')
     parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'],
                         help='Which dataset to do predictions for (test or dev)')
     parser.add_argument('--pred_set_name', type=str, help='Name of dataset to run prediction for; will be ignored if --evaluate is test')
@@ -211,9 +238,6 @@ def parse_argv(parser):
     parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to save embeddings.')
     parser.add_argument('--checkpoint_name', default='best.pth',
                         help='Checkpoint file to use (relative to --path, defaults to best.pth)')
-    parser.add_argument('--bleu', action='store_true', help='whether to use the bleu metric (always on for iwslt)')
-    parser.add_argument('--rouge', action='store_true',
-                        help='whether to use the bleu metric (always on for cnn, dailymail, and cnn_dailymail)')
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
 
@@ -221,11 +245,7 @@ def parse_argv(parser):
                         help='whether use exisiting cached splits or generate new ones')
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
     parser.add_argument('--cache', default='.cache', type=str, help='where to save cached files')
-
-    parser.add_argument('--saved_models', default='./saved_models', type=str,
-                        help='directory where cached models should be loaded from')
-    parser.add_argument('--subsample', default=20000000, type=int,
-                        help='subsample the eval/test datasets (experimental)')
+    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets (experimental)')
                         
     parser.add_argument('--pred_languages', type=str, nargs='+',
                         help='used to specify dataset languages used during prediction for multilingual tasks'
@@ -251,6 +271,14 @@ def parse_argv(parser):
     parser.add_argument("--num_beam_groups", type=int, nargs='+', default=[1], help='1 disables diverse beam seach')
     parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
+
+    # These are used for confidence calibration
+    parser.add_argument('--calibrator_path', type=str, default=None, help='If provided, will be used to output confidence scores for each prediction.')
+    parser.add_argument('--save_confidence_features', action='store_true', help='If provided, will be used to output confidence scores for each prediction.')
+    parser.add_argument("--confidence_feature_path", type=str, default=None, help='A .pkl file to save confidence features in.')
+    parser.add_argument("--mc_dropout", action='store_true', help='Monte Carlo dropout')
+    parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo dropout')
+
     parser.add_argument("--half_precision", action='store_true', help='If True, will use half precision on all tensors and calculations.')
 
 
@@ -276,26 +304,20 @@ def adjust_multilingual_eval(args):
             args.pred_languages[i] = None
             
             
-def check_and_update_generation_args(args):
+def set_default_values(args):
     """
-    checks all generation commandline arguments. Since these arguments are all lists and shorthand can be used, we expand them to match the expected length
-    for instance, [1.0] becomes [1.0 1.0] if all other generation arguments are of length 2
+    sets default values that depend on other input arguments
     """
-    hyperparameters = ['num_outputs', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
-    max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])
-    valid_len = [1, max_hyperparameter_len]
-    for h in hyperparameters:
-        if (len(getattr(args, h)) not in valid_len):
-            logger.error('Hyperparameters should either have the same number of values as others or have exactly one value.')
-        # If only one value is provided, use the same value for all samples
-        setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
+    if args.confidence_feature_path is None:
+        args.confidence_feature_path = os.path.join(args.path, 'confidence_features.pkl')
 
-    logger.info('Will output %d sequences for each input.', sum(args.num_outputs))
 
 def main(args):
     load_config_json(args)
     check_and_update_generation_args(args)
     adjust_multilingual_eval(args)
+    set_default_values(args)
+
     set_seed(args)
     args.tasks = list(get_tasks(args.task_names, args).values())
 

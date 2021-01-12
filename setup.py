@@ -57,6 +57,10 @@ setuptools.setup(
         'transformers==4.1.1',
         'sentence-transformers==0.4.0',
         'sentencepiece==0.1.*',
-        'loss_dropper @ git+https://github.com/ddkang/loss_dropper#egg=loss_dropper'
+        'loss_dropper @ git+https://github.com/ddkang/loss_dropper#egg=loss_dropper',
+        # for calibration:
+        'scikit-learn~=0.23',
+        'dill~=0.3',
+        'xgboost~=1.3',
     ]
 )

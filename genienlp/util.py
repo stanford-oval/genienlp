@@ -36,9 +36,11 @@ import shutil
 import random
 import time
 import re
+from typing import List, Optional
 import numpy as np
 import torch
 from transformers.models.mbart.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
+from torch.functional import Tensor
 
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
@@ -101,6 +103,103 @@ class SpecialTokenMap:
                 break
             
         return s
+
+
+class ConfidenceFeatures:
+    """
+    Contains all necessary features that are useful for calculating confidence of a single generated output
+    """
+
+    def __init__(self, drop_logits: List[Tensor], drop_probs: List[Tensor], gold_answer: Tensor, prediction: Tensor,
+                 nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_entropies: Tensor, context: Tensor):
+        """
+        Inputs:
+            droplogits: logits after MC dropout
+            gold_answer: includes BOS and EOS tokens, but no PAD tokens
+            prediction: includes BOS and EOS tokens, but no PAD tokens
+            nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
+        """
+        if drop_logits is not None:
+            self.drop_logits = torch.stack(drop_logits, dim=0).cpu()
+        else:
+            self.drop_logits = None
+        if drop_probs is not None:
+            self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
+        else:
+            self.drop_probs = None
+        self.nodrop_logits = nodrop_logits.cpu()
+        self.nodrop_probs = nodrop_probs.cpu()
+        self.nodrop_entropies = nodrop_entropies.cpu()
+
+        self.first_mistake = ConfidenceFeatures.find_first_mistake(gold_answer, prediction)
+        self.context = context
+
+    @property
+    def mc_dropout_num(self):
+        if self.drop_logits is None:
+            return 0
+        else:
+            return self.drop_logits.shape[0]
+
+    @property
+    def mc_dropout(self):
+        return self.mc_dropout_num > 0
+
+    @staticmethod
+    def find_first_mistake(gold_answer: Tensor, prediction: Tensor):
+        """
+        Inputs:
+            gold_answer: includes BOS and EOS tokens, but no PAD tokens
+            prediction: includes BOS and EOS tokens, but no PAD tokens
+        Returns:
+            The index of the first token where `gold_answer` and `prediction` differ, or -1 if they are equal. Ignores BOS, so the minimum possible value is .
+        """
+        # print('gold_answer = ', gold_answer)
+        # print('prediction = ', prediction)
+        # skip BOS
+        gold_answer = gold_answer[1:]
+        prediction = prediction[1:]
+
+        for i in range(min(len(gold_answer), len(prediction))):
+            if gold_answer[i] != prediction[i]:
+                return i
+        if len(gold_answer) != len(prediction):
+            # one is a strict prefix of the other
+            return min(len(gold_answer), len(prediction))
+        return -1
+
+    def __repr__(self) -> str:
+        return '<Confidence: drop_logits=' + str(self.drop_logits) \
+                + ', drop_probs=' + str(self.drop_probs) \
+                + ', first_mistake=' + str(self.first_mistake) \
+                + ', nodrop_logits=' + str(self.nodrop_logits) \
+                + ', nodrop_probs=' + str(self.nodrop_probs) \
+                + ', nodrop_entropies=' + str(self.nodrop_entropies) \
+                + ', context=' + str(self.context) \
+                + '>'
+
+
+class GenerationOutput():
+    """
+    Contains all the information that the generation function may need to output
+    """
+
+    def __init__(self,
+                 loss: Optional[float] = None,
+                 example_ids: Optional[List] = None,
+                 predictions: Optional[List] = None,
+                 answers: Optional[List] = None,
+                 contexts: Optional[List] = None,
+                 confidence_features: Optional[List] = None,
+                 confidence_scores: Optional[List] = None):
+        self.loss = loss
+        self.example_ids = example_ids
+        self.predictions = predictions
+        self.answers = answers
+        self.contexts = contexts
+        self.confidence_features = confidence_features
+        self.confidence_scores = confidence_scores
+
 
 def remove_thingtalk_quotes(thingtalk):
     quote_values = []
