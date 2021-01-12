@@ -186,9 +186,8 @@ def parse_argv(parser):
     parser.add_argument('--locale', default='en', help='locale tag of the language to parse')
 
     # for confidence estimation:
-    parser.add_argument('--calibrator_path', type=str, default=None, help='If provided, will be used to output confidence scores for each prediction.')
-    parser.add_argument("--mc_dropout", action='store_true', help='Monte Carlo dropout')
-    parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo dropout')
+    parser.add_argument('--calibrator_path', type=str, default=None,
+                        help='If provided, will be used to output confidence scores for each prediction. Defaults to `--path`/calibrator.pkl')
 
 def main(args):
     load_config_json(args)
@@ -223,6 +222,8 @@ def main(args):
     if args.calibrator_path is not None:
         confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
         logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
+        args.mc_dropout = confidence_estimator.mc_dropout
+        args.mc_dropout_num = confidence_estimator.mc_dropout_num
 
     server = Server(args, model.numericalizer, model, device, confidence_estimator)
 

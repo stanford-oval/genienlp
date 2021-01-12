@@ -134,6 +134,17 @@ class ConfidenceFeatures:
         self.first_mistake = ConfidenceFeatures.find_first_mistake(gold_answer, prediction)
         self.context = context
 
+    @property
+    def mc_dropout_num(self):
+        if self.drop_logits is None:
+            return 0
+        else:
+            return self.drop_logits.shape[0]
+
+    @property
+    def mc_dropout(self):
+        return self.mc_dropout_num > 0
+
     @staticmethod
     def find_first_mistake(gold_answer: Tensor, prediction: Tensor):
         """

@@ -241,12 +241,14 @@ class ConfidenceEstimator():
         return obj
 
 class RawConfidenceEstimator(ConfidenceEstimator):
-    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str):
+    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout:bool, mc_dropout_num:int):
         # don't change the interface, to match the parent class
         assert len(featurizers) == 1, 'RawConfidenceEstimator only works with a single featurizer that outputs a single numerical value'
         self.name = name
         self.featurizer = featurizers[0]
         self.eval_metric = eval_metric
+        self.mc_dropout= mc_dropout
+        self.mc_dropout_num = mc_dropout_num
 
         self.score = 0
 
@@ -272,7 +274,7 @@ class RawConfidenceEstimator(ConfidenceEstimator):
         return precision, recall, pass_rate, accuracies, thresholds
 
 class TreeConfidenceEstimator(ConfidenceEstimator):
-    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str):
+    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout:bool, mc_dropout_num:int):
         self.name = name
         self.featurizers = featurizers
         self.eval_metric = eval_metric
@@ -282,6 +284,9 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
         self.feature_size = 0
         self.normalizer_sub = 0
         self.normalizer_divide = 1
+
+        self.mc_dropout= mc_dropout
+        self.mc_dropout_num = mc_dropout_num
 
     @staticmethod
     def _extract_confidence_scores(model, dev_dataset):
@@ -487,9 +492,13 @@ def main(args):
                     ]:
         if name.startswith('raw'):
             estimator_class = RawConfidenceEstimator
+            mc_dropout = False
+            mc_dropout_num = 0
         else:
             estimator_class = TreeConfidenceEstimator
-        estimator = estimator_class(name=name, featurizers=f, eval_metric=args.eval_metric)
+            mc_dropout = train_confidences[0][0].mc_dropout
+            mc_dropout_num = train_confidences[0][0].mc_dropout_num
+        estimator = estimator_class(name=name, featurizers=f, eval_metric=args.eval_metric, mc_dropout=mc_dropout, mc_dropout_num=mc_dropout_num)
         logger.info('name = %s', name)
         
         train_features, train_labels = estimator.convert_to_dataset(train_confidences, train=True)
