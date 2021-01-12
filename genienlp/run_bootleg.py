@@ -74,6 +74,7 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_prob_threshold', type=float, default=0.3, help='Probability threshold for accepting a candidate for a mention')
     parser.add_argument('--bootleg_dataset_threads', type=int, default=1, help='Number of threads for parallel processing of dataset in bootleg')
     parser.add_argument('--bootleg_dataloader_threads', type=int, default=4, help='Number of threads for parallel loading of datasets in bootleg')
+    parser.add_argument('--bootleg_extract_num_workers', type=int, default=4, help='Number of workers for extracing mentions step of bootleg')
     
     parser.add_argument('--bootleg_integration', type=int, choices=[1, 2],
                         help='In level 1 we extract types for top Qid candidates and feed it to the bottom of Encoder using an entity embedding layer'

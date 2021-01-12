@@ -147,7 +147,7 @@ def parse_argv(parser):
     parser.add_argument('--dump_type2id', action='store_true', help='This will create the "type to id" mapping for all entities available in ES database')
     parser.add_argument('--dump_canonical2type', action='store_true', help='This will create the "canonical to type" mapping for all entities available in ES database')
 
-    parser.add_argument('--min_entity_len', type=int, default=2, help='Minimum length for entities when ngrams lookup_method is used ')
+    parser.add_argument('--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams lookup_method is used ')
     parser.add_argument('--max_entity_len', type=int, default=4, help='Maximum length for entities when ngrams lookup_method is used ')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
     
@@ -165,6 +165,7 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_prob_threshold', type=float, default=0.3, help='Probability threshold for accepting a candidate for a mention')
     parser.add_argument('--bootleg_dataset_threads', type=int, default=1, help='Number of threads for parallel processing of dataset in bootleg')
     parser.add_argument('--bootleg_dataloader_threads', type=int, default=4, help='Number of threads for parallel loading of datasets in bootleg')
+    parser.add_argument('--bootleg_extract_num_workers', type=int, default=4, help='Number of workers for extracing mentions step of bootleg')
 
     parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], default='average', help='Method used to aggregate several type embeddings for a single mention')
 

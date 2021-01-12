@@ -477,7 +477,7 @@ def load_config_json(args):
                     'num_db_types', 'db_unk_id', 'retrieve_method', 'lookup_method', 'almond_domains',
                     'features', 'features_size', 'features_default_val',
                     'bootleg_input_dir', 'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
-                    'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads',
+                    'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
                     'bootleg_integration', 'bootleg_load_prepped_data', 'bootleg_dump_mode', 'bootleg_prob_threshold'
                     ]
 
