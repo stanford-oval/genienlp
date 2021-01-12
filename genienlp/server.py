@@ -222,7 +222,6 @@ def main(args):
     if args.calibrator_path is not None:
         confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
         logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
-        args.mc_dropout = confidence_estimator.mc_dropout
         args.mc_dropout_num = confidence_estimator.mc_dropout_num
 
     server = Server(args, model.numericalizer, model, device, confidence_estimator)

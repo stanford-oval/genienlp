@@ -164,16 +164,12 @@ class TransformerSeq2Seq(GenieModel):
         return generated
 
 
-    def confidence_features(self, batch, predictions, mc_dropout=False, mc_dropout_num=0) -> List[ConfidenceFeatures]:
+    def confidence_features(self, batch, predictions, mc_dropout_num=0) -> List[ConfidenceFeatures]:
         """
         predictions: Tensor of shape (batch_size, output_length)
-        mc_dropout: if True, will activate dropout layers
-        mc_droput_num: number of Monte Carlo samples used for the MC Dropout method
+        mc_droput_num: number of Monte Carlo samples used for the MC Dropout method. 0 disables MC dropout.
         """
-        if mc_dropout:
-            assert mc_dropout_num > 0, 'MC Dropout is enabled, but mc_droput_num is 0'
-        else:
-            assert mc_dropout_num == 0, 'MC Dropout is disabled, but mc_droput_num is not 0'
+        
         batch_size = predictions.shape[0]
         repetition_factor = batch_size//batch.context.value.shape[0]
         input_ids = batch.context.value.repeat_interleave(repetition_factor, dim=0) # repeat to account for multiple predictions per input
@@ -213,8 +209,8 @@ class TransformerSeq2Seq(GenieModel):
         confidence_features = []
         for i in range(batch_size):
             confidence_features.append(
-                        ConfidenceFeatures(drop_logits=batch_drop_logits[i] if mc_dropout else None,
-                                         drop_probs=batch_drop_probs[i] if mc_dropout else None,
+                        ConfidenceFeatures(drop_logits=batch_drop_logits[i] if mc_dropout_num > 0 else None,
+                                         drop_probs=batch_drop_probs[i] if mc_dropout_num > 0 else None,
                                          gold_answer=batch.answer.value[i//repetition_factor][:batch.answer.length[i//repetition_factor]],
                                          prediction=predictions[i][:prediction_lengths[i]+1],  # +1 to include EOS
                                          nodrop_logits=batch_nodrop_logits[i][:prediction_lengths[i]],

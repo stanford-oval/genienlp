@@ -276,8 +276,7 @@ def parse_argv(parser):
     parser.add_argument('--calibrator_path', type=str, default=None, help='If provided, will be used to output confidence scores for each prediction.')
     parser.add_argument('--save_confidence_features', action='store_true', help='If provided, will be used to output confidence scores for each prediction.')
     parser.add_argument("--confidence_feature_path", type=str, default=None, help='A .pkl file to save confidence features in.')
-    parser.add_argument("--mc_dropout", action='store_true', help='Monte Carlo dropout')
-    parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo dropout')
+    parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo (MC) dropout. 0 disables MC dropout.')
 
     parser.add_argument("--half_precision", action='store_true', help='If True, will use half precision on all tensors and calculations.')
 

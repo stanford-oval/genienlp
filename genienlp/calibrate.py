@@ -242,13 +242,12 @@ class ConfidenceEstimator():
         return obj
 
 class RawConfidenceEstimator(ConfidenceEstimator):
-    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout:bool, mc_dropout_num:int):
+    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout_num:int):
         # don't change the interface, to match the parent class
         assert len(featurizers) == 1, 'RawConfidenceEstimator only works with a single featurizer that outputs a single numerical value'
         self.name = name
         self.featurizer = featurizers[0]
         self.eval_metric = eval_metric
-        self.mc_dropout= mc_dropout
         self.mc_dropout_num = mc_dropout_num
 
         self.score = 0
@@ -495,9 +494,8 @@ def main(args):
             estimator_class = RawConfidenceEstimator
         else:
             estimator_class = TreeConfidenceEstimator
-        mc_dropout = train_confidences[0][0].mc_dropout
         mc_dropout_num = train_confidences[0][0].mc_dropout_num
-        estimator = estimator_class(name=name, featurizers=f, eval_metric=args.eval_metric, mc_dropout=mc_dropout, mc_dropout_num=mc_dropout_num)
+        estimator = estimator_class(name=name, featurizers=f, eval_metric=args.eval_metric, mc_dropout_num=mc_dropout_num)
         logger.info('name = %s', name)
         
         train_features, train_labels = estimator.convert_to_dataset(train_confidences, train=True)

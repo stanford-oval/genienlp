@@ -141,10 +141,6 @@ class ConfidenceFeatures:
         else:
             return self.drop_logits.shape[0]
 
-    @property
-    def mc_dropout(self):
-        return self.mc_dropout_num > 0
-
     @staticmethod
     def find_first_mistake(gold_answer: Tensor, prediction: Tensor):
         """
