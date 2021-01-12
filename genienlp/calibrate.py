@@ -200,7 +200,7 @@ def parse_argv(parser):
 
 
 class ConfidenceEstimator():
-    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str):
+    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout_num:int):
         raise NotImplementedError()
 
     def convert_to_features(self, confidences: Iterable[ConfidenceFeatures], train: bool = False):
@@ -274,7 +274,7 @@ class RawConfidenceEstimator(ConfidenceEstimator):
         return precision, recall, pass_rate, accuracies, thresholds
 
 class TreeConfidenceEstimator(ConfidenceEstimator):
-    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout:bool, mc_dropout_num:int):
+    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout_num:int):
         self.name = name
         self.featurizers = featurizers
         self.eval_metric = eval_metric
@@ -283,9 +283,8 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
         self.score = 0
         self.feature_size = 0
         self.normalizer_sub = 0
-        self.normalizer_divide = 1
+        self.normalizer_div = 1
 
-        self.mc_dropout= mc_dropout
         self.mc_dropout_num = mc_dropout_num
 
     @staticmethod
@@ -294,10 +293,9 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
         return prediction_probs
 
     def _pad_and_normalize(self, features: List, normalize='var', train: bool = False):
-        if train:
+        if train or self.feature_size == 0:
             self.feature_size = max([len(f) for f in features])
             logger.info('feature size of the model is set to %d', self.feature_size)
-        
         padded_features = []
         for f in features:
             f = f[:self.feature_size] # truncate
