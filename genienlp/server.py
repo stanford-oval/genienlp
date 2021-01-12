@@ -94,7 +94,7 @@ class Server:
                                                   output_predictions_only=True,
                                                   confidence_estimator=self.confidence_estimator)
 
-                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0], 'score': s} for (p, s) in zip(output.predictions, output.confidence_scores)]})
+                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0], 'score': float(s)} for (p, s) in zip(output.predictions, output.confidence_scores)]})
             else:
                 output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                   output_predictions_only=True)
