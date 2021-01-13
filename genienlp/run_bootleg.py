@@ -1,6 +1,7 @@
 import os
 import logging
 import time
+from pprint import pformat
 
 from .arguments import save_args, post_parse_general
 from .util import set_seed
@@ -72,9 +73,9 @@ def parse_argv(parser):
                         help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
     parser.add_argument('--bootleg_batch_size', type=int, default=30, help='Batch size used for inference using bootleg')
     parser.add_argument('--bootleg_prob_threshold', type=float, default=0.3, help='Probability threshold for accepting a candidate for a mention')
-    parser.add_argument('--bootleg_dataset_threads', type=int, default=1, help='Number of threads for parallel processing of dataset in bootleg')
+    parser.add_argument('--bootleg_dataset_threads', type=int, default=2, help='Number of threads for parallel processing of dataset in bootleg')
     parser.add_argument('--bootleg_dataloader_threads', type=int, default=4, help='Number of threads for parallel loading of datasets in bootleg')
-    parser.add_argument('--bootleg_extract_num_workers', type=int, default=4, help='Number of workers for extracing mentions step of bootleg')
+    parser.add_argument('--bootleg_extract_num_workers', type=int, default=8, help='Number of workers for extracing mentions step of bootleg')
     
     parser.add_argument('--bootleg_integration', type=int, choices=[1, 2],
                         help='In level 1 we extract types for top Qid candidates and feed it to the bottom of Encoder using an entity embedding layer'
@@ -197,6 +198,8 @@ def main(args):
 
     args = post_parse_general(args)
     set_seed(args)
+    
+    logger.info(f'Arguments:\n{pformat(vars(args))}')
 
     dump_bootleg_features(args, logger)
     
