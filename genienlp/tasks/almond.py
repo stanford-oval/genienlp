@@ -293,9 +293,10 @@ class BaseAlmondTask(BaseTask):
         answer_entities = quoted_pattern_with_space.findall(answer)
         for ent in answer_entities:
             # this is thingtalk specific and also domain specific
-            # (music with syntax: ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ... )
-            # (spotify with syntax: ... param:artists contains " XXX " ^^com.spotify:artist and param:id =~ " XXX " ...)
-            # (another syntax: ... filter param:geo:Location == location: " XXXX " and ...)
+            # ( ... id =~ " position and affirm " ) ...'
+            # ... ^^org.schema.Book:Person ( " james clavell " ) ...
+            # ... contains~ ( award , " booker " ) ...
+            # ... inLanguage =~ " italian " ...
             # ** this should change if annotations convention changes **
         
             # assume first syntax
@@ -303,23 +304,21 @@ class BaseAlmondTask(BaseTask):
 
             schema_entity_type = None
 
-            answer_tokens_after_entity = answer[idx + len('" ' + ent + ' "'):].split()
-            if answer_tokens_after_entity[0].startswith('^^'):
-                schema_entity_type = answer_tokens_after_entity[0].rsplit(':', 1)[1]
-                
-            if schema_entity_type is None:
+            tokens_after_entity = answer[idx + len('" ' + ent + ' "'):].split()
+            tokens_before_entity = answer[:idx].split()
             
-                answer_tokens_before_entity = answer[:idx].split()
-                
-                # check last three tokens to find one that starts with param
-                for i in range(3):
-                    if answer_tokens_before_entity[-i].startswith('param:'):
-                        schema_entity_type = answer_tokens_before_entity[-i]
-                        break
+            if tokens_before_entity[-1] == '=~':
+                if tokens_before_entity[-2] == 'id':
+                    schema_entity_type = 'id'
+                elif tokens_before_entity[-2] == 'inLanguage':
+                    schema_entity_type = 'inLanguage'
             
-                if schema_entity_type:
-                    schema_entity_type = schema_entity_type.strip('()').rsplit(':', 1)[1]
-                    
+            elif tokens_before_entity[-4] == 'contains~':
+                schema_entity_type = tokens_before_entity[-2]
+                
+            elif tokens_before_entity[2].startswith('^^'):
+                schema_entity_type = tokens_before_entity[2].rsplit(':', 1)[1]
+
             if schema_entity_type is None or schema_entity_type not in self.TTtype2DBtype.keys():
                 schema_type = self.db.unk_type
             else:
@@ -340,12 +339,12 @@ class BaseAlmondTask(BaseTask):
         tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokens))]
         tokens_text = " ".join(tokens)
 
-        for ent in entity2type.keys():
+        for ent, type in entity2type.items():
             ent_num_tokens = len(ent.split(' '))
             idx = tokens_text.index(ent)
-            token_pos = len(tokens_text[:idx].strip().split(' '))
+            token_pos = len(tokens_text[:idx].split())
             
-            type_id = self.db.type2id[entity2type[ent]]
+            type_id = self.db.type2id[type]
             type_id = self.pad_features([type_id], self.args.features_size[0], self.args.features_default_val[0])
         
             tokens_type_ids[token_pos: token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
@@ -367,18 +366,9 @@ class BaseAlmondTask(BaseTask):
 
         return tokens_type_ids
     
-    def find_word_freqs(self, tokens, tokens_type_ids):
-        token_freqs = []
-        
-        for token, token_type_id in zip(tokens, tokens_type_ids):
-            if token_type_id == self.args.features_default_val[0]:
-                token_freqs.append([1.0] * self.args.features_size[1])
-            else:
-                token_freqs.append([1.0 / (zipf_frequency(token, 'en') + 1e-3)] * self.args.features_size[1])
-        return token_freqs
 
-    def find_type_probs(self, tokens, default_val):
-        token_freqs = [default_val] * len(tokens)
+    def find_type_probs(self, tokens, default_val, default_size):
+        token_freqs = [[default_val] * default_size] * len(tokens)
         return token_freqs
 
     def postprocess_answer(self, answer):
@@ -464,28 +454,25 @@ class BaseAlmondTask(BaseTask):
             new_sentence = ' '.join(new_tokens)
             
         new_sentence = new_sentence.strip()
-        new_sentence_length = len(new_sentence.split(' '))
+        new_tokens = new_sentence.split(' ')
+        new_sentence_length = len(new_tokens)
 
-        tokens_type_ids, tokens_type_probs, tokens_word_freqs = None, None, None
+        tokens_type_ids, tokens_type_probs = None, None
         
         if 'type_id' in self.args.features:
             tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(new_sentence_length)]
         if 'type_prob' in self.args.features:
             tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(new_sentence_length)]
-        if 'word_freq' in self.args.features:
-            tokens_word_freqs = [[self.args.features_default_val[2]] * self.args.features_size[2] for _ in range(new_sentence_length)]
 
         if self.args.do_ner and self.bootleg is None and field_name not in self.no_feature_fields:
             if 'type_id' in self.args.features:
-                tokens_type_ids = self.find_type_ids(tokens, answer)
+                tokens_type_ids = self.find_type_ids(new_tokens, answer)
             if 'type_prob' in self.args.features:
-                tokens_type_probs = self.find_type_probs(tokens, self.args.features_size[1])
-            if 'word_freq' in self.args.features:
-                tokens_word_freqs = self.find_word_freqs(tokens, tokens_type_ids)
+                tokens_type_probs = self.find_type_probs(new_tokens, self.args.features_default_val[1], self.args.features_size[1])
                 
             if self.args.verbose and self.args.do_ner:
                     print()
-                    print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(tokens, tokens_type_ids)], sep='\n')
+                    print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(new_tokens, tokens_type_ids)], sep='\n')
              
         zip_list = []
         if tokens_type_ids:
@@ -494,9 +481,6 @@ class BaseAlmondTask(BaseTask):
         if tokens_type_probs:
             assert len(tokens_type_probs) == new_sentence_length
             zip_list.append(tokens_type_probs)
-        if tokens_word_freqs:
-            assert len(tokens_word_freqs) == new_sentence_length
-            zip_list.append(tokens_word_freqs)
             
         features = [Feature(*tup) for tup in zip(*zip_list)]
         

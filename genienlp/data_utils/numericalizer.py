@@ -501,6 +501,8 @@ class TransformerNumericalizer(object):
         sequential_fields = []
         for i in range(batch_size):
             if features:
+                for feat in batch_features[i]:
+                    feat.flatten()
                 feature = [feat.flatten() for feat in batch_features[i]]
                 assert len(batch_numerical[i]) == len(feature)
             else:
