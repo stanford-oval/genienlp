@@ -146,8 +146,8 @@ class NumericalizedExamples(NamedTuple):
         context_limiteds = numericalizer.pad(context_limiteds, pad_id=numericalizer.decoder_pad_id)
         context_lengths = torch.stack(context_lengths, dim=0)
         
-        if batch.context.feature:
-            # change pad_id later
+        if context_features:
+            # TODO change pad_id later
             context_features = numericalizer.pad(context_features, pad_id=0)
         
         answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
