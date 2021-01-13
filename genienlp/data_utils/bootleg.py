@@ -21,11 +21,13 @@ class Bootleg(object):
         self.embed_dir = f'{self.args.bootleg_input_dir}/emb_data/'
         
         with open(f'{self.args.bootleg_input_dir}/emb_data/entityQID_to_wikidataTypeQID.json', 'r') as fin:
+        # with open(f'{self.args.bootleg_input_dir}/emb_data/es_qid2type.json', 'r') as fin:
             self.qid2type = ujson.load(fin)
 
-        with open(f'{self.args.bootleg_input_dir}/emb_data/wikidataqid_to_bootlegtypeid.json', 'r') as fin:
+        # with open(f'{self.args.bootleg_input_dir}/emb_data/wikidataqid_to_bootlegtypeid.json', 'r') as fin:
+        with open(f'{self.args.bootleg_input_dir}/emb_data/es_type2id.json', 'r') as fin:
             self.type2id = ujson.load(fin)
-            
+        
         self.pretrained_bert = f'{self.args.bootleg_input_dir}/emb_data/pretrained_bert_models'
         
         self.cur_entity_embed_size = 0
@@ -139,9 +141,10 @@ class Bootleg(object):
                             all_types = self.qid2type[qid]
                             if len(all_types):
                                 # choose only the first type
-                                type_id = self.type2id[all_types[0]]
-                                type_ids.append(type_id)
-                                type_probs.append(prob)
+                                if all_types[0] in self.type2id:
+                                    type_id = self.type2id[all_types[0]]
+                                    type_ids.append(type_id)
+                                    type_probs.append(prob)
                             
                         padded_type_ids = self.pad_features(type_ids, self.args.features_size[0], self.args.features_default_val[0])
                         padded_type_probs = self.pad_features(type_probs, self.args.features_size[1], self.args.features_default_val[1])
