@@ -1,3 +1,4 @@
+import random
 import re
 import torch
 import torch.nn as nn
@@ -7,13 +8,15 @@ import logging
 
 import numpy as np
 
-from transformers import XLMRobertaConfig
+from transformers import XLMRobertaConfig, BartConfig
 
 from transformers import LogitsProcessorList
 from transformers import MarianMTModel, BartForConditionalGeneration, MBartForConditionalGeneration,\
     T5ForConditionalGeneration, MT5ForConditionalGeneration
-from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
+from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions, BaseModelOutput, \
+    Seq2SeqModelOutput, Seq2SeqLMOutput
 from transformers.modeling_utils import PreTrainedModel
+from transformers.models.bart.modeling_bart import BartEncoder, BartModel, shift_tokens_right, _expand_mask
 
 from transformers.models.bert.modeling_bert import BertEncoder, BertPooler, BertPreTrainedModel, BertEmbeddings, BertModel
 from transformers.models.roberta.modeling_roberta import create_position_ids_from_input_ids, RobertaEncoder, \
@@ -78,8 +81,6 @@ MARIAN_GROUP_MEMBERS = {**MARIAN_GROUPS, **MARIAN_TATOEBA_GROUPS}
 MODEL_PARALLEL_SUPPORTED_MODELS = list(tokenization_gpt2.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys()) + \
                                     list(tokenization_t5.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys()) + \
                                     list(MT5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
-
-NON_SPM_BASED_TOKENIZERS = list()
 
 ###############
 
@@ -341,6 +342,321 @@ class GenieMT5ForConditionalGeneration(MT5ForConditionalGeneration, GeniePreTrai
         super().__init__(config)
 
 ###############
+## NER models
+
+
+###############
+## BART
+
+class BartForConditionalGenerationForNER(BartForConditionalGeneration):
+
+    def __init__(self, config: BartConfig, num_db_types, db_unk_id):
+        super().__init__(config)
+        self.model = BartModelForNER(config, num_db_types, db_unk_id)
+
+        self.init_weights()
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        entity_ids=None,
+        entity_masking=None,
+        entity_probs=None,
+        mask_entities=False,
+        decoder_inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None:
+            use_cache = False
+            if decoder_input_ids is None:
+                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
+
+        outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            entity_ids=entity_ids,
+            entity_masking=entity_masking,
+            entity_probs=entity_probs,
+            mask_entities=mask_entities,
+            decoder_input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
+
+        masked_lm_loss = None
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            # TODO(SS): do we need to ignore pad tokens in labels?
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        if not return_dict:
+            output = (lm_logits,) + outputs[1:]
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+
+        return Seq2SeqLMOutput(
+            loss=masked_lm_loss,
+            logits=lm_logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+class BartModelForNER(BartModel):
+    def __init__(self, config: BartConfig, num_db_types, db_unk_id):
+        super().__init__(config)
+
+        self.encoder = BartEncoderForNER(config, num_db_types, db_unk_id, self.shared)
+
+        self.init_weights()
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        entity_ids=None,
+        entity_masking=None,
+        entity_probs=None,
+        mask_entities=False,
+        decoder_inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+
+        # 4.12.20 (PVP): Not a fan of this "magical" function and
+        # also wonder how often it's actually used ... keep now
+        # for backward compatibility
+        # -> is this used for backward compatibility
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                entity_ids=entity_ids,
+                entity_masking=entity_masking,
+                entity_probs=entity_probs,
+                mask_entities=mask_entities,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=False
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
+        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
+
+        return Seq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
+
+
+
+
+class BartEncoderForNER(BartEncoder):
+    """
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    :class:`BartEncoderLayer`.
+    Args:
+        config: BartConfig
+        embed_tokens (torch.nn.Embedding): output embedding
+    """
+
+    def __init__(self, config: BartConfig, num_db_types, db_unk_id, embed_tokens: Optional[nn.Embedding] = None):
+        super().__init__(config)
+        self.num_db_types = num_db_types
+        self.db_unk_id = db_unk_id
+        self.pad_token_id = config.pad_token_id
+        if num_db_types > 0:
+            self.entity_type_embeddings = nn.Embedding(num_db_types, config.hidden_size, padding_idx=db_unk_id)
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        entity_ids=None,
+        entity_masking=None,
+        entity_probs=None,
+        mask_entities=False,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        Args:
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+                Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                for details.
+                `What are input IDs? <../glossary.html#input-ids>`__
+            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+                `What are attention masks? <../glossary.html#attention-mask>`__
+            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
+                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
+                into associated vectors than the model's internal embedding lookup matrix.
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+            output_hidden_states (:obj:`bool`, `optional`):
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more detail.
+            return_dict (:obj:`bool`, `optional`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # retrieve input_ids and inputs_embeds
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+
+        embed_pos = self.embed_positions(input_shape)
+
+        hidden_states = inputs_embeds + embed_pos
+
+        if self.num_db_types > 0 and entity_ids is not None:
+            # get length for unpadded types
+            type_lengths = entity_masking.sum(-1)
+    
+            # avoid division by zero
+            type_lengths[type_lengths == 0] = 1
+    
+            entity_type_embeddings = self.entity_type_embeddings(entity_ids)
+    
+            # weighted average
+            if entity_probs is not None:
+                entity_type_embeddings = entity_type_embeddings * entity_probs.unsqueeze(-1)
+    
+            # average embedding of different types
+            # size (batch, length, num_types, emb_dim)
+            entity_type_embeddings = entity_type_embeddings.sum(-2) / type_lengths.unsqueeze(-1)
+    
+            hidden_states += entity_type_embeddings
+        
+        hidden_states = self.layernorm_embedding(hidden_states)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        # expand attention_mask
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+        for encoder_layer in self.layers:
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            dropout_probability = random.uniform(0, 1)
+            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+                attn = None
+            else:
+                hidden_states, attn = encoder_layer(hidden_states, attention_mask, output_attentions=output_attentions)
+
+            if output_attentions:
+                all_attentions = all_attentions + (attn,)
+
+        if self.layer_norm:
+            hidden_states = self.layer_norm(hidden_states)
+
+        if output_hidden_states:
+            encoder_states = encoder_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        )
+
+###############
+## BERT
 
 class BertEmbeddingsForNER(BertEmbeddings):
     """Construct the embeddings from word, position, token_type, and entity_type embeddings.
@@ -522,8 +838,9 @@ class BertModelForNER(BertModel):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
-
+    
 ###############
+## Roberta
 
 class RobertaEmbeddingsForNER(BertEmbeddingsForNER):
     """

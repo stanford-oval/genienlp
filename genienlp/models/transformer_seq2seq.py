@@ -29,12 +29,13 @@
 
 import logging
 import torch
-from transformers import AutoModelForSeq2SeqLM, AutoConfig
+from transformers import AutoModelForSeq2SeqLM, AutoConfig, BartConfig
 from loss_dropper import LossDropper
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import get_mbart_lang
 from .base import GenieModel
+from ..paraphrase.transformers_utils import BartForConditionalGenerationForNER
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +49,17 @@ class TransformerSeq2Seq(GenieModel):
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
         self._is_mbart = 'mbart' in self.args.pretrained_model
         
-        if save_directory is not None:
-            self.model = AutoModelForSeq2SeqLM.from_config(config)
+        if isinstance(config, BartConfig):
+            self.model = BartForConditionalGenerationForNER(config, args.num_db_types, args.db_unk_id).from_pretrained(
+                self.args.pretrained_model, num_db_types=args.num_db_types, db_unk_id=args.db_unk_id, cache_dir=args.embeddings)
+        elif args.do_ner:
+            raise ValueError('Model is not supported for bootleg_integration level 1')
         else:
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
-                                                               cache_dir=self.args.embeddings)
+            if save_directory is not None:
+                self.model = AutoModelForSeq2SeqLM.from_config(config)
+            else:
+                self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
+                                                                   cache_dir=self.args.embeddings)
             
         self.numericalizer = TransformerNumericalizer(self.args.pretrained_model,
                                                       max_generative_vocab=None,
