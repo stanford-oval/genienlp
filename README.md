@@ -11,7 +11,7 @@ The library is suitable for all NLP tasks that can be framed as Contextual Quest
 - text input as _question_
 - text or structured output as _answer_
 
-As the work by [McCann et al.](https://arxiv.org/abs/1806.08730) shows, many different NLP tasks can be framed in this way.
+As the work by [McCann et al.](https://arxiv.org/abs/1806.08730) shows, many NLP tasks can be framed in this way.
 Genie primarily uses the library for paraphrasing, translation, semantic parsing, and dialogue state tracking, and this is
 what the models work best for.
 
@@ -88,7 +88,24 @@ Generate paraphrases:
 genienlp run-paraphrase --model_type gpt2 --model_name_or_path <modeldir> --temperature 0.3 --repetition_penalty 1.0 --num_samples 4 --length 15 --batch_size 32 --input_file <input tsv file> --input_column 1
 ```
 
+
+### Named Entity Disambiguation
+
+First run a bootleg model to extract mentions, entity candidates, and contextual embeddings for the mentions.
+```bash
+genienlp bootleg-dump-features bootleg-dump-features --train_tasks <train_task_names> --save <savedir> --preserve_case --data <dataset_dir> --train_batch_tokens 400 --val_batch_size 400 --database_type json --database_dir <database_dir> --features type_id type_prob --features_size 1 1 --features_default_val 0 1.0 --num_workers 0 --min_entity_len 1 --max_entity_len 4 --bootleg_input_dir <bootleg_input_dir> --bootleg_model <bootleg_model>
+```
+This command generates several output files. In <dataset_dir> you should see a `prep` dir which contains preprocessed data (e.g. data converted to memory-mapped format, several array to facilitate embedding lookup etc.) If your dataset doesn't change you can reuse the same files.
+It will also generate several files in <results_temp> folder. In `eval_bootleg/[train|eval]/<bootleg_model>/bootleg_lables.jsonl` you can see the examples, mentions, predicted candidates and their probabilities according to bootleg. 
+
+Now you can use the extracted features from bootleg in downstream tasks such as semantic parsing to improve named entity understanding and consequently generation:
+```bash
+genienlp train --train_tasks <train_task_names> --train_iterations 60000 --preserve_case --save <savedir> --data <dataset_dir> --model TransformerLSTM --pretrained_model bert-base-uncased --trainable_decoder_embeddings 50 --train_batch_tokens 1000 --val_batch_size 1000 --do_ner --database_type json --database_dir <database_dir> --retrieve_method bootleg --features type_id type_prob --features_size 1 1 --features_default_val 0 1.0 --num_workers 0 --min_entity_len 1 --max_entity_len 4 --bootleg_input_dir <bootleg_input_dir> --bootleg_model <bootleg_model>  --bootleg_load_prepped_data --bootleg_integration <1|2>
+```
+
+
 See `genienlp --help` and `genienlp <command> --help` for details about each argument.
+
 
 ## Citation
 
