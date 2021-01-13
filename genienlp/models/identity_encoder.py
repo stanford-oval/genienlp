@@ -134,6 +134,7 @@ class IdentityEncoder(nn.Module):
         if self.args.num_db_types > 0:
             context_entity_ids = batch.context.feature[:, :, :self.args.features_size[0]].long()
             
+            # indicates position of entities
             context_entity_masking = (context_entity_ids != self.args.features_default_val[0]).int()
 
             if self.args.entity_type_agg_method == 'weighted':

@@ -33,7 +33,7 @@ import torch
 
 
 def identity(x, **kw):
-    return x
+    return x, []
 
 
 class SequentialField(NamedTuple):

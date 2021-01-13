@@ -44,8 +44,6 @@ subcommands = {
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
     'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.parse_argv, run_lm_finetuning.main),
     'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main),
-
-    'bootleg-dump-features': ('Extract candidate features for named entity mentions in the dataset', run_bootleg.parse_argv, run_bootleg.main),
     
     # commands that work with datasets
     'transform-dataset': ('Apply transformations to a tab-separated dataset', transform_dataset.parse_argv, transform_dataset.main),
@@ -53,8 +51,12 @@ subcommands = {
     'dialog-to-tsv': ('Convert a dialog dataset to a turn-by-turn tab-separated format', dialog_to_tsv.parse_argv, dialog_to_tsv.main),
     'split-dataset': ('Split a dataset file into two files', split_dataset.parse_argv, split_dataset.main),
     
+    # sts commands
     'calculate-paraphrase-sts': ('Calculate semantic similarity scores between a dataset and its paraphrase', sts_calculate_scores.parse_argv, sts_calculate_scores.main),
     'filter-paraphrase-sts': ('Filter paraphrases based on semantic similarity scores', sts_filter.parse_argv, sts_filter.main),
+    
+    # bootleg commands
+    'bootleg-dump-features': ('Extract candidate features for named entity mentions in the dataset', run_bootleg.parse_argv, run_bootleg.main),
     
 }
 

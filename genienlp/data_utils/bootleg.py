@@ -1,12 +1,14 @@
 import os
 import ujson
 import numpy as np
+import logging
 from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
 from bootleg import run
 
 from ..util import reverse_bisect_left
 
+logger = logging.getLogger(__name__)
 
 class Bootleg(object):
     
@@ -20,13 +22,18 @@ class Bootleg(object):
         self.entity_dir = f'{self.args.bootleg_input_dir}/wiki_entity_data'
         self.embed_dir = f'{self.args.bootleg_input_dir}/emb_data/'
         
-        with open(f'{self.args.bootleg_input_dir}/emb_data/entityQID_to_wikidataTypeQID.json', 'r') as fin:
-        # with open(f'{self.args.bootleg_input_dir}/emb_data/es_qid2type.json', 'r') as fin:
-            self.qid2type = ujson.load(fin)
+        
+        if args.bootleg_integration == 1:
+            with open(f'{self.args.bootleg_input_dir}/emb_data/es_qid2type.json', 'r') as fin:
+                self.qid2type = ujson.load(fin)
+            with open(f'{self.args.bootleg_input_dir}/emb_data/wikidataqid_to_bootlegtypeid.json', 'r') as fin:
+                self.type2id = ujson.load(fin)
 
-        # with open(f'{self.args.bootleg_input_dir}/emb_data/wikidataqid_to_bootlegtypeid.json', 'r') as fin:
-        with open(f'{self.args.bootleg_input_dir}/emb_data/es_type2id.json', 'r') as fin:
-            self.type2id = ujson.load(fin)
+        else:
+            with open(f'{self.args.bootleg_input_dir}/emb_data/entityQID_to_wikidataTypeQID.json', 'r') as fin:
+                self.qid2type = ujson.load(fin)
+            with open(f'{self.args.bootleg_input_dir}/emb_data/es_type2id.json', 'r') as fin:
+                self.type2id = ujson.load(fin)
         
         self.pretrained_bert = f'{self.args.bootleg_input_dir}/emb_data/pretrained_bert_models'
         
@@ -138,13 +145,23 @@ class Bootleg(object):
                         type_probs = []
                         for qid, prob in zip(all_qids, all_probs):
                             # get all type for a qid
-                            all_types = self.qid2type[qid]
+                            if qid in self.qid2type:
+                                all_types = self.qid2type[qid]
+                            else:
+                                all_types = []
+                                logger.warning(f'Could not find qid {qid} in qid2type mapping')
+                            
+                            if isinstance(all_types, str):
+                                all_types = [all_types]
+                            
                             if len(all_types):
                                 # choose only the first type
                                 if all_types[0] in self.type2id:
                                     type_id = self.type2id[all_types[0]]
                                     type_ids.append(type_id)
                                     type_probs.append(prob)
+                                else:
+                                    logger.warning(f'Could not find type_id {all_types[0]} in type2id mapping')
                             
                         padded_type_ids = self.pad_features(type_ids, self.args.features_size[0], self.args.features_default_val[0])
                         padded_type_probs = self.pad_features(type_probs, self.args.features_size[1], self.args.features_default_val[1])

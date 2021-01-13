@@ -384,9 +384,10 @@ class BertEmbeddingsForNER(BertEmbeddings):
             embeddings += position_embeddings
         
         if self.num_db_types > 0 and entity_ids is not None:
-            # average embedding of different types
-            # size (batch, length, num_types, emb_dim)
+            # get length for unpadded types
             type_lengths = entity_masking.sum(-1)
+            
+            # avoid division by zero
             type_lengths[type_lengths == 0] = 1
             
             entity_type_embeddings = self.entity_type_embeddings(entity_ids)
@@ -394,7 +395,9 @@ class BertEmbeddingsForNER(BertEmbeddings):
             # weighted average
             if entity_probs is not None:
                 entity_type_embeddings = entity_type_embeddings * entity_probs.unsqueeze(-1)
-
+            
+            # average embedding of different types
+            # size (batch, length, num_types, emb_dim)
             entity_type_embeddings = entity_type_embeddings.sum(-2) / type_lengths.unsqueeze(-1)
             
             embeddings += entity_type_embeddings

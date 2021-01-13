@@ -400,11 +400,11 @@ class BaseAlmondTask(BaseTask):
 
     def preprocess_field(self, sentence, field_name=None, answer=None):
         if self.override_context is not None and field_name == 'context':
-            return self.override_context
+            return self.override_context, []
         if self.override_question is not None and field_name == 'question':
-            return self.override_question
+            return self.override_question, []
         if not sentence:
-            return ''
+            return '', []
 
         tokens = sentence.split(' ')
         is_program = self._is_program_field(field_name)
