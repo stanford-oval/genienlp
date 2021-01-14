@@ -58,7 +58,9 @@ class Feature:
     def flatten(self):
         result = []
         for field in VALID_FEATURE_FIELDS:
-            result += getattr(self, field)
+            field_val = getattr(self, field)
+            if field_val:
+                result += field_val
         return result
     
 VALID_FEATURE_FIELDS = tuple(Feature.__annotations__.keys())
