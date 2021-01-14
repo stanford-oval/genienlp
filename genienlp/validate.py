@@ -119,7 +119,7 @@ def print_results(keys, values, num_print=1):
         for key_idx, key in enumerate(keys):
             value = values[key_idx][ex_idx]
             v = value[0] if isinstance(value, list) else value
-            print(f'{key}: {repr(v)}')
+            print(f'{key:>11}: {repr(v)}')
         print()
     sys.stdout.flush()
 
