@@ -88,7 +88,7 @@ class Bootleg(object):
         if not self.args.bootleg_load_prepped_data:
             extract_mentions(in_filepath=jsonl_input_path, out_filepath=jsonl_output_path, cand_map_file=self.cand_map, num_workers=self.args.bootleg_extract_num_workers)
     
-    def pad_features(self, tokens, max_size, pad_id):
+    def pad_values(self, tokens, max_size, pad_id):
         if len(tokens) > max_size:
             tokens = tokens[:max_size]
         else:
@@ -115,18 +115,21 @@ class Bootleg(object):
                     # we only have ctx_emb_ids for top candidates
                     # TODO  output ctx_emb_ids for all 30 candidates
                     for ctx_emb_id, prob, span in zip(line['ctx_emb_ids'], line['probs'], line['spans']):
+                        type_ids = []
+                        type_probs = []
                         
-                        # account for padding and UNK id added to embedding matrix
-                        ctx_emb_id += 2
-                        
-                        # account for shift in embedding idx when we merge embeddings for all data splits
-                        ctx_emb_id += self.cur_entity_embed_size
-                        
-                        type_ids = [ctx_emb_id]
-                        type_probs = [prob]
+                        if prob > threshold:
+                            # account for padding and UNK id added to embedding matrix
+                            ctx_emb_id += 2
+                            
+                            # account for shift in embedding idx when we merge embeddings for all data splits
+                            ctx_emb_id += self.cur_entity_embed_size
+                            
+                            type_ids = [ctx_emb_id]
+                            type_probs = [prob]
                 
-                        padded_type_ids = self.pad_features(type_ids, self.args.features_size[0], self.args.features_default_val[0])
-                        padded_type_probs = self.pad_features(type_probs, self.args.features_size[1], self.args.features_default_val[1])
+                        padded_type_ids = self.pad_values(type_ids, self.args.features_size[0], self.args.features_default_val[0])
+                        padded_type_probs = self.pad_values(type_probs, self.args.features_size[1], self.args.features_default_val[1])
                 
                         tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
                         tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
@@ -163,8 +166,8 @@ class Bootleg(object):
                                 else:
                                     logger.warning(f'Could not find type_id {all_types[0]} in type2id mapping')
                             
-                        padded_type_ids = self.pad_features(type_ids, self.args.features_size[0], self.args.features_default_val[0])
-                        padded_type_probs = self.pad_features(type_probs, self.args.features_size[1], self.args.features_default_val[1])
+                        padded_type_ids = self.pad_values(type_ids, self.args.features_size[0], self.args.features_default_val[0])
+                        padded_type_probs = self.pad_values(type_probs, self.args.features_size[1], self.args.features_default_val[1])
                         
                         tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
                         tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
