@@ -467,7 +467,7 @@ class TransformerNumericalizer(object):
                 all_input_features.append(wp_features)
         
         features = all_input_features
-            
+        
         batch_special_tokens_mask = batch_encoded.special_tokens_mask
 
         batch_features = []
