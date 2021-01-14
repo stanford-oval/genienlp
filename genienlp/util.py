@@ -110,27 +110,39 @@ class ConfidenceFeatures:
     Contains all necessary features that are useful for calculating confidence of a single generated output
     """
 
-    def __init__(self, drop_logits: List[Tensor], drop_probs: List[Tensor], gold_answer: Tensor, prediction: Tensor,
-                 nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_entropies: Tensor, context: Tensor):
+    def __init__(self, drop_logits: List[Tensor], drop_probs: List[Tensor], drop_top1_probs: List[Tensor], drop_top2_probs: List[Tensor],
+                 gold_answer: Tensor, prediction: Tensor,
+                 nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_top1_probs: Tensor, nodrop_top2_probs: Tensor,
+                 nodrop_entropies: Tensor, context: Tensor):
         """
         Inputs:
             droplogits: logits after MC dropout
             gold_answer: includes BOS and EOS tokens, but no PAD tokens
             prediction: includes BOS and EOS tokens, but no PAD tokens
             nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
+            nodrop_top1_probs, nodrop_top2_probs: highest and second highest probabilities of the next token, given that the previous token was from `prediction`
         """
+        
+        # store the results of MC dropout if provided
         if drop_logits is not None:
             self.drop_logits = torch.stack(drop_logits, dim=0).cpu()
+            self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
+            self.drop_top1_probs = torch.stack(drop_top1_probs, dim=0).cpu()
+            self.drop_top2_probs = torch.stack(drop_top2_probs, dim=0).cpu()
         else:
             self.drop_logits = None
-        if drop_probs is not None:
-            self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
-        else:
             self.drop_probs = None
+            self.drop_top1_probs = None
+            self.drop_top2_probs = None
+
         self.nodrop_logits = nodrop_logits.cpu()
         self.nodrop_probs = nodrop_probs.cpu()
+        self.nodrop_top1_probs = nodrop_top1_probs.cpu()
+        self.nodrop_top2_probs = nodrop_top2_probs.cpu()
         self.nodrop_entropies = nodrop_entropies.cpu()
 
+        self.prediction = prediction
+        self.gold_answer = gold_answer
         self.first_mistake = ConfidenceFeatures.find_first_mistake(gold_answer, prediction)
         self.context = context
 
