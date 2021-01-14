@@ -199,8 +199,9 @@ def parse_argv(parser):
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
     parser.add_argument('--almond_detokenize_sentence', action='store_true',
                         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
-    parser.add_argument('--preprocess_special_tokens', action='store_true',
-                        help='convert special ThingTalk tokens to words')
+    parser.add_argument('--almond_thingtalk_version', type=int, choices=[1, 2], default=2, help='Thingtalk version for almond datasets')
+
+    parser.add_argument('--preprocess_special_tokens', action='store_true', help='convert special ThingTalk tokens to words')
     
     parser.add_argument('--model_parallel', action='store_true', help='Use model parallelization by spliting model weights across available gpus')
     parser.add_argument('--mp_device_ratio', default=None, nargs='+', type=int, help='Provide the distribution ratio of model layers across gpus when using model_parallel'

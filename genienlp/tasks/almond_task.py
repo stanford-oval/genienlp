@@ -56,6 +56,7 @@ class BaseAlmondTask(BaseTask):
         
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
+        self._almond_thingtalk_version = args.almond_thingtalk_version
         
         # initialize the database
         self.db = None
@@ -127,53 +128,89 @@ class BaseAlmondTask(BaseTask):
         
         answer_entities = quoted_pattern_with_space.findall(answer)
         for ent in answer_entities:
-            # ** this should change if thingtalk syntax changes **
             
-            # ( ... [Book|Music|...] ( ) filter id =~ " position and affirm " ) ...'
-            # ... ^^org.schema.Book:Person ( " james clavell " ) ...
-            # ... contains~ ( [award|genre|...] , " booker " ) ...
-            # ... inLanguage =~ " persian " ...
-            
-            # assume first syntax
-            idx = answer.index('" ' + ent + ' "')
-            
-            schema_entity_type = None
-            
-            tokens_after_entity = answer[idx + len('" ' + ent + ' "'):].split()
-            tokens_before_entity = answer[:idx].split()
-            
-            if tokens_before_entity[-2] == 'Location':
-                schema_entity_type = 'Location'
-            
-            elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in ['ratingValue',
-                                                                                                 'reviewCount',
-                                                                                                 'checkoutTime',
-                                                                                                 'checkinTime']:
-                schema_entity_type = tokens_before_entity[-2]
-            
-            elif tokens_before_entity[-1] == '=~':
-                if tokens_before_entity[-2] == 'id':
-                    if tokens_before_entity[-3] == 'filter':
-                        schema_entity_type = tokens_before_entity[-6]
-                else:
-                    schema_entity_type = tokens_before_entity[-2]
-            
-            elif tokens_before_entity[-4] == 'contains~':
-                schema_entity_type = tokens_before_entity[-2]
-            
-            elif tokens_before_entity[-2].startswith('^^'):
-                schema_entity_type = tokens_before_entity[-2].rsplit(':', 1)[1]
-                if schema_entity_type == 'Person' and tokens_before_entity[-3] == 'null' and tokens_before_entity[
-                    -5] in ['director', 'creator', 'actor']:
-                    schema_entity_type = 'Person.' + tokens_before_entity[-5]
-            
-            if schema_entity_type is None or schema_entity_type not in self.TTtype2DBtype.keys():
-                schema_type = self.db.unk_type
-            else:
-                schema_type = self.TTtype2DBtype[schema_entity_type]
-            
-            entity2type[ent] = schema_type
+            if self._almond_thingtalk_version == 1:
+                #  ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ...
+                # ... param:artists contains " XXX " ^^com.spotify:artist and param:id =~ " XXX " ...
+                # ... filter param:geo:Location == location: " XXXX " and ...
+    
+                # assume first syntax
+                idx = answer.index('" ' + ent + ' "')
+    
+                schema_entity_type = None
+    
+                answer_tokens_after_entity = answer[idx + len('" ' + ent + ' "'):].split()
+                if answer_tokens_after_entity[0].startswith('^^'):
+                    schema_entity_type = answer_tokens_after_entity[0].rsplit(':', 1)[1]
+    
+                if schema_entity_type is None:
         
+                    answer_tokens_before_entity = answer[:idx].split()
+        
+                    # check last three tokens to find one that starts with param
+                    for i in range(3):
+                        if answer_tokens_before_entity[-i].startswith('param:'):
+                            schema_entity_type = answer_tokens_before_entity[-i]
+                            break
+        
+                    if schema_entity_type:
+                        schema_entity_type = schema_entity_type.strip('()').rsplit(':', 1)[1]
+    
+                if schema_entity_type is None or schema_entity_type not in self.TTtype2DBtype.keys():
+                    schema_type = self.db.unk_type
+                else:
+                    schema_type = self.TTtype2DBtype[schema_entity_type]
+    
+                entity2type[ent] = schema_type
+
+            else:
+            
+                # ** this should change if thingtalk syntax changes **
+                
+                # ( ... [Book|Music|...] ( ) filter id =~ " position and affirm " ) ...'
+                # ... ^^org.schema.Book:Person ( " james clavell " ) ...
+                # ... contains~ ( [award|genre|...] , " booker " ) ...
+                # ... inLanguage =~ " persian " ...
+                
+                # assume first syntax
+                idx = answer.index('" ' + ent + ' "')
+                
+                schema_entity_type = None
+                
+                tokens_after_entity = answer[idx + len('" ' + ent + ' "'):].split()
+                tokens_before_entity = answer[:idx].split()
+                
+                if tokens_before_entity[-2] == 'Location':
+                    schema_entity_type = 'Location'
+                
+                elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in ['ratingValue',
+                                                                                                     'reviewCount',
+                                                                                                     'checkoutTime',
+                                                                                                     'checkinTime']:
+                    schema_entity_type = tokens_before_entity[-2]
+                
+                elif tokens_before_entity[-1] == '=~':
+                    if tokens_before_entity[-2] == 'id':
+                        if tokens_before_entity[-3] == 'filter':
+                            schema_entity_type = tokens_before_entity[-6]
+                    else:
+                        schema_entity_type = tokens_before_entity[-2]
+                
+                elif tokens_before_entity[-4] == 'contains~':
+                    schema_entity_type = tokens_before_entity[-2]
+                
+                elif tokens_before_entity[-2].startswith('^^'):
+                    schema_entity_type = tokens_before_entity[-2].rsplit(':', 1)[1]
+                    if schema_entity_type == 'Person' and tokens_before_entity[-3] == 'null' and tokens_before_entity[-5] in ['director', 'creator', 'actor']:
+                        schema_entity_type = 'Person.' + tokens_before_entity[-5]
+                
+                if schema_entity_type is None or schema_entity_type not in self.TTtype2DBtype.keys():
+                    schema_type = self.db.unk_type
+                else:
+                    schema_type = self.TTtype2DBtype[schema_entity_type]
+                
+                entity2type[ent] = schema_type
+            
         return entity2type
     
     def pad_features(self, features, max_size, pad_id):
