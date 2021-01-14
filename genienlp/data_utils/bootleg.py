@@ -26,13 +26,13 @@ class Bootleg(object):
         if args.bootleg_integration == 1:
             with open(f'{self.args.bootleg_input_dir}/emb_data/es_qid2type.json', 'r') as fin:
                 self.qid2type = ujson.load(fin)
-            with open(f'{self.args.bootleg_input_dir}/emb_data/wikidataqid_to_bootlegtypeid.json', 'r') as fin:
+            with open(f'{self.args.bootleg_input_dir}/emb_data/es_type2id.json', 'r') as fin:
                 self.type2id = ujson.load(fin)
 
         else:
             with open(f'{self.args.bootleg_input_dir}/emb_data/entityQID_to_wikidataTypeQID.json', 'r') as fin:
                 self.qid2type = ujson.load(fin)
-            with open(f'{self.args.bootleg_input_dir}/emb_data/es_type2id.json', 'r') as fin:
+            with open(f'{self.args.bootleg_input_dir}/emb_data/wikidataqid_to_bootlegtypeid.json', 'r') as fin:
                 self.type2id = ujson.load(fin)
         
         self.pretrained_bert = f'{self.args.bootleg_input_dir}/emb_data/pretrained_bert_models'

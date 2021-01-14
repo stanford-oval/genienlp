@@ -81,7 +81,7 @@ class IdentityEncoder(nn.Module):
                 context_embedded_last_hidden_state, _pooled, context_embedded_hidden_states = self.context_BootlegBertEncoder(inputs_embeds=context_embedded_last_hidden_state, input_ent_ids=context_entity_ids)
             else:
                 context_embedded_last_hidden_state = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking,
-                                                           entity_probs=context_entity_probs, mask_entities=mask_entities)[0]
+                                                           entity_probs=context_entity_probs, mask_entities=mask_entities).last_hidden_state
 
         else:
             context_embedded_last_hidden_state = self.encoder_embeddings(context, attention_mask=(~context_padding).to(dtype=torch.float)).last_hidden_state
