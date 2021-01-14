@@ -384,36 +384,31 @@ class TransformerNumericalizer(object):
             else:
                 sentences, index2expansions = list(zip(*map(self._apply_special_token_preprocessing, sentences)))
 
-        all_input_features = []
-        if features:
-            for i, (sentence, index2expansion) in enumerate(zip(sentences, index2expansions)):
-                feat = features[i]
-                new_feat = []
-                keys = set(index2expansion.keys())
-                for j in range(len(feat)):
-                    repeat = 1
-                    if j in keys:
-                        repeat = index2expansion[j]
-                    
-                    new_feat.extend(feat[j]*repeat)
-                
-                
-                assert len(new_feat) == len(sentence.split(' '))
-                
-                all_input_features.append(new_feat)
-                
-        features = all_input_features
+            all_input_features = []
+            if features:
+                for i, (sentence, index2expansion) in enumerate(zip(sentences, index2expansions)):
+                    feat = features[i]
+                    new_feat = []
+                    keys = set(index2expansion.keys())
+                    for j in range(len(feat)):
+                        repeat = 1
+                        if j in keys:
+                            repeat = index2expansion[j]
+            
+                        new_feat.extend(feat[j] * repeat)
         
+                    assert len(new_feat) == len(sentence.split(' '))
         
+                    all_input_features.append(new_feat)
 
-        all_input_ids = []
-        all_input_features = []
+            features = all_input_features
+
         
         # batch_encode_plus for fast tokenizers returns tokenized text
         # whereas slow version do not. We breakdwon slow tokenization into two steps
         # extract tokenized text first, use that to adjust features
         # then pass tokenized text to `_batch_prepare_for_model`
-
+        all_input_ids = []
         all_wp_tokenized = []
 
         if self._use_fast():
@@ -469,9 +464,9 @@ class TransformerNumericalizer(object):
                 
                 assert len(wp_tokenized) == len(wp_features)
         
-            all_input_features.append(wp_features)
+                all_input_features.append(wp_features)
         
-        
+        features = all_input_features
             
         batch_special_tokens_mask = batch_encoded.special_tokens_mask
 
@@ -479,7 +474,7 @@ class TransformerNumericalizer(object):
         
         if features:
             for i in range(batch_size):
-                feat = all_input_features[i]
+                feat = features[i]
                 special_tokens_mask = batch_special_tokens_mask[i]
                 num_prefix_special_tokens, num_suffix_special_tokens = self.get_num_special_tokens(special_tokens_mask)
     
@@ -501,8 +496,6 @@ class TransformerNumericalizer(object):
         sequential_fields = []
         for i in range(batch_size):
             if features:
-                for feat in batch_features[i]:
-                    feat.flatten()
                 feature = [feat.flatten() for feat in batch_features[i]]
                 assert len(batch_numerical[i]) == len(feature)
             else:

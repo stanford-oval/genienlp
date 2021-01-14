@@ -247,9 +247,7 @@ class BaseAlmondTask(BaseTask):
         #     self.db = LocalElasticDatabase(db_data_processed)
         # elif self.args.database_type == 'remote-elastic':
         #     self.db = RemoteElasticDatabase(es_config, unk_id, all_aliases, type2id, alias2qid, qid2typeid)
-        #     if self.args.create_type_mapping:
-        #         es_dump_type2id(self.db)
-        #         es_dump_canonical2type(self.db)
+
 
     def _init_bootleg(self):
         self.bootleg = Bootleg(self.args)
@@ -294,17 +292,11 @@ class BaseAlmondTask(BaseTask):
         for ent in answer_entities:
             # ** this should change if thingtalk syntax changes **
             
-            # books
-            # ( ... Book ( ) filter id =~ " position and affirm " ) ...'
+            # ( ... [Book|Music|...] ( ) filter id =~ " position and affirm " ) ...'
             # ... ^^org.schema.Book:Person ( " james clavell " ) ...
             # ... contains~ ( [award|genre|...] , " booker " ) ...
-            # ... inLanguage =~ " italian " ...
+            # ... inLanguage =~ " persian " ...
             
-            # music
-            
-            
-            
-        
             # assume first syntax
             idx = answer.index('" ' + ent + ' "')
 
@@ -333,7 +325,6 @@ class BaseAlmondTask(BaseTask):
                 schema_entity_type = tokens_before_entity[-2].rsplit(':', 1)[1]
                 if schema_entity_type == 'Person' and tokens_before_entity[-3] == 'null' and tokens_before_entity[-5] in ['director', 'creator', 'actor']:
                     schema_entity_type = 'Person.' + tokens_before_entity[-5]
-                    
 
             if schema_entity_type is None or schema_entity_type not in self.TTtype2DBtype.keys():
                 schema_type = self.db.unk_type
@@ -405,6 +396,8 @@ class BaseAlmondTask(BaseTask):
         return new_answer
 
     def preprocess_field(self, sentence, field_name=None, answer=None):
+        
+        #TODO fix features it should not be empty list
         if self.override_context is not None and field_name == 'context':
             return self.override_context, []
         if self.override_question is not None and field_name == 'question':
