@@ -36,7 +36,7 @@ import multiprocessing as mp
 import ujson
 import marisa_trie
 
-from ..data_utils.example import Feature
+from ..data_utils.example import Feature, get_pad_feature
 from ..data_utils.database import Database
 from ..data_utils.database_utils import DOMAIN_TYPE_MAPPING
 from ..data_utils.bootleg import Bootleg
@@ -147,21 +147,22 @@ class AlmondDataset(CQA):
                 for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
                     if is_contextual:
                         for i in range(len(tokens_type_ids)):
-                            examples[n].question_feature[i] = ex.question_feature[i]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
-                            examples[n].context_plus_question_feature[i + len(ex.context.split(' '))] = ex.context_plus_question_feature[i + len(ex.context.split(' '))]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
-                            
+                            examples[n].question_feature[i].type_id = tokens_type_ids[i]
+                            examples[n].question_feature[i].type_prob = tokens_type_probs[i]
+                            examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[i]
+                            examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = tokens_type_probs[i]
+ 
                     else:
                         for i in range(len(tokens_type_ids)):
-                            examples[n].context_feature[i] = ex.context_feature[i]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
-                            examples[n].context_plus_question_feature[i] = ex.context_plus_question_feature[i]._replace(type_id=tokens_type_ids[i], type_prob=tokens_type_probs[i])
-                            
+                            examples[n].context_feature[i].type_id = tokens_type_ids[i]
+                            examples[n].context_feature[i].type_prob = tokens_type_probs[i]
+                            examples[n].context_plus_question_feature[i].type_id = tokens_type_ids[i]
+                            examples[n].context_plus_question_feature[i].type_prob = tokens_type_probs[i]
+
                 if verbose:
-                    print()
                     for ex in examples:
-                        if is_contextual:
-                            print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(ex.question_tokens, ex.question_feature)], sep='\n')
-                        else:
-                            print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(ex.context, ex.context_feature)], sep='\n')
+                        print()
+                        print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(ex.context_plus_question.split(' '), ex.context_plus_question_feature)], sep='\n')
                             
             if cache_input_data:
                 os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -399,9 +400,11 @@ class BaseAlmondTask(BaseTask):
         
         #TODO fix features it should not be empty list
         if self.override_context is not None and field_name == 'context':
-            return self.override_context, []
+            pad_feature = get_pad_feature(self.args.features, self.args.features_default_val, self.args.features_size)
+            return self.override_context, [pad_feature] * len(self.override_context.split(' '))
         if self.override_question is not None and field_name == 'question':
-            return self.override_question, []
+            pad_feature = get_pad_feature(self.args.features, self.args.features_default_val, self.args.features_size)
+            return self.override_question, [pad_feature] * len(self.override_question.split(' '))
         if not sentence:
             return '', []
 

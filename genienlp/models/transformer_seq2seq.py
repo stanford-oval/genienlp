@@ -66,6 +66,7 @@ class TransformerSeq2Seq(GenieModel):
                                                       cache=args.embeddings,
                                                       no_fast_tokenizer=args.no_fast_tokenizer,
                                                       preprocess_special_tokens=args.preprocess_special_tokens,
+                                                      features=args.features,
                                                       features_default_val=args.features_default_val,
                                                       features_size=args.features_size
                                                       )

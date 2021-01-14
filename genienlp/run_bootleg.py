@@ -96,14 +96,10 @@ def parse_argv(parser):
     parser.add_argument('--features_default_val', nargs='+', type=float, default=[0, 1.0],
                         help='Max length of each feature vector. All features are padded up to this length')
     
-    parser.add_argument('--override_question', default=None, help='Override the question for all tasks')
-    parser.add_argument('--override_context', default=None, help='Override the context for all tasks')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
     parser.add_argument('--almond_detokenize_sentence', action='store_true',
                         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
-    parser.add_argument('--preprocess_special_tokens', action='store_true',
-                        help='convert special ThingTalk tokens to words')
 
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     
@@ -134,7 +130,6 @@ def dump_bootleg_features(args, logger):
                                 'features_size': args.features_size,
                                 'features_default_val': args.features_default_val,
                                 'verbose': args.verbose,
-                                'preprocess_special_tokens': args.preprocess_special_tokens
                                 }
     
     for task in args.train_tasks:

@@ -30,6 +30,8 @@
 from typing import NamedTuple, List, Union, Iterable
 import unicodedata
 import torch
+from dataclasses import dataclass
+
 
 
 def identity(x, **kw):
@@ -42,9 +44,11 @@ class SequentialField(NamedTuple):
     limited: Union[torch.tensor, List[int]]
     feature: Union[torch.tensor, List[List[int]], None]
 
+
 # Feature is defined per token
 # Each field contains a list of possible values for that feature
-class Feature(NamedTuple):
+@dataclass
+class Feature:
     type_id: List[int] = None
     type_prob: List[float] = None
 
@@ -57,7 +61,14 @@ class Feature(NamedTuple):
             result += getattr(self, field)
         return result
     
-VALID_FEATURE_FIELDS = tuple(Feature._fields)
+VALID_FEATURE_FIELDS = tuple(Feature.__annotations__.keys())
+
+def get_pad_feature(feature_fields, features_default_val, features_size):
+    pad_feature = Feature()
+    for i, field in enumerate(feature_fields):
+        assert field in VALID_FEATURE_FIELDS
+        setattr(pad_feature, field, [features_default_val[i]] * features_size[i])
+    return pad_feature
 
 
 class Example(NamedTuple):

@@ -37,7 +37,7 @@ from torch.nn.utils.rnn import pad_sequence
 from transformers import AutoConfig, AutoTokenizer, BertTokenizer, XLMRobertaTokenizer
 
 from .decoder_vocab import DecoderVocabulary
-from .example import SequentialField, Feature
+from .example import SequentialField, Feature, get_pad_feature
 
 # not all tokenizers respect whitespace in the input or honor do_basic_tokenize=False
 # for those, we need to use the slow tokenizers or we'll get messed up thingtalk output
@@ -76,7 +76,7 @@ class TransformerNumericalizer(object):
     _special_tokens_to_token_regexes: List[Tuple[re.Pattern, str]]
     
     def __init__(self, pretrained_tokenizer, max_generative_vocab, cache=None, no_fast_tokenizer=False,
-                 preprocess_special_tokens=False, features_default_val=None, features_size=None):
+                 preprocess_special_tokens=False, features=None, features_default_val=None, features_size=None):
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
         self._cache = cache
@@ -91,7 +91,7 @@ class TransformerNumericalizer(object):
         # map a space-separated sequence of words to a token
         self._special_tokens_to_token_regexes = []
         
-        
+        self.features = features
         self.features_default_val = features_default_val
         self.features_size = features_size
         
@@ -477,8 +477,8 @@ class TransformerNumericalizer(object):
                 feat = features[i]
                 special_tokens_mask = batch_special_tokens_mask[i]
                 num_prefix_special_tokens, num_suffix_special_tokens = self.get_num_special_tokens(special_tokens_mask)
-    
-                pad_feat = Feature(type_id=[self.features_default_val[0]] * self.features_size[0], type_prob=[self.features_default_val[1]] * self.features_size[1])
+                
+                pad_feat = get_pad_feature(self.features, self.features_default_val, self.features_size)
                 feat = [pad_feat] * num_prefix_special_tokens + feat + [pad_feat] * num_suffix_special_tokens
     
                 batch_features.append(feat)
