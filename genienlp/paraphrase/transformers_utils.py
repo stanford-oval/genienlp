@@ -593,7 +593,10 @@ class BartEncoderForNER(BartEncoder):
             input_shape = inputs_embeds.size()[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-
+        
+        if entity_masking is not None and mask_entities:
+            input_ids = input_ids * ~(entity_masking.max(-1)[0].bool())
+            
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
@@ -746,8 +749,6 @@ class BertModelForNER(BertModel):
             inputs_embeds=None,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
-            past_key_values=None,
-            use_cache=None,
             output_attentions=None,
             output_hidden_states=None,
             return_dict=None,
@@ -851,7 +852,7 @@ class RobertaEmbeddingsForNER(BertEmbeddingsForNER):
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         return super().forward(
-            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, inputs_embeds=inputs_embeds, past_key_values_length=past_key_values_length,
+            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, inputs_embeds=inputs_embeds,
             entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs, mask_entities=mask_entities)
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):

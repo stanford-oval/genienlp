@@ -121,8 +121,19 @@ class TransformerSeq2Seq(GenieModel):
             # (1) loss is averaged over sequence lengths first, then over the batch size. This way,
             # longer sequences in the batch do not drown shorter sequences.
             # (2) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
+
+            context_entity_ids, context_entity_probs, context_entity_masking = None, None, None
+            mask_entities = False
+            if self.args.num_db_types > 0:
+                context_entity_ids = batch.context.feature[:, :, :self.args.features_size[0]].long()
+                # indicates position of entities
+                context_entity_masking = (context_entity_ids != self.args.features_default_val[0]).int()
+                if self.args.entity_type_agg_method == 'weighted':
+                    context_entity_probs = batch.context.feature[:, :, self.args.features_size[0]:self.args.features_size[0] + self.args.features_size[1]].long()
             
-            outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
+            outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id),
+                                 entity_ids=context_entity_ids, entity_masking=context_entity_masking,
+                                 entity_probs=context_entity_probs, mask_entities=mask_entities)
             
             ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
             loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)
