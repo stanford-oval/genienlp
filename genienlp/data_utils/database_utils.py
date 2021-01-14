@@ -14,7 +14,7 @@ DOMAIN_TYPE_MAPPING['music'] = {'MusicRecording': 'Q7366', 'Person': 'Q5', 'Musi
 # TODO actor and director should be handled differently
 DOMAIN_TYPE_MAPPING['movies'] = {'Movie': 'Q11424', 'Person.creator': 'Q2500638', 'Person.director': 'Q3455803', 'Person.actor': 'Q33999'}   # Q11424:film
 
-DOMAIN_TYPE_MAPPING['books'] = {'Book': 'Q571','Person': 'Q5', 'inLanguage': 'Q315', 'award': 'Q618779'}  # Q571:book, Q315:language, Q618779:award
+DOMAIN_TYPE_MAPPING['books'] = {'Book': 'Q571', 'Person': 'Q5', 'inLanguage': 'Q315', 'award': 'Q618779'}  # Q571:book, Q315:language, Q618779:award
 
 DOMAIN_TYPE_MAPPING['linkedin'] = {'Organization': 'Q43229','Person': 'Q5', 'addressLocality': 'Q2221906', 'award': 'Q618779'} # Q2221906:geographic_location
 
