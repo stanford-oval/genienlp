@@ -28,4 +28,4 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from . import generic_task
-from . import almond
+from . import almond_task

@@ -1,10 +1,3 @@
-#
-# Copyright (c) 2019, The Board of Trustees of the Leland Stanford Junior University
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
 # * Redistributions of source code must retain the above copyright notice, this
 #   list of conditions and the following disclaimer.
 #
@@ -28,184 +21,29 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-import torch
-import logging
 from collections import defaultdict
-import math
-import multiprocessing as mp
-import ujson
+
 import marisa_trie
+import ujson
 
-from ..data_utils.example import Feature, get_pad_feature
-from ..data_utils.database import Database
 from ..data_utils.database_utils import DOMAIN_TYPE_MAPPING
+from ..tasks.base_dataset import Split
+from ..tasks.base_task import BaseTask
+from ..tasks.generic_dataset import input_then_output_len, input_tokens_fn, CQA, default_batch_fn
+from ..tasks.registry import register_task
 from ..data_utils.bootleg import Bootleg
+from ..data_utils.database import Database
+from ..data_utils.example import Example, get_pad_feature, Feature
+from ..tasks.almond_dataset import AlmondDataset
+from ..tasks.almond_utils import ISO_to_LANG, process_id, is_cjk_char, quoted_pattern_with_space, \
+    tokenize_cjk_chars, detokenize_cjk_chars, is_entity, is_entity_marker, is_device
 
-from .base_task import BaseTask
-from .registry import register_task
-from .generic_dataset import CQA, default_batch_fn, input_then_output_len, input_tokens_fn
-from ..data_utils.example import Example
-from .almond_utils import ISO_to_LANG, is_device, is_entity, is_entity_marker, process_id,\
-    tokenize_cjk_chars, detokenize_cjk_chars, is_cjk_char, process, chunk_file, quoted_pattern_with_space
-
-from .base_dataset import Split
-
-logger = logging.getLogger(__name__)
-
-
-class AlmondDataset(CQA):
-    """Obtaining dataset for Almond semantic parsing task"""
-
-    base_url = None
-
-    def __init__(self, path, *, make_example, **kwargs):
-        
-        #TODO fix cache_path for multilingual task
-        subsample = kwargs.get('subsample')
-        cached_path = kwargs.get('cached_path')
-        is_contextual = kwargs.get('is_contextual')
-        
-        skip_cache = kwargs.get('skip_cache', True)
-        cache_input_data = kwargs.get('cache_input_data', False)
-        bootleg = kwargs.get('bootleg', None)
-        num_workers = kwargs.get('num_workers', 0)
-        features_size = kwargs.get('features_size')
-        features_default_val = kwargs.get('features_default_val')
-        verbose = kwargs.get('verbose', False)
-        
-        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
-        dir_name = os.path.basename(os.path.dirname(path))
-
-        if os.path.exists(cache_name) and not skip_cache:
-            logger.info(f'Loading cached data from {cache_name}')
-            examples = torch.load(cache_name)
-        else:
-            n = 0
-            with open(path, 'r', encoding='utf-8') as fp:
-                for line in fp:
-                    n += 1
-
-            max_examples = min(n, subsample) if subsample is not None else n
-            if num_workers > 0:
-                num_processes = min(num_workers, int(mp.cpu_count()))
-                logger.info(f'Using {num_processes} workers...')
-                chunk_size = int(math.ceil(max_examples / num_processes))
-                num_chunks = int(math.ceil(max_examples / chunk_size))
-    
-                base_path, extension = path.rsplit('.', 1)
-    
-                chunk_file_paths = [f'{base_path}_{chunk_id}.tsv' for chunk_id in range(num_chunks)]
-                chunk_file(path, chunk_file_paths, chunk_size, num_chunks)
-                num_processes = min(num_processes, num_chunks)
-    
-                with mp.Pool(processes=num_processes) as pool:
-                    process_args = [{'in_file': chunk_file_paths[i], 'chunk_size': chunk_size, 'dir_name': dir_name,
-                                     'example_batch_size': 1, 'make_process_example': make_example,
-                                     'kwargs': kwargs} for i in range(num_chunks)]
-                    results = pool.map(process, process_args)
-    
-                # merge all results
-                examples = [item for sublist in results for item in sublist]
-    
-                for file in chunk_file_paths:
-                    os.remove(file)
-            else:
-                process_args = {'in_file': path, 'chunk_size': max_examples, 'dir_name': dir_name,
-                                'example_batch_size': 1, 'make_process_example': make_example,
-                                'kwargs': kwargs}
-                examples = process(process_args)
-                
-                
-            if bootleg:
-                config_ovrrides = bootleg.fixed_overrides
-                
-                input_file_dir = os.path.dirname(path)
-                input_file_name = os.path.basename(path.rsplit('.', 1)[0] + '_bootleg.jsonl')
-                
-                data_overrides = [
-                    "--data_config.data_dir", input_file_dir,
-                    "--data_config.test_dataset.file", input_file_name
-                ]
-                
-                # get config args
-                config_ovrrides.extend(data_overrides)
-                config_args = bootleg.create_config(config_ovrrides)
-                
-                # create jsonl files from input examples
-                # jsonl is the input format bootleg expects
-                bootleg.create_jsonl(path, examples, is_contextual)
-                
-                # extract mentions and mention spans in the sentence and write them to output jsonl files
-                bootleg.extract_mentions(path)
-                
-                # find the right entity candidate for each mention
-                # extract type ids for each token in input sentence
-                all_token_type_ids, all_tokens_type_probs = bootleg.disambiguate_mentions(config_args, input_file_name[:-len('_bootleg.jsonl')])
-                
-                # override examples features with bootleg features
-                assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
-                for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
-                    if is_contextual:
-                        for i in range(len(tokens_type_ids)):
-                            examples[n].question_feature[i].type_id = tokens_type_ids[i]
-                            examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-                            examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[i]
-                            examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = tokens_type_probs[i]
- 
-                    else:
-                        for i in range(len(tokens_type_ids)):
-                            examples[n].context_feature[i].type_id = tokens_type_ids[i]
-                            examples[n].context_feature[i].type_prob = tokens_type_probs[i]
-                            examples[n].context_plus_question_feature[i].type_id = tokens_type_ids[i]
-                            examples[n].context_plus_question_feature[i].type_prob = tokens_type_probs[i]
-
-                if verbose:
-                    for ex in examples:
-                        print()
-                        print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(ex.context_plus_question.split(' '), ex.context_plus_question_feature)], sep='\n')
-                            
-            if cache_input_data:
-                os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-                logger.info(f'Caching data to {cache_name}')
-                torch.save(examples, cache_name)
-
-        super().__init__(examples, **kwargs)
-        
-
-    @classmethod
-    def return_splits(cls, path, train='train', validation='eval', test='test', **kwargs):
-
-        """Create dataset objects for splits of the ThingTalk dataset.
-        Arguments:
-            path: path to directory where data splits reside
-            train: The prefix of the train data. Default: 'train'.
-            validation: The prefix of the validation data. Default: 'eval'.
-            test: The prefix of the test data. Default: 'test'.
-            Remaining keyword arguments: Passed to the splits method of
-                Dataset.
-        """
-        
-        train_data = None if train is None else cls(os.path.join(path, train + '.tsv'), **kwargs)
-        validation_data = None if validation is None else cls(os.path.join(path, validation + '.tsv'), **kwargs)
-        test_data = None if test is None else cls(os.path.join(path, test + '.tsv'), **kwargs)
-
-        aux_data = None
-        do_curriculum = kwargs.get('curriculum', False)
-        if do_curriculum:
-            kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
-    
 
 
 class BaseAlmondTask(BaseTask):
     """Base class for the Almond semantic parsing task
         i.e. natural language to formal language (ThingTalk) mapping"""
-
+    
     def __init__(self, name, args):
         super().__init__(name, args)
         self.args = args
@@ -215,10 +53,10 @@ class BaseAlmondTask(BaseTask):
         else:
             no_feature_fields.append('question')
         self.no_feature_fields = no_feature_fields
-
+        
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
-
+        
         # initialize the database
         self.db = None
         self.bootleg = None
@@ -232,7 +70,7 @@ class BaseAlmondTask(BaseTask):
                 for domain in self.args.almond_domains:
                     self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
                 self._init_db()
-
+    
     def _init_db(self):
         if self.args.database_type in ['json', 'local-elastic']:
             with open(os.path.join(self.args.database_dir, 'canonical2type.json'), 'r') as fin:
@@ -248,24 +86,23 @@ class BaseAlmondTask(BaseTask):
         #     self.db = LocalElasticDatabase(db_data_processed)
         # elif self.args.database_type == 'remote-elastic':
         #     self.db = RemoteElasticDatabase(es_config, unk_id, all_aliases, type2id, alias2qid, qid2typeid)
-
-
+    
     def _init_bootleg(self):
         self.bootleg = Bootleg(self.args)
-
+    
     def is_contextual(self):
         return NotImplementedError
     
     @property
     def metrics(self):
         return ['em', 'sm', 'f1']
-
+    
     def _is_program_field(self, field_name):
         raise NotImplementedError()
-
+    
     def _make_example(self, parts, dir_name, **kwargs):
         raise NotImplementedError()
-
+    
     def get_splits(self, root, **kwargs):
         kwargs['bootleg'] = self.bootleg
         kwargs['is_contextual'] = self.is_contextual()
@@ -278,14 +115,13 @@ class BaseAlmondTask(BaseTask):
             output.append(sentence[i])
             # skip space after cjk chars only if followed by another cjk char
             if is_cjk_char(ord(sentence[i])) and \
-                    i+1 < len(sentence) and sentence[i+1] == ' ' and \
-                    i+2 < len(sentence) and is_cjk_char(ord(sentence[i+2])):
+                    i + 1 < len(sentence) and sentence[i + 1] == ' ' and \
+                    i + 2 < len(sentence) and is_cjk_char(ord(sentence[i + 2])):
                 i += 2
             else:
                 i += 1
         return "".join(output)
-
-
+    
     def collect_answer_entity_types(self, answer):
         entity2type = dict()
         
@@ -300,16 +136,19 @@ class BaseAlmondTask(BaseTask):
             
             # assume first syntax
             idx = answer.index('" ' + ent + ' "')
-
+            
             schema_entity_type = None
-
+            
             tokens_after_entity = answer[idx + len('" ' + ent + ' "'):].split()
             tokens_before_entity = answer[:idx].split()
             
             if tokens_before_entity[-2] == 'Location':
                 schema_entity_type = 'Location'
-                
-            elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in ['ratingValue', 'reviewCount', 'checkoutTime', 'checkinTime']:
+            
+            elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in ['ratingValue',
+                                                                                                 'reviewCount',
+                                                                                                 'checkoutTime',
+                                                                                                 'checkinTime']:
                 schema_entity_type = tokens_before_entity[-2]
             
             elif tokens_before_entity[-1] == '=~':
@@ -321,19 +160,20 @@ class BaseAlmondTask(BaseTask):
             
             elif tokens_before_entity[-4] == 'contains~':
                 schema_entity_type = tokens_before_entity[-2]
-                
+            
             elif tokens_before_entity[-2].startswith('^^'):
                 schema_entity_type = tokens_before_entity[-2].rsplit(':', 1)[1]
-                if schema_entity_type == 'Person' and tokens_before_entity[-3] == 'null' and tokens_before_entity[-5] in ['director', 'creator', 'actor']:
+                if schema_entity_type == 'Person' and tokens_before_entity[-3] == 'null' and tokens_before_entity[
+                    -5] in ['director', 'creator', 'actor']:
                     schema_entity_type = 'Person.' + tokens_before_entity[-5]
-
+            
             if schema_entity_type is None or schema_entity_type not in self.TTtype2DBtype.keys():
                 schema_type = self.db.unk_type
             else:
                 schema_type = self.TTtype2DBtype[schema_entity_type]
-        
+            
             entity2type[ent] = schema_type
-    
+        
         return entity2type
     
     def pad_features(self, features, max_size, pad_id):
@@ -342,11 +182,11 @@ class BaseAlmondTask(BaseTask):
         else:
             features += [pad_id] * (max_size - len(features))
         return features
-
+    
     def oracle_type_ids(self, tokens, entity2type):
         tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokens))]
         tokens_text = " ".join(tokens)
-
+        
         for ent, type in entity2type.items():
             ent_num_tokens = len(ent.split(' '))
             idx = tokens_text.index(ent)
@@ -354,33 +194,33 @@ class BaseAlmondTask(BaseTask):
             
             type_id = self.db.type2id[type]
             type_id = self.pad_features([type_id], self.args.features_size[0], self.args.features_default_val[0])
-        
+            
             tokens_type_ids[token_pos: token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
-    
+        
         return tokens_type_ids
-
+    
     def find_type_ids(self, tokens, answer):
         tokens_type_ids = []
-
+        
         if self.args.database_type == 'json':
             if self.args.retrieve_method == 'naive':
-                tokens_type_ids = self.db.lookup(tokens, self.args.lookup_method, self.args.min_entity_len, self.args.max_entity_len)
+                tokens_type_ids = self.db.lookup(tokens, self.args.lookup_method, self.args.min_entity_len,
+                                                 self.args.max_entity_len)
             elif self.args.retrieve_method == 'entity-oracle':
                 answer_entities = quoted_pattern_with_space.findall(answer)
                 tokens_type_ids = self.db.lookup(tokens, answer_entities=answer_entities)
             elif self.args.retrieve_method == 'type-oracle':
                 entity2type = self.collect_answer_entity_types(answer)
                 tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
-
+        
         return tokens_type_ids
     
-
     def find_type_probs(self, tokens, default_val, default_size):
         token_freqs = [[default_val] * default_size] * len(tokens)
         return token_freqs
-
-    def postprocess_answer(self, answer):
     
+    def postprocess_answer(self, answer):
+        
         if self._almond_detokenize_sentence:
             # To make genienlp transparent to the tokenization done by genie-toolkit
             # We tokenize answer here by adding whitespace between each CJK character
@@ -395,10 +235,10 @@ class BaseAlmondTask(BaseTask):
             new_tokens.append(token)
         new_answer = ' '.join(new_tokens)
         return new_answer
-
+    
     def preprocess_field(self, sentence, field_name=None, answer=None):
         
-        #TODO fix features it should not be empty list
+        # TODO fix features it should not be empty list
         if self.override_context is not None and field_name == 'context':
             pad_feature = get_pad_feature(self.args.features, self.args.features_default_val, self.args.features_size)
             return self.override_context, [pad_feature] * len(self.override_context.split(' '))
@@ -407,7 +247,7 @@ class BaseAlmondTask(BaseTask):
             return self.override_question, [pad_feature] * len(self.override_question.split(' '))
         if not sentence:
             return '', []
-
+        
         tokens = sentence.split(' ')
         is_program = self._is_program_field(field_name)
         new_tokens = []
@@ -417,12 +257,12 @@ class BaseAlmondTask(BaseTask):
                     token = token[len('QUOTED_'):]
                 elif token.startswith('GENERIC_ENTITY_'):
                     token = token[len('GENERIC_'):]
-
+                
                 self.special_tokens.add(token)
             new_tokens.append(token)
         tokens = new_tokens
         new_sentence = ' '.join(tokens)
-
+        
         if self._almond_detokenize_sentence:
             
             # BERT tokenizers by default add whitespace around any CJK character
@@ -456,7 +296,7 @@ class BaseAlmondTask(BaseTask):
                 if in_string:
                     new_tokens.append(token)
                     continue
-
+                
                 if not is_entity(token) and not is_entity_marker(token) and \
                         not is_device(token):
                     for word in token.split('_'):
@@ -464,28 +304,33 @@ class BaseAlmondTask(BaseTask):
                 else:
                     new_tokens.append(token)
             new_sentence = ' '.join(new_tokens)
-            
+        
         new_sentence = new_sentence.strip()
         new_tokens = new_sentence.split(' ')
         new_sentence_length = len(new_tokens)
-
+        
         tokens_type_ids, tokens_type_probs = None, None
         
         if 'type_id' in self.args.features:
-            tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(new_sentence_length)]
+            tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in
+                               range(new_sentence_length)]
         if 'type_prob' in self.args.features:
-            tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(new_sentence_length)]
-
+            tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in
+                                 range(new_sentence_length)]
+        
         if self.args.do_ner and self.bootleg is None and field_name not in self.no_feature_fields:
             if 'type_id' in self.args.features:
                 tokens_type_ids = self.find_type_ids(new_tokens, answer)
             if 'type_prob' in self.args.features:
-                tokens_type_probs = self.find_type_probs(new_tokens, self.args.features_default_val[1], self.args.features_size[1])
-                
+                tokens_type_probs = self.find_type_probs(new_tokens, self.args.features_default_val[1],
+                                                         self.args.features_size[1])
+            
             if self.args.verbose and self.args.do_ner:
-                    print()
-                    print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(new_tokens, tokens_type_ids)], sep='\n')
-             
+                print()
+                print(
+                    *[f'token: {token}\ttype: {token_type}' for token, token_type in zip(new_tokens, tokens_type_ids)],
+                    sep='\n')
+        
         zip_list = []
         if tokens_type_ids:
             assert len(tokens_type_ids) == new_sentence_length
@@ -493,7 +338,7 @@ class BaseAlmondTask(BaseTask):
         if tokens_type_probs:
             assert len(tokens_type_probs) == new_sentence_length
             zip_list.append(tokens_type_probs)
-            
+        
         features = [Feature(*tup) for tup in zip(*zip_list)]
         
         return new_sentence, features
@@ -503,13 +348,13 @@ class BaseAlmondTask(BaseTask):
 class Almond(BaseAlmondTask):
     """The Almond semantic parsing task
     i.e. natural language to formal language (ThingTalk) mapping"""
-
+    
     def _is_program_field(self, field_name):
         return field_name == 'answer'
-
+    
     def is_contextual(self):
         return False
-
+    
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
@@ -523,18 +368,19 @@ class Almond(BaseAlmondTask):
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
 
+
 @register_task('natural_seq2seq')
 class NaturalSeq2Seq(BaseAlmondTask):
     """The Almond seqeunce to sequence task where both sequences are natural language
     i.e. no ThingTalk program. Paraphrasing and translation are examples of this task"""
-
+    
     @property
     def metrics(self):
         return ['bleu', 'em', 'nf1']
-
+    
     def _is_program_field(self, field_name):
         return False
-
+    
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant
         if len(parts) == 2:
@@ -549,7 +395,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
         answer = target_sequence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
-
+    
     def get_splits(self, root, **kwargs):
         kwargs['bootleg'] = self.bootleg
         kwargs['is_contextual'] = False
@@ -560,12 +406,13 @@ class NaturalSeq2Seq(BaseAlmondTask):
 class ContextualAlmond(BaseAlmondTask):
     """Contextual Almond semantic parsing task
     """
+    
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
-
+    
     def is_contextual(self):
         return True
-
+    
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
             _id, context, sentence, target_code = parts[:4]
@@ -581,17 +428,17 @@ class ContextualAlmond(BaseAlmondTask):
 class ReverseAlmond(BaseTask):
     """Reverse Almond semantic parsing task
     i.e. formal language to natural language mapping"""
-
+    
     @property
     def metrics(self):
         return ['bleu', 'em']
-
+    
     def is_contextual(self):
         return False
-
+    
     def _is_program_field(self, field_name):
         return field_name == 'context'
-
+    
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
@@ -602,12 +449,13 @@ class ReverseAlmond(BaseTask):
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
 
+
 # TODO add a similar preprocessing step to Multilingual dialogue tasks as well
 class BaseAlmondDialogueNLUTask(BaseAlmondTask):
     def preprocess_field(self, sentence, field_name=None, answer=None):
         if not sentence:
             return sentence
-
+        
         # remove the $dialogue at the start of the dialogue
         # this is safe because we know we're processing dialogues, so the answer
         # always starts with $dialogue and the context is either `null` or also
@@ -615,11 +463,11 @@ class BaseAlmondDialogueNLUTask(BaseAlmondTask):
         if field_name == 'context' and sentence.startswith('$dialogue '):
             sentence = sentence[len('$dialogue '):]
         if field_name == 'answer':
-            assert(sentence.startswith('$dialogue '))
+            assert (sentence.startswith('$dialogue '))
             sentence = sentence[len('$dialogue '):]
-
+        
         return super().preprocess_field(sentence, field_name, answer)
-
+    
     def postprocess_answer(self, answer):
         return '$dialogue ' + answer
 
@@ -630,27 +478,29 @@ class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
     (translate the user utterance to a formal representation, given the current
     state of the conversation)
     """
+    
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
-
+    
     def is_contextual(self):
         return True
-
+    
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
             _id, context, sentence, target_code = parts[:4]
         else:
             _id, context, sentence, target_code = parts
-
+        
         answer = target_code
         question = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
-
+    
     def get_splits(self, root, **kwargs):
         kwargs['bootleg'] = self.bootleg
         kwargs['is_contextual'] = True
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example,
+                                           **kwargs)
 
 
 @register_task('almond_dialogue_nlu_agent')
@@ -660,12 +510,13 @@ class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
     state of the conversation).
     This is used to facilitate annotation of human-human dialogues.
     """
+    
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
-
+    
     def is_contextual(self):
         return True
-
+    
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
             _id, context, sentence, target_code = parts[:4]
@@ -675,11 +526,12 @@ class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
         question = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
-
+    
     def get_splits(self, root, **kwargs):
         kwargs['bootleg'] = self.bootleg
         kwargs['is_contextual'] = True
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example,
+                                           **kwargs)
 
 
 @register_task('almond_dialogue_nlg')
@@ -688,16 +540,17 @@ class AlmondDialogueNLG(BaseAlmondTask):
     (generate the system utterance, given the current state of the conversation
     and the desired system dialogue act)
     """
+    
     def _is_program_field(self, field_name):
         return field_name == 'context'
-
+    
     def is_contextual(self):
         return True
-
+    
     @property
     def metrics(self):
         return ['bleu']
-
+    
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task
         _id, context, sentence, target_code = parts
@@ -706,11 +559,12 @@ class AlmondDialogueNLG(BaseAlmondTask):
         answer = sentence
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
-
+    
     def get_splits(self, root, **kwargs):
         kwargs['bootleg'] = self.bootleg
         kwargs['is_contextual'] = True
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example,
+                                           **kwargs)
 
 
 @register_task('almond_dialogue_policy')
@@ -718,16 +572,17 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     """Multi-turn dialogue policy task for Almond dialogues
     (generate the next dialogue act, given the current state of the conversation)
     """
+    
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
-
+    
     def is_contextual(self):
         return True
-
+    
     @property
     def metrics(self):
         return ['em', 'f1']
-
+    
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
         _id, context, _sentence, target_code = parts
@@ -736,37 +591,39 @@ class AlmondDialoguePolicy(BaseAlmondTask):
         answer = target_code
         return Example.from_raw(self.name + '/' + _id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
-
+    
     def get_splits(self, root, **kwargs):
         kwargs['bootleg'] = self.bootleg
         kwargs['is_contextual'] = True
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
-    
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example,
+                                           **kwargs)
+
 
 class BaseAlmondMultiLingualTask(BaseAlmondTask):
     """ Base task for MultiLingual Almond
     """
+    
     def get_train_processed_ids(self, split):
         all_ids = []
         for ex in split.examples:
             all_ids.append(process_id(ex))
         return all_ids
-
+    
     def combine_datasets(self, datasets, sort_key_fn, batch_size_fn, used_fields, groups):
         splits = defaultdict()
-    
+        
         for field in used_fields:
             all_examples = []
             for dataset in datasets:
                 all_examples.extend(getattr(dataset, field).examples)
-        
+            
             splits[field] = CQA(all_examples, sort_key_fn=sort_key_fn, batch_size_fn=batch_size_fn, groups=groups)
-    
+        
         return Split(train=splits.get('train'),
                      eval=splits.get('eval'),
                      test=splits.get('test'),
                      aux=splits.get('aux'))
-
+    
     def get_splits(self, root, **kwargs):
         
         kwargs['bootleg'] = self.bootleg
@@ -780,7 +637,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
             almond_dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
                                                          make_example=self._make_example, **kwargs)
             all_datasets.append(almond_dataset)
-            
+        
         used_fields = [field for field in all_datasets[0]._fields if getattr(all_datasets[0], field) is not None]
         
         assert len(all_datasets) >= 1
@@ -792,7 +649,8 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
                 ids_sets = list(map(lambda dataset: set(self.get_train_processed_ids(dataset.train)), all_datasets))
                 id_set_base = set(ids_sets[0])
                 for id_set in ids_sets:
-                    assert set(id_set) == id_set_base, 'When using sentence batching your datasets should have matching ids'
+                    assert set(
+                        id_set) == id_set_base, 'When using sentence batching your datasets should have matching ids'
             
             sort_key_fn = process_id
             batch_size_fn = default_batch_fn
@@ -800,7 +658,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
             # use default values for `sort_key_fn` and `batch_size_fn`
             sort_key_fn = input_then_output_len
             batch_size_fn = input_tokens_fn
-            
+        
         groups = len(all_datasets) if kwargs.get('sentence_batching') else None
         
         if kwargs.get('separate_eval') and (all_datasets[0].eval or all_datasets[0].test):
@@ -814,13 +672,13 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     def __init__(self, name, args):
         super().__init__(name, args)
         self.lang_as_question = args.almond_lang_as_question
-
+    
     def _is_program_field(self, field_name):
         return field_name == 'answer'
-
+    
     def is_contextual(self):
         return False
-
+    
     @property
     def metrics(self):
         return ['em', 'sm', 'bleu']
@@ -845,17 +703,17 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
 class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
     """Multi-turn NLU task (user and agent) for MultiLingual Almond dialogues
     """
-
+    
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
-
+    
     def is_contextual(self):
         return True
-
+    
     @property
     def metrics(self):
         return ['em', 'sm', 'bleu']
-
+    
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
             _id, context, sentence, target_code = parts
@@ -871,16 +729,17 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
 class AlmondDialogMultiLingualNLG(BaseAlmondTask):
     """Multi-turn NLG task (agent) for MultiLingual Almond dialogues
     """
+    
     def _is_program_field(self, field_name):
         return field_name == 'context'
     
     def is_contextual(self):
         return True
-
+    
     @property
     def metrics(self):
         return ['bleu']
-
+    
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task
         _id, context, sentence, target_code = parts
