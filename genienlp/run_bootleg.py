@@ -100,6 +100,7 @@ def parse_argv(parser):
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
     parser.add_argument('--almond_detokenize_sentence', action='store_true',
                         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
+    parser.add_argument('--almond_thingtalk_version', type=int, choices=[1, 2], default=2, help='Thingtalk version for almond datasets')
 
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     
@@ -190,6 +191,8 @@ def main(args):
     args.do_ner = True
     args.retrieve_method = 'bootleg'
     args.bootleg_load_prepped_data = False
+    args.override_context = None
+    args.override_question = None
 
     args = post_parse_general(args)
     set_seed(args)
