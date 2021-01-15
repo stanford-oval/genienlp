@@ -1,5 +1,4 @@
-# FROM stanfordoval/genienlp
-FROM 932360549041.dkr.ecr.us-west-2.amazonaws.com/genie-nlp-kf:20210114.1
+FROM stanfordoval/genienlp
 
 MAINTAINER Thingpedia Admins <thingpedia-admins@lists.stanford.edu>
 
@@ -7,7 +6,7 @@ MAINTAINER Thingpedia Admins <thingpedia-admins@lists.stanford.edu>
 # There is a workaround by changing pod fsgroup but kfserving inference service cannot set pod level security context.
 USER root
 
-RUN pip3 install awscli kfserving
+RUN pip3 install awscli
 
 WORKDIR /home/genienlp
 ENTRYPOINT ["/opt/genienlp/dockerfiles/kfserver_start.sh"]
