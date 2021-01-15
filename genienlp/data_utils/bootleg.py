@@ -2,6 +2,9 @@ import os
 import ujson
 import numpy as np
 import logging
+
+from .database_utils import BANNED_WORDS
+
 from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
 from bootleg import run
@@ -114,11 +117,11 @@ class Bootleg(object):
                 if self.args.bootleg_integration == 2:
                     # we only have ctx_emb_ids for top candidates
                     # TODO  output ctx_emb_ids for all 30 candidates
-                    for ctx_emb_id, prob, span in zip(line['ctx_emb_ids'], line['probs'], line['spans']):
+                    for alias, ctx_emb_id, prob, span in zip(line['aliases'], line['ctx_emb_ids'], line['probs'], line['spans']):
                         type_ids = []
                         type_probs = []
                         
-                        if prob > threshold:
+                        if prob > threshold and alias not in BANNED_WORDS:
                             # account for padding and UNK id added to embedding matrix
                             ctx_emb_id += 2
                             
@@ -135,7 +138,7 @@ class Bootleg(object):
                         tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
             
                 else:
-                    for all_qids, all_probs, span in zip(line['cands'], line['cand_probs'], line['spans']):
+                    for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
                         # filter qids with confidence lower than a threshold
                         idx = reverse_bisect_left(all_probs, threshold, lo=0)
                         all_qids = all_qids[:idx]
@@ -146,25 +149,27 @@ class Bootleg(object):
     
                         type_ids = []
                         type_probs = []
-                        for qid, prob in zip(all_qids, all_probs):
-                            # get all type for a qid
-                            if qid in self.qid2type:
-                                all_types = self.qid2type[qid]
-                            else:
-                                all_types = []
-                                logger.warning(f'Could not find qid {qid} in qid2type mapping')
-                            
-                            if isinstance(all_types, str):
-                                all_types = [all_types]
-                            
-                            if len(all_types):
-                                # choose only the first type
-                                if all_types[0] in self.type2id:
-                                    type_id = self.type2id[all_types[0]]
-                                    type_ids.append(type_id)
-                                    type_probs.append(prob)
+                        
+                        if alias not in BANNED_WORDS:
+                            for qid, prob in zip(all_qids, all_probs):
+                                # get all type for a qid
+                                if qid in self.qid2type:
+                                    all_types = self.qid2type[qid]
                                 else:
-                                    logger.warning(f'Could not find type_id {all_types[0]} in type2id mapping')
+                                    all_types = []
+                                    logger.warning(f'Could not find qid {qid} in qid2type mapping')
+                                
+                                if isinstance(all_types, str):
+                                    all_types = [all_types]
+                                
+                                if len(all_types):
+                                    # choose only the first type
+                                    if all_types[0] in self.type2id:
+                                        type_id = self.type2id[all_types[0]]
+                                        type_ids.append(type_id)
+                                        type_probs.append(prob)
+                                    else:
+                                        logger.warning(f'Could not find type_id {all_types[0]} in type2id mapping')
                             
                         padded_type_ids = self.pad_values(type_ids, self.args.features_size[0], self.args.features_default_val[0])
                         padded_type_probs = self.pad_values(type_probs, self.args.features_size[1], self.args.features_default_val[1])
