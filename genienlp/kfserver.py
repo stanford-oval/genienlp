@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2018, Salesforce, Inc.
+# Copyright (c) 2021, Salesforce, Inc.
 #                     The Board of Trustees of the Leland Stanford Junior University
 # All rights reserved.
 #
@@ -28,8 +28,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-import multiprocessing
 import logging
 
 import kfserving
@@ -60,5 +58,4 @@ def main(args):
     model, device, confidence_estimator = init(args)
     model_server = KFModelServer('nlp', args, model.numericalizer, model, device, confidence_estimator)
     model_server.load()
-    num_workers =  min(1, multiprocessing.cpu_count() - 1)
-    kfserving.KFServer(workers=num_workers).start([model_server])
+    kfserving.KFServer(workers=1).start([model_server])

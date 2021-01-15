@@ -21,7 +21,6 @@ RUN dnf -y install git gcc gcc-c++ make cmake && \
 	   -o torch-1.7.1-cp38-cp38-manylinux1_x86_64.whl \
 	&& pip3 install torch-1.7.1-cp38-cp38-manylinux1_x86_64.whl \
 	&& rm -fr torch-1.7.1-cp38-cp38-manylinux1_x86_64.whl \
-	&& pip3 install awscli kfserving \
 	&& pip3 install -e /opt/genienlp \
 	&& rm -fr /root/.cache \
 	&& dnf -y remove gcc gcc-c++ make cmake \
@@ -31,4 +30,4 @@ RUN dnf -y install git gcc gcc-c++ make cmake && \
 RUN useradd -ms /bin/bash -r genienlp
 USER genienlp
 WORKDIR /home/genienlp
-ENTRYPOINT ["/opt/genienlp/dockerfiles/start.sh"]
+ENTRYPOINT ["genienlp"]
