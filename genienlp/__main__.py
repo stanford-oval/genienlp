@@ -30,7 +30,7 @@
 
 import argparse
 
-from . import arguments, train, predict, server, cache_embeddings, export, calibrate
+from . import arguments, train, predict, server, kfserver, cache_embeddings, export, calibrate
 from .paraphrase import run_lm_finetuning, run_generation
 from .paraphrase.scripts import split_dataset, dialog_to_tsv, clean_paraphrasing_dataset, transform_dataset
 from .sts import sts_calculate_scores, sts_filter
@@ -41,6 +41,7 @@ subcommands = {
     'export': ('Export a trained model for serving', export.parse_argv, export.main),
     'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.parse_argv, predict.main),
     'server': ('Export RPC interface to predict', server.parse_argv, server.main),
+    'kfserver': ('Export KFServing interface to predict', server.parse_argv, kfserver.main),
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
     'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.parse_argv, run_lm_finetuning.main),
     'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main),
