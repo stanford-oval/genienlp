@@ -31,7 +31,7 @@ import logging
 import nltk
 nltk.download('averaged_perceptron_tagger', quiet=True)
 
-from .database_utils import is_special_case, normalize_text, has_overlap
+from .database_utils import is_banned, normalize_text, has_overlap
 
 tracer = logging.getLogger('elasticsearch')
 tracer.setLevel(logging.CRITICAL)
@@ -69,7 +69,7 @@ class Database(object):
                 end += 1
                 gram_text = normalize_text(" ".join(gram))
             
-                if not is_special_case(gram_text) and not gram_text in verbs and gram_text in self.all_canonicals:
+                if not is_banned(gram_text) and not gram_text in verbs and gram_text in self.all_canonicals:
                     if has_overlap(start, end, used_aliases):
                         continue
                     if self.canonical2type[gram_text] not in self.entity_type_white_list:
@@ -103,7 +103,7 @@ class Database(object):
                     cur += 1
                 
                 if j == len(key_tokenized):
-                    if is_special_case(' '.join(key_tokenized)):
+                    if is_banned(' '.join(key_tokenized)):
                         continue
                     
                     # match found

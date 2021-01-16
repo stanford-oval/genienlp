@@ -373,10 +373,12 @@ def map_filter(callable, iterable):
     return output
 
 
-def reverse_bisect_left(a, x, lo=0, hi=None):
-    """Insert item x in list a, and keep it reverse-sorted assuming a
+def reverse_bisect_left(a, x, lo=None, hi=None):
+    """Find item x in list a, and keep it reverse-sorted assuming a
     is reverse-sorted.
     """
+    if lo is None:
+        lo = 0
     if hi is None:
         hi = len(a)
     while lo < hi:

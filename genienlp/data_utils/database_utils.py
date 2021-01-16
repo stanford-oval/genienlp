@@ -46,10 +46,8 @@ BANNED_WORDS = set(
 
 BANNED_REGEX = [re.compile(r'\d star'), re.compile(r'\dth'), re.compile(r'a \d')]
 
-def is_special_case(key):
-    if key in BANNED_WORDS:
-        return True
-    return False
+def is_banned(word):
+    return word in BANNED_WORDS or any([regex.match(word) for regex in BANNED_REGEX])
 
 def normalize_text(text):
     text = unicodedata.normalize('NFD', text).lower()
@@ -64,8 +62,9 @@ def has_overlap(start, end, used_aliases):
     return False
 
 
-
 def post_process_bootleg_types(qid, type, title, almond_domains):
+    # TODO if training on multiple domains (in one run) these mapping should be modified
+    # e.g. song is mapped to book which is not correct if training on music domain too
     for domain in almond_domains:
         if domain == 'books':
             # houghton mifflin
@@ -75,7 +74,7 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
             elif qid == 'Q1486':
                 type = 'Q618779'
     
-            if 'book' in title or 'novel' in title or 'poem' in title or title in \
+            elif 'book' in title or 'novel' in title or 'poem' in title or title in \
                     ['written work', 'literary work', 'literature', 'play', 'film',
                      'occurrence', 'song', 'fictional human',
                      'document', 'day of the week', 'compilation album', 'magazine',
@@ -88,6 +87,7 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
                 type = 'Q5'
             elif title in ['recurring event'] or 'award' in title:
                 type = 'Q618779'
+                
             # languages are not in typeid2title of bootleg
             # [language, country, ethnic group]
             elif type in ['Q34770', 'Q6256', 'Q41710']:
@@ -95,6 +95,11 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
             elif title in ['day', 'single', 'musical group',
                            'Wikimedia disambiguation page', 'Wikimedia list article',
                            'academic discipline']:
+                type = 'unk'
+            
+            # TODOD fix later (by more mapping)
+            # everything else has unknown type
+            else:
                 type = 'unk'
                 
     return type

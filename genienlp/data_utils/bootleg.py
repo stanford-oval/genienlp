@@ -3,7 +3,7 @@ import ujson
 import numpy as np
 import logging
 
-from .database_utils import BANNED_WORDS, BANNED_REGEX, post_process_bootleg_types
+from .database_utils import BANNED_WORDS, BANNED_REGEX, post_process_bootleg_types, is_banned
 
 from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
@@ -49,18 +49,14 @@ class Bootleg(object):
         
         self.cur_entity_embed_size = 0
         
-        # find model checkpoint within model folder
-        # due to naming inconsistency of bootleg models we should find it manually
-        init_checkpoint = None
-        for file in os.listdir(self.model_dir):
-            if '.pt' in file:
-                init_checkpoint = os.path.join(self.model_dir, file)
-                
-        if init_checkpoint is None:
-            raise ValueError('No model checkpoints were found within {} directory'.format(self.model_dir))
+        # Mapping between model directory model checkpoint name
+        model2checkpoint = {'bootleg_wiki': 'bootleg_model',
+                            'bootleg_wiki_types': 'bootleg_types',
+                            'bootleg_wiki_mini': 'bootleg_model_mini',
+                            'bootleg_wiki_kg': 'bootleg_kg'}
         
-        self.ckpt_name = os.path.basename(init_checkpoint)[:-len('.pt')]
-        self.model_ckpt_path = init_checkpoint
+        self.ckpt_name = model2checkpoint[self.args.bootleg_model]
+        self.model_ckpt_path = os.path.join(self.model_dir, self.ckpt_name)
 
         self.fixed_overrides = [
              "--run_config.timestamp", 'None',
@@ -128,7 +124,7 @@ class Bootleg(object):
                         type_ids = []
                         type_probs = []
                         
-                        if prob >= threshold and not (alias in BANNED_WORDS or any([regex.match(alias) for regex in BANNED_REGEX])):
+                        if prob >= threshold and not is_banned(alias):
                             # account for padding and UNK id added to embedding matrix
                             ctx_emb_id += 2
                             
@@ -147,7 +143,7 @@ class Bootleg(object):
                 else:
                     for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
                         # filter qids with confidence lower than a threshold
-                        idx = reverse_bisect_left(all_probs, threshold, lo=0)
+                        idx = reverse_bisect_left(all_probs, threshold)
                         all_qids = all_qids[:idx]
                         all_probs = all_probs[:idx]
                         
@@ -157,7 +153,7 @@ class Bootleg(object):
                         type_ids = []
                         type_probs = []
                         
-                        if not (alias in BANNED_WORDS or any([regex.match(alias) for regex in BANNED_REGEX])):
+                        if not is_banned(alias):
                             for qid, prob in zip(all_qids, all_probs):
                                 # get all type for a qid
                                 if qid in self.qid2type:
@@ -170,13 +166,14 @@ class Bootleg(object):
                                     all_types = [all_types]
                                 
                                 if len(all_types):
-                                    if all_types[0] in self.type2id:
-                                        # choose only the first type
-                                        type = all_types[0]
+                                    # choose only the first type
+                                    type = all_types[0]
+                                    
+                                    if type in self.type2id:
                                         title = self.typeid2title.get(type, '?')
                                         
                                         ######
-                                        ### postprocess types according to rules laerned from analyze_bootleg_results
+                                        ### postprocess types according to rules learned from analyze_bootleg_results
                                         ######
                                         if self.bootleg_post_process_types:
                                             type = post_process_bootleg_types(qid, type, title, self.almond_domains)
@@ -185,7 +182,7 @@ class Bootleg(object):
                                         type_ids.append(type_id)
                                         type_probs.append(prob)
                                     else:
-                                        logger.warning(f'Could not find type_id {all_types[0]} in type2id mapping')
+                                        logger.warning(f'Could not find type_id {type} in type2id mapping')
                             
                         padded_type_ids = self.pad_values(type_ids, self.args.features_size[0], self.args.features_default_val[0])
                         padded_type_probs = self.pad_values(type_probs, self.args.features_size[1], self.args.features_default_val[1])

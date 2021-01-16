@@ -6,7 +6,7 @@ from elasticsearch.client import XPackClient
 from elasticsearch.client.utils import NamespacedClient
 from elasticsearch import Elasticsearch, RequestsHttpConnection
 from elasticsearch import exceptions
-from .database import TYPES, is_special_case
+from .database import is_banned
 
 ES_RETRY_ATTEMPTS = 5
 
@@ -88,7 +88,7 @@ class ElasticDatabase(object):
                 # span_begs.append(j_st)
                 # span_ends.append(j_end)
                 
-                if not is_special_case(gram_attempt) and gram_attempt in self.all_aliases:
+                if not is_banned(gram_attempt) and gram_attempt in self.all_aliases:
                     keep = True
                     
                     for u_al in used_aliases:
@@ -163,7 +163,7 @@ class ElasticDatabase(object):
                 match = match[0]
                 canonical = match['_source']['canonical']
                 type = match['_source']['type']
-                if not is_special_case(canonical) and canonical == gram_attempts[i]:
+                if not is_banned(canonical) and canonical == gram_attempts[i]:
                     keep = True
                     
                     for u_al in used_aliases:
@@ -219,7 +219,7 @@ class ElasticDatabase(object):
                 match = match[0]
                 canonical = match['_source']['canonical']
                 type = match['_source']['type']
-                if not is_special_case(canonical) and canonical == batch_to_lookup[i]:
+                if not is_banned(canonical) and canonical == batch_to_lookup[i]:
                     all_tokens_type_ids[i].extend([self.type2id[type] for _ in range(all_currs[i], all_ends[i])])
                     all_currs[i] = all_ends[i]
                 else:
@@ -356,6 +356,8 @@ class RemoteElasticDatabase(ElasticDatabase):
 class LocalElasticDatabase(ElasticDatabase):
     def __init__(self, items):
         super().__init__()
+        # TODO fix how types are handled
+        TYPES = tuple()
         self.type2id.update({type: i + 1 for i, type in enumerate(TYPES)})
         self._init_db(items)
     
