@@ -36,11 +36,15 @@ TYPES = ('song_name', 'song_artist', 'song_album', 'song_genre')
 BANNED_WORDS = set(
     stopwords.words('english') + \
     ['music', 'musics', 'name', 'names', 'want', 'wants', 'album', 'albums', 'please', 'who', 'show me', 'tell me', 'find me',
-     'play', 'play me', 'plays', 'track', 'tracks', 'song', 'songs', 'record', 'records', 'recordings', 'album',
-     'something', 'get', 'selections',
+     'play', 'play me', 'plays', 'track', 'tracks', 'song', 'songs', 'record', 'records', 'recordings', 'album', 'url',
+     'something', 'get', 'selections', 'pages', 'isbn', 'isbn numbers', 'average rating', 'count', 'yesterday', 'before today', 'i need to know',
      'resume', 'resumes', 'the', 'search for me', 'search', 'searches', 'yes', 'yeah', 'popular',
-     'release', 'released', 'dance', 'dancing', 'need', 'i need', 'i would', ' i will', 'find', 'the list', 'get some']
+     'h', 'm', 's', 'd', 'y', 'am', 'pm', 'min', 'sec', 'hour', 'year', 'month', 'day',
+     'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+     'release', 'released', 'dance', 'dancing', 'need', 'i need', 'i would', ' i will', 'find', 'the list', 'get some', 'af', '1st', '2nd', '3rd']
 )
+
+BANNED_REGEX = [re.compile(r'\d star'), re.compile(r'\dth'), re.compile(r'a \d')]
 
 def is_special_case(key):
     if key in BANNED_WORDS:
@@ -58,3 +62,39 @@ def has_overlap(start, end, used_aliases):
         if start < alias_end and end > alias_start:
             return True
     return False
+
+
+
+def post_process_bootleg_types(qid, type, title, almond_domains):
+    for domain in almond_domains:
+        if domain == 'books':
+            # houghton mifflin
+            if qid == 'Q390074':
+                type = 'Q618779'
+            # ciudad de buenos aires
+            elif qid == 'Q1486':
+                type = 'Q618779'
+    
+            if 'book' in title or 'novel' in title or 'poem' in title or title in \
+                    ['written work', 'literary work', 'literature', 'play', 'film',
+                     'occurrence', 'song', 'fictional human',
+                     'document', 'day of the week', 'compilation album', 'magazine',
+                     'television series', 'taxon']:
+                type = 'Q571'
+            elif 'person' in title or 'rights activist' in title or title in ['writer',
+                                                                              'journalist',
+                                                                              'author',
+                                                                              'politician']:
+                type = 'Q5'
+            elif title in ['recurring event'] or 'award' in title:
+                type = 'Q618779'
+            # languages are not in typeid2title of bootleg
+            # [language, country, ethnic group]
+            elif type in ['Q34770', 'Q6256', 'Q41710']:
+                type = 'Q315'
+            elif title in ['day', 'single', 'musical group',
+                           'Wikimedia disambiguation page', 'Wikimedia list article',
+                           'academic discipline']:
+                type = 'unk'
+                
+    return type

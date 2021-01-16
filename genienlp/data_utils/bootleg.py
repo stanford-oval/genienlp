@@ -3,7 +3,7 @@ import ujson
 import numpy as np
 import logging
 
-from .database_utils import BANNED_WORDS
+from .database_utils import BANNED_WORDS, BANNED_REGEX, post_process_bootleg_types
 
 from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
@@ -25,9 +25,12 @@ class Bootleg(object):
         self.entity_dir = f'{self.args.bootleg_input_dir}/wiki_entity_data'
         self.embed_dir = f'{self.args.bootleg_input_dir}/emb_data/'
         
+        self.almond_domains = args.almond_domains
+        self.bootleg_post_process_types = args.bootleg_post_process_types
         
         if args.bootleg_integration == 1:
-            with open(f'{self.args.bootleg_input_dir}/emb_data/es_qid2type.json', 'r') as fin:
+            # with open(f'{self.args.bootleg_input_dir}/emb_data/es_qid2type.json', 'r') as fin:
+            with open(f'{self.args.bootleg_input_dir}/emb_data/entityQID_to_wikidataTypeQID.json', 'r') as fin:
                 self.qid2type = ujson.load(fin)
             with open(f'{self.args.bootleg_input_dir}/emb_data/es_type2id.json', 'r') as fin:
                 self.type2id = ujson.load(fin)
@@ -37,6 +40,10 @@ class Bootleg(object):
                 self.qid2type = ujson.load(fin)
             with open(f'{self.args.bootleg_input_dir}/emb_data/wikidataqid_to_bootlegtypeid.json', 'r') as fin:
                 self.type2id = ujson.load(fin)
+                
+        with open(f'{self.args.bootleg_input_dir}/emb_data/wikidatatitle_to_typeid_0905.json', 'r') as fin:
+            title2typeid = ujson.load(fin)
+            self.typeid2title = {v: k for k, v in title2typeid.items()}
         
         self.pretrained_bert = f'{self.args.bootleg_input_dir}/emb_data/pretrained_bert_models'
         
@@ -121,7 +128,7 @@ class Bootleg(object):
                         type_ids = []
                         type_probs = []
                         
-                        if prob > threshold and alias not in BANNED_WORDS:
+                        if prob >= threshold and not (alias in BANNED_WORDS or any([regex.match(alias) for regex in BANNED_REGEX])):
                             # account for padding and UNK id added to embedding matrix
                             ctx_emb_id += 2
                             
@@ -150,7 +157,7 @@ class Bootleg(object):
                         type_ids = []
                         type_probs = []
                         
-                        if alias not in BANNED_WORDS:
+                        if not (alias in BANNED_WORDS or any([regex.match(alias) for regex in BANNED_REGEX])):
                             for qid, prob in zip(all_qids, all_probs):
                                 # get all type for a qid
                                 if qid in self.qid2type:
@@ -163,9 +170,18 @@ class Bootleg(object):
                                     all_types = [all_types]
                                 
                                 if len(all_types):
-                                    # choose only the first type
                                     if all_types[0] in self.type2id:
-                                        type_id = self.type2id[all_types[0]]
+                                        # choose only the first type
+                                        type = all_types[0]
+                                        title = self.typeid2title.get(type, '?')
+                                        
+                                        ######
+                                        ### postprocess types according to rules laerned from analyze_bootleg_results
+                                        ######
+                                        if self.bootleg_post_process_types:
+                                            type = post_process_bootleg_types(qid, type, title, self.almond_domains)
+
+                                        type_id = self.type2id[type]
                                         type_ids.append(type_id)
                                         type_probs.append(prob)
                                     else:

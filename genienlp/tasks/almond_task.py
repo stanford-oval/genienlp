@@ -58,6 +58,8 @@ class BaseAlmondTask(BaseTask):
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
         self._almond_thingtalk_version = args.almond_thingtalk_version
         
+        self.almond_domains = args.almond_domains
+        
         # initialize the database
         self.db = None
         self.bootleg = None
@@ -68,7 +70,7 @@ class BaseAlmondTask(BaseTask):
             if self.args.retrieve_method == 'bootleg':
                 self._init_bootleg()
             else:
-                for domain in self.args.almond_domains:
+                for domain in self.almond_domains:
                     self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
                 self._init_db()
     

@@ -162,10 +162,11 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_embs', help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
     parser.add_argument('--bootleg_load_prepped_data', action='store_true', help='Load bootleg dumped features')
     parser.add_argument('--bootleg_batch_size', type=int, default=16, help='Batch size used for inference using bootleg')
-    parser.add_argument('--bootleg_prob_threshold', type=float, default=0.3, help='Probability threshold for accepting a candidate for a mention')
+    parser.add_argument('--bootleg_prob_threshold', type=float, default=0.5, help='Probability threshold for accepting a candidate for a mention')
     parser.add_argument('--bootleg_dataset_threads', type=int, default=2, help='Number of threads for parallel processing of dataset in bootleg')
     parser.add_argument('--bootleg_dataloader_threads', type=int, default=4, help='Number of threads for parallel loading of datasets in bootleg')
     parser.add_argument('--bootleg_extract_num_workers', type=int, default=4, help='Number of workers for extracing mentions step of bootleg')
+    parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
 
     parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], default='average', help='Method used to aggregate several type embeddings for a single mention')
 
