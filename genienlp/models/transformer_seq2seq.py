@@ -38,6 +38,7 @@ from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import get_mbart_lang
 from .base import GenieModel
 from ..util import ConfidenceFeatures
+from .common import LabelSmoothingCrossEntropy
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,8 @@ class TransformerSeq2Seq(GenieModel):
             self.dropper = LossDropper(dropc=args.dropper_ratio, min_count=args.dropper_min_count)
         else:
             self.dropper = None
+
+        self.criterion = LabelSmoothingCrossEntropy(args.label_smoothing)
             
             
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
@@ -100,16 +103,16 @@ class TransformerSeq2Seq(GenieModel):
                 answer = answer[:, 1:].contiguous()
                 answer_length = answer_length - 1
 
-            # setting pad output tokens to -100 means they will be ignored in calculating loss
-            answer[answer==self.numericalizer.pad_id] = -100
-
-            # this is similar to what `transformers` Seq2Seq models do, but with two changes
-            # (1) loss is averaged over sequence lengths first, then over the batch size. This way,
+            # this has several differences compared to what `transformers` Seq2Seq models do:
+            # (1) pad tokens are ignored in all loss calculations
+            # (2) loss is averaged over sequence lengths first, then over the batch size. This way,
             # longer sequences in the batch do not drown shorter sequences.
-            # (2) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
+            # (3) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
+            # (4) if `args.label_smoothing > 0.0`, will add label smoothing term to loss
             outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
-            ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
-            loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)
+            batch_size, vocab_size = outputs.logits.shape[0], outputs.logits.shape[2]
+            loss = self.criterion(outputs.logits.view(-1, vocab_size), target=answer.view(-1), ignore_index=self.numericalizer.pad_id)
+            loss = loss.view(batch_size, -1) # (batch_size, sequence_length)
             loss = loss.sum(dim=1) / answer_length # accounts for the case where BOS is removed
             if self.dropper is not None:
                 dropper_mask = self.dropper(loss)

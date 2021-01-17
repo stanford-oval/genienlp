@@ -171,6 +171,8 @@ def parse_argv(parser):
     parser.add_argument('--dropper_ratio', type=float, default=0.0, help='Ratio of dropped examples in the "Loss Truncation" algorithm. 0 disables truncation.')
     parser.add_argument('--dropper_min_count', type=int, default=10000,
                         help='Number of examples to see in the "Loss Truncation" algorithm before starting to drop high-loss examples.')
+    # Label smoothing; see https://arxiv.org/abs/1906.02629 for detailed analysis on its effect on neural network calibration
+    parser.add_argument('--label_smoothing', type=float, default=0.0, help='A number in [0, 1] to be used for label smoothing. 0 disables smoothing.')
 
     parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside --args.save, usually set to best.pth')
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')

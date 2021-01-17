@@ -560,7 +560,7 @@ def load_config_json(args):
                     'max_output_length', 'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
                     'override_context', 'override_question',
                     'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence',
-                    'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count']
+                    'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count', 'label_smoothing']
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         overwrite = ['val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty',
@@ -584,6 +584,8 @@ def load_config_json(args):
                 setattr(args, r, 0.0)
             elif r == 'dropper_min_count':
                 setattr(args, r, 10000)
+            elif r == 'label_smoothing':
+                setattr(args, r, 0.0)
             else:
                 setattr(args, r, None)
         args.dropout_ratio = 0.0
