@@ -92,7 +92,9 @@ class Bootleg(object):
         jsonl_input_path = input_path.rsplit('.', 1)[0] + '.jsonl'
         jsonl_output_path = input_path.rsplit('.', 1)[0] + '_bootleg.jsonl'
         if not self.args.bootleg_load_prepped_data:
-            extract_mentions(in_filepath=jsonl_input_path, out_filepath=jsonl_output_path, cand_map_file=self.cand_map, num_workers=self.args.bootleg_extract_num_workers)
+            extract_mentions(in_filepath=jsonl_input_path, out_filepath=jsonl_output_path,
+                             cand_map_file=self.cand_map, max_alias_len=self.args.max_entity_len,
+                             num_workers=self.args.bootleg_extract_num_workers)
     
     def pad_values(self, tokens, max_size, pad_id):
         if len(tokens) > max_size:

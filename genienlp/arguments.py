@@ -148,7 +148,7 @@ def parse_argv(parser):
     parser.add_argument('--dump_canonical2type', action='store_true', help='This will create the "canonical to type" mapping for all entities available in ES database')
 
     parser.add_argument('--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams lookup_method is used ')
-    parser.add_argument('--max_entity_len', type=int, default=4, help='Maximum length for entities when ngrams lookup_method is used ')
+    parser.add_argument('--max_entity_len', type=int, default=6, help='Maximum length for entities when ngrams lookup_method is used ')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
     
     parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
