@@ -215,10 +215,10 @@ def parse_argv(parser):
                         help='alternative momentum for Adam (only when not using transformer scheduler), and RAdam')
     parser.add_argument('--optimizer', default='adam', choices=['adam', 'adamw', 'sgd', 'radam'], type=str,
                         help='optimizer to use')
-    parser.add_argument('--lr_schedule', type=str, default='transformer', choices=['transformer', 'constant', 'linear', 'sgd'],
+    parser.add_argument('--lr_schedule', type=str, default='transformer', choices=['transformer', 'constant', 'linear', 'sgd', 'cosine'],
                         help='The learning rate strategy. All of them can be used with or without warmup.')
     parser.add_argument('--lr_multiply', default=0.01, type=float,
-                        help='Multiplier for the `transformer` learning rate scheduler, constant value for `constant` and maximum value for `linear` schedulers.')
+                        help='Multiplier for the `transformer` learning rate scheduler, constant value for `constant` and maximum value for `linear` and `cosine` schedulers.')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
     parser.add_argument('--gradient_accumulation_steps', default=1, type=int, help='Number of accumulation steps. Useful to effectively get larger batch sizes.')
 

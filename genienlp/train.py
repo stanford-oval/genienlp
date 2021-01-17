@@ -41,7 +41,8 @@ from pprint import pformat
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
-from transformers import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, AdamW
+from transformers import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, AdamW, \
+    get_cosine_schedule_with_warmup
 
 from . import arguments
 from . import models
@@ -503,6 +504,8 @@ def init_opt(args, model, logger):
         scheduler = get_constant_schedule_with_warmup(opt, num_warmup_steps=args.warmup)
     elif args.lr_schedule == 'linear':
         scheduler = get_linear_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations)//args.gradient_accumulation_steps, num_warmup_steps=args.warmup)
+    elif args.lr_schedule == 'cosine':
+        scheduler = get_cosine_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations)//args.gradient_accumulation_steps, num_warmup_steps=args.warmup, num_cycles=0.5)
     elif args.lr_schedule == 'sgd':
         lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
         scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
