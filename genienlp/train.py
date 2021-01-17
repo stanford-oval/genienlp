@@ -111,6 +111,8 @@ def prepare_data(args, logger):
             assert split.train
         train_sets.append(split.train)
         logger.info(f'{task.name} has {len(split.train)} training examples')
+        
+        print('train all_schema_types:', task.all_schema_types)
             
         if task.name.startswith('almond'):
             if args.features_default_val:
@@ -142,6 +144,8 @@ def prepare_data(args, logger):
         assert not split.train and not split.test and not split.aux
         logger.info(f'{task.name} has {len(split.eval)} validation examples')
         val_sets.append(split.eval)
+
+        print('eval all_schema_types:', task.all_schema_types)
         
         if getattr(task, 'bootleg', None):
             if args.bootleg_load_prepped_data:

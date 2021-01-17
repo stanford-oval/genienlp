@@ -59,6 +59,7 @@ class BaseAlmondTask(BaseTask):
         self._almond_thingtalk_version = args.almond_thingtalk_version
         
         self.almond_domains = args.almond_domains
+        self.all_schema_types = set()
         
         # initialize the database
         self.db = None
@@ -212,6 +213,8 @@ class BaseAlmondTask(BaseTask):
                     schema_type = self.TTtype2DBtype[schema_entity_type]
                 
                 entity2type[ent] = schema_type
+                
+            self.all_schema_types.add(schema_type)
             
         return entity2type
     
