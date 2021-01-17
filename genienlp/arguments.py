@@ -258,7 +258,7 @@ def parse_argv(parser):
 def post_parse_general(args):
     for feat in args.features:
         if feat not in VALID_FEATURE_FIELDS:
-            raise ValueError('Feature {} is not supported. Please provide valide features from {} list'.format(feat, VALID_FEATURE_FIELDS))
+            raise ValueError('Feature {} is not supported. Please provide valid features from {} list'.format(feat, VALID_FEATURE_FIELDS))
     
     if args.val_task_names is None:
         args.val_task_names = []
