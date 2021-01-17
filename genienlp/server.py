@@ -43,35 +43,63 @@ from .tasks.registry import get_tasks
 from .util import set_seed, init_devices, load_config_json, log_model_size
 from .validate import generate_with_model
 
+from bootleg.annotator import Annotator
+from .data_utils.bootleg import Bootleg
+
 logger = logging.getLogger(__name__)
 
 
 class Server:
-    def __init__(self, args, numericalizer, model, device, ner_annotator=None):
+    def __init__(self, args, numericalizer, model, device, bootleg_annotator=None):
         self.args = args
         self.device = device
         self.numericalizer = numericalizer
         self.model = model
-        
-        self.ner_annotator = ner_annotator
+        self.bootleg_annotator = bootleg_annotator
 
-        self._cached_tasks = dict()
+        self._cached_task_names = dict()
 
     def numericalize_examples(self, ex):
 
         all_features = NumericalizedExamples.from_examples(ex, self.numericalizer)
         # make a single batch with all examples
         return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
+    
+    def process_bootleg_labels(self, ex, label, task):
+        line = {}
+        if task.is_contextual():
+            line['sentence'] = ex.question
+        else:
+            line['sentence'] = ex.context
+    
+        assert len(label) == 7
+        line['cands'] = label[3][0]
+        line['cand_probs'] = list(map(lambda item: list(item), label[4][0]))
+        line['spans'] = label[5][0]
+        line['aliases'] = label[6][0]
+        tokens_type_ids, tokens_type_probs = task.bootleg.collect_features_per_line(line, self.args.bootleg_prob_threshold)
+    
+        if task.is_contextual():
+            for i in range(len(tokens_type_ids)):
+                ex.question_feature[i].type_id = tokens_type_ids[i]
+                ex.question_feature[i].type_prob = tokens_type_probs[i]
+                ex.context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[i]
+                ex.context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = tokens_type_probs[i]
+    
+        else:
+            for i in range(len(tokens_type_ids)):
+                ex.context_feature[i].type_id = tokens_type_ids[i]
+                ex.context_feature[i].type_prob = tokens_type_probs[i]
+                ex.context_plus_question_feature[i].type_id = tokens_type_ids[i]
+                ex.context_plus_question_feature[i].type_prob = tokens_type_probs[i]
 
     def handle_request(self, line):
         request = json.loads(line)
 
         task_name = request['task'] if 'task' in request else 'generic'
-        if task_name in self._cached_tasks:
-            task = self._cached_tasks[task_name]
-        else:
-            task = list(get_tasks([task_name], self.args).values())[0]
-            self._cached_tasks[task_name] = task
+        task = list(get_tasks([task_name], self.args, self._cached_task_names).values())[0]
+        if task_name not in self._cached_task_names:
+            self._cached_task_names[task_name] = task
 
         if 'instances' in request:
             examples = []
@@ -85,6 +113,22 @@ class Server:
 
                 ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
                 examples.append(ex)
+            
+            bootleg_inputs = []
+            if self.bootleg_annotator:
+                for ex in examples:
+                    if task.is_contextual():
+                        bootleg_inputs.append(ex.question)
+                    else:
+                        bootleg_inputs.append(ex.context)
+
+                bootleg_labels = self.bootleg_annotator.label_mentions(bootleg_inputs)
+                bootleg_labels_unpacked = list(*zip(bootleg_labels))
+                
+                for i in range(len(examples)):
+                    ex = examples[i]
+                    label = bootleg_labels_unpacked[i]
+                    self.process_bootleg_labels(ex, label, task)
 
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples(examples)
@@ -107,12 +151,14 @@ class Server:
                 answer = ''
 
             ex = Example.from_raw(str(request['id']), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
-
-            context_plus_question_feature = self.ner_annotator.bootleg_annotator.label_mentions(ex.context_plus_question)
-            if task.is_contextual():
-                question_feature = self.ner_annotator.bootleg_annotator.label_mentions(ex.question)
-            else:
-                context_feature = self.ner_annotator.bootleg_annotator.label_mentions(ex.context)
+            
+            if self.bootleg_annotator:
+                if task.is_contextual():
+                    bootleg_input = ex.question
+                else:
+                    bootleg_input = ex.context
+                label = self.bootleg_annotator.label_mentions(bootleg_input)
+                self.process_bootleg_labels(ex, label, task)
 
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples([ex])
@@ -183,29 +229,31 @@ def parse_argv(parser):
     parser.add_argument('--locale', default='en', help='locale tag of the language to parse')
 
 
-from bootleg.annotator import Annotator
-from .data_utils.bootleg import Bootleg
-
 def main(args):
     load_config_json(args)
     set_seed(args)
     
+    devices = init_devices(args)
+    device = devices[0] # server only runs on a single device
+
+    bootleg_annotator = None
     if args.do_ner and args.retrieve_method == 'bootleg':
         # instantiate the annotator class
+        # we use annotator only in server mode
+        # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED.
         bootleg = Bootleg(args)
         bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
         bootleg_annotator = Annotator(config_args=bootleg_config,
-                                      device='cuda' if torch.cuda.is_available() else 'cpu',
+                                      device='cpu' if device.type=='cpu' else 'cuda',
                                       max_alias_len=args.max_entity_len,
                                       cand_map=bootleg.cand_map,
                                       threshold=args.bootleg_prob_threshold)
-        
+        # collect all outputs now; we will filter later
+        bootleg_annotator.set_threshold(0.0)
+
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
-
-    devices = init_devices(args)
-    device = devices[0] # server only runs on a single device
 
     Model = getattr(models, args.model)
     model, _ = Model.from_pretrained(args.path,
@@ -215,11 +263,9 @@ def main(args):
                                      locale=args.locale
                                      )
 
-
-    
     model.to(device)
     model.eval()
 
-    server = Server(args, model.numericalizer, model, device, ner_annotator=bootleg_annotator)
+    server = Server(args, model.numericalizer, model, device, bootleg_annotator=bootleg_annotator)
 
     server.run()

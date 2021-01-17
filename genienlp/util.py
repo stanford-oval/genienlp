@@ -470,7 +470,7 @@ def load_config_json(args):
         retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
                     'max_output_length', 'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
                     'override_context', 'override_question',
-                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence',
+                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version',
                     'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count',
                     'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
                     'override_question', 'override_context',
@@ -480,7 +480,7 @@ def load_config_json(args):
                     'features', 'features_size', 'features_default_val',
                     'bootleg_input_dir', 'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
                     'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
-                    'bootleg_integration', 'bootleg_load_prepped_data', 'bootleg_dump_mode', 'bootleg_prob_threshold'
+                    'bootleg_integration', 'bootleg_load_prepped_data', 'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types'
                     ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
@@ -496,7 +496,7 @@ def load_config_json(args):
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
             elif r in ('do_ner', 'use_encoder_loss',
-                       'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens'
+                       'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version'
                        ):
                 setattr(args, r, False)
                 

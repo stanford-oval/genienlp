@@ -3,7 +3,7 @@ import ujson
 import numpy as np
 import logging
 
-from .database_utils import BANNED_WORDS, BANNED_REGEX, post_process_bootleg_types, is_banned
+from .database_utils import post_process_bootleg_types, is_banned
 
 from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
@@ -56,7 +56,7 @@ class Bootleg(object):
                             'bootleg_wiki_kg': 'bootleg_kg'}
         
         self.ckpt_name = model2checkpoint[self.args.bootleg_model]
-        self.model_ckpt_path = os.path.join(self.model_dir, self.ckpt_name)
+        self.model_ckpt_path = os.path.join(self.model_dir, self.ckpt_name + '.pt')
 
         self.fixed_overrides = [
              "--run_config.timestamp", 'None',
@@ -103,9 +103,94 @@ class Bootleg(object):
             tokens += [pad_id] * (max_size - len(tokens))
         return tokens
 
-    def disambiguate_mentions(self, config_args, file_name):
+    def disambiguate_mentions(self, config_args):
         if not self.args.bootleg_load_prepped_data:
             run.main(config_args, self.args.bootleg_dump_mode)
+
+    def collect_features_per_line(self, line, threshold):
+        
+        tokenized = line['sentence'].split(' ')
+        tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokenized))]
+        tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(len(tokenized))]
+    
+        if self.args.bootleg_integration == 2:
+            # we only have ctx_emb_ids for top candidates
+            # TODO  output ctx_emb_ids for all 30 candidates
+            for alias, ctx_emb_id, prob, span in zip(line['aliases'], line['ctx_emb_ids'], line['probs'], line['spans']):
+                type_ids = []
+                type_probs = []
+            
+                if prob >= threshold and not is_banned(alias):
+                    # account for padding and UNK id added to embedding matrix
+                    ctx_emb_id += 2
+                
+                    # account for shift in embedding idx when we merge embeddings for all data splits
+                    ctx_emb_id += self.cur_entity_embed_size
+                
+                    type_ids = [ctx_emb_id]
+                    type_probs = [prob]
+            
+                padded_type_ids = self.pad_values(type_ids, self.args.features_size[0],
+                                                  self.args.features_default_val[0])
+                padded_type_probs = self.pad_values(type_probs, self.args.features_size[1],
+                                                    self.args.features_default_val[1])
+            
+                tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
+                tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
+    
+        else:
+            for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
+                # filter qids with confidence lower than a threshold
+                idx = reverse_bisect_left(all_probs, threshold)
+                all_qids = all_qids[:idx]
+                all_probs = all_probs[:idx]
+
+                # TODO: now we only keep the first type for each qid
+                # extend so we can keep all types and aggregate later
+            
+                type_ids = []
+                type_probs = []
+            
+                if not is_banned(alias):
+                    for qid, prob in zip(all_qids, all_probs):
+                        # get all type for a qid
+                        if qid in self.qid2type:
+                            all_types = self.qid2type[qid]
+                        else:
+                            all_types = []
+                            logger.warning(f'Could not find qid {qid} in qid2type mapping')
+                    
+                        if isinstance(all_types, str):
+                            all_types = [all_types]
+                    
+                        if len(all_types):
+                            # choose only the first type
+                            type = all_types[0]
+                        
+                            if type in self.type2id:
+                                title = self.typeid2title.get(type, '?')
+                            
+                                ######
+                                ### postprocess types according to rules learned from analyze_bootleg_results
+                                ######
+                                if self.bootleg_post_process_types:
+                                    type = post_process_bootleg_types(qid, type, title, self.almond_domains)
+                            
+                                type_id = self.type2id[type]
+                                type_ids.append(type_id)
+                                type_probs.append(prob)
+                            else:
+                                logger.warning(f'Could not find type_id {type} in type2id mapping')
+            
+                padded_type_ids = self.pad_values(type_ids, self.args.features_size[0], self.args.features_default_val[0])
+                padded_type_probs = self.pad_values(type_probs, self.args.features_size[1], self.args.features_default_val[1])
+            
+                tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
+                tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
+
+        return tokens_type_ids, tokens_type_probs
+            
+    def collect_features(self, file_name):
         
         all_tokens_type_ids = []
         all_tokens_type_probs = []
@@ -113,85 +198,9 @@ class Bootleg(object):
         threshold = self.args.bootleg_prob_threshold
 
         with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/eval/{self.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
-            for i, line in enumerate(fin):
+            for line in fin:
                 line = ujson.loads(line)
-                tokenized = line['sentence'].split(' ')
-                tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokenized))]
-                tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(len(tokenized))]
-        
-                if self.args.bootleg_integration == 2:
-                    # we only have ctx_emb_ids for top candidates
-                    # TODO  output ctx_emb_ids for all 30 candidates
-                    for alias, ctx_emb_id, prob, span in zip(line['aliases'], line['ctx_emb_ids'], line['probs'], line['spans']):
-                        type_ids = []
-                        type_probs = []
-                        
-                        if prob >= threshold and not is_banned(alias):
-                            # account for padding and UNK id added to embedding matrix
-                            ctx_emb_id += 2
-                            
-                            # account for shift in embedding idx when we merge embeddings for all data splits
-                            ctx_emb_id += self.cur_entity_embed_size
-                            
-                            type_ids = [ctx_emb_id]
-                            type_probs = [prob]
-                
-                        padded_type_ids = self.pad_values(type_ids, self.args.features_size[0], self.args.features_default_val[0])
-                        padded_type_probs = self.pad_values(type_probs, self.args.features_size[1], self.args.features_default_val[1])
-                
-                        tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
-                        tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
-            
-                else:
-                    for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
-                        # filter qids with confidence lower than a threshold
-                        idx = reverse_bisect_left(all_probs, threshold)
-                        all_qids = all_qids[:idx]
-                        all_probs = all_probs[:idx]
-                        
-                        #TODO: now we only keep the first type for each qid
-                        # extend so we can keep all types and aggregate later
-    
-                        type_ids = []
-                        type_probs = []
-                        
-                        if not is_banned(alias):
-                            for qid, prob in zip(all_qids, all_probs):
-                                # get all type for a qid
-                                if qid in self.qid2type:
-                                    all_types = self.qid2type[qid]
-                                else:
-                                    all_types = []
-                                    logger.warning(f'Could not find qid {qid} in qid2type mapping')
-                                
-                                if isinstance(all_types, str):
-                                    all_types = [all_types]
-                                
-                                if len(all_types):
-                                    # choose only the first type
-                                    type = all_types[0]
-                                    
-                                    if type in self.type2id:
-                                        title = self.typeid2title.get(type, '?')
-                                        
-                                        ######
-                                        ### postprocess types according to rules learned from analyze_bootleg_results
-                                        ######
-                                        if self.bootleg_post_process_types:
-                                            type = post_process_bootleg_types(qid, type, title, self.almond_domains)
-
-                                        type_id = self.type2id[type]
-                                        type_ids.append(type_id)
-                                        type_probs.append(prob)
-                                    else:
-                                        logger.warning(f'Could not find type_id {type} in type2id mapping')
-                            
-                        padded_type_ids = self.pad_values(type_ids, self.args.features_size[0], self.args.features_default_val[0])
-                        padded_type_probs = self.pad_values(type_probs, self.args.features_size[1], self.args.features_default_val[1])
-                        
-                        tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
-                        tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
-                        
+                tokens_type_ids, tokens_type_probs = self.collect_features_per_line(line, threshold)
                 all_tokens_type_ids.append(tokens_type_ids)
                 all_tokens_type_probs.append(tokens_type_probs)
 

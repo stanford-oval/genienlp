@@ -127,8 +127,10 @@ class AlmondDataset(CQA):
                 bootleg.extract_mentions(path)
                 
                 # find the right entity candidate for each mention
-                # extract type ids for each token in input sentence
-                all_token_type_ids, all_tokens_type_probs = bootleg.disambiguate_mentions(config_args, input_file_name[:-len('_bootleg.jsonl')])
+                bootleg.disambiguate_mentions(config_args)
+                
+                # extract features for each token in input sentence from bootleg outputs
+                all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(input_file_name[:-len('_bootleg.jsonl')])
                 
                 # override examples features with bootleg features
                 assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)

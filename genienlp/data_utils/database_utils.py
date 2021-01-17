@@ -2,6 +2,9 @@ import unicodedata
 import re
 
 import nltk
+
+from genienlp.util import reverse_bisect_left
+
 nltk.download('stopwords', quiet=True)
 from nltk.corpus import stopwords
 
@@ -110,3 +113,4 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
             #     type = 'unk'
                 
     return type
+
