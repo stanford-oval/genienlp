@@ -64,7 +64,10 @@ class Server:
         return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
 
     def handle_request(self, line):
-        request = json.loads(line)
+        if isinstance(line, dict):
+            request = line
+        else:
+            request = json.loads(line)
 
         task_name = request['task'] if 'task' in request else 'generic'
         if task_name in self._cached_tasks:
@@ -189,7 +192,7 @@ def parse_argv(parser):
     parser.add_argument('--calibrator_path', type=str, default=None,
                         help='If provided, will be used to output confidence scores for each prediction. Defaults to `--path`/calibrator.pkl')
 
-def main(args):
+def init(args):
     load_config_json(args)
     set_seed(args)
 
@@ -224,7 +227,10 @@ def main(args):
         logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
         args.mc_dropout = confidence_estimator.mc_dropout
         args.mc_dropout_num = confidence_estimator.mc_dropout_num
+    return model, device, confidence_estimator
 
+
+def main(args):
+    model, device, confidence_estimator = init(args)
     server = Server(args, model.numericalizer, model, device, confidence_estimator)
-
     server.run()
