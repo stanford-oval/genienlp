@@ -66,6 +66,21 @@ def cv_drop_logit(i: int) -> Callable:
 def var_drop_logit(i: int) -> Callable:
     return lambda x: torch.var(x[i].drop_logits, dim=0).view(-1)
 
+def var_drop_top2_probs(i: int) -> Callable:
+    return lambda x: torch.var(x[i].drop_top2_probs, dim=0).view(-1)
+
+def probability_that_2_overtakes_1(i):
+    return lambda x: (x[i].drop_top2_probs > x[i].drop_top1_probs).float().mean(dim=0).view(-1)
+
+def diff_mean_drop_probability_2_and_1(i):
+    return lambda x: (x[i].drop_top2_probs.mean(dim=0).float() - x[i].drop_top1_probs.mean(dim=0).float()).view(-1)
+
+def diff_var_drop_probability_2_and_1(i):
+    return lambda x: (x[i].drop_top2_probs.var(dim=0).float() - x[i].drop_top1_probs.var(dim=0).float()).view(-1)
+
+def diff_nodrop_probability_2_and_1(i):
+    return lambda x: (x[i].nodrop_top2_probs - x[i].nodrop_top1_probs).view(-1)
+
 def mean_drop_logit(i: int) -> Callable:
     return lambda x: torch.mean(x[i].drop_logits, dim=0).view(-1)
 
@@ -106,11 +121,27 @@ def cv_drop_avg_logprob(i):
         return a
     return f
 
+def nodrop_prob(i):
+    return lambda x: x[i].nodrop_probs.view(-1)
+
 def nodrop_seq_prob(i):
     return lambda x: torch.prod(x[i].nodrop_probs).view(-1)
 
 def mean_drop_seq_prob(i):
     return lambda x: torch.mean(torch.prod(x[i].drop_probs, dim=1)).view(-1)
+
+def prob_first_mistake(i):
+    """
+    probability that this is the first mistake
+    """
+    def f(x):
+        probs = mean_drop_prob(i)(x)
+        ret = torch.zeros_like(probs)
+        for j in range(len(probs)):
+            ret[j] = torch.prod(probs[:j])*(1-probs[j])
+        return ret
+
+    return f
 
 def mean_drop_prob(i):
     return lambda x: torch.mean(x[i].drop_probs, dim=0).view(-1)
@@ -124,6 +155,14 @@ def var_drop_prob(i):
 def cv_drop_seq_prob(i):
     def f(x):
         a = torch.sqrt(var_drop_seq_prob(i)(x)) / mean_drop_seq_prob(i)(x)
+        a[a.isnan()] = 0
+        a[a.isinf()] = 0
+        return a
+    return f
+
+def cv_drop_prob(i: int) -> Callable:
+    def f(x):
+        a = torch.sqrt(var_drop_prob(i)(x)) / mean_drop_prob(i)(x)
         a[a.isnan()] = 0
         a[a.isinf()] = 0
         return a
@@ -150,6 +189,7 @@ def cev_drop_prob(i):
         a[a.isinf()] = 0
         return a
     return f
+
 
 
 def accuracy_at_pass_rate(labels, confidence_scores):
@@ -466,21 +506,24 @@ def main(args):
                     # ([cev_drop_seq_prob(0)], 'raw_cev_drop_seq_prob'),
                     # ([mean_drop_prob(0)], 'mean_prob'),
                     # ([var_drop_prob(0)], 'var_prob'),
-                    # ([cev_drop_prob(0)], 'cev_drop_prob'),
-                    # ([mean_drop_logit(0)], 'mean'),
+                    # ([cv_drop_prob(0)], 'cv_drop_prob'),
+                    # ([probability_that_2_overtakes_1(0)], 'probability_that_2_overtakes_1'),
+                    # ([diff_mean_drop_probability_2_and_1(0)], 'diff_mean_drop_probability_2_and_1'),
+                    # ([diff_var_drop_probability_2_and_1(0)], 'diff_var_drop_probability_2_and_1'),
+                    # ([diff_nodrop_probability_2_and_1(0)], 'diff_nodrop_probability_2_and_1'),
                     # ([nodrop_entropies(0)], 'entropy'),
                     # ([(mean_drop_logit(0), nodrop_entropies(0))], 'mean + entropy'),
                     # ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0))], 'prediction_length + mean + entropy'),
                     # ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0), cv_drop_logit(0))], 'prediction_length + mean + entropy + cv'),
                     # ([max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'max_logit + max_entropy + max_cv'),
-                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv'),
-                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), max_of(var_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), min_of(var_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + max_var + min_logit + min_entropy + min_cv + min_var'),
-                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
+                    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv'),
+                    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), max_of(var_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), min_of(var_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + max_var + min_logit + min_entropy + min_cv + min_var'),
+                    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
                     ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
                     ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
-                    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length'),
+                    # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length'),
                     ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
-                    ([nodrop_seq_prob(0), prediction_length(0), max_of(mean_drop_prob(0)), max_of(nodrop_entropies(0)), max_of(cev_drop_prob(0)), min_of(mean_drop_prob(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'prob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
+                    # ([nodrop_seq_prob(0), prediction_length(0), max_of(mean_drop_prob(0)), max_of(nodrop_entropies(0)), max_of(cev_drop_prob(0)), min_of(mean_drop_prob(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'prob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
                     # ([variance_of_beam_logits], 'var_beam_logits'),
                     # ([variance_of_beam_probs], 'var_beam_probs'),
                     # ([mean_drop_avg_logprob(0)], 'mean_drop_avg_logprob'),
