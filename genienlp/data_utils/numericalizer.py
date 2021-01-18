@@ -405,7 +405,7 @@ class TransformerNumericalizer(object):
 
         
         # batch_encode_plus for fast tokenizers returns tokenized text
-        # whereas slow version do not. We breakdwon slow tokenization into two steps
+        # whereas slow version do not. We breakdown slow tokenization into two steps
         # extract tokenized text first, use that to adjust features
         # then pass tokenized text to `_batch_prepare_for_model`
         all_input_ids = []

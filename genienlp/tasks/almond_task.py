@@ -112,19 +112,6 @@ class BaseAlmondTask(BaseTask):
         kwargs['is_contextual'] = self.is_contextual()
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
     
-    def _detokenize_cjk_chars(self, sentence):
-        output = []
-        i = 0
-        while i < len(sentence):
-            output.append(sentence[i])
-            # skip space after cjk chars only if followed by another cjk char
-            if is_cjk_char(ord(sentence[i])) and \
-                    i + 1 < len(sentence) and sentence[i + 1] == ' ' and \
-                    i + 2 < len(sentence) and is_cjk_char(ord(sentence[i + 2])):
-                i += 2
-            else:
-                i += 1
-        return "".join(output)
     
     def collect_answer_entity_types(self, answer):
         entity2type = dict()
