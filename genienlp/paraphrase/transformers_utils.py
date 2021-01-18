@@ -529,8 +529,8 @@ class BartEncoderForNER(BartEncoder):
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BartConfig, num_db_types, db_unk_id, embed_tokens: Optional[nn.Embedding] = None):
-        super().__init__(config)
+    def __init__(self, config: BartConfig, num_db_types, db_unk_id, embed_tokens):
+        super().__init__(config, embed_tokens)
         self.num_db_types = num_db_types
         self.db_unk_id = db_unk_id
         self.pad_token_id = config.pad_token_id
