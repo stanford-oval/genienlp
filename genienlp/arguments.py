@@ -344,8 +344,12 @@ def post_parse_train_specific(args):
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
     
-    if len(args.features) != len(args.features_size):
-        raise ValueError('You should specify max feature size for each feature you provided')
+    if not (len(args.features) == len(args.features_size) == len(args.features_default_val)):
+        raise ValueError('You should specify size and default value for each feature you provided')
+    
+    if not args.preprocess_special_tokens and args.model == 'TransformerLSTM' and 'uncased' in args.pretrained_model:
+        raise ValueError('You should use the cased version of provided model when not preprocessing special tokens.'
+                         ' Otherwise the program (answer) will not be tokenized properly')
 
 
     args.log_dir = args.save
