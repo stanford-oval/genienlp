@@ -92,7 +92,7 @@ def parse_argv(parser):
                         help='Turn off tensorboard logging')
     parser.add_argument('--tensorboard_dir', default=None,
                         help='Directory where to save Tensorboard logs (defaults to --save)')
-    parser.add_argument('--max_to_keep', default=3, type=int, help='number of checkpoints to keep')
+    parser.add_argument('--max_to_keep', default=1, type=int, help='number of checkpoints to keep')
     parser.add_argument('--log_every', default=100, type=int, help='how often to log results in # of iterations')
     parser.add_argument('--save_every', default=1000, type=int,
                         help='how often to save a checkpoint in # of iterations')
@@ -186,16 +186,16 @@ def parse_argv(parser):
 
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers (for TransformerLSTM)')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules ')
-    parser.add_argument('--rnn_zero_state', default='zero', choices=['zero', 'average', 'cls'],
+    parser.add_argument('--rnn_zero_state', default='average', choices=['zero', 'average', 'cls'],
                         help='how to construct RNN zero state (for TransformerLSTM)')
 
-    parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
+    parser.add_argument('--trainable_decoder_embeddings', default=50, type=int,
                         help='size of decoder embedding (for TransformerLSTM)')
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model (for TransformerLSTM)')
 
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
-    parser.add_argument("--almond_has_multiple_programs", action='store_true', help='Indicate if almond dataset has multiple programs for each sentence')
+    parser.add_argument("--almond_has_single_program", action='store_false', dest='almond_has_multiple_programs', help='Indicate if almond dataset has multiple programs for each sentence')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
     parser.add_argument('--almond_detokenize_sentence', action='store_true',

@@ -518,8 +518,6 @@ class BartModelForNER(BartModel):
         )
 
 
-
-
 class BartEncoderForNER(BartEncoder):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a

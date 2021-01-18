@@ -44,8 +44,7 @@ def parse_argv(parser):
     parser.add_argument('--preserve_case', action='store_false', dest='lower',
                         help='whether to preserve casing for all text')
 
-    parser.add_argument("--almond_has_multiple_programs", action='store_true',
-                        help='Indicate if almond dataset has multiple programs for each sentence')
+    parser.add_argument("--almond_has_single_program", action='store_false', dest='almond_has_multiple_programs', help='Indicate if almond dataset has multiple programs for each sentence')
 
     parser.add_argument('--num_workers', type=int, default=0,
                         help='Number of processes to use for data loading (0 means no multiprocessing)')
