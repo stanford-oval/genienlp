@@ -209,7 +209,7 @@ def parse_argv(parser):
                                                                 'e.g. "1 2 2 2" first device recieves half number of layers compared to other devices'
                                                                 'default is None meaning we distribute evenly on all available gpus')
 
-    parser.add_argument('--warmup', default=1, type=int, help='warmup for learning rate. setting it to 1 disables warmup.')
+    parser.add_argument('--warmup', default=40, type=int, help='warmup for learning rate. setting it to 1 disables warmup.')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
     parser.add_argument('--beta0', default=0.9, type=float,
                         help='alternative momentum for Adam (only when not using transformer scheduler), and RAdam')

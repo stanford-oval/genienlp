@@ -478,15 +478,16 @@ def load_config_json(args):
                     'entity_type_agg_method',
                     'num_db_types', 'db_unk_id', 'retrieve_method', 'lookup_method', 'almond_domains',
                     'features', 'features_size', 'features_default_val',
-                    'bootleg_input_dir', 'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
+                    'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
                     'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
                     'bootleg_integration', 'bootleg_load_prepped_data', 'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types'
                     ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
-        overwrite = ['database_dir', 'val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty',
+        overwrite = ['val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty',
                      'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty',
-                     'temperature', 'reduce_metrics']
+                     'temperature', 'reduce_metrics',
+                     'bootleg_input_dir', 'database_dir']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)

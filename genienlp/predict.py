@@ -278,7 +278,9 @@ def parse_argv(parser):
     parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
     parser.add_argument("--half_precision", action='store_true', help='If True, will use half precision on all tensors and calculations.')
-
+    
+    parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
+    parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
 
 def adjust_multilingual_eval(args):
     if (have_multilingual(args.task_names) and args.pred_languages is None) or (
