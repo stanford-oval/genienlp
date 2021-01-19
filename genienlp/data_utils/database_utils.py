@@ -3,8 +3,6 @@ import re
 
 import nltk
 
-from genienlp.util import reverse_bisect_left
-
 nltk.download('stopwords', quiet=True)
 from nltk.corpus import stopwords
 
@@ -30,14 +28,13 @@ DOMAIN_TYPE_MAPPING['hotels'] = {'Hotel': 'Q571', 'LocationFeatureSpecification'
 
 
 ## Dialogues
-DOMAIN_TYPE_MAPPING['spotify'] = {'id': 'Q134556', 'song': 'Q7366', 'artist': 'Q5',
-                                  'artists': 'Q5', 'album': 'Q208569', 'genres': 'Q188451'}   # Q188451:music genre
+DOMAIN_TYPE_MAPPING['spotify'] = {'song': 'Q7366', 'artist': 'Q5', 'artists': 'Q5', 'album': 'Q208569', 'genres': 'Q188451'}   # Q188451:music genre
 
 # Order of types should not be changed (new types can be appended)
 TYPES = ('song_name', 'song_artist', 'song_album', 'song_genre')
 
 
-BANNED_WORDS = set(
+BANNED_PHRASES = set(
     stopwords.words('english') + \
     ['music', 'musics', 'name', 'names', 'want', 'wants', 'album', 'albums', 'please', 'who', 'show me', 'tell me', 'find me',
      'play', 'play me', 'plays', 'track', 'tracks', 'song', 'songs', 'record', 'records', 'recordings', 'album', 'url', 'mount to',
@@ -46,13 +43,13 @@ BANNED_WORDS = set(
      'h', 'm', 's', 'd', 'y', 'am', 'pm', 'min', 'sec', 'hour', 'year', 'month', 'day', 'us', 'we', 'who', 'what', 'where', 'the',
      'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
      'release', 'released', 'dance', 'dancing', 'need', 'i need', 'i would', ' i will', 'find', 'the list', 'get some', 'af', '1st', '2nd', '3rd',
-     'tongue', 'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
+     'tongue', 'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'spotify', 'app']
 )
 
 BANNED_REGEX = [re.compile(r'\d (star|rating)'), re.compile(r'\dth'), re.compile(r'a \d'), re.compile(r'\d (hour|min|sec|minute|second)s?')]
 
 def is_banned(word):
-    return word in BANNED_WORDS or any([regex.match(word) for regex in BANNED_REGEX])
+    return word in BANNED_PHRASES or any([regex.match(word) for regex in BANNED_REGEX])
 
 def normalize_text(text):
     text = unicodedata.normalize('NFD', text).lower()

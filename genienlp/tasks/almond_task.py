@@ -201,7 +201,7 @@ class BaseAlmondTask(BaseTask):
                 
                 entity2type[ent] = schema_type
                 
-            self.all_schema_types.add(schema_type)
+            self.all_schema_types.add(schema_entity_type)
             
         return entity2type
     
