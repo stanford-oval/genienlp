@@ -512,7 +512,7 @@ class TransformerNumericalizer(object):
                 idx = match.span()[0]
                 tokens_before_idx = len(sentence[:idx].split(' '))
                 index2expansion[tokens_before_idx] = len(replacement.split(' '))
-                
+        for i, (regex, replacement) in enumerate(self._special_tokens_to_word_regexes):
             sentence = regex.sub(replacement, sentence)
         return sentence, index2expansion
     
