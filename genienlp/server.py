@@ -76,10 +76,10 @@ class Server:
             line['sentence'] = ex.context
     
         assert len(label) == 7
-        line['cands'] = label[3][0]
-        line['cand_probs'] = list(map(lambda item: list(item), label[4][0]))
-        line['spans'] = label[5][0]
-        line['aliases'] = label[6][0]
+        line['cands'] = label[3]
+        line['cand_probs'] = list(map(lambda item: list(item), label[4]))
+        line['spans'] = label[5]
+        line['aliases'] = label[6]
         tokens_type_ids, tokens_type_probs = task.bootleg.collect_features_per_line(line, self.args.bootleg_prob_threshold)
     
         if task.is_contextual():
@@ -129,7 +129,7 @@ class Server:
                         bootleg_inputs.append(ex.context)
 
                 bootleg_labels = self.bootleg_annotator.label_mentions(bootleg_inputs)
-                bootleg_labels_unpacked = list(*zip(bootleg_labels))
+                bootleg_labels_unpacked = list(zip(*bootleg_labels))
                 
                 for i in range(len(examples)):
                     ex = examples[i]
@@ -146,11 +146,12 @@ class Server:
 
                 response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0], 'score': float(s)} for (p, s) in zip(output.predictions, output.confidence_scores)]})
             else:
-                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                  output_predictions_only=True)
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True)
 
                 response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0]} for p in output.predictions]})
             return response + '\n'
+        
+        # TODO remove else by treating single examples as batch of 1
         else:
             context = request['context']
             if not context:
@@ -172,7 +173,14 @@ class Server:
                 else:
                     bootleg_input = ex.context
                 label = self.bootleg_annotator.label_mentions(bootleg_input)
-                self.process_bootleg_labels(ex, label, task)
+                
+                # batch size of 1
+                new_label = []
+                for data in label:
+                    new_label.append(data[0])
+                new_label = tuple(new_label)
+                
+                self.process_bootleg_labels(ex, new_label, task)
 
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples([ex])
