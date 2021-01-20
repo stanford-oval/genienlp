@@ -162,6 +162,10 @@ class BaseAlmondTask(BaseTask):
                 # ... contains~ ( [award|genre|...] , " booker " ) ...
                 # ... inLanguage =~ " persian " ...
                 
+                
+                # missing syntax from current code
+                #  ... @com.spotify . song ( ) filter in_array~ ( id , [ " piano man " , " uptown girl " ] ) ) [ 1 : 2 ]  ...
+                
                 # assume first syntax
                 idx = answer.index('" ' + ent + ' "')
                 
