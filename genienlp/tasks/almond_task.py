@@ -35,9 +35,8 @@ from ..data_utils.bootleg import Bootleg
 from ..data_utils.database import Database
 from ..data_utils.example import Example, get_pad_feature, Feature
 from ..tasks.almond_dataset import AlmondDataset
-from ..tasks.almond_utils import ISO_to_LANG, process_id, is_cjk_char, quoted_pattern_with_space, \
+from ..tasks.almond_utils import ISO_to_LANG, process_id, quoted_pattern_with_space, \
     tokenize_cjk_chars, detokenize_cjk_chars, is_entity, is_entity_marker, is_device
-
 
 
 class BaseAlmondTask(BaseTask):
@@ -271,7 +270,6 @@ class BaseAlmondTask(BaseTask):
     
     def preprocess_field(self, sentence, field_name=None, answer=None):
         
-        # TODO fix features it should not be empty list
         if self.override_context is not None and field_name == 'context':
             pad_feature = get_pad_feature(self.args.features, self.args.features_default_val, self.args.features_size)
             return self.override_context, [pad_feature] * len(self.override_context.split(' '))
@@ -487,7 +485,7 @@ class ReverseAlmond(BaseTask):
 class BaseAlmondDialogueNLUTask(BaseAlmondTask):
     def preprocess_field(self, sentence, field_name=None, answer=None):
         if not sentence:
-            return sentence
+            return sentence, []
         
         # remove the $dialogue at the start of the dialogue
         # this is safe because we know we're processing dialogues, so the answer
