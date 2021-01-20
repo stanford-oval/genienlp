@@ -87,7 +87,8 @@ class Example(NamedTuple):
     @staticmethod
     def from_raw(example_id: str, context: str, question: str, answer: str, preprocess=identity, lower=False):
         args = [example_id]
-
+        answer = unicodedata.normalize('NFD', answer)
+        
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
             arg = unicodedata.normalize('NFD', arg)
             sentence, features = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)

@@ -119,6 +119,7 @@ class BaseAlmondTask(BaseTask):
         answer_entities = quoted_pattern_with_space.findall(answer)
         for ent in answer_entities:
             
+            
             if self._almond_thingtalk_version == 1:
                 #  ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ...
                 # ... param:artists contains " XXX " ^^com.spotify:artist and param:id =~ " XXX " ...
@@ -181,8 +182,11 @@ class BaseAlmondTask(BaseTask):
                 
                 elif tokens_before_entity[-1] == '=~':
                     if tokens_before_entity[-2] == 'id':
-                        if tokens_before_entity[-3] == 'filter':
-                            schema_entity_type = tokens_before_entity[-6]
+                        # travers previous tokens until find filter
+                        i = -3
+                        while tokens_before_entity[i] != 'filter' and i > 3-len(tokens_before_entity):
+                            i -= 1
+                        schema_entity_type = tokens_before_entity[i-3]
                     else:
                         schema_entity_type = tokens_before_entity[-2]
                 

@@ -350,7 +350,7 @@ class GenieMT5ForConditionalGeneration(MT5ForConditionalGeneration, GeniePreTrai
 
 class BartForConditionalGenerationForNER(BartForConditionalGeneration):
 
-    def __init__(self, config: BartConfig, num_db_types, db_unk_id):
+    def __init__(self, config, num_db_types, db_unk_id):
         super().__init__(config)
         self.model = BartModelForNER(config, num_db_types, db_unk_id)
 
@@ -427,7 +427,7 @@ class BartForConditionalGenerationForNER(BartForConditionalGeneration):
         )
 
 class BartModelForNER(BartModel):
-    def __init__(self, config: BartConfig, num_db_types, db_unk_id):
+    def __init__(self, config, num_db_types, db_unk_id):
         super().__init__(config)
 
         self.encoder = BartEncoderForNER(config, num_db_types, db_unk_id, self.shared)
