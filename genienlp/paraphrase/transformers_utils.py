@@ -606,10 +606,8 @@ class BartEncoderForNER(BartEncoder):
         embed_pos = self.embed_positions(input_shape)
 
         hidden_states = inputs_embeds + embed_pos
-        
-        hidden_states = self.layernorm_embedding(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        entity_type_embeddings = None
         if self.num_db_types > 0 and entity_ids is not None:
             # get length for unpadded types
             type_lengths = entity_masking.sum(-1)
@@ -627,7 +625,11 @@ class BartEncoderForNER(BartEncoder):
             # size (batch, length, num_types, emb_dim)
             entity_type_embeddings = entity_type_embeddings.sum(-2) / type_lengths.unsqueeze(-1)
     
+        if entity_type_embeddings is not None:
             hidden_states += entity_type_embeddings
+
+        hidden_states = self.layernorm_embedding(hidden_states)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
         if attention_mask is not None:
@@ -645,6 +647,8 @@ class BartEncoderForNER(BartEncoder):
                 attn = None
             else:
                 hidden_states, attn = encoder_layer(hidden_states, attention_mask, output_attentions=output_attentions)
+                if entity_type_embeddings is not None:
+                    hidden_states += entity_type_embeddings
 
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
