@@ -7,6 +7,7 @@ virtual assistants. It is derived from the [decaNLP](https://github.com/salesfor
 but has diverged significantly.
 
 The library is suitable for all NLP tasks that can be framed as Contextual Question Answering, that is, with 3 inputs:
+
 - text or structured input as _context_
 - text input as _question_
 - text or structured output as _answer_
@@ -18,11 +19,12 @@ what the models work best for.
 ## Installation
 
 genienlp is available on PyPi. You can install it with:
+
 ```bash
 pip3 install genienlp
 ```
 
-After installation, a `genienlp` command becomes available.
+After installation, `genienlp` command becomes available.
 
 ## Usage
 
@@ -76,14 +78,33 @@ Opens a TCP server that listens to requests, formatted as JSON objects containin
 `answer`. The server listens to port 8401 by default, use `--port` to specify a different port or `--stdin` to
 use standard input/output instead of TCP.
 
-### Paraphrasing
+### Calibrating a trained model
+Calibrate the confidence scores of a trained model:
 
+1. Calcualate and save confidence features of the evaluation set in a pickle file:
+    ```bash
+    genienlp predict --task almond --data <datadir> --path <modeldir> --save_confidence_features --confidence_feature_path <confidence_feature_file>
+    ```
+
+1. Train a boosted tree to map confidence features to a score between 0 and 1:
+    ```bash
+    genienlp calibrate --confidence_path <confidence_feature_file> --save <calibrator_path>
+    ````
+
+1. Now if you provide `--calibrator_path` during prediction, it will output confidence scores for each output:
+    ```bash
+    genienlp predict --tasks almond --data <datadir> --path <modeldir> --calibrator_path <calibrator_path>
+    ```
+
+### Paraphrasing
 Train a paraphrasing model:
+
 ```bash
 genienlp train-paraphrase --train_data_file <train_data_file> --eval_data_file <dev_data_file> --output_dir <modeldir> --model_type gpt2 --do_train --do_eval --evaluate_during_training --logging_steps 1000 --save_steps 1000 --max_steps 40000 --save_total_limit 2 --gradient_accumulation_steps 16 --per_gpu_eval_batch_size 4 --per_gpu_train_batch_size 4 --num_train_epochs 1 --model_name_or_path <gpt2/gpt2-medium/gpt2-large/gpt2-xlarge>
 ```
 
 Generate paraphrases:
+
 ```bash
 genienlp run-paraphrase --model_type gpt2 --model_name_or_path <modeldir> --temperature 0.3 --repetition_penalty 1.0 --num_samples 4 --length 15 --batch_size 32 --input_file <input tsv file> --input_column 1
 ```

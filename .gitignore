@@ -13,6 +13,8 @@ local_scripts/*
 dataset/*
 generated/*
 *events.out.tfevents*
+*.pkl
+*.png
 
 .DS_Store
 .idea/

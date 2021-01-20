@@ -63,6 +63,40 @@ do
     i=$((i+1))
 done
 
+# test calibration
+for hparams in \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random" ;
+do
+
+    # train
+    pipenv run python3 -m genienlp train --train_tasks almond --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
+
+    # greedy prediction
+    pipenv run python3 -m genienlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $embedding_dir --skip_cache --save_confidence_features --confidence_feature_path $workdir/model_$i/confidences.pkl --mc_dropout --mc_dropout_num 10
+
+    # check if confidence file exists
+    if test ! -f $workdir/model_$i/confidences.pkl ; then
+        echo "File not found!"
+        exit
+    fi
+
+    # calibrate
+    pipenv run python3 -m genienlp calibrate --confidence_path $workdir/model_$i/confidences.pkl --save $workdir/model_$i --testing
+
+    # check if calibrator exists
+    if test ! -f $workdir/model_$i/calibrator.pkl ; then
+        echo "File not found!"
+        exit
+    fi
+
+    echo "Testing the server mode after calibration"
+    echo '{"id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | pipenv run python3 -m genienlp server --path $workdir/model_$i --stdin
+
+    rm -rf $workdir/model_$i $workdir/model_$i_exported
+
+    i=$((i+1))
+done
+
 # test almond_multilingual task
 for hparams in \
       "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50" \
@@ -178,6 +212,31 @@ for model in "t5-small" "Helsinki-NLP/opus-mt-en-de" ; do
 
   rm -rf $workdir/generated_"$base_model"_aligned.tsv
 
+done
+
+# test kfserver
+for hparams in \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random" ;
+do
+
+    # train
+    pipenv run python3 -m genienlp train --train_tasks almond --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
+
+    # run kfserver in background
+    (pipenv run python3 -m genienlp kfserver --path $workdir/model_$i)&
+    SERVER_PID=$!
+    sleep 5
+
+    # send predict request via http
+    request='{"id":"123", "instances": [{"task": "generic", "context": "", "question": "what is the weather"}]}'
+    status=`curl -s -o /dev/stderr -w "%{http_code}" http://localhost:8080/v1/models/nlp:predict -d "$request"`
+    kill $SERVER_PID
+    if [[ "$status" -ne 200 ]]; then
+        echo "Unexpected http status: $status"
+        exit 1
+    fi
+    rm -rf $workdir/model_$i $workdir/model_$i_exported
+    i=$((i+1))
 done
 
 rm -fr $workdir

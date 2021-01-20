@@ -32,32 +32,43 @@ import sys
 import torch
 from collections import OrderedDict
 
+from .util import GenerationOutput
 from .metrics import compute_metrics
 
 
-def generate_with_model(model, data_iterator, numericalizer, task, args, prediction_file_name=None, output_predictions_only=False, original_order=None):
+def generate_with_model(model, data_iterator, numericalizer, task,args,
+                        output_predictions_only=False,
+                        output_confidence_features=False,
+                        original_order=None,
+                        confidence_estimator=None) -> GenerationOutput:
     """
     Inputs:
         original_order: List of indices. If provided, we will sort the results according to this order
+        confidence_estimator: if provided, will use it to calculate and output confidence scores
     Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
         loss
         predictions: a List of Lists of strings
         answers
         contexts
     """
+    output_confidence_scores = confidence_estimator is not None
     if isinstance(model, torch.nn.DataParallel):
         # get rid of the DataParallel wrapper
         model = model.module
     predictions = []
+    confidence_features = []
     example_ids = []
     answers = []
     contexts = []
 
     for batch in data_iterator:
         batch_size = len(batch.example_id)
-        batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
+        raw_batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
+        batch_prediction = [[] for _ in range(batch_size)]
+        batch_confidence_features = [[] for _ in range(batch_size)]
+
         for hyperparameter_idx in range(len(args.temperature)):
-            partial_batch_prediction = model.generate(batch,
+            raw_partial_batch_prediction = model.generate(batch,
                                                 max_output_length=args.max_output_length,
                                                 num_outputs=args.num_outputs[hyperparameter_idx],
                                                 temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
@@ -68,11 +79,16 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
                                                 num_beam_groups=args.num_beam_groups[hyperparameter_idx],
                                                 diversity_penalty=args.diversity_penalty[hyperparameter_idx],
                                                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
-                                                do_sample=args.temperature[hyperparameter_idx]!=0  # if temperature==0, we do not sample
+                                                do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
                                                 )
-            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction, task=task, field_name='answer')
+            if output_confidence_features or output_confidence_scores:
+                partial_batch_confidence_features =  model.confidence_features(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout=args.mc_dropout, mc_dropout_num=args.mc_dropout_num)
+            partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction, task=task, field_name='answer')
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
+                raw_batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(raw_partial_batch_prediction[i])
+                if output_confidence_features or output_confidence_scores:
+                    batch_confidence_features[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_confidence_features[i])
         
         if not output_predictions_only:
             batch_answer = numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer')
@@ -81,21 +97,27 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, predict
             batch_context = numericalizer.reverse(batch.context.value.data, task=task, field_name='context')
             contexts += batch_context
         predictions += batch_prediction
+        confidence_features += batch_confidence_features
     
     if original_order is not None:
         # sort back to the original order
-        original_order, example_ids, predictions, answers, contexts = tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))
-
-    if prediction_file_name is not None:
-        with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
-            for i in range(len(example_ids)):
-                prediction_file.write(example_ids[i] + '\t' + '\t'.join(predictions[i]) + '\n') # write all outputs in the prediction file, separated by \t
+        original_order, example_ids, predictions, answers, contexts, confidence_features = [list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidence_features)))))]
     
-    if output_predictions_only:
-        return predictions
     # TODO calculate and return loss
     loss = None
-    return loss, predictions, answers, contexts
+    output = GenerationOutput(loss=loss)
+
+    if output_predictions_only:
+        output.predictions = predictions
+    else:
+        output.example_ids, output.predictions, output.answers, output.contexts = example_ids, predictions, answers, contexts
+    if output_confidence_features:
+        output.confidence_features = confidence_features
+    if output_confidence_scores:
+        confidence_scores = confidence_estimator.estimate(confidence_features)
+        output.confidence_scores = confidence_scores
+
+    return output
 
 
 def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args):
@@ -128,10 +150,10 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
     with torch.no_grad():
         model.eval()
         names = ['beam search', 'answer', 'context']
-        loss, predictions, answers, contexts = generate_with_model(model, val_iter, numericalizer, task, args, prediction_file_name=None)
+        output = generate_with_model(model, val_iter, numericalizer, task, args)
 
-        metrics = calculate_and_reduce_metrics(predictions, answers, task.metrics, args)
-        results = [predictions, answers, contexts]
+        metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args)
+        results = [output.predictions, output.answers, output.contexts]
         print_results(names, results, num_print=num_print)
 
-        return loss, metrics
+        return output.loss, metrics

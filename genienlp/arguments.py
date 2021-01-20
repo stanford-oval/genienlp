@@ -113,7 +113,7 @@ def parse_argv(parser):
                         help='multiplicative constant choosing the weight of encoder_loss in total loss')
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
 
-    parser.add_argument('--max_output_length', default=100, type=int, help='maximum output length for generation')
+    parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
     parser.add_argument('--max_generative_vocab', default=50000, type=int,
                         help='max vocabulary for the generative softmax')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
@@ -255,6 +255,25 @@ def parse_argv(parser):
                         help='growth strategy for curriculum')
 
 
+
+def check_and_update_generation_args(args):
+    """
+    checks all generation commandline arguments. Since these arguments are all lists and shorthand can be used, we expand them to match the expected length
+    for instance, [1.0] becomes [1.0 1.0] if all other generation arguments are of length 2
+    """
+    hyperparameters = ['num_outputs', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'num_beam_groups', 'diversity_penalty', 'no_repeat_ngram_size']
+    max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])
+    valid_len = [1, max_hyperparameter_len]
+    for h in hyperparameters:
+        if (len(getattr(args, h)) not in valid_len):
+            logger.error('Hyperparameters should either have the same number of values as others or have exactly one value.')
+        # If only one value is provided, use the same value for all samples
+        setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
+
+    logger.info('Will output %d sequences for each input.', sum(args.num_outputs))
+    return args
+
+
 def post_parse_general(args):
     for feat in args.features:
         if feat not in VALID_FEATURE_FIELDS:
@@ -363,4 +382,5 @@ def post_parse_train_specific(args):
 
     save_args(args, force_overwrite=True)
     
+    args = check_and_update_generation_args(args)
     return args

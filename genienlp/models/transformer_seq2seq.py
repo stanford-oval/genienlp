@@ -28,7 +28,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+from typing import List
 import torch
+
+from torch.tensor import Tensor
 from transformers import AutoModelForSeq2SeqLM, AutoConfig, BartConfig
 from loss_dropper import LossDropper
 
@@ -36,6 +39,7 @@ from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import get_mbart_lang
 from .base import GenieModel
 from ..paraphrase.transformers_utils import BartForConditionalGenerationForNER
+from ..util import ConfidenceFeatures
 
 logger = logging.getLogger(__name__)
 
@@ -189,3 +193,80 @@ class TransformerSeq2Seq(GenieModel):
                                         )
 
         return generated
+
+
+    def confidence_features(self, batch, predictions, mc_dropout=False, mc_dropout_num=0) -> List[ConfidenceFeatures]:
+        """
+        predictions: Tensor of shape (batch_size, output_length)
+        mc_dropout: if True, will activate dropout layers
+        mc_droput_num: number of Monte Carlo samples used for the MC Dropout method
+        """
+        if mc_dropout:
+            assert mc_dropout_num > 0, 'MC Dropout is enabled, but mc_droput_num is 0'
+        else:
+            assert mc_dropout_num == 0, 'MC Dropout is disabled, but mc_droput_num is not 0'
+        batch_size = predictions.shape[0]
+        repetition_factor = batch_size//batch.context.value.shape[0]
+        input_ids = batch.context.value.repeat_interleave(repetition_factor, dim=0) # repeat to account for multiple predictions per input
+
+        prediction_lengths = self.get_length(predictions)
+
+        pad_token_id = self.numericalizer._tokenizer.pad_token_id
+        attention_mask = self.model._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer._tokenizer.eos_token_id)
+        truncated_predictions = predictions[:, 1:] # remove the BOS token since it is not actually being generated
+
+        assert not self.training, 'Model should be in eval() mode before generation can start.'
+
+        batch_nodrop_logits = []
+        batch_nodrop_probs = []
+        batch_nodrop_entropies = []
+        outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
+        nodrop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
+        for i in range(batch_size):
+            batch_nodrop_logits.append(nodrop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
+            probs = torch.softmax(nodrop_logits[i], dim=1)
+            batch_nodrop_probs.append(probs.gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
+            batch_nodrop_entropies.append(-torch.sum(torch.log(probs)*probs, dim=1)[:prediction_lengths[i]])
+        
+        # activate dropout layers
+        self.train()
+
+        batch_drop_logits = [[] for _ in range(batch_size)]
+        batch_drop_probs = [[] for _ in range(batch_size)]
+        for _ in range(mc_dropout_num):
+            outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
+            drop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
+            for i in range(batch_size):
+                batch_drop_logits[i].append((drop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))[:prediction_lengths[i]])
+                drop_probs = torch.softmax(drop_logits[i], dim=1).gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]]
+                batch_drop_probs[i].append(drop_probs)
+
+        confidence_features = []
+        for i in range(batch_size):
+            confidence_features.append(
+                        ConfidenceFeatures(drop_logits=batch_drop_logits[i] if mc_dropout else None,
+                                         drop_probs=batch_drop_probs[i] if mc_dropout else None,
+                                         gold_answer=batch.answer.value[i//repetition_factor][:batch.answer.length[i//repetition_factor]],
+                                         prediction=predictions[i][:prediction_lengths[i]+1],  # +1 to include EOS
+                                         nodrop_logits=batch_nodrop_logits[i][:prediction_lengths[i]],
+                                         nodrop_probs=batch_nodrop_probs[i][:prediction_lengths[i]],
+                                         nodrop_entropies=batch_nodrop_entropies[i][:prediction_lengths[i]],
+                                         context=batch.context.value[i//repetition_factor][:batch.context.length[i//repetition_factor]],
+                                         ))
+
+        # return the model back to its previous state
+        self.eval()
+        
+        return confidence_features
+
+    def get_length(self, prediction:Tensor):
+        # skip the first token, because BOS is the same as EOS for some models
+        prediction = prediction[:, 1:]
+
+        # add EOS at the end in case the prediction doesn't have any
+        prediction = torch.cat([prediction, torch.ones((prediction.shape[0], 1), dtype=torch.long, device=prediction.device)*self.numericalizer.eos_id], dim=1)
+
+        # find the index of the first eos
+        first_eos_one_hot = (torch.cumsum((prediction == self.numericalizer.eos_id).long(), dim=1) == 1) & (prediction == self.numericalizer.eos_id)
+        first_eos = first_eos_one_hot.nonzero(as_tuple=False)[:, 1] + 1 # +1 to account for the first token that we ignored
+        return first_eos

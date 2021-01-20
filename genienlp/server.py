@@ -30,9 +30,11 @@
 
 
 import asyncio
+from genienlp.calibrate import ConfidenceEstimator
 import json
 import logging
 import sys
+import os
 from pprint import pformat
 
 import torch
@@ -50,11 +52,12 @@ logger = logging.getLogger(__name__)
 
 
 class Server:
-    def __init__(self, args, numericalizer, model, device, bootleg_annotator=None):
+    def __init__(self, args, numericalizer, model, device, confidence_estimator, bootleg_annotator=None):
         self.args = args
         self.device = device
         self.numericalizer = numericalizer
         self.model = model
+        self.confidence_estimator = confidence_estimator
         self.bootleg_annotator = bootleg_annotator
 
         self._cached_task_names = dict()
@@ -94,7 +97,10 @@ class Server:
                 ex.context_plus_question_feature[i].type_prob = tokens_type_probs[i]
 
     def handle_request(self, line):
-        request = json.loads(line)
+        if isinstance(line, dict):
+            request = line
+        else:
+            request = json.loads(line)
 
         task_name = request['task'] if 'task' in request else 'generic'
         task = list(get_tasks([task_name], self.args, self._cached_task_names).values())[0]
@@ -133,9 +139,17 @@ class Server:
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples(examples)
             # it is a single batch, so wrap it in []
-            predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
+            if self.args.calibrator_path is not None:
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                  output_predictions_only=True,
+                                                  confidence_estimator=self.confidence_estimator)
 
-            response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0] } for p in predictions] })
+                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0], 'score': float(s)} for (p, s) in zip(output.predictions, output.confidence_scores)]})
+            else:
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                  output_predictions_only=True)
+
+                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0]} for p in output.predictions]})
             return response + '\n'
         else:
             context = request['context']
@@ -162,9 +176,15 @@ class Server:
 
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples([ex])
-            predictions = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, prediction_file_name=None, output_predictions_only=True)
-
-            response = json.dumps(dict(id=request['id'], answer=predictions[0][0]))
+            if self.args.calibrator_path is not None:
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                  output_predictions_only=True,
+                                                  confidence_estimator=self.confidence_estimator)
+                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=float(output.confidence_scores[0])))
+            else:
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                  output_predictions_only=True)
+                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0]))
             return response + '\n'
 
     async def handle_client(self, client_reader, client_writer):
@@ -216,7 +236,7 @@ class Server:
 
 
 def parse_argv(parser):
-    parser.add_argument('--path', required=True)
+    parser.add_argument('--path', type=str, required=True)
     parser.add_argument('--devices', default=[0], nargs='+', type=int,
                         help='a list of devices that can be used (multi-gpu currently WIP)')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
@@ -228,8 +248,11 @@ def parse_argv(parser):
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
     parser.add_argument('--locale', default='en', help='locale tag of the language to parse')
 
+    # for confidence estimation:
+    parser.add_argument('--calibrator_path', type=str, default=None,
+                        help='If provided, will be used to output confidence scores for each prediction. Defaults to `--path`/calibrator.pkl')
 
-def main(args):
+def init(args):
     load_config_json(args)
     set_seed(args)
     
@@ -266,6 +289,22 @@ def main(args):
     model.to(device)
     model.eval()
 
-    server = Server(args, model.numericalizer, model, device, bootleg_annotator=bootleg_annotator)
+    # set the default path for calibrator if it exists
+    if args.calibrator_path is None:
+        default_path = os.path.join(args.path, 'calibrator.pkl')
+        if os.path.isfile(default_path):
+            args.calibrator_path = default_path
 
+    confidence_estimator = None
+    if args.calibrator_path is not None:
+        confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
+        logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
+        args.mc_dropout = confidence_estimator.mc_dropout
+        args.mc_dropout_num = confidence_estimator.mc_dropout_num
+    return model, device, confidence_estimator, bootleg_annotator
+
+
+def main(args):
+    model, device, confidence_estimator, bootleg_annotator = init(args)
+    server = Server(args, model.numericalizer, model, device, confidence_estimator, bootleg_annotator)
     server.run()

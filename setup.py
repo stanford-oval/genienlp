@@ -65,6 +65,11 @@ setuptools.setup(
         'ujson==1.35',
         'marisa_trie==0.7.5',
         'sentence-transformers==0.4.0',
-        'loss_dropper @ git+https://github.com/ddkang/loss_dropper#egg=loss_dropper'
+        'loss_dropper @ git+https://github.com/ddkang/loss_dropper#egg=loss_dropper',
+        'kfserving>=0.5.0',
+        # for calibration:
+        'scikit-learn~=0.23',
+        'dill~=0.3',
+        'xgboost~=1.3',
     ]
 )
