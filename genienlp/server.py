@@ -106,94 +106,55 @@ class Server:
         task = list(get_tasks([task_name], self.args, self._cached_task_names).values())[0]
         if task_name not in self._cached_task_names:
             self._cached_task_names[task_name] = task
-
-        if 'instances' in request:
-            examples = []
-            # request['instances'] is an array of {context, question, answer, example_id}
-            for instance in request['instances']:
-                example_id, context, question, answer = instance.get('example_id', ''), instance['context'], instance['question'], instance.get('answer', '')
-                if not context:
-                    context = task.default_context
-                if not question:
-                    question = task.default_question
-
-                ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
-                examples.append(ex)
-            
-            bootleg_inputs = []
-            if self.bootleg_annotator:
-                for ex in examples:
-                    if task.is_contextual():
-                        bootleg_inputs.append(ex.question)
-                    else:
-                        bootleg_inputs.append(ex.context)
-
-                bootleg_labels = self.bootleg_annotator.label_mentions(bootleg_inputs)
-                bootleg_labels_unpacked = list(zip(*bootleg_labels))
-                
-                for i in range(len(examples)):
-                    ex = examples[i]
-                    label = bootleg_labels_unpacked[i]
-                    self.process_bootleg_labels(ex, label, task)
-
-            self.model.add_new_vocab_from_data([task])
-            batch = self.numericalize_examples(examples)
-            # it is a single batch, so wrap it in []
-            if self.args.calibrator_path is not None:
-                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                  output_predictions_only=True,
-                                                  confidence_estimator=self.confidence_estimator)
-
-                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0], 'score': float(s)} for (p, s) in zip(output.predictions, output.confidence_scores)]})
-            else:
-                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True)
-
-                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0]} for p in output.predictions]})
-            return response + '\n'
         
-        # TODO remove else by treating single examples as batch of 1
-        else:
-            context = request['context']
+        # if single example wrap it as a list
+        if 'instances' not in request:
+            request['instances'] = [{'example_id': request.get('example_id', ''), 'context': request['context'], 'question': request['question'], 'answer': request.get('answer', '')}]
+        
+        examples = []
+        # request['instances'] is an array of {context, question, answer, example_id}
+        for instance in request['instances']:
+            example_id, context, question, answer = instance.get('example_id', ''), instance['context'], instance['question'], instance.get('answer', '')
             if not context:
                 context = task.default_context
-            question = request['question']
             if not question:
                 question = task.default_question
 
-            if 'answer' in request.keys():
-                answer = request['answer']
-            else:
-                answer = ''
-
-            ex = Example.from_raw(str(request['id']), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
-            
-            if self.bootleg_annotator:
+            ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
+            examples.append(ex)
+        
+        bootleg_inputs = []
+        if self.bootleg_annotator:
+            for ex in examples:
                 if task.is_contextual():
-                    bootleg_input = ex.question
+                    bootleg_inputs.append(ex.question)
                 else:
-                    bootleg_input = ex.context
-                label = self.bootleg_annotator.label_mentions(bootleg_input)
-                
-                # batch size of 1
-                new_label = []
-                for data in label:
-                    new_label.append(data[0])
-                new_label = tuple(new_label)
-                
-                self.process_bootleg_labels(ex, new_label, task)
+                    bootleg_inputs.append(ex.context)
 
-            self.model.add_new_vocab_from_data([task])
-            batch = self.numericalize_examples([ex])
-            if self.args.calibrator_path is not None:
-                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                  output_predictions_only=True,
-                                                  confidence_estimator=self.confidence_estimator)
-                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=float(output.confidence_scores[0])))
-            else:
-                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                  output_predictions_only=True)
-                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0]))
-            return response + '\n'
+            bootleg_labels = self.bootleg_annotator.label_mentions(bootleg_inputs)
+            bootleg_labels_unpacked = list(zip(*bootleg_labels))
+            
+            for i in range(len(examples)):
+                ex = examples[i]
+                label = bootleg_labels_unpacked[i]
+                self.process_bootleg_labels(ex, label, task)
+
+        self.model.add_new_vocab_from_data([task])
+        batch = self.numericalize_examples(examples)
+        # it is a single batch, so wrap it in []
+        if self.args.calibrator_path is not None:
+            output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                              output_predictions_only=True,
+                                              confidence_estimator=self.confidence_estimator)
+
+            response = json.dumps({'id': request['id'], 'instances': [{'answer': p[0], 'score': float(s)}
+                                                                      for (p, s) in zip(output.predictions, output.confidence_scores)]})
+        else:
+            output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True)
+
+            response = json.dumps({'id': request['id'], 'instances': [{'answer': p[0]} for p in output.predictions]})
+        return response + '\n'
+        
 
     async def handle_client(self, client_reader, client_writer):
         try:
