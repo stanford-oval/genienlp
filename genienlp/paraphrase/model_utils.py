@@ -31,8 +31,13 @@ def shift_tokens_right(input_ids, pad_token_id):
 def freeze_params(model):
     for par in model.parameters():
         par.requires_grad = False
-        
-        
+
+
+def unfreeze_params(model):
+    for par in model.parameters():
+        par.requires_grad = True
+
+
 def freeze_embeds(model):
     """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
     try:
@@ -45,6 +50,17 @@ def freeze_embeds(model):
         for d in [model.encoder, model.decoder]:
             freeze_params(d.embed_tokens)
 
+def unfreeze_embeds(model):
+    """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
+    try:
+        unfreeze_params(model.model.shared)
+        for d in [model.model.encoder, model.model.decoder]:
+            unfreeze_params(d.embed_positions)
+            unfreeze_params(d.embed_tokens)
+    except AttributeError:
+        unfreeze_params(model.shared)
+        for d in [model.encoder, model.decoder]:
+            unfreeze_params(d.embed_tokens)
 
 def check_args(args):
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:

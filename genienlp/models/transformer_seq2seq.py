@@ -39,6 +39,7 @@ from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import get_mbart_lang
 from .base import GenieModel
 from ..paraphrase.transformers_utils import BartForConditionalGenerationForNER
+from ..paraphrase.model_utils import freeze_embeds, freeze_params
 from ..util import ConfidenceFeatures
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,9 @@ class TransformerSeq2Seq(GenieModel):
             else:
                 self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
                                                                    cache_dir=self.args.embeddings)
+        
+        if self.args.freeze_embeds_steps > 0:
+            freeze_embeds(self.model)
             
         self.numericalizer = TransformerNumericalizer(self.args.pretrained_model,
                                                       max_generative_vocab=None,

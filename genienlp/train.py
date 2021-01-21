@@ -53,6 +53,8 @@ from .model_utils.saver import Saver
 from .validate import validate
 from .arguments import save_args
 
+from .paraphrase.model_utils import unfreeze_embeds, unfreeze_params
+
 
 def initialize_logger(args):
     # set up file logger
@@ -402,6 +404,10 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 if (iteration+1) % args.gradient_accumulation_steps == 0:
                     lr_scheduler.step() # update the learning rate
                 continue
+                
+            if args.freeze_embeds_steps != 0 and iteration > args.freeze_embeds_steps:
+                unfreeze_embeds(model.model if args.model_parallel else model.module.model)
+                
 
             task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
             round_progress = f'round_{rnd}:' if rounds else ''

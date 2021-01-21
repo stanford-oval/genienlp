@@ -647,8 +647,8 @@ class BartEncoderForNER(BartEncoder):
                 attn = None
             else:
                 hidden_states, attn = encoder_layer(hidden_states, attention_mask, output_attentions=output_attentions)
-                if entity_type_embeddings is not None:
-                    hidden_states += entity_type_embeddings
+                # if entity_type_embeddings is not None:
+                #     hidden_states += entity_type_embeddings
 
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
