@@ -37,7 +37,7 @@ from .data_utils.progbar import progress_bar
 from .metrics import compute_metrics
 
 
-def generate_with_model(model, data_iterator, numericalizer, task,args,
+def generate_with_model(model, data_iterator, numericalizer, task, args,
                         output_predictions_only=False,
                         output_confidence_features=False,
                         original_order=None,
@@ -64,9 +64,16 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
 
     for batch in progress_bar(data_iterator):
         batch_size = len(batch.example_id)
-        raw_batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
         batch_prediction = [[] for _ in range(batch_size)]
         batch_confidence_features = [[] for _ in range(batch_size)]
+
+        example_ids += batch.example_id
+        if not output_predictions_only:
+            batch_answer = numericalizer.reverse(batch.answer.value.data)
+            batch_answer = [task.postprocess_prediction(example_ids[i], batch_answer[i]) for i in range(len(batch_answer))]
+            answers += batch_answer
+            batch_context = numericalizer.reverse(batch.context.value.data)
+            contexts += batch_context
 
         for hyperparameter_idx in range(len(args.temperature)):
             raw_partial_batch_prediction = model.generate(batch,
@@ -84,19 +91,16 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
                                                 )
             if output_confidence_features or output_confidence_scores:
                 partial_batch_confidence_features =  model.confidence_features(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout=args.mc_dropout, mc_dropout_num=args.mc_dropout_num)
-            partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction, task=task, field_name='answer')
+            partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction)
+            # post-process predictions
+            for i in range(len(partial_batch_prediction)):
+                partial_batch_prediction[i] = task.postprocess_prediction(example_ids[(i//args.num_outputs[hyperparameter_idx]) % batch_size], partial_batch_prediction[i])
+            # put them into the right array
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
-                raw_batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(raw_partial_batch_prediction[i])
                 if output_confidence_features or output_confidence_scores:
                     batch_confidence_features[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_confidence_features[i])
         
-        if not output_predictions_only:
-            batch_answer = numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer')
-            example_ids += batch.example_id
-            answers += batch_answer
-            batch_context = numericalizer.reverse(batch.context.value.data, task=task, field_name='context')
-            contexts += batch_context
         predictions += batch_prediction
         confidence_features += batch_confidence_features
     
