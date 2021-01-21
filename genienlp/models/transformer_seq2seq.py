@@ -68,6 +68,10 @@ class TransformerSeq2Seq(GenieModel):
         
         if self.args.freeze_embeds_steps > 0:
             freeze_embeds(self.model)
+        if self.args.freeze_encoder_steps > 0:
+            freeze_params(self.model.get_encoder())
+        if self.args.freeze_decoder_steps > 0:
+            freeze_params(self.model.get_decoder())
             
         self.numericalizer = TransformerNumericalizer(self.args.pretrained_model,
                                                       max_generative_vocab=None,

@@ -407,6 +407,10 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 
             if args.freeze_embeds_steps != 0 and iteration > args.freeze_embeds_steps:
                 unfreeze_embeds(model.model if args.model_parallel else model.module.model)
+            if args.freeze_encoder_steps != 0 and iteration > args.freeze_encoder_steps:
+                unfreeze_params(model.model.get_encoder() if args.model_parallel else model.module.model.get_encoder())
+            if args.freeze_decoder_steps != 0 and iteration > args.freeze_decoder_steps:
+                unfreeze_params(model.model.get_decoder() if args.model_parallel else model.module.model.get_decoder())
                 
 
             task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''

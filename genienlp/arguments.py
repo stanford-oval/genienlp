@@ -253,6 +253,8 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum')
     
+    parser.add_argument("--freeze_encoder_steps", default=0, type=int)
+    parser.add_argument("--freeze_decoder_steps", default=0, type=int)
     parser.add_argument("--freeze_embeds_steps", default=0, type=int)
     parser.add_argument("--almond_reverse_program", action='store_true')
 

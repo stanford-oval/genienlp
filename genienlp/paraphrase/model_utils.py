@@ -40,24 +40,24 @@ def unfreeze_params(model):
 
 def freeze_embeds(model):
     """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-    try:
+    if hasattr(model, 'model'):
         freeze_params(model.model.shared)
         for d in [model.model.encoder, model.model.decoder]:
             freeze_params(d.embed_positions)
             freeze_params(d.embed_tokens)
-    except AttributeError:
+    else:
         freeze_params(model.shared)
         for d in [model.encoder, model.decoder]:
             freeze_params(d.embed_tokens)
 
 def unfreeze_embeds(model):
-    """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-    try:
+    """Unfreeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
+    if hasattr(model, 'model'):
         unfreeze_params(model.model.shared)
         for d in [model.model.encoder, model.model.decoder]:
             unfreeze_params(d.embed_positions)
             unfreeze_params(d.embed_tokens)
-    except AttributeError:
+    else:
         unfreeze_params(model.shared)
         for d in [model.encoder, model.decoder]:
             unfreeze_params(d.embed_tokens)
