@@ -108,7 +108,7 @@ def parse_argv(parser):
                         help='Batch same sentences together (used for multilingual tasks)')
     parser.add_argument('--use_encoder_loss', action='store_true', help='Force encoded values for sentences in different languages to be the same')
     parser.add_argument('--encoder_loss_type', type=str, default='mean', choices=['mean', 'sum'],
-                        help='Function to calculate encoder_loss_type from the context rnn hidden states')
+                        help='Function to calculate encoder_loss from the context hidden states')
     parser.add_argument('--encoder_loss_weight', type=float, default=0.1,
                         help='multiplicative constant choosing the weight of encoder_loss in total loss')
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')

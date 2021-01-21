@@ -569,17 +569,18 @@ def load_config_json(args):
         retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
                     'max_output_length', 'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
                     'override_context', 'override_question',
-                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version',
+                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version', 'almond_reverse_program',
                     'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count',
                     'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
-                    'override_question', 'override_context',
+                    'override_question', 'override_context', 'append_types_to_text',
                     'do_ner', 'database_type', 'elastic_config', 'min_entity_len', 'max_entity_len',
-                    'entity_type_agg_method',
+                    'entity_type_agg_method', 'entity_word_embeds_dropout',
                     'num_db_types', 'db_unk_id', 'retrieve_method', 'lookup_method', 'almond_domains',
                     'features', 'features_size', 'features_default_val',
                     'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
                     'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
-                    'bootleg_integration', 'bootleg_load_prepped_data', 'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types'
+                    'bootleg_integration', 'bootleg_load_prepped_data', 'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types',
+                    'freeze_encoder_steps', 'freeze_decoder_steps', 'freeze_embeds_steps',
                     ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
@@ -596,13 +597,17 @@ def load_config_json(args):
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
             elif r in ('do_ner', 'use_encoder_loss',
-                       'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version'
+                       'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version', 'almond_reverse_program',
+                       'append_types_to_text'
                        ):
                 setattr(args, r, False)
                 
-            elif r in ('num_db_types', 'db_unk_id'):
+            elif r in ('num_db_types', 'db_unk_id', 'freeze_encoder_steps', 'freeze_decoder_steps', 'freeze_embeds_steps'):
                 setattr(args, r, 0)
-                
+            
+            elif r in ('entity_word_embeds_dropout'):
+                setattr(args, r, 0.0)
+            
             elif r in ('num_beams', 'num_outputs', 'top_p', 'repetition_penalty'):
                 setattr(args, r, [1])
                 
