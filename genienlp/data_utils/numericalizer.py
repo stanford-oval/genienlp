@@ -137,8 +137,10 @@ class TransformerNumericalizer(object):
         if hasattr(self._tokenizer, 'wordpiece_tokenizer'):
             self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
         else:
-            self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
-
+            if self._use_fast():
+                self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')
+            else:
+                self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
 
     def load(self, save_dir):
         if self.max_generative_vocab is not None:
