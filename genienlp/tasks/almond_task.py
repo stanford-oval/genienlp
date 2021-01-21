@@ -56,6 +56,7 @@ class BaseAlmondTask(BaseTask):
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
         self._almond_thingtalk_version = args.almond_thingtalk_version
+        self._almond_reverse_program = args.almond_reverse_program
         
         self.almond_domains = args.almond_domains
         self.all_schema_types = set()
@@ -261,6 +262,11 @@ class BaseAlmondTask(BaseTask):
             # To make genienlp transparent to the tokenization done by genie-toolkit
             # We tokenize answer here by adding whitespace between each CJK character
             answer = tokenize_cjk_chars(answer)
+            
+        if self._almond_reverse_program:
+            answer_tokens = answer.split(' ')
+            answer_tokens.reverse()
+            answer = ' '.join(answer_tokens)
         
         new_tokens = []
         for token in answer.split():
@@ -376,6 +382,12 @@ class BaseAlmondTask(BaseTask):
         
         features = [Feature(*tup) for tup in zip(*zip_list)]
         
+        if field_name == 'answer' and self._almond_reverse_program:
+            features.reverse()
+            new_sentence_tokens = new_sentence.split(' ')
+            new_sentence_tokens.reverse()
+            new_sentence = ' '.join(new_sentence_tokens)
+            
         return new_sentence, features
 
 
