@@ -33,6 +33,7 @@ import torch
 from collections import OrderedDict
 
 from .util import GenerationOutput
+from .data_utils.progbar import progress_bar
 from .metrics import compute_metrics
 
 
@@ -61,7 +62,7 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
     answers = []
     contexts = []
 
-    for batch in data_iterator:
+    for batch in progress_bar(data_iterator):
         batch_size = len(batch.example_id)
         raw_batch_prediction = [[] for _ in range(batch_size)] # a list where each element is a list of outputs for one input
         batch_prediction = [[] for _ in range(batch_size)]
