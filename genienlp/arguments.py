@@ -259,6 +259,9 @@ def parse_argv(parser):
     parser.add_argument("--almond_reverse_program", action='store_true')
 
     parser.add_argument("--entity_word_embeds_dropout", default=0.0, type=float)
+    
+    parser.add_argument("--append_types_to_text", action='store_true')
+
 
 
 def check_and_update_generation_args(args):

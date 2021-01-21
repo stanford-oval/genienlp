@@ -115,11 +115,11 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
             for index, set_ in enumerate(val_set):
-                loader, original_order = make_data_loader(set_, numericalizer, bs, device, train=False, return_original_order=True)
+                loader, original_order = make_data_loader(set_, numericalizer, bs, device, train=False, return_original_order=True, append_types_to_text=args.append_types_to_text)
                 task_iter.append((task, task_languages[index], loader, original_order))
         # single language task or no separate eval
         else:
-           loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device, train=False, return_original_order=True)
+           loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device, train=False, return_original_order=True, append_types_to_text=args.append_types_to_text)
            task_iter.append((task, task_languages, loader, original_order))
 
         iters.extend(task_iter)

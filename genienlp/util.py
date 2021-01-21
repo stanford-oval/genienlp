@@ -529,8 +529,8 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
-    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer)
+def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False, append_types_to_text=False):
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer, append_types_to_text=append_types_to_text)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]

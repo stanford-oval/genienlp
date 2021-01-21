@@ -58,15 +58,7 @@ class TransformerLSTM(GenieModel):
         encoder_embeddings = args.pretrained_model
         config = AutoConfig.from_pretrained(encoder_embeddings, cache_dir=args.embeddings)
         args.dimension = config.hidden_size
-        self.numericalizer = TransformerNumericalizer(encoder_embeddings,
-                                                      max_generative_vocab=args.max_generative_vocab,
-                                                      cache=args.embeddings,
-                                                      no_fast_tokenizer=args.no_fast_tokenizer,
-                                                      preprocess_special_tokens=args.preprocess_special_tokens,
-                                                      features=args.features,
-                                                      features_default_val=args.features_default_val,
-                                                      features_size=args.features_size
-                                                      )
+        self.numericalizer = TransformerNumericalizer(encoder_embeddings, args, max_generative_vocab=args.max_generative_vocab)
         
         self.numericalizer.get_tokenizer(save_directory)
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)

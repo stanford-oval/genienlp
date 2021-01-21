@@ -35,7 +35,7 @@ from dataclasses import dataclass
 
 
 def identity(x, **kw):
-    return x, []
+    return x, [], x
 
 
 class SequentialField(NamedTuple):
@@ -83,15 +83,25 @@ class Example(NamedTuple):
     answer_feature: List[Feature]
     context_plus_question: str
     context_plus_question_feature: List[Feature]
+    context_plus_question_with_types: str
 
     @staticmethod
     def from_raw(example_id: str, context: str, question: str, answer: str, preprocess=identity, lower=False):
         args = [example_id]
         answer = unicodedata.normalize('NFD', answer)
         
+        question_plus_types = ''
+        context_plus_types = ''
+        
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
             arg = unicodedata.normalize('NFD', arg)
-            sentence, features = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)
+            sentence, features, sentence_plus_types = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)
+            
+            if argname == 'context':
+                context_plus_types = sentence_plus_types
+            elif argname == 'question':
+                question_plus_types = sentence_plus_types
+            
             if lower:
                 sentence = sentence.lower()
             args.append(sentence)
@@ -100,7 +110,8 @@ class Example(NamedTuple):
         # create context_plus_question fields by concatenating context and question fields
         args.append(args[1] + ' ' + args[3])
         args.append(args[2] + args[4])
-
+        args.append(context_plus_types + ' ' + question_plus_types)
+        
         return Example(*args)
     
 def get_default_fields(text, features, features_size, features_default_val):
@@ -123,12 +134,15 @@ class NumericalizedExamples(NamedTuple):
     answer: SequentialField
     
     @staticmethod
-    def from_examples(examples, numericalizer):
+    def from_examples(examples, numericalizer, append_types_to_text):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
-
-        tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question for ex in examples],
-                                                        [ex.context_plus_question_feature for ex in examples if ex.context_plus_question_feature])
+        
+        if append_types_to_text:
+            tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question_with_types for ex in examples], [])
+        else:
+            tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question for ex in examples],
+                                                            [ex.context_plus_question_feature for ex in examples if ex.context_plus_question_feature])
         tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], [])
         for i in range(len(examples)):
             numericalized_examples.append(NumericalizedExamples([examples[i].example_id],

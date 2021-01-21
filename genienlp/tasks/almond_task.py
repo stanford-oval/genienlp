@@ -73,6 +73,7 @@ class BaseAlmondTask(BaseTask):
             else:
                 for domain in self.almond_domains:
                     self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
+                self.DBtype2TTtype = {v: k for k, v in self.TTtype2DBtype.items()}
                 self._init_db()
     
     def _init_db(self):
@@ -250,7 +251,7 @@ class BaseAlmondTask(BaseTask):
                 entity2type = self.collect_answer_entity_types(answer)
                 tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
         
-        return tokens_type_ids
+        return tokens_type_ids, entity2type
     
     def find_type_probs(self, tokens, default_val, default_size):
         token_freqs = [[default_val] * default_size] * len(tokens)
@@ -361,7 +362,7 @@ class BaseAlmondTask(BaseTask):
         
         if self.args.do_ner and self.bootleg is None and field_name not in self.no_feature_fields:
             if 'type_id' in self.args.features:
-                tokens_type_ids = self.find_type_ids(new_tokens, answer)
+                tokens_type_ids, entity2type = self.find_type_ids(new_tokens, answer)
             if 'type_prob' in self.args.features:
                 tokens_type_probs = self.find_type_probs(new_tokens, self.args.features_default_val[1],
                                                          self.args.features_size[1])
@@ -388,7 +389,35 @@ class BaseAlmondTask(BaseTask):
             new_sentence_tokens.reverse()
             new_sentence = ' '.join(new_sentence_tokens)
             
-        return new_sentence, features
+        # create sentence plus types
+        new_sentence_tokens = new_sentence.split(' ')
+        if len(features):
+            assert len(new_sentence_tokens) == len(features)
+    
+        sentence_plus_types_tokens = []
+        i = 0
+        while i < len(new_sentence_tokens):
+            token = new_sentence_tokens[i]
+            feat = features[i]
+            # token is entity
+            if any([val != self.args.features_default_val[0] for val in feat.type_id]):
+                final_token = '<e> '
+                all_types = ' | '.join([self.DBtype2TTtype[self.db.id2type[id]] for id in feat.type_id])
+                final_token += '( ' + all_types + ' ) ' + token
+                # append all entities with same type
+                i += 1
+                while i < len(new_sentence_tokens) and features[i] == feat:
+                    final_token += ' ' + new_sentence_tokens[i]
+                    i += 1
+                final_token += ' </e>'
+                sentence_plus_types_tokens.append(final_token)
+            else:
+                sentence_plus_types_tokens.append(token)
+                i += 1
+        sentence_plus_types = ' '.join(sentence_plus_types_tokens)
+
+
+        return new_sentence, features, sentence_plus_types
 
 
 @register_task('almond')

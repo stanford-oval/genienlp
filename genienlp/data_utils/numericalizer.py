@@ -75,14 +75,13 @@ class TransformerNumericalizer(object):
     _special_tokens_to_word_regexes: List[Tuple[re.Pattern, str]]
     _special_tokens_to_token_regexes: List[Tuple[re.Pattern, str]]
     
-    def __init__(self, pretrained_tokenizer, max_generative_vocab, cache=None, no_fast_tokenizer=False,
-                 preprocess_special_tokens=False, features=None, features_default_val=None, features_size=None):
+    def __init__(self, pretrained_tokenizer, args, max_generative_vocab):
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
-        self._cache = cache
+        self._cache = args.embeddings
         self._tokenizer = None
         
-        self._preprocess_special_tokens = preprocess_special_tokens
+        self._preprocess_special_tokens = args.preprocess_special_tokens
         
         # map a token to a space-separated sequence of words
         self._special_tokens_to_word_map = []
@@ -91,11 +90,7 @@ class TransformerNumericalizer(object):
         # map a space-separated sequence of words to a token
         self._special_tokens_to_token_regexes = []
         
-        self.features = features
-        self.features_default_val = features_default_val
-        self.features_size = features_size
-        
-        self.no_fast_tokenizer = no_fast_tokenizer
+        self.args = args
         
     @property
     def vocab(self):
@@ -113,7 +108,7 @@ class TransformerNumericalizer(object):
             return self.pad_id
     
     def _use_fast(self):
-        return not self.no_fast_tokenizer and \
+        return not self.args.no_fast_tokenizer and \
                (self._pretrained_name in ALLOWED_FAST_TOKENIZERS or
                (self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING))
     
@@ -185,6 +180,10 @@ class TransformerNumericalizer(object):
         else:
             # add the special tokens directly to the tokenizer
             self._tokenizer.add_tokens(special_tokens)
+        
+        # add entity boundary special tokens
+        if self.args.append_types_to_text:
+            self._tokenizer.add_tokens(['<e>', '</e>'])
         
         if self.max_generative_vocab is not None:
             # do a pass over all the data in the dataset
@@ -480,7 +479,7 @@ class TransformerNumericalizer(object):
                 special_tokens_mask = batch_special_tokens_mask[i]
                 num_prefix_special_tokens, num_suffix_special_tokens = self.get_num_special_tokens(special_tokens_mask)
                 
-                pad_feat = get_pad_feature(self.features, self.features_default_val, self.features_size)
+                pad_feat = get_pad_feature(self.args.features, self.args.features_default_val, self.args.features_size)
                 feat = [pad_feat] * num_prefix_special_tokens + feat + [pad_feat] * num_suffix_special_tokens
     
                 batch_features.append(feat)

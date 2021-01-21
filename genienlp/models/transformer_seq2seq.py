@@ -73,15 +73,7 @@ class TransformerSeq2Seq(GenieModel):
         if self.args.freeze_decoder_steps > 0:
             freeze_params(self.model.get_decoder())
             
-        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model,
-                                                      max_generative_vocab=None,
-                                                      cache=args.embeddings,
-                                                      no_fast_tokenizer=args.no_fast_tokenizer,
-                                                      preprocess_special_tokens=args.preprocess_special_tokens,
-                                                      features=args.features,
-                                                      features_default_val=args.features_default_val,
-                                                      features_size=args.features_size
-                                                      )
+        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, args, max_generative_vocab=None)
 
         self.numericalizer.get_tokenizer(save_directory)
         
@@ -137,7 +129,7 @@ class TransformerSeq2Seq(GenieModel):
             context_entity_ids, context_entity_probs, context_entity_masking = None, None, None
             entity_word_embeds_dropout = self.args.entity_word_embeds_dropout
             
-            if self.args.num_db_types > 0:
+            if self.args.num_db_types > 0 and not self.args.append_types_to_text:
                 context_entity_ids = batch.context.feature[:, :, :self.args.features_size[0]].long()
                 # indicates position of entities
                 context_entity_masking = (context_entity_ids != self.args.features_default_val[0]).int()

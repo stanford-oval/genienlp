@@ -43,6 +43,7 @@ class Database(object):
     def __init__(self, canonical2type, type2id, all_canonicals, TTtype2DBtype):
         self.canonical2type = canonical2type
         self.type2id = type2id
+        self.id2type = {v: k for k, v in self.type2id.items()}
         self.all_canonicals = all_canonicals
         self.entity_type_white_list = list(TTtype2DBtype.values())
 
