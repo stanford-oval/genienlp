@@ -61,7 +61,12 @@ class Example(NamedTuple):
             args.append(field)
 
         # create context_plus_question field by appending context and question words
-        args.append(args[1] + ' ' + args[2])
+        if len(args[2]) > 0:
+            context_plus_question = args[1] + ' ' + args[2]
+        else:
+            # if question is empty, don't append space
+            context_plus_question = args[1]
+        args.append(context_plus_question)
 
         return Example(*args)
 
