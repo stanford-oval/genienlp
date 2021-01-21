@@ -63,15 +63,15 @@ def get_all_splits(args):
     for i, task in enumerate(args.tasks):
         task_languages = args.pred_languages[i]
         logger.info(f'Loading {task}')
-        kwargs = {'train': None}
-        if args.evaluate == 'valid':
-            kwargs['test'] = None
-            if args.pred_set_name is not None:
-                kwargs['validation'] = args.pred_set_name
+        kwargs = {'train': None, 'validation': None, 'test': None}
+        if args.evaluate == 'train':
+            del kwargs['train'] # deleting keys means use the default file name
+        elif args.evaluate == 'valid':
+            kwargs['validation'] = args.pred_set_name
         elif args.evaluate == 'test':
-            kwargs['validation'] = None
+            del kwargs['test']
         else:
-            raise ValueError('Split used for prediction should be either valid or test')
+            raise ValueError('Split used for prediction should be either train, valid or test')
         
         kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
                        'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages,
@@ -83,8 +83,13 @@ def get_all_splits(args):
             task_splits = [task_splits]
         task_split_processed = []
         for split in task_splits:
-            assert (split.eval or split.test) and not split.train and not split.aux
-            split = split.eval if split.eval else split.test
+            assert (split.eval or split.test or split.train) and not split.aux
+            if split.train:
+                split = split.train
+            elif split.eval:
+                split = split.eval
+            else:
+                split = split.test
             task_split_processed.append(split)
         splits.append(task_split_processed)
     return splits
@@ -225,9 +230,9 @@ def run(args, device):
 
 def parse_argv(parser):
     parser.add_argument('--path', type=str, required=True, help='Folder to load the model from')
-    parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'],
-                        help='Which dataset to do predictions for (test or dev)')
-    parser.add_argument('--pred_set_name', type=str, help='Name of dataset to run prediction for; will be ignored if --evaluate is test')
+    parser.add_argument('--evaluate', type=str, required=True, choices=['train', 'valid', 'test'],
+                        help='Which dataset to do predictions for (train, dev or test)')
+    parser.add_argument('--pred_set_name', default='eval', type=str, help='Name of dataset to run prediction for; will be ignored if --evaluate is test')
     parser.add_argument('--tasks',
                         default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl',
                                  'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
