@@ -373,7 +373,7 @@ class BartForConditionalGenerationForNER(BartForConditionalGeneration):
         entity_ids=None,
         entity_masking=None,
         entity_probs=None,
-        mask_entities=False,
+        entity_word_embeds_dropout=False,
         decoder_inputs_embeds=None,
         labels=None,
         use_cache=None,
@@ -395,7 +395,7 @@ class BartForConditionalGenerationForNER(BartForConditionalGeneration):
             entity_ids=entity_ids,
             entity_masking=entity_masking,
             entity_probs=entity_probs,
-            mask_entities=mask_entities,
+            entity_word_embeds_dropout=entity_word_embeds_dropout,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
@@ -451,7 +451,7 @@ class BartModelForNER(BartModel):
         entity_ids=None,
         entity_masking=None,
         entity_probs=None,
-        mask_entities=False,
+        entity_word_embeds_dropout=False,
         decoder_inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
@@ -481,7 +481,7 @@ class BartModelForNER(BartModel):
                 entity_ids=entity_ids,
                 entity_masking=entity_masking,
                 entity_probs=entity_probs,
-                mask_entities=mask_entities,
+                entity_word_embeds_dropout=entity_word_embeds_dropout,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -548,7 +548,7 @@ class BartEncoderForNER(BartEncoder):
         entity_ids=None,
         entity_masking=None,
         entity_probs=None,
-        mask_entities=False,
+        entity_word_embeds_dropout=False,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -597,9 +597,11 @@ class BartEncoderForNER(BartEncoder):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
         
-        if entity_masking is not None and mask_entities:
-            input_ids = input_ids * ~(entity_masking.max(-1)[0].bool())
-            
+        # dropout word embeddings for entities
+        if entity_masking is not None and entity_word_embeds_dropout > 0.0:
+            if entity_word_embeds_dropout > random.random():
+                input_ids = input_ids * ~(entity_masking.max(-1)[0].bool())
+        
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
@@ -681,7 +683,7 @@ class BertEmbeddingsForNER(BertEmbeddings):
             self.entity_type_embeddings = nn.Embedding(num_db_types, config.hidden_size, padding_idx=db_unk_id)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None,
-                entity_ids=None, entity_masking=None, entity_probs=None, mask_entities=False):
+                entity_ids=None, entity_masking=None, entity_probs=None, entity_word_embeds_dropout=False):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -695,8 +697,10 @@ class BertEmbeddingsForNER(BertEmbeddings):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
-        if entity_masking is not None and mask_entities:
-            input_ids = input_ids * ~(entity_masking.max(-1)[0].bool())
+        # dropout word embeddings for entities
+        if entity_masking is not None and entity_word_embeds_dropout > 0.0:
+            if entity_word_embeds_dropout > random.random():
+                input_ids = input_ids * ~(entity_masking.max(-1)[0].bool())
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -751,7 +755,7 @@ class BertModelForNER(BertModel):
             entity_ids=None,
             entity_masking=None,
             entity_probs=None,
-            mask_entities=False,
+            entity_word_embeds_dropout=False,
             head_mask=None,
             inputs_embeds=None,
             encoder_hidden_states=None,
@@ -809,7 +813,7 @@ class BertModelForNER(BertModel):
         if embedding_output is None:
             embedding_output = self.embeddings(
                 input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds,
-                entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs, mask_entities=mask_entities
+                entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs, entity_word_embeds_dropout=entity_word_embeds_dropout
             )
             
         encoder_outputs = self.encoder(
@@ -850,7 +854,7 @@ class RobertaEmbeddingsForNER(BertEmbeddingsForNER):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0,
-                entity_ids=None, entity_masking=None, entity_probs=None, mask_entities=False):
+                entity_ids=None, entity_masking=None, entity_probs=None, entity_word_embeds_dropout=False):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
@@ -860,7 +864,7 @@ class RobertaEmbeddingsForNER(BertEmbeddingsForNER):
 
         return super().forward(
             input_ids, token_type_ids=token_type_ids, position_ids=position_ids, inputs_embeds=inputs_embeds,
-            entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs, mask_entities=mask_entities)
+            entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs, entity_word_embeds_dropout=entity_word_embeds_dropout)
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """

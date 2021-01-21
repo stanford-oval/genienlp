@@ -135,7 +135,8 @@ class TransformerSeq2Seq(GenieModel):
             # (2) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
 
             context_entity_ids, context_entity_probs, context_entity_masking = None, None, None
-            mask_entities = False
+            entity_word_embeds_dropout = self.args.entity_word_embeds_dropout
+            
             if self.args.num_db_types > 0:
                 context_entity_ids = batch.context.feature[:, :, :self.args.features_size[0]].long()
                 # indicates position of entities
@@ -145,7 +146,7 @@ class TransformerSeq2Seq(GenieModel):
             
             outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id),
                                  entity_ids=context_entity_ids, entity_masking=context_entity_masking,
-                                 entity_probs=context_entity_probs, mask_entities=mask_entities)
+                                 entity_probs=context_entity_probs, entity_word_embeds_dropout=entity_word_embeds_dropout)
             
             ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
             loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)
