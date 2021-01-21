@@ -34,7 +34,7 @@ import multiprocessing
 from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
-from transformers import AutoConfig, AutoTokenizer, BertTokenizer, XLMRobertaTokenizer
+from transformers import AutoConfig, AutoTokenizer, BertTokenizer, XLMRobertaTokenizer, BartTokenizer, BartTokenizerFast
 
 from .decoder_vocab import DecoderVocabulary
 from .example import SequentialField, Feature, get_pad_feature
@@ -129,13 +129,13 @@ class TransformerNumericalizer(object):
                                                             cache_dir=self._cache,
                                                             use_fast=self._use_fast())
             
-        if hasattr(self._tokenizer, 'wordpiece_tokenizer'):
+        if isinstance(self._tokenizer, BertTokenizer):
             self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
-        else:
-            if self._use_fast():
-                self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')
-            else:
-                self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
+        elif isinstance(self._tokenizer, XLMRobertaTokenizer):
+            self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
+        elif isinstance(self._tokenizer, (BartTokenizer, BartTokenizerFast)):
+            self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')
+
 
     def load(self, save_dir):
         if self.max_generative_vocab is not None:
