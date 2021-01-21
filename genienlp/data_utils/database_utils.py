@@ -36,14 +36,16 @@ TYPES = ('song_name', 'song_artist', 'song_album', 'song_genre')
 
 BANNED_PHRASES = set(
     stopwords.words('english') + \
-    ['music', 'musics', 'name', 'names', 'want', 'wants', 'album', 'albums', 'please', 'who', 'show me', 'tell me', 'find me',
+    ['music', 'musics', 'name', 'names', 'want', 'wants', 'album', 'albums', 'please', 'who', 'show me', 'tell me', 'find me', 'sing', 'sang',
      'play', 'play me', 'plays', 'track', 'tracks', 'song', 'songs', 'record', 'records', 'recordings', 'album', 'url', 'mount to',
      'something', 'get', 'selections', 'pages', 'isbn', 'isbn numbers', 'average rating', 'count', 'yesterday', 'before today', 'i need to know',
-     'resume', 'resumes', 'the', 'search for me', 'search', 'searches', 'yes', 'yeah', 'popular', 'trouble', 'go', 'millisecond',
+     'resume', 'resumes', 'the', 'search for me', 'search', 'searches', 'yes', 'yeah', 'popular', 'trouble', 'go', 'millisecond', 'good music', 'hear music',
      'h', 'm', 's', 'd', 'y', 'am', 'pm', 'min', 'sec', 'hour', 'year', 'month', 'day', 'us', 'we', 'who', 'what', 'where', 'the',
      'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
      'release', 'released', 'dance', 'dancing', 'need', 'i need', 'i would', ' i will', 'find', 'the list', 'get some', 'af', '1st', '2nd', '3rd',
-     'tongue', 'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'spotify', 'app']
+     'tongue', 'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'spotify', 'app', 'almond', 'genre',
+     'play dj', 'stone', 'sound tracks', 'hi', 'hey', 'tweet', 'all music', 'hello', 'preference', 'top tracks', 'all the good', 'music i', 'id',
+     'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 )
 
 BANNED_REGEX = [re.compile(r'\d (star|rating)'), re.compile(r'\dth'), re.compile(r'a \d'), re.compile(r'\d (hour|min|sec|minute|second)s?')]
@@ -108,6 +110,32 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
                 type = 'unk'
             # else:
             #     type = 'unk'
-                
+            
+        elif domain == 'spotify':
+            if title in ['song', 'single', 'musical composition', 'ballad', 'extended play', 'literary work',
+                         'television series', 'film', 'play']:
+                type = 'Q7366'
+            elif 'album' in title or title in []:
+                type = 'Q208569'
+            elif 'genre' in title or title in []:
+                type = 'Q188451'
+            elif 'person' in title or 'musician' in title or title in ['singer', 'actor', 'musician', 'songwriter',
+                                                                       'composer',
+                                                                       'singer-songwriter', 'musical group', 'drummer',
+                                                                       'writer',
+                                                                       'poet', 'guitarist', 'rapper', 'painter',
+                                                                       'film director',
+                                                                       'rock band', 'university teacher', 'journalist',
+                                                                       'television presenter',
+                                                                       'saxophonist', 'music pedagogue',
+                                                                       'association football player',
+                                                                       'disc jockey', 'record producer', 'engineer',
+                                                                       'human biblical figure', 'big band',
+                                                                       'musical duo', 'girl group']:
+                type = 'Q5'
+    
+            elif title in ['taxon', 'Wikimedia disambiguation page', 'Wikimedia list article']:
+                type = 'unk'
+
     return type
 

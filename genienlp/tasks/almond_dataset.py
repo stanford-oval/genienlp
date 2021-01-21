@@ -56,6 +56,8 @@ class AlmondDataset(CQA):
         skip_cache = kwargs.get('skip_cache', True)
         cache_input_data = kwargs.get('cache_input_data', False)
         bootleg = kwargs.get('bootleg', None)
+        db = kwargs.get('db', None)
+        DBtype2TTtype = kwargs.get('DBtype2TTtype', None)
         num_workers = kwargs.get('num_workers', 0)
         features_size = kwargs.get('features_size')
         features_default_val = kwargs.get('features_default_val')
@@ -149,11 +151,37 @@ class AlmondDataset(CQA):
                             examples[n].context_plus_question_feature[i].type_id = tokens_type_ids[i]
                             examples[n].context_plus_question_feature[i].type_prob = tokens_type_probs[i]
 
+
+                    context_plus_question_with_types_tokens = []
+                    context_plus_question_tokens = ex.context_plus_question.split(' ')
+                    context_plus_question_features = ex.context_plus_question_feature
+                    i = 0
+                    while i < len(context_plus_question_tokens):
+                        token = context_plus_question_tokens[i]
+                        feat = context_plus_question_features[i]
+                        # token is entity
+                        if any([val != features_default_val[0] for val in feat.type_id]):
+                            final_token = '<e> '
+                            all_types = ' | '.join([DBtype2TTtype.get(db.id2type[id], '') for id in feat.type_id])
+                            final_token += '( ' + all_types + ' ) ' + token
+                            # append all entities with same type
+                            i += 1
+                            while i < len(context_plus_question_tokens) and context_plus_question_features[i] == feat:
+                                final_token += ' ' + context_plus_question_tokens[i]
+                                i += 1
+                            final_token += ' </e>'
+                            context_plus_question_with_types_tokens.append(final_token)
+                        else:
+                            context_plus_question_with_types_tokens.append(token)
+                            i += 1
+                    context_plus_question_with_types = ' '.join(context_plus_question_with_types_tokens)
+                    examples[n] = examples[n]._replace(context_plus_question_with_types=context_plus_question_with_types)
+
                 if verbose:
                     for ex in examples:
                         print()
                         print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(ex.context_plus_question.split(' '), ex.context_plus_question_feature)], sep='\n')
-                            
+
             if cache_input_data:
                 os.makedirs(os.path.dirname(cache_name), exist_ok=True)
                 logger.info(f'Caching data to {cache_name}')
