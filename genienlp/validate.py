@@ -62,7 +62,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
     answers = []
     contexts = []
 
-    for batch in progress_bar(data_iterator):
+    for batch in progress_bar(data_iterator, desc='Generating'):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
         batch_confidence_features = [[] for _ in range(batch_size)]

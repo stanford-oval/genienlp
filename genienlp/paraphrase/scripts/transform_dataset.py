@@ -143,7 +143,6 @@ def main(args):
             elif args.transformation == 'replace_queries':
                 for idx in range(args.num_new_queries):
                     copy_row = row.copy()
-                    print(new_queries)
                     copy_row[args.utterance_column] = new_queries[new_query_count]
                     copy_row[args.id_column] = 'A' + copy_row[args.id_column] + '-' + str(idx) # add 'A' for auto-paraphrasing
                     output_rows.append(copy_row)
