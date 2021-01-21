@@ -96,8 +96,9 @@ def main(args):
         if args.transformation in ['replace_queries', 'merge_input_file_with_query_file']:
             new_queries = []
             query_file = open(args.query_file, 'r')
-            for q in query_file:
-                new_queries.append(lower_case(tokenize(q.strip())))
+            for line in query_file:
+                queries = line.split('\t')[1:] # 0 is example id
+                new_queries.extend([lower_case(tokenize(q.strip())) for q in queries])
             new_query_count = 0
         if args.transformation in ['remove_wrong_thingtalk', 'get_wrong_thingtalk']:
             gold_thingtalks = []
@@ -142,6 +143,7 @@ def main(args):
             elif args.transformation == 'replace_queries':
                 for idx in range(args.num_new_queries):
                     copy_row = row.copy()
+                    print(new_queries)
                     copy_row[args.utterance_column] = new_queries[new_query_count]
                     copy_row[args.id_column] = 'A' + copy_row[args.id_column] + '-' + str(idx) # add 'A' for auto-paraphrasing
                     output_rows.append(copy_row)
