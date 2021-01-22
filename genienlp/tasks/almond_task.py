@@ -418,7 +418,7 @@ class BaseAlmondTask(BaseTask):
                     # token is entity
                     if any([val != self.args.features_default_val[0] for val in feat.type_id]):
                         final_token = '<e> '
-                        all_types = ' | '.join([self.DBtype2TTtype[self.db.id2type[id]] for id in feat.type_id])
+                        all_types = ' | '.join(set([self.DBtype2TTtype[self.db.id2type[id]] for id in feat.type_id]))
                         final_token += '( ' + all_types + ' ) ' + token
                         # append all entities with same type
                         i += 1

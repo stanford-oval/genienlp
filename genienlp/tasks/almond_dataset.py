@@ -165,7 +165,7 @@ class AlmondDataset(CQA):
                             
                             # all_types = ' | '.join([DBtype2TTtype.get(db.id2type[id], '') for id in feat.type_id])
                             
-                            all_types = ' | '.join([DBtype2TTtype[db.id2type[id]] for id in feat.type_id if db.id2type[id] in DBtype2TTtype])
+                            all_types = ' | '.join(set([DBtype2TTtype[db.id2type[id]] for id in feat.type_id if db.id2type[id] in DBtype2TTtype]))
                             
                             final_token += '( ' + all_types + ' ) ' + token
                             # append all entities with same type

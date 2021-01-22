@@ -109,7 +109,7 @@ class Server:
         
                 # all_types = ' | '.join([DBtype2TTtype.get(db.id2type[id], '') for id in feat.type_id])
         
-                all_types = ' | '.join([task.DBtype2TTtype[task.db.id2type[id]] for id in feat.type_id if task.db.id2type[id] in task.DBtype2TTtype])
+                all_types = ' | '.join(set([task.DBtype2TTtype[task.db.id2type[id]] for id in feat.type_id if task.db.id2type[id] in task.DBtype2TTtype]))
         
                 final_token += '( ' + all_types + ' ) ' + token
                 # append all entities with same type
