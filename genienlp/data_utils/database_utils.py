@@ -30,9 +30,6 @@ DOMAIN_TYPE_MAPPING['hotels'] = {'Hotel': 'Q571', 'LocationFeatureSpecification'
 ## Dialogues
 DOMAIN_TYPE_MAPPING['spotify'] = {'song': 'Q7366', 'artist': 'Q5', 'artists': 'Q5', 'album': 'Q208569', 'genres': 'Q188451'}   # Q188451:music genre
 
-# Order of types should not be changed (new types can be appended)
-TYPES = ('song_name', 'song_artist', 'song_album', 'song_genre')
-
 
 BANNED_PHRASES = set(
     stopwords.words('english') + \
@@ -45,10 +42,12 @@ BANNED_PHRASES = set(
      'release', 'released', 'dance', 'dancing', 'need', 'i need', 'i would', ' i will', 'find', 'the list', 'get some', 'af', '1st', '2nd', '3rd',
      'tongue', 'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'spotify', 'app', 'almond', 'genre',
      'play dj', 'stone', 'sound tracks', 'hi', 'hey', 'tweet', 'all music', 'hello', 'preference', 'top tracks', 'all the good', 'music i', 'id',
-     'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+     'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'from yesterday', 'show tunes', 'tag', 'ms', 'all good',
+     'greatest hits', 'good hits']
 )
 
-BANNED_REGEX = [re.compile(r'\d (star|rating)'), re.compile(r'\dth'), re.compile(r'a \d'), re.compile(r'\d (hour|min|sec|minute|second)s?')]
+BANNED_REGEX = [re.compile(r'\d (star|rating)'), re.compile(r'\dth'), re.compile(r'a \d'),
+                re.compile(r'\d (hour|min|sec|minute|second|day|month|year)s?'), re.compile(r'this (hour|min|sec|minute|second|day|month|year)s?')]
 
 def is_banned(word):
     return word in BANNED_PHRASES or any([regex.match(word) for regex in BANNED_REGEX])
@@ -108,16 +107,21 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
             elif title in ['day', 'single', 'musical group', 'English unit of measurement',
                            'Wikimedia disambiguation page', 'Wikimedia list article']:
                 type = 'unk'
-            # else:
-            #     type = 'unk'
+            else:
+                type = 'unk'
             
         elif domain == 'spotify':
+            # rap, rap music
+            if qid in ['Q6010', 'Q11401']:
+                type = 'Q188451'
+    
             if title in ['song', 'single', 'musical composition', 'ballad', 'extended play', 'literary work',
                          'television series', 'film', 'play']:
                 type = 'Q7366'
             elif 'album' in title or title in []:
                 type = 'Q208569'
-            elif 'genre' in title or title in []:
+            elif 'genre' in title or title in ['country', 'music by country or region', 'music term', 'republic',
+                                               'ethnic group', 'music scene']:
                 type = 'Q188451'
             elif 'person' in title or 'musician' in title or title in ['singer', 'actor', 'musician', 'songwriter',
                                                                        'composer',
@@ -131,10 +135,15 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
                                                                        'association football player',
                                                                        'disc jockey', 'record producer', 'engineer',
                                                                        'human biblical figure', 'big band',
-                                                                       'musical duo', 'girl group']:
+                                                                       'musical duo', 'girl group',
+                                                                       'boy band', 'musical ensemble', 'artist',
+                                                                       'vocal group', 'heavy metal band',
+                                                                       'literary character', 'lawyer', 'lyricist',
+                                                                       'baseball player']:
                 type = 'Q5'
     
-            elif title in ['taxon', 'Wikimedia disambiguation page', 'Wikimedia list article']:
+            elif title in ['video game', 'disease', 'city of the United States', 'taxon',
+                           'Wikimedia disambiguation page', 'Wikimedia list article']:
                 type = 'unk'
 
     return type
