@@ -114,7 +114,7 @@ def prepare_data(args, logger):
         train_sets.append(split.train)
         logger.info(f'{task.name} has {len(split.train)} training examples')
         
-        print('train all_schema_types:', task.all_schema_types)
+        logger.info(f'train all_schema_types: {task.all_schema_types}')
             
         if task.name.startswith('almond'):
             if args.features_default_val:
@@ -147,7 +147,7 @@ def prepare_data(args, logger):
         logger.info(f'{task.name} has {len(split.eval)} validation examples')
         val_sets.append(split.eval)
 
-        print('eval all_schema_types:', task.all_schema_types)
+        logger.info('eval all_schema_types: {task.all_schema_types}')
         
         if getattr(task, 'bootleg', None):
             if args.bootleg_load_prepped_data:
@@ -598,7 +598,7 @@ def main(args):
             
         device_map = dict(zip(args.devices, layers_list))
         model.model.parallelize(device_map)
-        print('Model parallel is used with following device map: ', model.model.device_map)
+        logger.info('Model parallel is used with following device map: {model.model.device_map}')
     else:
         model.to(devices[0])
         model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
