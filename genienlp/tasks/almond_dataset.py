@@ -162,7 +162,11 @@ class AlmondDataset(CQA):
                         # token is entity
                         if any([val != features_default_val[0] for val in feat.type_id]):
                             final_token = '<e> '
-                            all_types = ' | '.join([DBtype2TTtype.get(db.id2type[id], '') for id in feat.type_id])
+                            
+                            # all_types = ' | '.join([DBtype2TTtype.get(db.id2type[id], '') for id in feat.type_id])
+                            
+                            all_types = ' | '.join([DBtype2TTtype[db.id2type[id]] for id in feat.type_id if db.id2type[id] in DBtype2TTtype])
+                            
                             final_token += '( ' + all_types + ' ) ' + token
                             # append all entities with same type
                             i += 1
