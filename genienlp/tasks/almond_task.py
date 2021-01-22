@@ -405,31 +405,32 @@ class BaseAlmondTask(BaseTask):
             new_sentence = ' '.join(new_sentence_tokens)
 
         sentence_plus_types = ''
-        if len(features):
-            # create sentence plus types
-            new_sentence_tokens = new_sentence.split(' ')
-            assert len(new_sentence_tokens) == len(features)
-            sentence_plus_types_tokens = []
-            i = 0
-            while i < len(new_sentence_tokens):
-                token = new_sentence_tokens[i]
-                feat = features[i]
-                # token is entity
-                if any([val != self.args.features_default_val[0] for val in feat.type_id]):
-                    final_token = '<e> '
-                    all_types = ' | '.join([self.DBtype2TTtype[self.db.id2type[id]] for id in feat.type_id])
-                    final_token += '( ' + all_types + ' ) ' + token
-                    # append all entities with same type
-                    i += 1
-                    while i < len(new_sentence_tokens) and features[i] == feat:
-                        final_token += ' ' + new_sentence_tokens[i]
+        if self.args.do_ner and self.bootleg is None:
+            if len(features):
+                # create sentence plus types
+                new_sentence_tokens = new_sentence.split(' ')
+                assert len(new_sentence_tokens) == len(features)
+                sentence_plus_types_tokens = []
+                i = 0
+                while i < len(new_sentence_tokens):
+                    token = new_sentence_tokens[i]
+                    feat = features[i]
+                    # token is entity
+                    if any([val != self.args.features_default_val[0] for val in feat.type_id]):
+                        final_token = '<e> '
+                        all_types = ' | '.join([self.DBtype2TTtype[self.db.id2type[id]] for id in feat.type_id])
+                        final_token += '( ' + all_types + ' ) ' + token
+                        # append all entities with same type
                         i += 1
-                    final_token += ' </e>'
-                    sentence_plus_types_tokens.append(final_token)
-                else:
-                    sentence_plus_types_tokens.append(token)
-                    i += 1
-            sentence_plus_types = ' '.join(sentence_plus_types_tokens)
+                        while i < len(new_sentence_tokens) and features[i] == feat:
+                            final_token += ' ' + new_sentence_tokens[i]
+                            i += 1
+                        final_token += ' </e>'
+                        sentence_plus_types_tokens.append(final_token)
+                    else:
+                        sentence_plus_types_tokens.append(token)
+                        i += 1
+                sentence_plus_types = ' '.join(sentence_plus_types_tokens)
 
 
         return new_sentence, features, sentence_plus_types
