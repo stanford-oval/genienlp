@@ -406,9 +406,9 @@ class BaseAlmondTask(BaseTask):
 
         sentence_plus_types = ''
         if len(features):
-            assert len(new_sentence_tokens) == len(features)
             # create sentence plus types
             new_sentence_tokens = new_sentence.split(' ')
+            assert len(new_sentence_tokens) == len(features)
             sentence_plus_types_tokens = []
             i = 0
             while i < len(new_sentence_tokens):

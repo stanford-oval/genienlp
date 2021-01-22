@@ -230,9 +230,8 @@ def init(args):
 
     bootleg_annotator = None
     if args.do_ner and args.retrieve_method == 'bootleg':
-        # instantiate the annotator class
-        # we use annotator only in server mode
-        # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED.
+        # instantiate the annotator class. we use annotator only in server mode
+        # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
         bootleg = Bootleg(args)
         bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
         bootleg_annotator = Annotator(config_args=bootleg_config,

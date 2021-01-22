@@ -10,7 +10,7 @@ from nltk.corpus import stopwords
 DOMAIN_TYPE_MAPPING = dict()
 
 ## SQA
-DOMAIN_TYPE_MAPPING['music'] = {'MusicRecording': 'Q7366', 'Person': 'Q5', 'MusicAlbum': 'Q208569', 'inLanguage': 'Q315'}   # Q5:human, Q7366:song, Q208569:studio_album
+DOMAIN_TYPE_MAPPING['music'] = {'MusicRecording': 'Q7366', 'Person': 'Q5', 'MusicAlbum': 'Q482994', 'inLanguage': 'Q315'}   # Q5:human, Q7366:song, Q482994:album
 
 # TODO actor and director should be handled differently
 DOMAIN_TYPE_MAPPING['movies'] = {'Movie': 'Q11424', 'Person.creator': 'Q2500638', 'Person.director': 'Q3455803', 'Person.actor': 'Q33999'}   # Q11424:film
@@ -28,7 +28,7 @@ DOMAIN_TYPE_MAPPING['hotels'] = {'Hotel': 'Q571', 'LocationFeatureSpecification'
 
 
 ## Dialogues
-DOMAIN_TYPE_MAPPING['spotify'] = {'song': 'Q7366', 'artist': 'Q5', 'artists': 'Q5', 'album': 'Q208569', 'genres': 'Q188451'}   # Q188451:music genre
+DOMAIN_TYPE_MAPPING['spotify'] = {'song': 'Q7366', 'artist': 'Q5', 'artists': 'Q5', 'album': 'Q482994', 'genres': 'Q188451'}   # Q188451:music genre
 
 
 BANNED_PHRASES = set(
@@ -119,7 +119,7 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
                          'television series', 'film', 'play']:
                 type = 'Q7366'
             elif 'album' in title or title in []:
-                type = 'Q208569'
+                type = 'Q482994'
             elif 'genre' in title or title in ['country', 'music by country or region', 'music term', 'republic',
                                                'ethnic group', 'music scene']:
                 type = 'Q188451'
