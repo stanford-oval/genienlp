@@ -50,7 +50,7 @@ from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader
     log_model_size, init_devices
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
-from .validate import validate
+from .validate import validate, print_results
 from .arguments import save_args
 
 from .paraphrase.model_utils import unfreeze_embeds, unfreeze_params
@@ -460,6 +460,12 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
             # validate
             if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
+                if args.print_train_examples_too:
+                    names = ['answer', 'context']
+                    values = [numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer'),
+                              numericalizer.reverse(batch.context.value.data, task=task, field_name='context')]
+                    print_results(names, values, num_print=args.num_print)
+                    
                 deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
                                          train_task=task, round_progress=round_progress,
                                          task_progress=task_progress, writer=writer, logger=logger)

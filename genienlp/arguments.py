@@ -87,6 +87,8 @@ def parse_argv(parser):
     parser.add_argument('--n_jump_start', default=0, type=int, help='how many tasks to jump start (presented in order)')
     parser.add_argument('--num_print', default=10, type=int,
                         help='how many validation examples with greedy output to print to std out')
+    parser.add_argument('--print_train_examples_too', action='store_true',
+                        help='Whether to print some train examples along with eval examples during validation')
 
     parser.add_argument('--no_tensorboard', action='store_false', dest='tensorboard',
                         help='Turn off tensorboard logging')
