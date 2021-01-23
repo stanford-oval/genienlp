@@ -549,7 +549,7 @@ def load_config_json(args):
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
         retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
-                    'max_output_length', 'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
+                    'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
                     'override_context', 'override_question',
                     'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence',
                     'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count']
@@ -557,7 +557,7 @@ def load_config_json(args):
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         overwrite = ['val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty',
                      'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty',
-                     'temperature', 'reduce_metrics']
+                     'temperature', 'max_output_length', 'reduce_metrics']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)

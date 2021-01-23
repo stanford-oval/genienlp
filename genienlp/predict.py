@@ -276,6 +276,7 @@ def parse_argv(parser):
     parser.add_argument("--num_beam_groups", type=int, nargs='+', default=[1], help='1 disables diverse beam seach')
     parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
+    parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
 
     # These are used for confidence calibration
     parser.add_argument('--calibrator_path', type=str, default=None, help='If provided, will be used to output confidence scores for each prediction.')
