@@ -158,7 +158,6 @@ class Bootleg(object):
                             all_types = self.qid2type[qid]
                         else:
                             all_types = []
-                            logger.warning(f'Could not find qid {qid} in qid2type mapping')
                     
                         if isinstance(all_types, str):
                             all_types = [all_types]
