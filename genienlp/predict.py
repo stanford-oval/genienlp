@@ -138,8 +138,6 @@ def run(args, device):
 
     val_sets = get_all_splits(args)
     model.add_new_vocab_from_data(args.tasks)
-    if args.half_precision:
-        model.half()
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
 
@@ -180,7 +178,8 @@ def run(args, device):
                 logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
             else:
                 confidence_estimator = None
-            generation_output = generate_with_model(model, it, model.numericalizer, task, args,
+            with torch.cuda.amp.autocast(enabled=args.mixed_precision):
+                generation_output = generate_with_model(model, it, model.numericalizer, task, args,
                                                      original_order=original_order,
                                                      output_confidence_features=args.save_confidence_features,
                                                      confidence_estimator=confidence_estimator)
@@ -285,7 +284,8 @@ def parse_argv(parser):
     parser.add_argument("--mc_dropout", action='store_true', help='Monte Carlo dropout')
     parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo dropout')
 
-    parser.add_argument("--half_precision", action='store_true', help='If True, will use half precision on all tensors and calculations.')
+    parser.add_argument("--mixed_precision", action='store_true', help='If True, will use mixed precision for prediction.'
+                        'This reduces memory consumption and is especially faster on GPUs like NVIDIA V100 and T4. May slightly change the generated output.')
 
 
 def adjust_multilingual_eval(args):
