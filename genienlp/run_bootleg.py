@@ -97,6 +97,7 @@ def parse_argv(parser):
     parser.add_argument('--almond_detokenize_sentence', action='store_true',
                         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
     parser.add_argument('--almond_thingtalk_version', type=int, choices=[1, 2], default=2, help='Thingtalk version for almond datasets')
+    parser.add_argument("--almond_reverse_program", action='store_true')
 
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     
