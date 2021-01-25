@@ -182,7 +182,7 @@ class TransformerNumericalizer(object):
             self._tokenizer.add_tokens(special_tokens)
         
         # add entity boundary special tokens
-        if self.args.append_types_to_text:
+        if self.args.add_types_to_text != 'no':
             self._tokenizer.add_tokens(['<e>', '</e>'])
         
         if self.max_generative_vocab is not None:

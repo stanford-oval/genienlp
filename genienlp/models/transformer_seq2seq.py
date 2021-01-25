@@ -129,7 +129,7 @@ class TransformerSeq2Seq(GenieModel):
             context_entity_ids, context_entity_probs, context_entity_masking = None, None, None
             entity_word_embeds_dropout = self.args.entity_word_embeds_dropout
             
-            if self.args.num_db_types > 0 and not self.args.append_types_to_text:
+            if self.args.num_db_types > 0 and not self.args.add_types_to_text:
                 context_entity_ids = batch.context.feature[:, :, :self.args.features_size[0]].long()
                 # indicates position of entities
                 context_entity_masking = (context_entity_ids != self.args.features_default_val[0]).int()

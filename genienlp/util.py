@@ -529,8 +529,8 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False, append_types_to_text=False):
-    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer, append_types_to_text=append_types_to_text)
+def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False, add_types_to_text=False):
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer, add_types_to_text=add_types_to_text)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
@@ -572,7 +572,7 @@ def load_config_json(args):
                     'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version', 'almond_reverse_program',
                     'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count',
                     'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
-                    'override_question', 'override_context', 'append_types_to_text',
+                    'override_question', 'override_context', 'add_types_to_text',
                     'do_ner', 'database_type', 'elastic_config', 'min_entity_len', 'max_entity_len',
                     'entity_type_agg_method', 'entity_word_embeds_dropout',
                     'num_db_types', 'db_unk_id', 'retrieve_method', 'lookup_method', 'almond_domains',
@@ -598,7 +598,6 @@ def load_config_json(args):
             # These are for backward compatibility with models that were trained before we added these arguments
             elif r in ('do_ner', 'use_encoder_loss',
                        'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version', 'almond_reverse_program',
-                       'append_types_to_text'
                        ):
                 setattr(args, r, False)
                 
@@ -616,7 +615,9 @@ def load_config_json(args):
                 
             elif r in ['features', 'features_size', 'features_default_val']:
                 setattr(args, r, [])
-                
+            
+            elif r == 'add_types_to_text':
+                setattr(args, r, 'no')
             elif r == 'database_type':
                 setattr(args, r, 'json')
             elif r == 'elastic_config':

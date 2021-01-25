@@ -262,7 +262,7 @@ def parse_argv(parser):
 
     parser.add_argument("--entity_word_embeds_dropout", default=0.0, type=float)
     
-    parser.add_argument("--append_types_to_text", action='store_true')
+    parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'])
 
 
 

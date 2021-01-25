@@ -64,7 +64,7 @@ class Server:
 
     def numericalize_examples(self, ex):
 
-        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer, self.args.append_types_to_text)
+        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer, self.args.add_types_to_text)
         # make a single batch with all examples
         return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
     
@@ -95,36 +95,10 @@ class Server:
                 ex.context_feature[i].type_prob = tokens_type_probs[i]
                 ex.context_plus_question_feature[i].type_id = tokens_type_ids[i]
                 ex.context_plus_question_feature[i].type_prob = tokens_type_probs[i]
-
-        context_plus_question_with_types_tokens = []
-        context_plus_question_tokens = ex.context_plus_question.split(' ')
-        context_plus_question_features = ex.context_plus_question_feature
-        i = 0
-        while i < len(context_plus_question_tokens):
-            token = context_plus_question_tokens[i]
-            feat = context_plus_question_features[i]
-            # token is entity
-            if any([val != self.args.features_default_val[0] for val in feat.type_id]):
-                final_token = '<e> '
         
-                # all_types = ' | '.join([DBtype2TTtype.get(db.id2type[id], '') for id in feat.type_id])
-        
-                all_types = ' | '.join(set([task.DBtype2TTtype[task.db.id2type[id]] for id in feat.type_id if task.db.id2type[id] in task.DBtype2TTtype]))
-        
-                final_token += '( ' + all_types + ' ) ' + token
-                # append all entities with same type
-                i += 1
-                while i < len(context_plus_question_tokens) and context_plus_question_features[i] == feat:
-                    final_token += ' ' + context_plus_question_tokens[i]
-                    i += 1
-                final_token += ' </e>'
-                context_plus_question_with_types_tokens.append(final_token)
-            else:
-                context_plus_question_with_types_tokens.append(token)
-                i += 1
-        context_plus_question_with_types = ' '.join(context_plus_question_with_types_tokens)
+        context_plus_question_with_types = task.create_sentence_plus_types_tokens(ex.context_plus_question, ex.context_plus_question_feature)
         ex = ex._replace(context_plus_question_with_types=context_plus_question_with_types)
-        
+
         return ex
 
     def handle_request(self, line):

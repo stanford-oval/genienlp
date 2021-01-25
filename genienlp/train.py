@@ -355,17 +355,17 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     logger.info(f'Preparing iterators')
     main_device = devices[0]
 
-    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, train=True, append_types_to_text=args.append_types_to_text))
+    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, train=True, add_types_to_text=args.add_types_to_text))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False, append_types_to_text=args.append_types_to_text))
+    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False, add_types_to_text=args.add_types_to_text))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     aux_iters = []
     if use_curriculum:
 
-        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True, append_types_to_text=args.append_types_to_text))
+        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True, add_types_to_text=args.add_types_to_text))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         

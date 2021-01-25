@@ -134,11 +134,11 @@ class NumericalizedExamples(NamedTuple):
     answer: SequentialField
     
     @staticmethod
-    def from_examples(examples, numericalizer, append_types_to_text):
+    def from_examples(examples, numericalizer, add_types_to_text):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
         
-        if append_types_to_text:
+        if add_types_to_text != 'no':
             tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question_with_types for ex in examples], [])
         else:
             tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question for ex in examples],
