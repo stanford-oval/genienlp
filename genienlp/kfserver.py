@@ -56,6 +56,6 @@ class KFModelServer(kfserving.KFModel):
 
 def main(args):
     model, device, confidence_estimator = init(args)
-    model_server = KFModelServer('nlp', args, model.numericalizer, model, device, confidence_estimator)
+    model_server = KFModelServer(args.inference_name, args, model.numericalizer, model, device, confidence_estimator)
     model_server.load()
     kfserving.KFServer(workers=1).start([model_server])
