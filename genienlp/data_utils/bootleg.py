@@ -3,13 +3,13 @@ import ujson
 import numpy as np
 import logging
 
-from .database_utils import post_process_bootleg_types, is_banned
+from .database_utils import is_banned
 
 from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
 from bootleg import run
 
-from ..util import reverse_bisect_left
+from ..util import reverse_bisect_left, post_process_bootleg_types
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +91,10 @@ class Bootleg(object):
     def extract_mentions(self, input_path):
         jsonl_input_path = input_path.rsplit('.', 1)[0] + '.jsonl'
         jsonl_output_path = input_path.rsplit('.', 1)[0] + '_bootleg.jsonl'
-        if not self.args.bootleg_load_prepped_data:
-            extract_mentions(in_filepath=jsonl_input_path, out_filepath=jsonl_output_path,
-                             cand_map_file=self.cand_map, max_alias_len=self.args.max_entity_len,
-                             num_workers=self.args.bootleg_extract_num_workers)
-    
+        extract_mentions(in_filepath=jsonl_input_path, out_filepath=jsonl_output_path,
+                         cand_map_file=self.cand_map, max_alias_len=self.args.max_entity_len,
+                         num_workers=self.args.bootleg_extract_num_workers)
+
     def pad_values(self, tokens, max_size, pad_id):
         if len(tokens) > max_size:
             tokens = tokens[:max_size]
@@ -104,8 +103,7 @@ class Bootleg(object):
         return tokens
 
     def disambiguate_mentions(self, config_args):
-        if not self.args.bootleg_load_prepped_data:
-            run.main(config_args, self.args.bootleg_dump_mode)
+        run.main(config_args, self.args.bootleg_dump_mode)
 
     def collect_features_per_line(self, line, threshold):
         
@@ -203,7 +201,7 @@ class Bootleg(object):
                 all_tokens_type_ids.append(tokens_type_ids)
                 all_tokens_type_probs.append(tokens_type_probs)
 
-        if self.args.bootleg_load_prepped_data:
+        if os.path.exists(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/eval/{self.ckpt_name}/bootleg_embs.npy'):
             with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/eval/{self.ckpt_name}/bootleg_embs.npy', 'rb') as fin:
                 emb_data = np.load(fin)
                 self.cur_entity_embed_size += emb_data.shape[0]
@@ -226,4 +224,3 @@ class Bootleg(object):
         
         os.makedirs(f'{self.args.bootleg_output_dir}/bootleg/eval/{self.ckpt_name}', exist_ok=True)
         np.save(f'{self.args.bootleg_output_dir}/bootleg/eval/{self.ckpt_name}/ent_embedding.npy', new_emb)
-

@@ -550,7 +550,91 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
         return data_loader, sampler.original_order
     else:
         return data_loader
+
+
+def post_process_bootleg_types(qid, type, title, almond_domains):
+    # TODO if training on multiple domains (in one run) these mapping should be modified
+    # e.g. song is mapped to book which is not correct if training on music domain too
+    for domain in almond_domains:
+        if domain == 'books':
+            if type == 'Q15087423':
+                type = 'unk'
+            
+            # [houghton mifflin award, ciudad de buenos aires award, new berry award]
+            if qid in ['Q390074', 'Q1486', 'Q616527']:
+                type = 'Q618779'
+            
+            # [penguin classics, ]
+            elif qid in ['Q1336200']:
+                type = 'Q57933693'
+            
+            elif 'book' in title or 'novel' in title or 'poem' in title or title in \
+                    ['written work', 'literary work', 'literature', 'play', 'film', 'occurrence', 'song',
+                     'fictional human', 'profession',
+                     'document', 'day of the week', 'compilation album', 'magazine', 'television series', 'taxon',
+                     'Bible translation',
+                     'concept', 'disease', 'technique', 'activity', 'food', 'political ideology', 'literary genre',
+                     'mountain', 'mental process',
+                     'academic discipline', 'base material', 'negative emotion', 'emotion']:
+                type = 'Q571'
+            elif 'publisher' in title or title in ['editorial collection', 'version, edition, or translation']:
+                type = 'Q57933693'
+            elif 'person' in title or 'rights activist' in title or title in ['writer', 'journalist', 'author',
+                                                                              'politician',
+                                                                              'Esperantist', 'philosopher', 'actor',
+                                                                              'painter',
+                                                                              'historian', 'lawyer', 'poet', 'singer']:
+                type = 'Q5'
+            elif title in ['recurring event'] or 'award' in title:
+                type = 'Q618779'
+            # languages are not in typeid2title of bootleg
+            # [language, country, ethnic group, people, republic]
+            elif type in ['Q34770', 'Q6256', 'Q41710', 'Q2472587', 'Q7270']:
+                type = 'Q315'
+            elif title in ['day', 'single', 'musical group', 'English unit of measurement',
+                           'Wikimedia disambiguation page', 'Wikimedia list article']:
+                type = 'unk'
+            else:
+                type = 'unk'
+        
+        elif domain == 'spotify':
+            # rap, rap music
+            if qid in ['Q6010', 'Q11401']:
+                type = 'Q188451'
+            
+            if title in ['song', 'single', 'musical composition', 'ballad', 'extended play', 'literary work',
+                         'television series', 'film', 'play']:
+                type = 'Q7366'
+            elif 'album' in title or title in []:
+                type = 'Q482994'
+            elif 'genre' in title or title in ['country', 'music by country or region', 'music term', 'republic',
+                                               'ethnic group', 'music scene']:
+                type = 'Q188451'
+            elif 'person' in title or 'musician' in title or title in ['singer', 'actor', 'musician', 'songwriter',
+                                                                       'composer',
+                                                                       'singer-songwriter', 'musical group', 'drummer',
+                                                                       'writer',
+                                                                       'poet', 'guitarist', 'rapper', 'painter',
+                                                                       'film director',
+                                                                       'rock band', 'university teacher', 'journalist',
+                                                                       'television presenter',
+                                                                       'saxophonist', 'music pedagogue',
+                                                                       'association football player',
+                                                                       'disc jockey', 'record producer', 'engineer',
+                                                                       'human biblical figure', 'big band',
+                                                                       'musical duo', 'girl group',
+                                                                       'boy band', 'musical ensemble', 'artist',
+                                                                       'vocal group', 'heavy metal band',
+                                                                       'literary character', 'lawyer', 'lyricist',
+                                                                       'baseball player']:
+                type = 'Q5'
+            
+            elif title in ['video game', 'disease', 'city of the United States', 'taxon',
+                           'Wikimedia disambiguation page', 'Wikimedia list article']:
+                type = 'unk'
     
+    return type
+
 
 def get_mbart_lang(orig_lang):
     for lang in FAIRSEQ_LANGUAGE_CODES:
@@ -579,7 +663,7 @@ def load_config_json(args):
                     'features', 'features_size', 'features_default_val',
                     'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
                     'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
-                    'bootleg_integration', 'bootleg_load_prepped_data', 'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types',
+                    'bootleg_integration', 'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types',
                     'freeze_encoder_steps', 'freeze_decoder_steps', 'freeze_embeds_steps',
                     ]
 

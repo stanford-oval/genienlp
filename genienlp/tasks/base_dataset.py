@@ -126,12 +126,12 @@ class Dataset(torch.utils.data.Dataset):
 
         return os.path.join(path, cls.dirname)
     
-    
+from typing import Union
 class Split(NamedTuple):
-    train: Dataset = None
-    eval: Dataset = None
-    test: Dataset = None
-    aux: Dataset = None
+    train: Union[Dataset, str] = None
+    eval: Union[Dataset, str] = None
+    test: Union[Dataset, str] = None
+    aux: Union[Dataset, str] = None
 
 
 def interleave_keys(a, b):

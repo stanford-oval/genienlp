@@ -60,49 +60,29 @@ class BaseAlmondTask(BaseTask):
         
         self.almond_domains = args.almond_domains
         self.all_schema_types = set()
-        
-        # initialize the database
-        self.db = None
-        self.bootleg = None
-        self.DBtype2TTtype = {}
-        
+
         if args.do_ner:
             self.unk_id = args.features_default_val[0]
             self.TTtype2DBtype = dict()
-            
+    
             # TODO always init db for now
             for domain in self.almond_domains:
                 self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
             self.DBtype2TTtype = {v: k for k, v in self.TTtype2DBtype.items()}
             self._init_db()
-            
-            
-            if self.args.retrieve_method == 'bootleg':
-                self._init_bootleg()
-            else:
-                for domain in self.almond_domains:
-                    self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
-                self.DBtype2TTtype = {v: k for k, v in self.TTtype2DBtype.items()}
-                self._init_db()
-    
+
     def _init_db(self):
         if self.args.database_type in ['json', 'local-elastic']:
             with open(os.path.join(self.args.database_dir, 'canonical2type.json'), 'r') as fin:
                 canonical2type = ujson.load(fin)
             with open(os.path.join(self.args.database_dir, 'type2id.json'), 'r') as fin:
                 type2id = ujson.load(fin)
-            
+
             all_canonicals = marisa_trie.Trie(canonical2type.keys())
-        
+
         if self.args.database_type == 'json':
             self.db = Database(canonical2type, type2id, all_canonicals, self.TTtype2DBtype)
-        # elif self.args.database_type == 'local-elastic':
-        #     self.db = LocalElasticDatabase(db_data_processed)
-        # elif self.args.database_type == 'remote-elastic':
-        #     self.db = RemoteElasticDatabase(es_config, unk_id, all_aliases, type2id, alias2qid, qid2typeid)
-    
-    def _init_bootleg(self):
-        self.bootleg = Bootleg(self.args)
+
     
     def is_contextual(self):
         return NotImplementedError
@@ -118,10 +98,6 @@ class BaseAlmondTask(BaseTask):
         raise NotImplementedError()
     
     def get_splits(self, root, **kwargs):
-        kwargs['bootleg'] = self.bootleg
-        kwargs['is_contextual'] = self.is_contextual()
-        kwargs['db'] = self.db
-        kwargs['DBtype2TTtype'] = self.DBtype2TTtype
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
     
     
@@ -262,7 +238,7 @@ class BaseAlmondTask(BaseTask):
                 entity2type = self.collect_answer_entity_types(answer)
                 tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
         
-        return tokens_type_ids, entity2type
+        return tokens_type_ids
     
     def find_type_probs(self, tokens, default_val, default_size):
         token_freqs = [[default_val] * default_size] * len(tokens)
@@ -302,7 +278,7 @@ class BaseAlmondTask(BaseTask):
                 # token is an entity
                 if any([val != self.args.features_default_val[0] for val in feat.type_id]):
                     final_token = '<e> '
-                    all_types = ' | '.join(set([self.DBtype2TTtype[self.db.id2type[id]] for id in feat.type_id]))
+                    all_types = ' | '.join(set([self.DBtype2TTtype[self.db.id2type[id]] for id in feat.type_id if self.db.id2type[id] in self.DBtype2TTtype]))
                     final_token += '( ' + all_types + ' ) ' + token
                     # append all entities with same type
                     i += 1
@@ -412,26 +388,25 @@ class BaseAlmondTask(BaseTask):
         
         tokens_type_ids, tokens_type_probs = None, None
         
-        if 'type_id' in self.args.features:
+        if 'type_id' in self.args.features and field_name != 'answer':
             tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in
                                range(new_sentence_length)]
-        if 'type_prob' in self.args.features:
+        if 'type_prob' in self.args.features and field_name != 'answer':
             tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in
                                  range(new_sentence_length)]
         
         if self.args.do_ner and field_name not in self.no_feature_fields:
-            if self.bootleg is None:
-                if 'type_id' in self.args.features:
-                    tokens_type_ids, entity2type = self.find_type_ids(new_tokens, answer)
-                if 'type_prob' in self.args.features:
-                    tokens_type_probs = self.find_type_probs(new_tokens, self.args.features_default_val[1],
-                                                             self.args.features_size[1])
-                
-                if self.args.verbose and self.args.do_ner:
-                    print()
-                    print(
-                        *[f'token: {token}\ttype: {token_type}' for token, token_type in zip(new_tokens, tokens_type_ids)],
-                        sep='\n')
+            if 'type_id' in self.args.features:
+                tokens_type_ids = self.find_type_ids(new_tokens, answer)
+            if 'type_prob' in self.args.features:
+                tokens_type_probs = self.find_type_probs(new_tokens, self.args.features_default_val[1],
+                                                         self.args.features_size[1])
+            
+            if self.args.verbose and self.args.do_ner:
+                print()
+                print(
+                    *[f'token: {token}\ttype: {token_type}' for token, token_type in zip(new_tokens, tokens_type_ids)],
+                    sep='\n')
             else:
                 # TODO move bootleg out of almond_dataset to here
                 pass
@@ -453,7 +428,7 @@ class BaseAlmondTask(BaseTask):
             new_sentence = ' '.join(new_sentence_tokens)
 
         sentence_plus_types = ''
-        if self.args.do_ner and self.bootleg is None and self.args.add_types_to_text != 'no' and len(features):
+        if self.args.do_ner and self.args.add_types_to_text != 'no' and len(features):
             sentence_plus_types = self.create_sentence_plus_types_tokens(new_sentence, features, self.args.add_types_to_text)
 
         return new_sentence, features, sentence_plus_types
@@ -512,10 +487,6 @@ class NaturalSeq2Seq(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
-        kwargs['bootleg'] = self.bootleg
-        kwargs['is_contextual'] = False
-        kwargs['db'] = self.db
-        kwargs['DBtype2TTtype'] = self.DBtype2TTtype
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
 
@@ -611,10 +582,6 @@ class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
-        kwargs['bootleg'] = self.bootleg
-        kwargs['is_contextual'] = True
-        kwargs['db'] = self.db
-        kwargs['DBtype2TTtype'] = self.DBtype2TTtype
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example,
                                            **kwargs)
 
@@ -644,10 +611,6 @@ class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
-        kwargs['bootleg'] = self.bootleg
-        kwargs['is_contextual'] = True
-        kwargs['db'] = self.db
-        kwargs['DBtype2TTtype'] = self.DBtype2TTtype
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example,
                                            **kwargs)
 
@@ -679,10 +642,6 @@ class AlmondDialogueNLG(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
-        kwargs['bootleg'] = self.bootleg
-        kwargs['is_contextual'] = True
-        kwargs['db'] = self.db
-        kwargs['DBtype2TTtype'] = self.DBtype2TTtype
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example,
                                            **kwargs)
 
@@ -713,10 +672,6 @@ class AlmondDialoguePolicy(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
-        kwargs['bootleg'] = self.bootleg
-        kwargs['is_contextual'] = True
-        kwargs['db'] = self.db
-        kwargs['DBtype2TTtype'] = self.DBtype2TTtype
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example,
                                            **kwargs)
 
@@ -731,36 +686,36 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
             all_ids.append(process_id(ex))
         return all_ids
     
-    def combine_datasets(self, datasets, sort_key_fn, batch_size_fn, used_fields, groups):
+    def combine_datasets(self, datasets, all_paths, sort_key_fn, batch_size_fn, used_fields, groups):
         splits = defaultdict()
+        # paths = defaultdict()
         
         for field in used_fields:
+            # choose one path and replace dir name with 'combined'
+            # paths[field] = '/'.join([getattr(all_paths[0], field).rsplit('/', 2)[0], 'combined', getattr(all_paths[0], field).rsplit('/', 2)[2]])
+            
             all_examples = []
             for dataset in datasets:
                 all_examples.extend(getattr(dataset, field).examples)
-            
+
             splits[field] = CQA(all_examples, sort_key_fn=sort_key_fn, batch_size_fn=batch_size_fn, groups=groups)
+            
         
-        return Split(train=splits.get('train'),
-                     eval=splits.get('eval'),
-                     test=splits.get('test'),
-                     aux=splits.get('aux'))
-    
+        return Split(train=splits.get('train'), eval=splits.get('eval'), test=splits.get('test'), aux=splits.get('aux'))
+               # Split(train=paths.get('train'), eval=paths.get('eval'), test=paths.get('test'), aux=paths.get('aux'))
+
+
     def get_splits(self, root, **kwargs):
-        
-        kwargs['bootleg'] = self.bootleg
-        kwargs['is_contextual'] = self.is_contextual()
-        kwargs['db'] = self.db
-        kwargs['DBtype2TTtype'] = self.DBtype2TTtype
-        
         all_datasets = []
+        all_paths = []
         # number of directories to read data from
         all_dirs = kwargs['all_dirs'].split('+')
         
         for dir in all_dirs:
-            almond_dataset = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
+            splits, paths = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
                                                          make_example=self._make_example, **kwargs)
-            all_datasets.append(almond_dataset)
+            all_datasets.append(splits)
+            all_paths.append(paths)
         
         used_fields = [field for field in all_datasets[0]._fields if getattr(all_datasets[0], field) is not None]
         
@@ -786,9 +741,10 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
         groups = len(all_datasets) if kwargs.get('sentence_batching') else None
         
         if kwargs.get('separate_eval') and (all_datasets[0].eval or all_datasets[0].test):
-            return all_datasets
+            return all_datasets, all_paths
+        # TODO fix handling paths for multilingual
         else:
-            return self.combine_datasets(all_datasets, sort_key_fn, batch_size_fn, used_fields, groups)
+            return self.combine_datasets(all_datasets, all_paths, sort_key_fn, batch_size_fn, used_fields, groups), all_paths[0]
 
 
 @register_task('almond_multilingual')

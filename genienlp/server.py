@@ -80,7 +80,7 @@ class Server:
         line['cand_probs'] = list(map(lambda item: list(item), label[4]))
         line['spans'] = label[5]
         line['aliases'] = label[6]
-        tokens_type_ids, tokens_type_probs = task.bootleg.collect_features_per_line(line, self.args.bootleg_prob_threshold)
+        tokens_type_ids, tokens_type_probs = self.bootleg_annotator.bootleg.collect_features_per_line(line, self.args.bootleg_prob_threshold)
     
         if task.is_contextual():
             for i in range(len(tokens_type_ids)):
@@ -96,7 +96,9 @@ class Server:
                 ex.context_plus_question_feature[i].type_id = tokens_type_ids[i]
                 ex.context_plus_question_feature[i].type_prob = tokens_type_probs[i]
         
-        context_plus_question_with_types = task.create_sentence_plus_types_tokens(ex.context_plus_question, ex.context_plus_question_feature)
+        context_plus_question_with_types = task.create_sentence_plus_types_tokens(ex.context_plus_question,
+                                                                                  ex.context_plus_question_feature,
+                                                                                  self.args.add_types_to_text)
         ex = ex._replace(context_plus_question_with_types=context_plus_question_with_types)
 
         return ex
@@ -235,10 +237,12 @@ def init(args):
 
     bootleg_annotator = None
     if args.do_ner and args.retrieve_method == 'bootleg':
-        # instantiate the annotator class. we use annotator only in server mode
-        # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
+        # instantiate a bootleg object to load config and relevant databases
         bootleg = Bootleg(args)
         bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
+
+        # instantiate the annotator class. we use annotator only in server mode
+        # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
         bootleg_annotator = Annotator(config_args=bootleg_config,
                                       device='cpu' if device.type=='cpu' else 'cuda',
                                       max_alias_len=args.max_entity_len,
@@ -246,6 +250,7 @@ def init(args):
                                       threshold=args.bootleg_prob_threshold)
         # collect all outputs now; we will filter later
         bootleg_annotator.set_threshold(0.0)
+        setattr(bootleg_annotator, 'bootleg', bootleg)
 
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')

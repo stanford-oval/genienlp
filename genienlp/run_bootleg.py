@@ -4,6 +4,7 @@ import time
 from pprint import pformat
 
 from .arguments import save_args, post_parse_general
+from .data_utils.bootleg import Bootleg
 from .util import set_seed
 
 
@@ -114,10 +115,79 @@ def parse_argv(parser):
     parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')
     parser.add_argument('--aux_dataset', default='', type=str,
                         help='path to auxiliary dataset (ignored if curriculum is not used)')
+    parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'])
+
+
+def bootleg_process_splits(args, split, path, task, bootleg, mode='train'):
+    examples = split.examples
+    config_overrides = bootleg.fixed_overrides
+    
+    input_file_dir = os.path.dirname(path)
+    input_file_name = os.path.basename(path.rsplit('.', 1)[0] + '_bootleg.jsonl')
+    
+    data_overrides = [
+        "--data_config.data_dir", input_file_dir,
+        "--data_config.test_dataset.file", input_file_name
+    ]
+    
+    # get config args
+    config_overrides.extend(data_overrides)
+    config_args = bootleg.create_config(config_overrides)
+    
+    if mode == 'dump':
+        # create jsonl files from input examples
+        # jsonl is the input format bootleg expects
+        bootleg.create_jsonl(path, examples, task.is_contextual())
+    
+        # extract mentions and mention spans in the sentence and write them to output jsonl files
+        bootleg.extract_mentions(path)
+    
+        # find the right entity candidate for each mention
+        bootleg.disambiguate_mentions(config_args)
+        
+    # extract features for each token in input sentence from bootleg outputs
+    all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(input_file_name[:-len('_bootleg.jsonl')])
+    
+    # override examples features with bootleg features
+    assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
+    for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
+        if task.is_contextual():
+            for i in range(len(tokens_type_ids)):
+                examples[n].question_feature[i].type_id = tokens_type_ids[i]
+                examples[n].question_feature[i].type_prob = tokens_type_probs[i]
+                examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[
+                    i]
+                examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = \
+                    tokens_type_probs[i]
+        
+        else:
+            for i in range(len(tokens_type_ids)):
+                examples[n].context_feature[i].type_id = tokens_type_ids[i]
+                examples[n].context_feature[i].type_prob = tokens_type_probs[i]
+                examples[n].context_plus_question_feature[i].type_id = tokens_type_ids[i]
+                examples[n].context_plus_question_feature[i].type_prob = tokens_type_probs[i]
+        
+        if mode != 'dump':
+            context_plus_question_with_types = task.create_sentence_plus_types_tokens(ex.context_plus_question,
+                                                                                      ex.context_plus_question_feature,
+                                                                                      args.add_types_to_text)
+            examples[n] = ex._replace(context_plus_question_with_types=context_plus_question_with_types)
+            
+    
+    if args.verbose:
+        for ex in examples:
+            print()
+            print(*[f'token: {token}\ttype: {token_type}' for token, token_type in
+                    zip(ex.context_plus_question.split(' '), ex.context_plus_question_feature)], sep='\n')
 
 
 def dump_bootleg_features(args, logger):
-    train_sets, val_sets, aux_sets, vocab_sets = [], [], [], []
+    # initialize bootleg
+    bootleg = None
+    if args.do_ner and args.retrieve_method == 'bootleg':
+        bootleg = Bootleg(args)
+    
+    train_sets, val_sets, aux_sets = [], [], []
     
     train_eval_shared_kwargs = {'subsample': args.subsample,
                                 'skip_cache': args.skip_cache,
@@ -125,9 +195,6 @@ def dump_bootleg_features(args, logger):
                                 'sentence_batching': args.sentence_batching,
                                 'almond_lang_as_question': args.almond_lang_as_question,
                                 'num_workers': args.num_workers,
-                                'features_size': args.features_size,
-                                'features_default_val': args.features_default_val,
-                                'verbose': args.verbose,
                                 }
     
     for task in args.train_tasks:
@@ -138,24 +205,33 @@ def dump_bootleg_features(args, logger):
         kwargs['cached_path'] = os.path.join(args.cache, task.name)
         if args.use_curriculum:
             kwargs['curriculum'] = True
-            
+        
         logger.info(f'Adding {task.name} to training datasets')
         t0 = time.time()
-        split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
+    
         t1 = time.time()
         logger.info('Data loading took {} sec'.format(t1 - t0))
-        assert not split.eval and not split.test
+        assert not splits.eval and not splits.test
         if args.use_curriculum:
-            assert split.aux
-            aux_sets.append(split.aux)
-            logger.info(f'{task.name} has {len(split.aux)} auxiliary examples')
+            assert splits.aux
+            aux_sets.append(splits.aux)
+            logger.info(f'{task.name} has {len(splits.aux)} auxiliary examples')
         else:
-            assert split.train
-        train_sets.append(split.train)
-        logger.info(f'{task.name} has {len(split.train)} training examples')
+            assert splits.train
+
+        if bootleg:
+            bootleg_process_splits(args, splits.train, paths.train, task, bootleg, mode='dump')
+
+        logger.info(f'{task.name} has {len(splits.train)} training examples')
+        
+        logger.info(f'train all_schema_types: {task.all_schema_types}')
         
         if task.name.startswith('almond'):
-            args.db_unk_id = int(args.features_default_val[0])
+            if args.features_default_val:
+                args.db_unk_id = int(args.features_default_val[0])
+            else:
+                args.db_unk_id = 0
             if args.do_ner:
                 if getattr(task, 'db', None):
                     args.num_db_types = len(task.db.type2id)
@@ -176,9 +252,22 @@ def dump_bootleg_features(args, logger):
         kwargs['cached_path'] = os.path.join(args.cache, task.name)
         
         logger.info(f'Adding {task.name} to validation datasets')
-        split = task.get_splits(args.data, lower=args.lower, **kwargs)
-        assert not split.train and not split.test and not split.aux
-        logger.info(f'{task.name} has {len(split.eval)} validation examples')
+        splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
+
+        assert not splits.train and not splits.test and not splits.aux
+        logger.info(f'{task.name} has {len(splits.eval)} validation examples')
+
+        if bootleg:
+            bootleg_process_splits(args, splits.eval, paths.eval, task, bootleg, mode='dump')
+
+        logger.info(f'eval all_schema_types: {task.all_schema_types}')
+        
+        if getattr(task, 'bootleg', None):
+            if args.bootleg_load_prepped_data:
+                emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
+                if args.use_curriculum:
+                    emb_file_list += ['aux']
+                task.bootleg.merge_embeds(emb_file_list)
 
     logger.info('Created bootleg features for provided datasets with subsampling: {}'.format(args.subsample))
 
@@ -187,7 +276,6 @@ def main(args):
     
     args.do_ner = True
     args.retrieve_method = 'bootleg'
-    args.bootleg_load_prepped_data = False
     args.override_context = None
     args.override_question = None
 

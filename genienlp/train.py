@@ -38,14 +38,20 @@ from copy import deepcopy
 from functools import partial
 from pprint import pformat
 
+import marisa_trie
 import numpy as np
 import torch
+import ujson
 from tensorboardX import SummaryWriter
 from transformers import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, AdamW, \
     get_cosine_schedule_with_warmup
 
 from . import arguments
 from . import models
+from .data_utils.bootleg import Bootleg
+from .data_utils.database import Database
+from .data_utils.database_utils import DOMAIN_TYPE_MAPPING
+from .run_bootleg import bootleg_process_splits
 from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader,\
     log_model_size, init_devices
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
@@ -74,8 +80,32 @@ def initialize_logger(args):
 
     return logger
 
+def init_db(args, TTtype2DBtype):
+    if args.database_type in ['json', 'local-elastic']:
+        with open(os.path.join(args.database_dir, 'canonical2type.json'), 'r') as fin:
+            canonical2type = ujson.load(fin)
+        with open(os.path.join(args.database_dir, 'type2id.json'), 'r') as fin:
+            type2id = ujson.load(fin)
+        
+        all_canonicals = marisa_trie.Trie(canonical2type.keys())
+    
+    if args.database_type == 'json':
+        db = Database(canonical2type, type2id, all_canonicals, TTtype2DBtype)
+    # elif self.args.database_type == 'local-elastic':
+    #     self.db = LocalElasticDatabase(db_data_processed)
+    # elif self.args.database_type == 'remote-elastic':
+    #     self.db = RemoteElasticDatabase(es_config, unk_id, all_aliases, type2id, alias2qid, qid2typeid)
+    
+    return db
+
 
 def prepare_data(args, logger):
+    
+    # initialize bootleg
+    bootleg = None
+    if args.do_ner and args.retrieve_method == 'bootleg':
+        bootleg = Bootleg(args)
+    
     train_sets, val_sets, aux_sets = [], [], []
 
     train_eval_shared_kwargs = {'subsample': args.subsample,
@@ -84,9 +114,6 @@ def prepare_data(args, logger):
                                 'sentence_batching': args.sentence_batching,
                                 'almond_lang_as_question': args.almond_lang_as_question,
                                 'num_workers': args.num_workers,
-                                'features_size': args.features_size,
-                                'features_default_val': args.features_default_val,
-                                'verbose': args.verbose
                                 }
     
 
@@ -101,18 +128,23 @@ def prepare_data(args, logger):
 
         logger.info(f'Adding {task.name} to training datasets')
         t0 = time.time()
-        split = task.get_splits(args.data, lower=args.lower, **kwargs)
+        splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
+
         t1 = time.time()
         logger.info('Data loading took {} sec'.format(t1-t0))
-        assert not split.eval and not split.test
+        assert not splits.eval and not splits.test
         if args.use_curriculum:
-            assert split.aux
-            aux_sets.append(split.aux)
-            logger.info(f'{task.name} has {len(split.aux)} auxiliary examples')
+            assert splits.aux
+            aux_sets.append(splits.aux)
+            logger.info(f'{task.name} has {len(splits.aux)} auxiliary examples')
         else:
-            assert split.train
-        train_sets.append(split.train)
-        logger.info(f'{task.name} has {len(split.train)} training examples')
+            assert splits.train
+
+        if bootleg:
+            bootleg_process_splits(args, splits.train, paths.train, task, bootleg)
+
+        train_sets.append(splits.train)
+        logger.info(f'{task.name} has {len(splits.train)} training examples')
         
         logger.info(f'train all_schema_types: {task.all_schema_types}')
             
@@ -142,20 +174,18 @@ def prepare_data(args, logger):
         kwargs['cached_path'] = os.path.join(args.cache, task.name)
         
         logger.info(f'Adding {task.name} to validation datasets')
-        split = task.get_splits(args.data, lower=args.lower, **kwargs)
-        assert not split.train and not split.test and not split.aux
-        logger.info(f'{task.name} has {len(split.eval)} validation examples')
-        val_sets.append(split.eval)
-
-        logger.info('eval all_schema_types: {task.all_schema_types}')
+        splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
         
-        if getattr(task, 'bootleg', None):
-            if args.bootleg_load_prepped_data:
-                emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
-                if args.use_curriculum:
-                    emb_file_list += ['aux']
-                task.bootleg.merge_embeds(emb_file_list)
+        assert not splits.train and not splits.test and not splits.aux
+        logger.info(f'{task.name} has {len(splits.eval)} validation examples')
 
+        if bootleg:
+            bootleg_process_splits(args, splits.eval, paths.eval, task, bootleg)
+
+        val_sets.append(splits.eval)
+
+        logger.info(f'eval all_schema_types: {task.all_schema_types}')
+        
     return train_sets, val_sets, aux_sets
 
 

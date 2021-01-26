@@ -114,6 +114,7 @@ class Example(NamedTuple):
         
         return Example(*args)
     
+    
 def get_default_fields(text, features, features_size, features_default_val):
     text = text.split()
     text_mask = [True for _ in text]

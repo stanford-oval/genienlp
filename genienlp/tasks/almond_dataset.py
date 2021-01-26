@@ -51,17 +51,10 @@ class AlmondDataset(CQA):
         #TODO fix cache_path for multilingual task
         subsample = kwargs.get('subsample')
         cached_path = kwargs.get('cached_path')
-        is_contextual = kwargs.get('is_contextual')
         
         skip_cache = kwargs.get('skip_cache', True)
         cache_input_data = kwargs.get('cache_input_data', False)
-        bootleg = kwargs.get('bootleg', None)
-        db = kwargs.get('db', None)
-        DBtype2TTtype = kwargs.get('DBtype2TTtype', None)
         num_workers = kwargs.get('num_workers', 0)
-        features_size = kwargs.get('features_size')
-        features_default_val = kwargs.get('features_default_val')
-        verbose = kwargs.get('verbose', False)
         
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         dir_name = os.path.basename(os.path.dirname(path))
@@ -105,87 +98,6 @@ class AlmondDataset(CQA):
                                 'kwargs': kwargs}
                 examples = process(process_args)
                 
-                
-            if bootleg:
-                config_ovrrides = bootleg.fixed_overrides
-                
-                input_file_dir = os.path.dirname(path)
-                input_file_name = os.path.basename(path.rsplit('.', 1)[0] + '_bootleg.jsonl')
-                
-                data_overrides = [
-                    "--data_config.data_dir", input_file_dir,
-                    "--data_config.test_dataset.file", input_file_name
-                ]
-                
-                # get config args
-                config_ovrrides.extend(data_overrides)
-                config_args = bootleg.create_config(config_ovrrides)
-                
-                # create jsonl files from input examples
-                # jsonl is the input format bootleg expects
-                bootleg.create_jsonl(path, examples, is_contextual)
-                
-                # extract mentions and mention spans in the sentence and write them to output jsonl files
-                bootleg.extract_mentions(path)
-                
-                # find the right entity candidate for each mention
-                bootleg.disambiguate_mentions(config_args)
-                
-                # extract features for each token in input sentence from bootleg outputs
-                all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(input_file_name[:-len('_bootleg.jsonl')])
-                
-                # override examples features with bootleg features
-                assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
-                for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
-                    if is_contextual:
-                        for i in range(len(tokens_type_ids)):
-                            examples[n].question_feature[i].type_id = tokens_type_ids[i]
-                            examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-                            examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[i]
-                            examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = tokens_type_probs[i]
- 
-                    else:
-                        for i in range(len(tokens_type_ids)):
-                            examples[n].context_feature[i].type_id = tokens_type_ids[i]
-                            examples[n].context_feature[i].type_prob = tokens_type_probs[i]
-                            examples[n].context_plus_question_feature[i].type_id = tokens_type_ids[i]
-                            examples[n].context_plus_question_feature[i].type_prob = tokens_type_probs[i]
-
-
-                    context_plus_question_with_types_tokens = []
-                    context_plus_question_tokens = ex.context_plus_question.split(' ')
-                    context_plus_question_features = ex.context_plus_question_feature
-                    i = 0
-                    while i < len(context_plus_question_tokens):
-                        token = context_plus_question_tokens[i]
-                        feat = context_plus_question_features[i]
-                        # token is entity
-                        if any([val != features_default_val[0] for val in feat.type_id]):
-                            final_token = '<e> '
-                            
-                            # all_types = ' | '.join([DBtype2TTtype.get(db.id2type[id], '') for id in feat.type_id])
-                            
-                            all_types = ' | '.join(set([DBtype2TTtype[db.id2type[id]] for id in feat.type_id if db.id2type[id] in DBtype2TTtype]))
-                            
-                            final_token += '( ' + all_types + ' ) ' + token
-                            # append all entities with same type
-                            i += 1
-                            while i < len(context_plus_question_tokens) and context_plus_question_features[i] == feat:
-                                final_token += ' ' + context_plus_question_tokens[i]
-                                i += 1
-                            final_token += ' </e>'
-                            context_plus_question_with_types_tokens.append(final_token)
-                        else:
-                            context_plus_question_with_types_tokens.append(token)
-                            i += 1
-                    context_plus_question_with_types = ' '.join(context_plus_question_with_types_tokens)
-                    examples[n] = examples[n]._replace(context_plus_question_with_types=context_plus_question_with_types)
-
-                if verbose:
-                    for ex in examples:
-                        print()
-                        print(*[f'token: {token}\ttype: {token_type}' for token, token_type in zip(ex.context_plus_question.split(' '), ex.context_plus_question_feature)], sep='\n')
-
             if cache_input_data:
                 os.makedirs(os.path.dirname(cache_name), exist_ok=True)
                 logger.info(f'Caching data to {cache_name}')
@@ -206,7 +118,6 @@ class AlmondDataset(CQA):
             Remaining keyword arguments: Passed to the splits method of
                 Dataset.
         """
-        
         train_data = None if train is None else cls(os.path.join(path, train + '.tsv'), **kwargs)
         validation_data = None if validation is None else cls(os.path.join(path, validation + '.tsv'), **kwargs)
         test_data = None if test is None else cls(os.path.join(path, test + '.tsv'), **kwargs)
@@ -216,10 +127,17 @@ class AlmondDataset(CQA):
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux' + '.tsv'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
+            
+        data_splits = Split(train=None if train is None else train_data,
                      eval=None if validation is None else validation_data,
                      test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
-    
+                     aux=None if do_curriculum is False else aux_data)
+        
+        all_paths = Split(train=None if train is None else os.path.join(path, train + '.tsv'),
+                     eval=None if validation is None else os.path.join(path, validation + '.tsv'),
+                     test=None if test is None else os.path.join(path, test + '.tsv'),
+                     aux=None if do_curriculum is False else os.path.join(path, 'aux' + '.tsv'))
+        
+        return data_splits, all_paths
+            
 

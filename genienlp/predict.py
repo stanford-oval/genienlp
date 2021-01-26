@@ -39,6 +39,8 @@ import shutil
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
+from .data_utils.bootleg import Bootleg
+from .run_bootleg import bootleg_process_splits
 
 try:
      set_start_method('spawn')
@@ -59,8 +61,14 @@ from .arguments import check_and_update_generation_args
 logger = logging.getLogger(__name__)
 
 
-def get_all_splits(args):
-    splits = []
+def prepare_data(args):
+    # initialize bootleg
+    bootleg = None
+    if args.do_ner and args.retrieve_method == 'bootleg':
+        bootleg = Bootleg(args)
+    
+    datasets = []
+    paths = []
     if len(args.pred_languages) == 1 and len(args.tasks) > 1:
         args.pred_languages *= len(args.tasks)
     for i, task in enumerate(args.tasks):
@@ -82,22 +90,26 @@ def get_all_splits(args):
                        'all_dirs': task_languages,
                        'almond_lang_as_question': args.almond_lang_as_question,
                        'num_workers': args.num_workers,
-                       'features_size': args.features_size,
-                       'features_default_val': args.features_default_val,
-                       'verbose': args.verbose,
                        'separate_eval': args.separate_eval})
         
-        task_splits = task.get_splits(root=args.data, lower=args.lower, **kwargs)
+        task_splits, task_paths = task.get_splits(root=args.data, lower=args.lower, **kwargs)
         if not isinstance(task_splits, list):
             task_splits = [task_splits]
-        task_split_processed = []
-        for split in task_splits:
+            task_paths = [task_paths]
+        task_data_processed = []
+        task_path_processed = []
+        for split, path in zip(task_splits, task_paths):
             assert (split.eval or split.test) and not split.train and not split.aux
-            split = split.eval if split.eval else split.test
-            task_split_processed.append(split)
-        splits.append(task_split_processed)
+            data = split.eval if split.eval else split.test
+            path = path.eval if path.eval else path.test
+            if bootleg:
+                 bootleg_process_splits(args, data, path, task, bootleg)
+            task_data_processed.append(data)
+            task_path_processed.append(path)
+        datasets.append(task_data_processed)
+        paths.append(task_path_processed)
 
-    return splits
+    return datasets
 
 
 def prepare_data_iterators(args, val_sets, numericalizer, device):
@@ -141,7 +153,7 @@ def run(args, device):
                                      locale=locale
                                      )
 
-    val_sets = get_all_splits(args)
+    val_sets = prepare_data(args)
     model.add_new_vocab_from_data(args.tasks)
     if args.half_precision:
         model.half()
@@ -325,7 +337,7 @@ def set_default_values(args):
 
 
 def check_args(args):
-    if getattr(args, 'retrieve_method', None) == 'bootleg' and args.bootleg_load_prepped_data:
+    if getattr(args, 'retrieve_method', None) == 'bootleg':
         with open(os.path.join(args.path, 'config.json')) as config_file:
             config = json.load(config_file)
         if args.subsample != config['subsample']:
