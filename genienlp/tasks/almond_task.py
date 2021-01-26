@@ -299,7 +299,7 @@ class BaseAlmondTask(BaseTask):
                 feat = features[i]
                 # token is an entity
                 if any([val != self.args.features_default_val[0] for val in feat.type_id]):
-                    all_types = ' | '.join(set([self.DBtype2TTtype[self.db.id2type[id]] for id in feat.type_id]))
+                    all_types = ' | '.join(set([self.DBtype2TTtype[self.db.id2type[id]] for id in feat.type_id if self.db.id2type[id] in self.DBtype2TTtype]))
                     all_tokens = []
                     # append all entities with same type
                     while i < len(new_sentence_tokens) and features[i] == feat:

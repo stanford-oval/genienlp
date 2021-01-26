@@ -109,7 +109,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
                 longest_example = new_example # this is the first element in batch, and therefore the longest
             examples_size = self.batch_size_fn(longest_example)
             if examples_size > self.batch_size:
-                if i not in self._skipped_examples and len(self._skipped_examples) % 20:
+                if i not in self._skipped_examples and len(self._skipped_examples) != 0 and len(self._skipped_examples) % 10 == 0:
                     logger.warning(f'So far, has skipped {self._skipped_examples} examples larger than batch size.'
                                    ' Consider increasing the batch size to avoid this warning')
                 self._skipped_examples.add(i)
