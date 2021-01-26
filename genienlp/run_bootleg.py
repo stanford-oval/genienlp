@@ -209,7 +209,6 @@ def dump_bootleg_features(args, logger):
         logger.info(f'Adding {task.name} to training datasets')
         t0 = time.time()
         splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
-    
         t1 = time.time()
         logger.info('Data loading took {} sec'.format(t1 - t0))
         assert not splits.eval and not splits.test

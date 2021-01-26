@@ -203,6 +203,8 @@ def parse_argv(parser):
     parser.add_argument('--almond_detokenize_sentence', action='store_true',
                         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
     parser.add_argument('--almond_thingtalk_version', type=int, choices=[1, 2], default=2, help='Thingtalk version for almond datasets')
+    parser.add_argument("--almond_reverse_program", action='store_true', help='Generate thingtalk in reverse direction')
+
 
     parser.add_argument('--preprocess_special_tokens', action='store_true', help='convert special ThingTalk tokens to words')
     
@@ -255,11 +257,6 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum')
     
-    parser.add_argument("--freeze_encoder_steps", default=0, type=int)
-    parser.add_argument("--freeze_decoder_steps", default=0, type=int)
-    parser.add_argument("--freeze_embeds_steps", default=0, type=int)
-    parser.add_argument("--almond_reverse_program", action='store_true')
-
     parser.add_argument("--entity_word_embeds_dropout", default=0.0, type=float)
     
     parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'])

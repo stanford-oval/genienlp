@@ -32,14 +32,12 @@ from typing import List
 import torch
 
 from torch.tensor import Tensor
-from transformers import AutoModelForSeq2SeqLM, AutoConfig, BartConfig
+from transformers import AutoModelForSeq2SeqLM, AutoConfig
 from loss_dropper import LossDropper
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import get_mbart_lang
 from .base import GenieModel
-from ..paraphrase.transformers_utils import BartForConditionalGenerationForNER
-from ..paraphrase.model_utils import freeze_embeds, freeze_params
 from ..util import ConfidenceFeatures
 
 logger = logging.getLogger(__name__)
@@ -54,25 +52,12 @@ class TransformerSeq2Seq(GenieModel):
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
         self._is_mbart = 'mbart' in self.args.pretrained_model
         
-        if isinstance(config, BartConfig):
-            self.model = BartForConditionalGenerationForNER(config, args.num_db_types, args.db_unk_id).from_pretrained(
-                self.args.pretrained_model, num_db_types=args.num_db_types, db_unk_id=args.db_unk_id, cache_dir=args.embeddings)
-        elif args.do_ner:
-            raise ValueError('Model is not supported for bootleg_integration level 1')
+        if save_directory is not None:
+            self.model = AutoModelForSeq2SeqLM.from_config(config)
         else:
-            if save_directory is not None:
-                self.model = AutoModelForSeq2SeqLM.from_config(config)
-            else:
-                self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
-                                                                   cache_dir=self.args.embeddings)
-        
-        if self.args.freeze_embeds_steps > 0:
-            freeze_embeds(self.model)
-        if self.args.freeze_encoder_steps > 0:
-            freeze_params(self.model.get_encoder())
-        if self.args.freeze_decoder_steps > 0:
-            freeze_params(self.model.get_decoder())
-            
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
+                                                               cache_dir=self.args.embeddings)
+
         self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, args, max_generative_vocab=None)
 
         self.numericalizer.get_tokenizer(save_directory)
@@ -125,20 +110,7 @@ class TransformerSeq2Seq(GenieModel):
             # (1) loss is averaged over sequence lengths first, then over the batch size. This way,
             # longer sequences in the batch do not drown shorter sequences.
             # (2) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
-
-            context_entity_ids, context_entity_probs, context_entity_masking = None, None, None
-            entity_word_embeds_dropout = self.args.entity_word_embeds_dropout
-            
-            if self.args.num_db_types > 0 and not self.args.add_types_to_text:
-                context_entity_ids = batch.context.feature[:, :, :self.args.features_size[0]].long()
-                # indicates position of entities
-                context_entity_masking = (context_entity_ids != self.args.features_default_val[0]).int()
-                if self.args.entity_type_agg_method == 'weighted':
-                    context_entity_probs = batch.context.feature[:, :, self.args.features_size[0]:self.args.features_size[0] + self.args.features_size[1]].long()
-            
-            outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id),
-                                 entity_ids=context_entity_ids, entity_masking=context_entity_masking,
-                                 entity_probs=context_entity_probs, entity_word_embeds_dropout=entity_word_embeds_dropout)
+            outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
             
             ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
             loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)

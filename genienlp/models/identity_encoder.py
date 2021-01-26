@@ -32,7 +32,6 @@ from torch import nn
 
 from transformers.models.bert.modeling_bert import BertConfig
 from .common import LayerNorm, LinearFeedforward
-from ..paraphrase.transformers_utils import BootlegBertEncoder
 
 
 class IdentityEncoder(nn.Module):

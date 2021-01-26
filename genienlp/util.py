@@ -663,8 +663,7 @@ def load_config_json(args):
                     'features', 'features_size', 'features_default_val',
                     'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
                     'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
-                    'bootleg_integration', 'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types',
-                    'freeze_encoder_steps', 'freeze_decoder_steps', 'freeze_embeds_steps',
+                    'bootleg_integration', 'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types'
                     ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
@@ -685,7 +684,7 @@ def load_config_json(args):
                        ):
                 setattr(args, r, False)
                 
-            elif r in ('num_db_types', 'db_unk_id', 'freeze_encoder_steps', 'freeze_decoder_steps', 'freeze_embeds_steps'):
+            elif r in ('num_db_types', 'db_unk_id'):
                 setattr(args, r, 0)
             
             elif r in ('entity_word_embeds_dropout'):
