@@ -505,6 +505,9 @@ def main(args):
                                                             tasks=tasks,
                                                             device=devices[0])
         model.add_new_vocab_from_data(tasks=tasks, resize_decoder=True)
+        if not args.resume:
+            # we are fine-tuning, so reset the best score since the new fine-tune dataset usually has a different validation set from the original
+            best_decascore = None
     else:
         logger.info(f'Initializing a new {model_name}')
         model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks)
