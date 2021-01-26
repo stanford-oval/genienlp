@@ -28,19 +28,11 @@ class Bootleg(object):
         self.almond_domains = args.almond_domains
         self.bootleg_post_process_types = args.bootleg_post_process_types
         
-        if args.bootleg_integration == 1:
-            # with open(f'{self.args.bootleg_input_dir}/emb_data/es_qid2type.json', 'r') as fin:
-            with open(f'{self.args.bootleg_input_dir}/emb_data/entityQID_to_wikidataTypeQID.json', 'r') as fin:
-                self.qid2type = ujson.load(fin)
-            with open(f'{self.args.bootleg_input_dir}/emb_data/es_type2id.json', 'r') as fin:
-                self.type2id = ujson.load(fin)
+        with open(f'{self.args.bootleg_input_dir}/emb_data/entityQID_to_wikidataTypeQID.json', 'r') as fin:
+            self.qid2type = ujson.load(fin)
+        with open(f'{self.args.bootleg_input_dir}/emb_data/es_type2id.json', 'r') as fin:
+            self.type2id = ujson.load(fin)
 
-        else:
-            with open(f'{self.args.bootleg_input_dir}/emb_data/entityQID_to_wikidataTypeQID.json', 'r') as fin:
-                self.qid2type = ujson.load(fin)
-            with open(f'{self.args.bootleg_input_dir}/emb_data/wikidataqid_to_bootlegtypeid.json', 'r') as fin:
-                self.type2id = ujson.load(fin)
-                
         with open(f'{self.args.bootleg_input_dir}/emb_data/wikidatatitle_to_typeid_0905.json', 'r') as fin:
             title2typeid = ujson.load(fin)
             self.typeid2title = {v: k for k, v in title2typeid.items()}
@@ -111,73 +103,45 @@ class Bootleg(object):
         tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokenized))]
         tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(len(tokenized))]
     
-        if self.args.bootleg_integration == 2:
-            # we only have ctx_emb_ids for top candidates
-            # TODO  output ctx_emb_ids for all 30 candidates
-            for alias, ctx_emb_id, prob, span in zip(line['aliases'], line['ctx_emb_ids'], line['probs'], line['spans']):
-                type_ids = []
-                type_probs = []
-            
-                if prob >= threshold and not is_banned(alias):
-                    # account for padding and UNK id added to embedding matrix
-                    ctx_emb_id += 2
-                
-                    # account for shift in embedding idx when we merge embeddings for all data splits
-                    ctx_emb_id += self.cur_entity_embed_size
-                
-                    type_ids = [ctx_emb_id]
-                    type_probs = [prob]
-            
-                padded_type_ids = self.pad_values(type_ids, self.args.features_size[0],
-                                                  self.args.features_default_val[0])
-                padded_type_probs = self.pad_values(type_probs, self.args.features_size[1],
-                                                    self.args.features_default_val[1])
-            
-                tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
-                tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
-    
-        else:
-            for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
-                # filter qids with confidence lower than a threshold
-                idx = reverse_bisect_left(all_probs, threshold)
-                all_qids = all_qids[:idx]
-                all_probs = all_probs[:idx]
+        for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
+            # filter qids with confidence lower than a threshold
+            idx = reverse_bisect_left(all_probs, threshold)
+            all_qids = all_qids[:idx]
+            all_probs = all_probs[:idx]
 
-                # TODO: now we only keep the first type for each qid
-                # extend so we can keep all types and aggregate later
-            
-                type_ids = []
-                type_probs = []
-            
-                if not is_banned(alias):
-                    for qid, prob in zip(all_qids, all_probs):
-                        # get all type for a qid
-                        if qid in self.qid2type:
-                            all_types = self.qid2type[qid]
-                        else:
-                            all_types = []
+            # TODO: now we only keep the first type for each qid
+            # extend so we can keep all types and aggregate later
+        
+            type_ids = []
+            type_probs = []
+        
+            if not is_banned(alias):
+                for qid, prob in zip(all_qids, all_probs):
+                    # get all type for a qid
+                    if qid in self.qid2type:
+                        all_types = self.qid2type[qid]
+                    else:
+                        all_types = []
+                
+                    if isinstance(all_types, str):
+                        all_types = [all_types]
+                
+                    if len(all_types):
+                        # choose only the first type
+                        type = all_types[0]
                     
-                        if isinstance(all_types, str):
-                            all_types = [all_types]
-                    
-                        if len(all_types):
-                            # choose only the first type
-                            type = all_types[0]
+                        if type in self.type2id:
+                            title = self.typeid2title.get(type, '?')
                         
-                            if type in self.type2id:
-                                title = self.typeid2title.get(type, '?')
-                            
-                                ######
-                                ### postprocess types according to rules learned from analyze_bootleg_results
-                                ######
-                                if self.bootleg_post_process_types:
-                                    type = post_process_bootleg_types(qid, type, title, self.almond_domains)
-                            
-                                type_id = self.type2id[type]
-                                type_ids.append(type_id)
-                                type_probs.append(prob)
-                            else:
-                                logger.warning(f'Could not find type_id {type} in type2id mapping')
+                            ######
+                            ### postprocess types according to rules learned from analyze_bootleg_results
+                            ######
+                            if self.bootleg_post_process_types:
+                                type = post_process_bootleg_types(qid, type, title, self.almond_domains)
+                        
+                            type_id = self.type2id[type]
+                            type_ids.append(type_id)
+                            type_probs.append(prob)
             
                 padded_type_ids = self.pad_values(type_ids, self.args.features_size[0], self.args.features_default_val[0])
                 padded_type_probs = self.pad_values(type_probs, self.args.features_size[1], self.args.features_default_val[1])

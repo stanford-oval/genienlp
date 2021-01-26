@@ -72,7 +72,7 @@ class TransformerLSTM(GenieModel):
             self.encoder_embeddings = XLMRobertaModelForNER(config, args.num_db_types, args.db_unk_id).from_pretrained(
                 encoder_embeddings, num_db_types=args.num_db_types, db_unk_id=args.db_unk_id, cache_dir=args.embeddings)
         elif args.do_ner:
-            raise ValueError('Model is not supported for bootleg_integration level 1')
+            raise ValueError('Model is not supported for NER tasks')
         else:
             if save_directory is not None:
                 self.encoder_embeddings = AutoModel.from_config(config)

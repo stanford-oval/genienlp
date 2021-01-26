@@ -74,10 +74,6 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_extract_num_workers', type=int, default=8, help='Number of workers for extracing mentions step of bootleg')
     parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
 
-    parser.add_argument('--bootleg_integration', type=int, choices=[1, 2],
-                        help='In level 1 we extract types for top Qid candidates and feed it to the bottom of Encoder using an entity embedding layer'
-                             'In level 2 we use bootleg entity embeddings directly by concatenating it with Encoder output representations')
-
     parser.add_argument('--lookup_method', default='ngrams', choices=['ngrams', 'smaller_first', 'longer_first'],
                         help='smaller_first: start from one token and grow into longer spans until a match is found,'
                              'longer_first: start from the longest span and shrink until a match is found')

@@ -155,9 +155,6 @@ def parse_argv(parser):
     
     parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
-    parser.add_argument('--bootleg_integration', type=int, choices=[1, 2],
-                        help='In level 1 we extract types for top Qid candidates and feed it to the bottom of Encoder using an entity embedding layer'
-                             'In level 2 we use bootleg entity embeddings directly by concatenating it with Encoder output representations')
 
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
     parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4, help='Number of kg encoder layers for BootlegBertEncoder model')
@@ -171,6 +168,9 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
 
     parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], default='average', help='Method used to aggregate several type embeddings for a single mention')
+    parser.add_argument("--entity_word_embeds_dropout", default=0.0, type=float, help='Dropout entity word embeddings with this probability when encoding inputs')
+
+    parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'], help='Method for adding types to input text in text-based NER approach')
 
     parser.add_argument('--retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
                         help='how to retrieve types for entity tokens (bootleg option is wip')
@@ -257,10 +257,6 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum')
     
-    parser.add_argument("--entity_word_embeds_dropout", default=0.0, type=float)
-    
-    parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'])
-
 
 
 def check_and_update_generation_args(args):

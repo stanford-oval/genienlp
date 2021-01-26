@@ -2,6 +2,8 @@ import ujson
 import time
 import logging
 
+import nltk
+from bootleg.extract_mentions import get_lnrm
 from elasticsearch.client import XPackClient
 from elasticsearch.client.utils import NamespacedClient
 from elasticsearch import Elasticsearch, RequestsHttpConnection

@@ -30,7 +30,6 @@
 import torch
 from torch import nn
 
-from transformers.models.bert.modeling_bert import BertConfig
 from .common import LayerNorm, LinearFeedforward
 
 
@@ -61,26 +60,14 @@ class IdentityEncoder(nn.Module):
             self.pool = None
             self.norm = None
 
-        if self.args.do_ner and self.args.retrieve_method == 'bootleg' and self.args.bootleg_integration == 2:
-            config = BertConfig.from_pretrained('bert-base-uncased', cache_dir=self.args.embeddings)
-            config.num_hidden_layers = self.args.bootleg_kg_encoder_layer
-            
-            self.context_BootlegBertEncoder = BootlegBertEncoder(config, config.hidden_size, self.args.rnn_dimension,
-                                                         ent_emb_file=f'{self.args.bootleg_output_dir}/bootleg/eval/{self.args.bootleg_model}/ent_embedding.npy')
-
-
     def compute_final_embeddings(self, context, context_lengths, context_padding, context_entity_ids, context_entity_probs=None, context_entity_masking=None, entity_word_embeds_dropout=True):
         
         if self.args.do_ner:
-            if self.args.retrieve_method == 'bootleg' and self.args.bootleg_integration == 2:
-                # do not embed type_ids yet; in level 2 they are aggregated after contextual embeddings are formed
-                # still pass entity_masking and entity_word_embeds_dropout so that encoder loss would work (if used)
-                context_embedded_last_hidden_state = self.encoder_embeddings(context, entity_masking=context_entity_masking, entity_word_embeds_dropout=entity_word_embeds_dropout).last_hidden_state
-    
-                context_embedded_last_hidden_state, _pooled, context_embedded_hidden_states = self.context_BootlegBertEncoder(inputs_embeds=context_embedded_last_hidden_state, input_ent_ids=context_entity_ids)
-            else:
-                context_embedded_last_hidden_state = self.encoder_embeddings(context, entity_ids=context_entity_ids, entity_masking=context_entity_masking,
-                                                           entity_probs=context_entity_probs, entity_word_embeds_dropout=entity_word_embeds_dropout).last_hidden_state
+            context_embedded_last_hidden_state = self.encoder_embeddings(context,
+                                                                         entity_ids=context_entity_ids,
+                                                                         entity_masking=context_entity_masking,
+                                                                         entity_probs=context_entity_probs,
+                                                                         entity_word_embeds_dropout=entity_word_embeds_dropout).last_hidden_state
 
         else:
             context_embedded_last_hidden_state = self.encoder_embeddings(context, attention_mask=(~context_padding).to(dtype=torch.float)).last_hidden_state
