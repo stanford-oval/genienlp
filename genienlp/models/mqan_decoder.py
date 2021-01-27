@@ -97,7 +97,7 @@ class MQANDecoder(nn.Module):
             probs = self.probs(decoder_output, vocab_pointer_switch, context_attention, context_limited, decoder_vocab)
         
             probs, targets = mask(answer_limited[:, 1:].contiguous(), probs.contiguous(), pad_idx=decoder_vocab.pad_idx)
-            loss = F.nll_loss(probs.log(), targets)
+            loss = F.nll_loss(probs.log(), targets, ignore_index=decoder_vocab.pad_idx)
             if encoder_loss is not None:
                 loss += self.args.encoder_loss_weight * encoder_loss
             

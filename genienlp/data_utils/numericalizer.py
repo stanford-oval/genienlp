@@ -530,5 +530,5 @@ class TransformerNumericalizer(object):
             if task is not None and field_name == 'answer':
                 x = task.postprocess_answer(x)
             output.append(x)
-        
+
         return output

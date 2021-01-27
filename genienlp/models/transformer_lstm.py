@@ -188,5 +188,5 @@ class TransformerLSTM(GenieModel):
                                      encoder_output=encoder_output
                                     )
         generated = torch.cat((generated[:, 0:1], generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)), dim=1) # map everything to full vocabulary except BOS which already is in full vocabulary
-
+        
         return generated

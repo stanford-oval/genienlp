@@ -103,8 +103,6 @@ class TransformerSeq2Seq(GenieModel):
                 answer = answer[:, 1:].contiguous()
                 answer_length = answer_length - 1
 
-            # setting pad output tokens to -100 means they will be ignored in calculating loss
-            answer[answer==self.numericalizer.pad_id] = -100
 
             # this is similar to what `transformers` Seq2Seq models do, but with two changes
             # (1) loss is averaged over sequence lengths first, then over the batch size. This way,
@@ -112,7 +110,7 @@ class TransformerSeq2Seq(GenieModel):
             # (2) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
             outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
             
-            ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+            ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none', ignore_index=self.numericalizer.pad_id)
             loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)
             loss = loss.sum(dim=1) / answer_length # accounts for the case where BOS is removed
             if self.dropper is not None:
@@ -148,13 +146,13 @@ class TransformerSeq2Seq(GenieModel):
         generated = self.model.generate(input_ids=input_ids,
                                         max_length=max_output_length,
                                         min_length=2, # generate at least one token after BOS
-                                        bos_token_id=self.numericalizer._tokenizer.bos_token_id,
-                                        pad_token_id=self.numericalizer._tokenizer.pad_token_id,
+                                        bos_token_id=self.numericalizer.init_id,
+                                        pad_token_id=self.numericalizer.pad_id,
                                         early_stopping=True,
                                         num_return_sequences=num_outputs,
                                         repetition_penalty=repetition_penalty,
                                         temperature=temperature,
-                                        eos_token_id=self.numericalizer._tokenizer.eos_token_id,
+                                        eos_token_id=self.numericalizer.eos_id,
                                         top_k=top_k,
                                         top_p=top_p,
                                         num_beams=num_beams,
@@ -164,7 +162,7 @@ class TransformerSeq2Seq(GenieModel):
                                         do_sample=do_sample,
                                         decoder_start_token_id=decoder_start_token_id
                                         )
-
+        
         return generated
 
 
@@ -184,8 +182,8 @@ class TransformerSeq2Seq(GenieModel):
 
         prediction_lengths = self.get_length(predictions)
 
-        pad_token_id = self.numericalizer._tokenizer.pad_token_id
-        attention_mask = self.model._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer._tokenizer.eos_token_id)
+        pad_token_id = self.numericalizer.pad_id
+        attention_mask = self.model._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer.eos_id)
         truncated_predictions = predictions[:, 1:] # remove the BOS token since it is not actually being generated
 
         assert not self.training, 'Model should be in eval() mode before generation can start.'
