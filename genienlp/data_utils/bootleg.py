@@ -30,7 +30,7 @@ class Bootleg(object):
         
         with open(f'{self.args.bootleg_input_dir}/emb_data/entityQID_to_wikidataTypeQID.json', 'r') as fin:
             self.qid2type = ujson.load(fin)
-        with open(f'{self.args.bootleg_input_dir}/emb_data/es_type2id.json', 'r') as fin:
+        with open(f'{self.args.bootleg_input_dir}/es_material/type2id.json', 'r') as fin:
             self.type2id = ujson.load(fin)
 
         with open(f'{self.args.bootleg_input_dir}/emb_data/wikidatatitle_to_typeid_0905.json', 'r') as fin:

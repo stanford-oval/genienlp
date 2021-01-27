@@ -77,24 +77,6 @@ def initialize_logger(args):
 
     return logger
 
-def init_db(args, TTtype2DBtype):
-    if args.database_type in ['json', 'local-elastic']:
-        with open(os.path.join(args.database_dir, 'canonical2type.json'), 'r') as fin:
-            canonical2type = ujson.load(fin)
-        with open(os.path.join(args.database_dir, 'type2id.json'), 'r') as fin:
-            type2id = ujson.load(fin)
-        
-        all_canonicals = marisa_trie.Trie(canonical2type.keys())
-    
-    if args.database_type == 'json':
-        db = Database(canonical2type, type2id, all_canonicals, TTtype2DBtype)
-    # elif self.args.database_type == 'local-elastic':
-    #     self.db = LocalElasticDatabase(db_data_processed)
-    # elif self.args.database_type == 'remote-elastic':
-    #     self.db = RemoteElasticDatabase(es_config, unk_id, all_aliases, type2id, alias2qid, qid2typeid)
-    
-    return db
-
 
 def prepare_data(args, logger):
     

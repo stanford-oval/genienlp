@@ -173,11 +173,12 @@ def parse_argv(parser):
     parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'], help='Method for adding types to input text in text-based NER approach')
 
     parser.add_argument('--retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
-                        help='how to retrieve types for entity tokens (bootleg option is wip')
+                        help='how to retrieve types for entities')
     
     parser.add_argument('--lookup_method', default='ngrams', choices=['ngrams', 'smaller_first', 'longer_first'],
                         help='smaller_first: start from one token and grow into longer spans until a match is found,'
-                             'longer_first: start from the longest span and shrink until a match is found')
+                             'longer_first: start from the longest span and shrink until a match is found,'
+                             'ngrams: lookup all ngrams in the text and see if there is a match')
     
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
@@ -204,7 +205,6 @@ def parse_argv(parser):
                         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
     parser.add_argument('--almond_thingtalk_version', type=int, choices=[1, 2], default=2, help='Thingtalk version for almond datasets')
     parser.add_argument("--almond_reverse_program", action='store_true', help='Generate thingtalk in reverse direction')
-
 
     parser.add_argument('--preprocess_special_tokens', action='store_true', help='convert special ThingTalk tokens to words')
     
@@ -278,6 +278,13 @@ def check_and_update_generation_args(args):
 
 
 def post_parse_general(args):
+    
+    if args.database_dir is not None:
+        if args.bootleg_input_dir is None:
+            args.bootleg_input_dir = args.database_dir
+        if args.elastic_config is None:
+            args.elastic_config = os.path.join(args.database_dir, 'elastic_config.json')
+    
     for feat in args.features:
         if feat not in VALID_FEATURE_FIELDS:
             raise ValueError('Feature {} is not supported. Please provide valid features from {} list'.format(feat, VALID_FEATURE_FIELDS))
