@@ -169,7 +169,6 @@ class NumericalizedExamples(NamedTuple):
             answer_values.append(torch.tensor(batch.answer.value, device=device))
             answer_lengths.append(torch.tensor(batch.answer.length, device=device))
             answer_limiteds.append(torch.tensor(batch.answer.limited, device=device))
-            # answer_features.append(torch.tensor(batch.answer.feature, device=device))
 
         context_values = numericalizer.pad(context_values, pad_id=numericalizer.pad_id)
         context_limiteds = numericalizer.pad(context_limiteds, pad_id=numericalizer.decoder_pad_id)
@@ -182,7 +181,6 @@ class NumericalizedExamples(NamedTuple):
         answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
         answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)
         answer_lengths = torch.stack(answer_lengths, dim=0)
-        # answer_features = padding_function(answer_features)
 
         context = SequentialField(value=context_values,
                                   length=context_lengths,

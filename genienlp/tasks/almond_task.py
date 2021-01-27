@@ -395,7 +395,7 @@ class BaseAlmondTask(BaseTask):
             tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in
                                  range(new_sentence_length)]
         
-        if self.args.do_ner and field_name not in self.no_feature_fields:
+        if self.args.do_ner and self.args.retrieve_method != 'bootleg' and field_name not in self.no_feature_fields:
             if 'type_id' in self.args.features:
                 tokens_type_ids = self.find_type_ids(new_tokens, answer)
             if 'type_prob' in self.args.features:

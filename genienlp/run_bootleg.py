@@ -74,10 +74,6 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_extract_num_workers', type=int, default=8, help='Number of workers for extracing mentions step of bootleg')
     parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
 
-    parser.add_argument('--lookup_method', default='ngrams', choices=['ngrams', 'smaller_first', 'longer_first'],
-                        help='smaller_first: start from one token and grow into longer spans until a match is found,'
-                             'longer_first: start from the longest span and shrink until a match is found')
-    
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', default=[],
                         help='Domains used for almond dataset; e.g. music, books, ...')
@@ -258,11 +254,10 @@ def dump_bootleg_features(args, logger):
         logger.info(f'eval all_schema_types: {task.all_schema_types}')
         
         if getattr(task, 'bootleg', None):
-            if args.bootleg_load_prepped_data:
-                emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
-                if args.use_curriculum:
-                    emb_file_list += ['aux']
-                task.bootleg.merge_embeds(emb_file_list)
+            emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
+            if args.use_curriculum:
+                emb_file_list += ['aux']
+            task.bootleg.merge_embeds(emb_file_list)
 
     logger.info('Created bootleg features for provided datasets with subsampling: {}'.format(args.subsample))
 

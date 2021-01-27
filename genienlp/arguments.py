@@ -159,7 +159,6 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
     parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4, help='Number of kg encoder layers for BootlegBertEncoder model')
     parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_embs', help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
-    parser.add_argument('--bootleg_load_prepped_data', action='store_true', help='Load bootleg dumped features')
     parser.add_argument('--bootleg_batch_size', type=int, default=16, help='Batch size used for inference using bootleg')
     parser.add_argument('--bootleg_prob_threshold', type=float, default=0.5, help='Probability threshold for accepting a candidate for a mention')
     parser.add_argument('--bootleg_dataset_threads', type=int, default=2, help='Number of threads for parallel processing of dataset in bootleg')
