@@ -38,10 +38,8 @@ from copy import deepcopy
 from functools import partial
 from pprint import pformat
 
-import marisa_trie
 import numpy as np
 import torch
-import ujson
 from tensorboardX import SummaryWriter
 from transformers import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, AdamW, \
     get_cosine_schedule_with_warmup
@@ -49,7 +47,6 @@ from transformers import get_constant_schedule_with_warmup, get_linear_schedule_
 from . import arguments
 from . import models
 from .data_utils.bootleg import Bootleg
-from .data_utils.database import Database
 from .run_bootleg import bootleg_process_splits
 from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader,\
     log_model_size, init_devices
@@ -133,10 +130,10 @@ def prepare_data(args, logger):
             else:
                 args.db_unk_id = 0
             if args.do_ner:
-                if getattr(task, 'db', None):
+                if bootleg:
+                    args.num_db_types = len(bootleg.type2id)
+                elif getattr(task, 'db', None):
                     args.num_db_types = len(task.db.type2id)
-                elif getattr(task, 'bootleg', None):
-                    args.num_db_types = len(task.bootleg.type2id)
             else:
                 args.num_db_types = 0
             save_args(args, force_overwrite=True)
@@ -606,7 +603,7 @@ def main(args):
             
         device_map = dict(zip(args.devices, layers_list))
         model.model.parallelize(device_map)
-        logger.info('Model parallel is used with following device map: {model.model.device_map}')
+        logger.info(f'Model parallel is used with following device map: {model.model.device_map}')
     else:
         model.to(devices[0])
         model = NamedTupleCompatibleDataParallel(model, device_ids=devices)

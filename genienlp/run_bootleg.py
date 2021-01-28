@@ -141,30 +141,29 @@ def bootleg_process_splits(args, split, path, task, bootleg, mode='train'):
     all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(input_file_name[:-len('_bootleg.jsonl')])
     
     # override examples features with bootleg features
-    assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
-    for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
-        if task.is_contextual():
-            for i in range(len(tokens_type_ids)):
-                examples[n].question_feature[i].type_id = tokens_type_ids[i]
-                examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-                examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[
-                    i]
-                examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = \
-                    tokens_type_probs[i]
-        
-        else:
-            for i in range(len(tokens_type_ids)):
-                examples[n].context_feature[i].type_id = tokens_type_ids[i]
-                examples[n].context_feature[i].type_prob = tokens_type_probs[i]
-                examples[n].context_plus_question_feature[i].type_id = tokens_type_ids[i]
-                examples[n].context_plus_question_feature[i].type_prob = tokens_type_probs[i]
-        
-        if mode != 'dump':
+    if mode != 'dump':
+        assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
+        for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
+            if task.is_contextual():
+                for i in range(len(tokens_type_ids)):
+                    examples[n].question_feature[i].type_id = tokens_type_ids[i]
+                    examples[n].question_feature[i].type_prob = tokens_type_probs[i]
+                    examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[
+                        i]
+                    examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = \
+                        tokens_type_probs[i]
+            
+            else:
+                for i in range(len(tokens_type_ids)):
+                    examples[n].context_feature[i].type_id = tokens_type_ids[i]
+                    examples[n].context_feature[i].type_prob = tokens_type_probs[i]
+                    examples[n].context_plus_question_feature[i].type_id = tokens_type_ids[i]
+                    examples[n].context_plus_question_feature[i].type_prob = tokens_type_probs[i]
+            
             context_plus_question_with_types = task.create_sentence_plus_types_tokens(ex.context_plus_question,
                                                                                       ex.context_plus_question_feature,
                                                                                       args.add_types_to_text)
             examples[n] = ex._replace(context_plus_question_with_types=context_plus_question_with_types)
-            
     
     if args.verbose:
         for ex in examples:
@@ -174,10 +173,8 @@ def bootleg_process_splits(args, split, path, task, bootleg, mode='train'):
 
 
 def dump_bootleg_features(args, logger):
-    # initialize bootleg
-    bootleg = None
-    if args.do_ner and args.retrieve_method == 'bootleg':
-        bootleg = Bootleg(args)
+
+    bootleg = Bootleg(args)
     
     train_sets, val_sets, aux_sets = [], [], []
     
@@ -211,8 +208,7 @@ def dump_bootleg_features(args, logger):
         else:
             assert splits.train
 
-        if bootleg:
-            bootleg_process_splits(args, splits.train, paths.train, task, bootleg, mode='dump')
+        bootleg_process_splits(args, splits.train, paths.train, task, bootleg, mode='dump')
 
         logger.info(f'{task.name} has {len(splits.train)} training examples')
         
@@ -248,16 +244,15 @@ def dump_bootleg_features(args, logger):
         assert not splits.train and not splits.test and not splits.aux
         logger.info(f'{task.name} has {len(splits.eval)} validation examples')
 
-        if bootleg:
-            bootleg_process_splits(args, splits.eval, paths.eval, task, bootleg, mode='dump')
+        bootleg_process_splits(args, splits.eval, paths.eval, task, bootleg, mode='dump')
 
         logger.info(f'eval all_schema_types: {task.all_schema_types}')
         
-        if getattr(task, 'bootleg', None):
-            emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
-            if args.use_curriculum:
-                emb_file_list += ['aux']
-            task.bootleg.merge_embeds(emb_file_list)
+        # merge bootleg embedding for different splits
+        emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
+        if args.use_curriculum:
+            emb_file_list += ['aux']
+        task.bootleg.merge_embeds(emb_file_list)
 
     logger.info('Created bootleg features for provided datasets with subsampling: {}'.format(args.subsample))
 
