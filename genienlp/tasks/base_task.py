@@ -65,8 +65,8 @@ class BaseTask:
         """
         return generic_dataset.JSON.splits(root=root, name=self.name, **kwargs)
 
-    def postprocess_answer(self, answer):
-        return answer
+    def postprocess_prediction(self, example_id, prediction):
+        return prediction
 
     def preprocess_field(self, sentence, field_name=None):
         if self.override_context is not None and field_name == 'context':

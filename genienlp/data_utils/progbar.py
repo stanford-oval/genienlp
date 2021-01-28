@@ -59,6 +59,7 @@ class LogFriendlyProgressBar:
                 print(f'{self._desc} - progress: {progress}%', file=sys.stderr)
             else:
                 print(f'Progress: {progress}%', file=sys.stderr)
+            sys.stderr.flush()
             self._progress = progress
         return value
 

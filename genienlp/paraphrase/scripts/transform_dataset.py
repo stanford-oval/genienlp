@@ -35,8 +35,6 @@ def parse_argv(parser):
                         help='The path to the output file that will contain inputs that were removed because of `--transformation`.')
     parser.add_argument('--thingtalk_gold_file', type=str,
                         help='The path to the file containing the dataset with a correct thingtalk column.')
-    parser.add_argument('--num_new_queries', type=int, default=1,
-                        help='Number of new queries per old query. Valid if "--transformation replace_queries" is used.')
     parser.add_argument('--transformation', type=str, choices=['remove_thingtalk_quotes',
                                                                 'replace_queries',
                                                                 'remove_wrong_thingtalk',
@@ -50,7 +48,6 @@ def parse_argv(parser):
     parser.add_argument('--remove_with_heuristics', action='store_true',
                         help='Remove examples if the values inside quotations in ThingTalk have changed or special words like NUMBER_0 cannot be found in TT anymore.')
     parser.add_argument('--replace_with_gold', action='store_true', help='Instead of the original ThingTalk, output what the parser said is gold.')
-
     parser.add_argument('--task', type=str, required=True, choices=['almond', 'almond_dialogue_nlu', 'almond_dialogue_nlu_agent'],
                         help='Specifies the meaning of columns in the input file and the ones that should go to the output')
 
@@ -94,11 +91,11 @@ def main(args):
     with open(args.input, 'r') as input_file, open(args.output, 'w') as output_file:
         reader = csv.reader(input_file, delimiter='\t')
         if args.transformation in ['replace_queries', 'merge_input_file_with_query_file']:
-            new_queries = []
+            new_queries = [] # list of lists
             query_file = open(args.query_file, 'r')
-            for q in query_file:
-                new_queries.append(lower_case(tokenize(q.strip())))
-            new_query_count = 0
+            for line in query_file:
+                queries = line.split('\t')[1:] # 0 is example id
+                new_queries.append([lower_case(tokenize(q.strip())) for q in queries])
         if args.transformation in ['remove_wrong_thingtalk', 'get_wrong_thingtalk']:
             gold_thingtalks = []
             thingtalk_gold_file_reader = csv.reader(open(args.thingtalk_gold_file, 'r'), delimiter='\t')
@@ -112,7 +109,7 @@ def main(args):
         if args.remove_duplicates:
             seen_examples = set()
         all_thrown_away_rows = []
-        for row in progress_bar(reader, desc='Lines'):
+        for row_idx, row in enumerate(progress_bar(reader, desc='Lines')):
             output_rows = []
             thrown_away_rows = []
             if args.transformation == 'remove_thingtalk_quotes':
@@ -134,18 +131,16 @@ def main(args):
                 gold_thingtalk_count += 1
             elif args.transformation == 'merge_input_file_with_query_file':
                 output_rows.append(row)
-                for _ in range(args.num_new_queries):
+                for new_query in new_queries[row_idx]:
                     row = row.copy()
-                    row[args.utterance_column] = new_queries[new_query_count]
+                    row[args.utterance_column] = new_query
                     output_rows.append(row)
-                    new_query_count += 1
             elif args.transformation == 'replace_queries':
-                for idx in range(args.num_new_queries):
+                for idx, new_query in enumerate(new_queries[row_idx]):
                     copy_row = row.copy()
-                    copy_row[args.utterance_column] = new_queries[new_query_count]
+                    copy_row[args.utterance_column] = new_query
                     copy_row[args.id_column] = 'A' + copy_row[args.id_column] + '-' + str(idx) # add 'A' for auto-paraphrasing
                     output_rows.append(copy_row)
-                    new_query_count += 1
             else:
                 assert args.transformation == 'none'
                 # do basic clean-up because old generation code missed these
