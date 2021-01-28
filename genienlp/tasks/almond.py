@@ -270,7 +270,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
 
 
 @register_task('paraphrase')
-class Paraphrase(BaseAlmondTask):
+class Paraphrase(NaturalSeq2Seq):
     """The Almond paraphrasing task. Applies the necessary preprocessing for special tokens and case changes.
     Should only be used at prediction time.
     """
@@ -282,9 +282,6 @@ class Paraphrase(BaseAlmondTask):
     @property
     def metrics(self):
         return ['bleu']
-
-    def _is_program_field(self, field_name):
-        return False
 
     def postprocess_prediction(self, example_id, prediction):
         return output_heuristics(prediction, self.reverse_maps[example_id])
