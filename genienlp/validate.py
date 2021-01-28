@@ -41,7 +41,8 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
                         output_predictions_only=False,
                         output_confidence_features=False,
                         original_order=None,
-                        confidence_estimator=None) -> GenerationOutput:
+                        confidence_estimator=None,
+                        disable_progbar=True) -> GenerationOutput:
     """
     Inputs:
         original_order: List of indices. If provided, we will sort the results according to this order
@@ -62,7 +63,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
     answers = []
     contexts = []
 
-    for batch in progress_bar(data_iterator, desc='Generating'):
+    for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
         batch_confidence_features = [[] for _ in range(batch_size)]

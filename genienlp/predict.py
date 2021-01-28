@@ -182,7 +182,8 @@ def run(args, device):
                 generation_output = generate_with_model(model, it, model.numericalizer, task, args,
                                                      original_order=original_order,
                                                      output_confidence_features=args.save_confidence_features,
-                                                     confidence_estimator=confidence_estimator)
+                                                     confidence_estimator=confidence_estimator,
+                                                     disable_progbar=False)
             
             if args.save_confidence_features:
                 with open(args.confidence_feature_path, 'wb') as f:
