@@ -74,15 +74,15 @@ def prepare_data(args):
     for i, task in enumerate(args.tasks):
         task_languages = args.pred_languages[i]
         logger.info(f'Loading {task}')
-        kwargs = {'train': None}
-        if args.evaluate == 'valid':
-            kwargs['test'] = None
-            if args.pred_set_name is not None:
-                kwargs['validation'] = args.pred_set_name
+        kwargs = {'train': None, 'validation': None, 'test': None}
+        if args.evaluate == 'train':
+            del kwargs['train'] # deleting keys means use the default file name
+        elif args.evaluate == 'valid':
+            kwargs['validation'] = args.pred_set_name
         elif args.evaluate == 'test':
-            kwargs['validation'] = None
+            del kwargs['test']
         else:
-            raise ValueError('Split used for prediction should be either valid or test')
+            raise ValueError('Split used for prediction should be either train, valid or test')
         
         kwargs.update({'skip_cache': args.skip_cache,
                        'subsample': args.subsample,
@@ -100,8 +100,15 @@ def prepare_data(args):
         task_path_processed = []
         for split, path in zip(task_splits, task_paths):
             assert (split.eval or split.test) and not split.train and not split.aux
-            data = split.eval if split.eval else split.test
-            path = path.eval if path.eval else path.test
+            if split.train:
+                data = split.train
+                path = path.train
+            elif split.eval:
+                data = split.eval
+                path = path.eval
+            else:
+                data = split.test
+                path = path.test
             if bootleg:
                  bootleg_process_splits(args, data, path, task, bootleg)
             task_data_processed.append(data)
@@ -110,6 +117,7 @@ def prepare_data(args):
         paths.append(task_path_processed)
 
     return datasets
+
 
 
 def prepare_data_iterators(args, val_sets, numericalizer, device):
@@ -155,8 +163,6 @@ def run(args, device):
 
     val_sets = prepare_data(args)
     model.add_new_vocab_from_data(args.tasks)
-    if args.half_precision:
-        model.half()
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
 
@@ -197,10 +203,12 @@ def run(args, device):
                 logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
             else:
                 confidence_estimator = None
-            generation_output = generate_with_model(model, it, model.numericalizer, task, args,
+            with torch.cuda.amp.autocast(enabled=args.mixed_precision):
+                generation_output = generate_with_model(model, it, model.numericalizer, task, args,
                                                      original_order=original_order,
                                                      output_confidence_features=args.save_confidence_features,
-                                                     confidence_estimator=confidence_estimator)
+                                                     confidence_estimator=confidence_estimator,
+                                                     disable_progbar=False)
             
             if args.save_confidence_features:
                 with open(args.confidence_feature_path, 'wb') as f:
@@ -247,9 +255,9 @@ def run(args, device):
 
 def parse_argv(parser):
     parser.add_argument('--path', type=str, required=True, help='Folder to load the model from')
-    parser.add_argument('--evaluate', type=str, required=True, choices=['valid', 'test'],
-                        help='Which dataset to do predictions for (test or dev)')
-    parser.add_argument('--pred_set_name', type=str, help='Name of dataset to run prediction for; will be ignored if --evaluate is test')
+    parser.add_argument('--evaluate', type=str, required=True, choices=['train', 'valid', 'test'],
+                        help='Which dataset to do predictions for (train, dev or test)')
+    parser.add_argument('--pred_set_name', default='eval', type=str, help='Name of dataset to run prediction for; will be ignored if --evaluate is test')
     parser.add_argument('--tasks',
                         default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl',
                                  'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
@@ -293,6 +301,7 @@ def parse_argv(parser):
     parser.add_argument("--num_beam_groups", type=int, nargs='+', default=[1], help='1 disables diverse beam seach')
     parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
+    parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
 
     # These are used for confidence calibration
     parser.add_argument('--calibrator_path', type=str, default=None, help='If provided, will be used to output confidence scores for each prediction.')
@@ -301,10 +310,12 @@ def parse_argv(parser):
     parser.add_argument("--mc_dropout", action='store_true', help='Monte Carlo dropout')
     parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo dropout')
 
-    parser.add_argument("--half_precision", action='store_true', help='If True, will use half precision on all tensors and calculations.')
-    
     parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
+
+    parser.add_argument("--mixed_precision", action='store_true', help='If True, will use mixed precision for prediction.'
+                        'This reduces memory consumption and is especially faster on GPUs like NVIDIA V100 and T4. May slightly change the generated output.')
+
 
 def adjust_multilingual_eval(args):
     if (have_multilingual(args.task_names) and args.pred_languages is None) or (

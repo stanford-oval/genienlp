@@ -22,7 +22,6 @@
 
 import os
 from collections import defaultdict
-
 import marisa_trie
 import ujson
 
@@ -31,12 +30,13 @@ from ..tasks.base_dataset import Split
 from ..tasks.base_task import BaseTask
 from ..tasks.generic_dataset import input_then_output_len, input_tokens_fn, CQA, default_batch_fn
 from ..tasks.registry import register_task
-from ..data_utils.bootleg import Bootleg
 from ..data_utils.database import Database
 from ..data_utils.example import Example, get_pad_feature, Feature
 from ..tasks.almond_dataset import AlmondDataset
 from ..tasks.almond_utils import ISO_to_LANG, process_id, quoted_pattern_with_space, \
     tokenize_cjk_chars, detokenize_cjk_chars, is_entity, is_entity_marker, is_device
+from ..paraphrase.data_utils import input_heuristics, output_heuristics
+
 
 
 class BaseAlmondTask(BaseTask):
@@ -239,32 +239,34 @@ class BaseAlmondTask(BaseTask):
                 tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
         
         return tokens_type_ids
-    
+
+
     def find_type_probs(self, tokens, default_val, default_size):
         token_freqs = [[default_val] * default_size] * len(tokens)
         return token_freqs
-    
-    def postprocess_answer(self, answer):
+
+    def postprocess_prediction(self, example_id, prediction):
         
         if self._almond_detokenize_sentence:
             # To make genienlp transparent to the tokenization done by genie-toolkit
-            # We tokenize answer here by adding whitespace between each CJK character
-            answer = tokenize_cjk_chars(answer)
+            # We tokenize prediction here by adding whitespace between each CJK character
+            prediction = tokenize_cjk_chars(prediction)
             
         if self._almond_reverse_program:
-            answer_tokens = answer.split(' ')
-            answer_tokens.reverse()
-            answer = ' '.join(answer_tokens)
-        
+            prediction_tokens = prediction.split(' ')
+            prediction_tokens.reverse()
+            prediction = ' '.join(prediction_tokens)
+            
         new_tokens = []
-        for token in answer.split():
+        for token in prediction.split():
             if token.startswith('STRING_'):
                 token = 'QUOTED_' + token
             elif token.startswith('ENTITY_'):
                 token = 'GENERIC_' + token
             new_tokens.append(token)
-        new_answer = ' '.join(new_tokens)
-        return new_answer
+            
+        new_prediction = ' '.join(new_tokens)
+        return new_prediction
     
     def create_sentence_plus_types_tokens(self, new_sentence, features, add_types_to_text):
         new_sentence_tokens = new_sentence.split(' ')
@@ -449,13 +451,13 @@ class Almond(BaseAlmondTask):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
         if self._almond_has_multiple_programs:
-            _id, sentence, target_code = parts[:3]
+            example_id, sentence, target_code = parts[:3]
         else:
-            _id, sentence, target_code = parts
+            example_id, sentence, target_code = parts
         question = 'translate from english to thingtalk'
         context = sentence
         answer = target_code
-        return Example.from_raw(self.name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
 
 
@@ -475,15 +477,60 @@ class NaturalSeq2Seq(BaseAlmondTask):
         # the question is irrelevant
         if len(parts) == 2:
             input_sequence, target_sequence = parts
-            _id = "id-null"
+            example_id = "id-null"
         elif len(parts) == 3:
-            _id, input_sequence, target_sequence = parts
+            example_id, input_sequence, target_sequence = parts
         else:
             raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
         question = 'translate from input to output'
         context = input_sequence
         answer = target_sequence
-        return Example.from_raw(self.name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
+                                preprocess=self.preprocess_field, lower=False)
+
+    def get_splits(self, root, **kwargs):
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
+
+
+@register_task('paraphrase')
+class Paraphrase(NaturalSeq2Seq):
+    """The Almond paraphrasing task. Applies the necessary preprocessing for special tokens and case changes.
+    Should only be used at prediction time.
+    """
+
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self.reverse_maps = {}
+
+    @property
+    def metrics(self):
+        return ['bleu']
+
+    def postprocess_prediction(self, example_id, prediction):
+        return output_heuristics(prediction, self.reverse_maps[example_id])
+
+
+    def _make_example(self, parts, dir_name=None, **kwargs):
+        if len(parts) == 3:
+            example_id, sentence, thingtalk = parts
+        elif len(parts) == 4:
+            example_id, _, sentence, thingtalk = parts # ignore dialogue context
+        else:
+            raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
+
+        example_id = self.name + '/' + example_id
+
+        sentence, reverse_map = input_heuristics(sentence, thingtalk=thingtalk, is_cased=True)
+        # this task especially needs example ids to be unique
+        if example_id in self.reverse_maps:
+            example_id += '.'
+        self.reverse_maps[example_id] = reverse_map
+
+        question = 'translate from input to output'
+        context = sentence
+        answer = sentence # means we calculate self-bleu
+        
+        return Example.from_raw(example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
@@ -503,12 +550,12 @@ class ContextualAlmond(BaseAlmondTask):
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
-            _id, context, sentence, target_code = parts[:4]
+            example_id, context, sentence, target_code = parts[:4]
         else:
-            _id, context, sentence, target_code = parts
+            example_id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
-        return Example.from_raw(self.name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
 
 
@@ -530,11 +577,11 @@ class ReverseAlmond(BaseAlmondTask):
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
         # a different language (like Chinese)
-        _id, sentence, target_code = parts
+        example_id, sentence, target_code = parts
         question = 'translate from thingtalk to english'
         context = target_code
         answer = sentence
-        return Example.from_raw(self.name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
 
 
@@ -552,10 +599,10 @@ class BaseAlmondDialogueNLUTask(BaseAlmondTask):
             sentence = sentence[len('$dialogue '):]
         return super().preprocess_field(sentence, field_name, answer)
     
-    def postprocess_answer(self, answer):
-        if not answer.startswith('$'):
-            return '$dialogue ' + answer
-        return answer
+    def postprocess_prediction(self, example_id, prediction):
+        if not prediction.startswith('$'):
+            return '$dialogue ' + prediction
+        return prediction
 
 @register_task('almond_dialogue_nlu')
 class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
@@ -572,13 +619,13 @@ class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
-            _id, context, sentence, target_code = parts[:4]
+            example_id, context, sentence, target_code = parts[:4]
         else:
-            _id, context, sentence, target_code = parts
-        
+            example_id, context, sentence, target_code = parts
+
         answer = target_code
         question = sentence
-        return Example.from_raw(self.name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
@@ -602,12 +649,12 @@ class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
-            _id, context, sentence, target_code = parts[:4]
+            example_id, context, sentence, target_code = parts[:4]
         else:
-            _id, context, sentence, target_code = parts
+            example_id, context, sentence, target_code = parts
         answer = target_code
         question = sentence
-        return Example.from_raw(self.name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
@@ -634,11 +681,11 @@ class AlmondDialogueNLG(BaseAlmondTask):
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task
-        _id, context, sentence, target_code = parts
+        example_id, context, sentence, target_code = parts
         question = 'what should the agent say ?'
         context = context + ' ' + target_code
         answer = sentence
-        return Example.from_raw(self.name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
@@ -664,11 +711,11 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
-        _id, context, _sentence, target_code = parts
+        example_id, context, _sentence, target_code = parts
         question = 'what should the agent do ?'
         context = context
         answer = target_code
-        return Example.from_raw(self.name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
@@ -765,9 +812,9 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     
     def _make_example(self, parts, dir_name, **kwargs):
         if self._almond_has_multiple_programs:
-            _id, sentence, target_code = parts[:3]
+            example_id, sentence, target_code = parts[:3]
         else:
-            _id, sentence, target_code = parts
+            example_id, sentence, target_code = parts
         language = ISO_to_LANG.get(dir_name, 'English').lower()
         if self.lang_as_question:
             question = 'translate from {} to thingtalk'.format(language)
@@ -775,7 +822,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
             question = 'translate from english to thingtalk'
         context = sentence
         answer = target_code
-        return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + dir_name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
 
 
@@ -796,12 +843,12 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
-            _id, context, sentence, target_code = parts
+            example_id, context, sentence, target_code = parts
         else:
-            _id, context, sentence, target_code = parts[:4]
+            example_id, context, sentence, target_code = parts[:4]
         answer = target_code
         question = sentence
-        return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + dir_name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
 
 
@@ -822,10 +869,10 @@ class AlmondDialogMultiLingualNLG(BaseAlmondTask):
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task
-        _id, context, sentence, target_code = parts
+        example_id, context, sentence, target_code = parts
         question = 'what should the agent say ?'
         context = context + ' ' + target_code
         answer = sentence
-        return Example.from_raw(self.name + '/' + dir_name + '/' + _id, context, question, answer,
+        return Example.from_raw(self.name + '/' + dir_name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
 

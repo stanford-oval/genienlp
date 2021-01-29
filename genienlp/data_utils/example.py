@@ -108,7 +108,8 @@ class Example(NamedTuple):
             args.append(features)
 
         # create context_plus_question fields by concatenating context and question fields
-        args.append(args[1] + ' ' + args[3])
+        # if question is empty, don't append space
+        args.append(args[1] + ' ' + args[3] if len(args[3]) else args[1])
         args.append(args[2] + args[4])
         args.append(context_plus_types + ' ' + question_plus_types)
         
