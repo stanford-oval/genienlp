@@ -36,6 +36,11 @@ DOMAIN_TYPE_MAPPING['linkedin'] = {'Organization': 'Q43229',
                                    'Person': 'Q5',
                                    'addressLocality': 'Q2221906',
                                    'award': 'Q618779'}   # Q2221906:geographic_location
+# linkedin alias
+DOMAIN_TYPE_MAPPING['people'] = {'Organization': 'Q43229',
+                                   'Person': 'Q5',
+                                   'addressLocality': 'Q2221906',
+                                   'award': 'Q618779'}   # Q2221906:geographic_location
 
 DOMAIN_TYPE_MAPPING['restaurants'] = {'Restaurant': 'Q571',
                                       'Person': 'Q5',

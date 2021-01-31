@@ -143,7 +143,7 @@ def parse_argv(parser):
     parser.add_argument('--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)')
     
     parser.add_argument('--do_ner', action='store_true', help='Collect and use entity features during training')
-    parser.add_argument('--database_type', default='json', choices=['json', 'local-elastic', 'remote-elastic'],
+    parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'],
                         help='database to interact with for NER')
     parser.add_argument('--elastic_config', type=str, help='Path to json file containing ES configs (used for remote-elastic only)')
     parser.add_argument('--dump_type2id', action='store_true', help='This will create the "type to id" mapping for all entities available in ES database')
@@ -282,7 +282,7 @@ def post_parse_general(args):
         if args.bootleg_input_dir is None:
             args.bootleg_input_dir = args.database_dir
         if args.elastic_config is None:
-            args.elastic_config = os.path.join(args.database_dir, 'elastic_config.json')
+            args.elastic_config = os.path.join(args.database_dir, 'es_material/elastic_config.json')
     
     for feat in args.features:
         if feat not in VALID_FEATURE_FIELDS:
@@ -375,7 +375,10 @@ def post_parse_train_specific(args):
     if not (len(args.features) == len(args.features_size) == len(args.features_default_val)):
         raise ValueError('You should specify size and default value for each feature you provided')
     
-    if not args.preprocess_special_tokens and args.model == 'TransformerLSTM' and 'uncased' in args.pretrained_model:
+    if args.preprocess_special_tokens and args.model == 'TransformerLSTM':
+        raise ValueError('Preprocessing special tokens should not be used for TransformerLSTM models')
+    
+    if args.model == 'TransformerLSTM' and 'uncased' in args.pretrained_model:
         raise ValueError('You should use the cased version of provided model when not preprocessing special tokens.'
                          ' Otherwise the program (answer) will not be tokenized properly')
 

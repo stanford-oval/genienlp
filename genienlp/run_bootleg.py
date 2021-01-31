@@ -252,7 +252,7 @@ def dump_bootleg_features(args, logger):
         emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
         if args.use_curriculum:
             emb_file_list += ['aux']
-        task.bootleg.merge_embeds(emb_file_list)
+        bootleg.merge_embeds(emb_file_list)
 
     logger.info('Created bootleg features for provided datasets with subsampling: {}'.format(args.subsample))
 

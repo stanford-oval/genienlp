@@ -26,6 +26,7 @@ import marisa_trie
 import ujson
 
 from ..data_utils.database_utils import DOMAIN_TYPE_MAPPING
+from ..data_utils.remote_database import RemoteElasticDatabase
 from ..tasks.base_dataset import Split
 from ..tasks.base_task import BaseTask
 from ..tasks.generic_dataset import input_then_output_len, input_tokens_fn, CQA, default_batch_fn
@@ -65,23 +66,28 @@ class BaseAlmondTask(BaseTask):
             self.unk_id = args.features_default_val[0]
             self.TTtype2DBtype = dict()
     
-            # TODO always init db for now
             for domain in self.almond_domains:
                 self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
             self.DBtype2TTtype = {v: k for k, v in self.TTtype2DBtype.items()}
             self._init_db()
 
     def _init_db(self):
-        if self.args.database_type in ['json', 'local-elastic']:
+        if self.args.database_type in ['json']:
             with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
                 canonical2type = ujson.load(fin)
             with open(os.path.join(self.args.database_dir, 'es_material/type2id.json'), 'r') as fin:
                 type2id = ujson.load(fin)
-
             all_canonicals = marisa_trie.Trie(canonical2type.keys())
 
-        if self.args.database_type == 'json':
-            self.db = Database(canonical2type, type2id, all_canonicals, self.TTtype2DBtype)
+            self.db = Database(canonical2type, type2id, all_canonicals,
+                               self.args.features_default_val, self.args.features_size)
+        
+        elif self.args.database_type == 'remote-elastic':
+            with open(self.args.elastic_config, 'r') as fin:
+                es_config = ujson.load(fin)
+            with open(os.path.join(self.args.database_dir, 'es_material/type2id.json'), 'r') as fin:
+                type2id = ujson.load(fin)
+            self.db = RemoteElasticDatabase(es_config, type2id, self.args.features_default_val, self.args.features_size)
 
     
     def is_contextual(self):
@@ -229,11 +235,11 @@ class BaseAlmondTask(BaseTask):
         
         if self.args.database_type == 'json':
             if self.args.retrieve_method == 'naive':
-                tokens_type_ids = self.db.lookup(tokens, self.args.lookup_method, self.args.min_entity_len,
+                tokens_type_ids = self.db.single_es_lookup(tokens, self.args.lookup_method, self.args.min_entity_len,
                                                  self.args.max_entity_len)
             elif self.args.retrieve_method == 'entity-oracle':
                 answer_entities = quoted_pattern_with_space.findall(answer)
-                tokens_type_ids = self.db.lookup(tokens, answer_entities=answer_entities)
+                tokens_type_ids = self.db.single_es_lookup(tokens, answer_entities=answer_entities)
             elif self.args.retrieve_method == 'type-oracle':
                 entity2type = self.collect_answer_entity_types(answer)
                 tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
