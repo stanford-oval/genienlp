@@ -5,6 +5,7 @@ import logging
 
 from .database_utils import is_banned
 
+import bootleg
 from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
 from bootleg import run
