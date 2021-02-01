@@ -47,6 +47,7 @@ class Database(object):
         self.all_canonicals = all_canonicals
 
         self.unk_id = features_default_val[0]
+        self.unk_type = self.id2type[self.unk_id]
         
         self.features_default_val = features_default_val
         self.features_size = features_size

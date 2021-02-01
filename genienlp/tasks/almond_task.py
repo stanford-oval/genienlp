@@ -235,11 +235,11 @@ class BaseAlmondTask(BaseTask):
         
         if self.args.database_type == 'json':
             if self.args.retrieve_method == 'naive':
-                tokens_type_ids = self.db.single_es_lookup(tokens, self.args.lookup_method, self.args.min_entity_len,
+                tokens_type_ids = self.db.lookup(tokens, self.args.lookup_method, self.args.min_entity_len,
                                                  self.args.max_entity_len)
             elif self.args.retrieve_method == 'entity-oracle':
                 answer_entities = quoted_pattern_with_space.findall(answer)
-                tokens_type_ids = self.db.single_es_lookup(tokens, answer_entities=answer_entities)
+                tokens_type_ids = self.db.lookup(tokens, answer_entities=answer_entities)
             elif self.args.retrieve_method == 'type-oracle':
                 entity2type = self.collect_answer_entity_types(answer)
                 tokens_type_ids = self.oracle_type_ids(tokens, entity2type)

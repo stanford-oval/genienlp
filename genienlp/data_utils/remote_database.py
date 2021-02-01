@@ -28,9 +28,10 @@ class RemoteElasticDatabase(object):
         self.type2id = type2id
         self.id2type = {v: k for k, v in self.type2id.items()}
         self.unk_id = features_default_val[0]
-
+        self.unk_type = self.id2type[self.unk_id]
+        
+        self.features_default_val = features_default_val
         self.features_size = features_size
-        self.unk_type = 'unk'
     
         self.canonical2type = defaultdict(list)
         self.auth = (config['username'], config['password'])

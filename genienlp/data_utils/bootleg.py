@@ -5,7 +5,6 @@ import logging
 
 from .database_utils import is_banned
 
-import bootleg
 from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
 from bootleg import run
@@ -110,9 +109,6 @@ class Bootleg(object):
             all_qids = all_qids[:idx]
             all_probs = all_probs[:idx]
 
-            # TODO: now we only keep the first type for each qid
-            # extend so we can keep all types and aggregate later
-        
             type_ids = []
             type_probs = []
         
@@ -134,9 +130,7 @@ class Bootleg(object):
                             if type in self.type2id:
                                 title = self.typeid2title.get(type, '?')
                             
-                                ######
-                                ### postprocess types according to rules learned from analyze_bootleg_results
-                                ######
+                                ## map wikidata types to thingtalk types
                                 if self.bootleg_post_process_types:
                                     type = post_process_bootleg_types(qid, type, title, self.almond_domains)
                             

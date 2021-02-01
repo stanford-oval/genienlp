@@ -27,6 +27,7 @@ trap on_error ERR INT TERM
 
 
 i=0
+
 for hparams in \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/tiny-mbart" \
@@ -93,6 +94,32 @@ do
     echo '{"id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | pipenv run python3 -m genienlp server --path $workdir/model_$i --stdin
 
     rm -rf $workdir/model_$i $workdir/model_$i_exported
+
+    i=$((i+1))
+done
+
+
+# test NED
+for hparams in \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --retrieve_method bootleg --lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text append --bootleg_post_process_types" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --retrieve_method bootleg --lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text no --bootleg_post_process_types" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --retrieve_method naive --lookup_method ngrams --almond_domains books --add_types_to_text insert" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --retrieve_method entity-oracle --lookup_method ngrams --almond_domains books --add_types_to_text insert" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --retrieve_method type-oracle --lookup_method ngrams --almond_domains books --add_types_to_text insert" \
+      "--model TransformerLSTM --pretrained_model bert-base-cased --retrieve_method bootleg --lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text append --bootleg_post_process_types" \
+      "--model TransformerLSTM --pretrained_model xlm-roberta-base --retrieve_method bootleg --lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text append --bootleg_post_process_types" ; do
+
+    # train
+    pipenv run python3 -m genienlp train --train_tasks almond --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --database_dir $SRCDIR/database/ --data $SRCDIR/dataset/books_v2/ --bootleg_output_dir $SRCDIR/dataset/books_v2/bootleg/  --exist_ok --skip_cache --embeddings $embedding_dir --no_commit --do_ner --database_type json --features type_id type_prob --features_size 1 1 --features_default_val 0 1.0 --num_workers 0 --min_entity_len 2 --max_entity_len 4 $hparams
+
+    # greedy prediction
+    pipenv run python3 -m genienlp predict --tasks almond --evaluate valid --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --database_dir $SRCDIR/database/ --data $SRCDIR/dataset/books_v2/ --embeddings $embedding_dir --skip_cache
+
+    # check if result file exists
+    if test ! -f $workdir/model_$i/eval_results/valid/almond.tsv ; then
+        echo "File not found!"
+        exit
+    fi
 
     i=$((i+1))
 done

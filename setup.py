@@ -71,5 +71,6 @@ setuptools.setup(
         'scikit-learn~=0.23',
         'dill~=0.3',
         'xgboost~=1.3',
+        'bootleg @ git+https://github.com/Mehrad0711/bootleg'
     ]
 )
