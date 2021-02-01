@@ -127,21 +127,21 @@ class Bootleg(object):
                         all_types = [all_types]
                 
                     if len(all_types):
-                        # choose only the first type
-                        type = all_types[0]
-                    
-                        if type in self.type2id:
-                            title = self.typeid2title.get(type, '?')
-                        
-                            ######
-                            ### postprocess types according to rules learned from analyze_bootleg_results
-                            ######
-                            if self.bootleg_post_process_types:
-                                type = post_process_bootleg_types(qid, type, title, self.almond_domains)
-                        
-                            type_id = self.type2id[type]
-                            type_ids.append(type_id)
-                            type_probs.append(prob)
+                        # update
+                        # go through all types
+                        for type in all_types:
+                            if type in self.type2id:
+                                title = self.typeid2title.get(type, '?')
+                            
+                                ######
+                                ### postprocess types according to rules learned from analyze_bootleg_results
+                                ######
+                                if self.bootleg_post_process_types:
+                                    type = post_process_bootleg_types(qid, type, title, self.almond_domains)
+                            
+                                type_id = self.type2id[type]
+                                type_ids.append(type_id)
+                                type_probs.append(prob)
             
                 padded_type_ids = self.pad_values(type_ids, self.args.features_size[0], self.args.features_default_val[0])
                 padded_type_probs = self.pad_values(type_probs, self.args.features_size[1], self.args.features_default_val[1])
