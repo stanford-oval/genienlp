@@ -556,7 +556,35 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
     # TODO if training on multiple domains (in one run) these mapping should be modified
     # e.g. song is mapped to book which is not correct if training on music domain too
     for domain in almond_domains:
-        if domain == 'books':
+        if domain == 'restaurants':
+            # pizzeria
+            if qid == 'Q177':
+                type = 'Q571'
+    
+            # ramen
+            if qid == 'Q1051265':
+                type = 'Q1778821'
+    
+            if 'cuisine' in title or 'pasta' in title or 'culture of ' in title or \
+                    title in ['food', 'type of food or dish', 'dish', 'convenience food', 'rice dish',
+                              'dish', 'food ingredient', 'stuffed pasta', 'raw fish dish',
+                              'soup', 'country', 'sovereign state', 'noodle', 'intangible cultural heritage']:
+                type = 'Q1778821'
+    
+            elif title in ['city of the United States', 'big city', 'city with millions of inhabitants',
+                           'commune of France']:
+                type = 'Q2221906'
+    
+            elif 'restaurant chain' in title or title in ['restaurant', 'food manufacturer']:
+                type = 'Q571'
+    
+            elif 'writer' in title:
+                type = 'Q5'
+    
+            elif title in ['musical group', 'Wikimedia disambiguation page', 'Wikimedia list article', 'film']:
+                type = 'unk'
+
+        elif domain == 'books':
             if type == 'Q15087423':
                 type = 'unk'
             
@@ -594,9 +622,77 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
             elif title in ['day', 'single', 'musical group', 'English unit of measurement',
                            'Wikimedia disambiguation page', 'Wikimedia list article']:
                 type = 'unk'
-            else:
+
+                
+        if domain == 'movies':
+            if 'film' in title or title in ['song', 'single', 'media franchise', 'literary work', 'television series',
+                                            'written work']:
+                type = 'Q11424'
+    
+            elif 'director' in title:
+                type = 'Q3455803'
+    
+            elif 'genre' in title or 'fiction' in title or title in ['drama', 'comedy']:
+                type = 'Q201658'
+    
+            elif 'producer' in title:
+                type = 'Q2500638'
+    
+            elif 'actor' in title or 'actress' in title:
+                type = 'Q33999'
+    
+            elif 'language' in title or title in ['cinema of country or region']:
+                type = 'Q315'
+    
+            elif 'writer' in title or title in ['composer', 'screenwriter', 'editer', 'singer', 'businessperson',
+                                                'playwright',
+                                                'art collector', 'comedian', 'musician', 'aircraft pilot',
+                                                'philanthropist',
+                                                'restaurateur', 'guitarist', 'novelist', 'Wikimedia list article',
+                                                'Wikimedia disambiguation page', 'journalist', 'musical group']:
                 type = 'unk'
-        
+
+
+        elif domain == 'music':
+            if title in ['song', 'single', 'musical composition', 'ballad', 'extended play', 'literary work',
+                         'television series', 'film', 'play']:
+                type = 'Q7366'
+            elif 'album' in title or title in []:
+                type = 'Q482994'
+            elif 'genre' in title or title in ['country', 'music by country or region', 'music term', 'republic',
+                                               'ethnic group', 'music scene', 'popular music', 'rock music',
+                                               'heavy metal', 'music', 'pop music', 'electronic music']:
+                type = 'Q188451'
+            elif 'person' in title or 'actor' in title or 'musician' in title or \
+                    title in ['singer', 'musician', 'songwriter',
+                              'composer', 'producer',
+                              'singer-songwriter', 'musical group', 'drummer',
+                              'writer', 'philanthropist', 'public figure',
+                              'poet', 'guitarist', 'rapper', 'painter',
+                              'film director', 'dancer', 'screenwriter',
+                              'rock band', 'university teacher', 'journalist',
+                              'television presenter', 'film producer',
+                              'saxophonist', 'music pedagogue',
+                              'association football player', 'film score composer',
+                              'disc jockey', 'record producer', 'engineer',
+                              'human biblical figure', 'big band',
+                              'musical duo', 'girl group', 'entrepreneur',
+                              'boy band', 'musical ensemble', 'artist',
+                              'vocal group', 'heavy metal band',
+                              'literary character', 'lawyer', 'lyricist',
+                              'baseball player', 'pianist', 'recording artist',
+                              'autobiographer', 'fashion designer']:
+                type = 'Q5'
+    
+            elif 'language' in title or title in ['cinema of country or region', 'sovereign state', 'Bantu',
+                                                  'Serbo-Croatian',
+                                                  'big city', 'Upper Guinea Creoles']:
+                type = 'Q315'
+    
+            elif title in ['Wikimedia disambiguation page', 'Wikimedia list article']:
+                type = 'unk'
+
+
         elif domain == 'spotify':
             # rap, rap music
             if qid in ['Q6010', 'Q11401']:
@@ -610,23 +706,16 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
             elif 'genre' in title or title in ['country', 'music by country or region', 'music term', 'republic',
                                                'ethnic group', 'music scene']:
                 type = 'Q188451'
-            elif 'person' in title or 'musician' in title or title in ['singer', 'actor', 'musician', 'songwriter',
-                                                                       'composer',
-                                                                       'singer-songwriter', 'musical group', 'drummer',
-                                                                       'writer',
-                                                                       'poet', 'guitarist', 'rapper', 'painter',
-                                                                       'film director',
-                                                                       'rock band', 'university teacher', 'journalist',
-                                                                       'television presenter',
-                                                                       'saxophonist', 'music pedagogue',
-                                                                       'association football player',
-                                                                       'disc jockey', 'record producer', 'engineer',
-                                                                       'human biblical figure', 'big band',
-                                                                       'musical duo', 'girl group',
-                                                                       'boy band', 'musical ensemble', 'artist',
-                                                                       'vocal group', 'heavy metal band',
-                                                                       'literary character', 'lawyer', 'lyricist',
-                                                                       'baseball player']:
+            elif 'person' in title or 'musician' in title or \
+                title in ['singer', 'actor', 'musician', 'songwriter',
+                          'composer', 'singer-songwriter', 'musical group', 'drummer',
+                          'writer', 'poet', 'guitarist', 'rapper', 'painter',
+                          'film director', 'rock band', 'university teacher', 'journalist',
+                          'television presenter', 'saxophonist', 'music pedagogue',
+                          'association football player', 'disc jockey', 'record producer', 'engineer',
+                          'human biblical figure', 'big band', 'musical duo', 'girl group',
+                          'boy band', 'musical ensemble', 'artist', 'vocal group', 'heavy metal band',
+                          'literary character', 'lawyer', 'lyricist', 'baseball player']:
                 type = 'Q5'
             
             elif title in ['video game', 'disease', 'city of the United States', 'taxon',

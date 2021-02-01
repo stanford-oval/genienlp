@@ -13,16 +13,19 @@ DOMAIN_TYPE_MAPPING = dict()
 
 
 DOMAIN_TYPE_MAPPING['music'] = {'MusicRecording': 'Q7366',
-                                'Person': 'Q5',
                                 'MusicAlbum': 'Q482994',
-                                'inLanguage': 'Q315'}   # Q5:human, Q7366:song, Q482994:album
+                                'Person': 'Q5',
+                                'iso_lang_code': 'Q315',
+                                'genres': 'Q188451'}  # Q188451:music genre, Q5:human, Q7366:song, Q482994:album
 
 
 # TODO actor and director should be handled differently
 DOMAIN_TYPE_MAPPING['movies'] = {'Movie': 'Q11424',
-                                 'Person.creator': 'Q2500638',
-                                 'Person.director': 'Q3455803',
-                                 'Person.actor': 'Q33999'}   # Q11424:film
+                                 'creator': 'Q2500638',
+                                 'director': 'Q3455803',
+                                 'actor': 'Q33999',
+                                 'genre': 'Q201658',
+                                 'iso_lang_code': 'Q315'}  # Q11424:film, Q201658:film genre
 
 # isbn is ignored for books because (1.bootleg doesn't detect them. 2.they are easy to recognize by semantic parser)
 DOMAIN_TYPE_MAPPING['books'] = {'Book': 'Q571',
@@ -78,7 +81,10 @@ BANNED_PHRASES = set(
      'tongue', 'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'spotify', 'app', 'almond', 'genre',
      'play dj', 'stone', 'sound tracks', 'hi', 'hey', 'tweet', 'all music', 'hello', 'preference', 'top tracks', 'all the good', 'music i', 'id',
      'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'from yesterday', 'show tunes', 'tag', 'ms', 'all good',
-     'greatest hits', 'good hits']
+     'greatest hits', 'good hits', 'content rating', 'how long', 'actor', 'pg', 'ratings', 'rating', 'rated pg', 'key', 'the nice',
+     'keyword', 'keywords', 'subtitle', 'subtitles', 'i want that', 'shorter', 'duration', 'num', 'hope', 'rm', 'michelin', 'michelin star', 'michelin stars',
+     'reservations', 'zip code', 'zipcode', 'smoke', 'smoking', 'luxury', 'bar', 'bars', 'kitchen', 'cafe', 'cafes', 'coffee', 'where i am',
+     'email']
 )
 
 BANNED_REGEXES = [re.compile(r'\d (star|rating)'), re.compile(r'\dth'), re.compile(r'a \d'),
