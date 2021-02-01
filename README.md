@@ -114,14 +114,14 @@ genienlp run-paraphrase --model_type gpt2 --model_name_or_path <modeldir> --temp
 
 First run a bootleg model to extract mentions, entity candidates, and contextual embeddings for the mentions.
 ```bash
-genienlp bootleg-dump-features bootleg-dump-features --train_tasks <train_task_names> --save <savedir> --preserve_case --data <dataset_dir> --train_batch_tokens 400 --val_batch_size 400 --database_type json --database_dir <database_dir> --features type_id type_prob --features_size 1 1 --features_default_val 0 1.0 --num_workers 0 --min_entity_len 1 --max_entity_len 4 --bootleg_input_dir <bootleg_input_dir> --bootleg_model <bootleg_model>
+genienlp bootleg-dump-features --train_tasks <train_task_names> --save <savedir> --preserve_case --data <dataset_dir> --train_batch_tokens 400 --val_batch_size 400 --database_type json --database_dir <database_dir> --features type_id type_prob --features_size 1 1 --features_default_val 0 1.0 --num_workers 0 --min_entity_len 1 --max_entity_len 4 --bootleg_model <bootleg_model>
 ```
 This command generates several output files. In `<dataset_dir>` you should see a `prep` dir which contains preprocessed data (e.g. data converted to memory-mapped format, several array to facilitate embedding lookup etc.) If your dataset doesn't change you can reuse the same files.
 It will also generate several files in <results_temp> folder. In `eval_bootleg/[train|eval]/<bootleg_model>/bootleg_lables.jsonl` you can see the examples, mentions, predicted candidates and their probabilities according to bootleg. 
 
 Now you can use the extracted features from bootleg in downstream tasks such as semantic parsing to improve named entity understanding and consequently generation:
 ```bash
-genienlp train --train_tasks <train_task_names> --train_iterations 60000 --preserve_case --save <savedir> --data <dataset_dir> --model TransformerLSTM --pretrained_model bert-base-uncased --trainable_decoder_embeddings 50 --train_batch_tokens 1000 --val_batch_size 1000 --do_ner --database_type json --database_dir <database_dir> --retrieve_method bootleg --features type_id type_prob --features_size 1 1 --features_default_val 0 1.0 --num_workers 0 --min_entity_len 1 --max_entity_len 4 --bootleg_input_dir <bootleg_input_dir> --bootleg_model <bootleg_model>
+genienlp train --train_tasks <train_task_names> --train_iterations 60000 --preserve_case --save <savedir> --data <dataset_dir> --model TransformerLSTM --pretrained_model bert-base-uncased --trainable_decoder_embeddings 50 --train_batch_tokens 1000 --val_batch_size 1000 --do_ner --database_type json --database_dir <database_dir> --retrieve_method bootleg --features type_id type_prob --features_size 1 1 --features_default_val 0 1.0 --num_workers 0 --min_entity_len 1 --max_entity_len 4 --bootleg_model <bootleg_model>
 ```
 
 
