@@ -522,7 +522,7 @@ class TransformerNumericalizer(object):
             sentence = regex.sub(replacement, sentence)
         return sentence
     
-    def reverse(self, batch, task=None, field_name=None):
+    def reverse(self, batch):
         output = []
         for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True, clean_up_tokenization_spaces=False):
             if self._preprocess_special_tokens:

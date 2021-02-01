@@ -460,8 +460,8 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
                 if args.print_train_examples_too:
                     names = ['answer', 'context']
-                    values = [numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer'),
-                              numericalizer.reverse(batch.context.value.data, task=task, field_name='context')]
+                    values = [numericalizer.reverse(batch.answer.value.data),
+                              numericalizer.reverse(batch.context.value.data)]
                     num_print = min(num_examples, args.num_print)
                     print_results(names, values, num_print=num_print)
                     
