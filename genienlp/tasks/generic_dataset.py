@@ -415,10 +415,10 @@ class SQuAD(CQA):
                                 answer_end = answer_start + len(answer)
                                 context_before_answer = context[:answer_start]
                                 context_after_answer = context[answer_end:]
-                                BEGIN = 'beginanswer '
-                                END = ' endanswer'
+                                BEGIN = 'beginanswer'
+                                END = 'endanswer'
 
-                                tagged_context = context_before_answer + BEGIN + answer + END + context_after_answer
+                                tagged_context = context_before_answer + BEGIN + ' ' + answer + ' ' + END + context_after_answer
                                 tagged_context = tagged_context.split()
 
                                 tokenized_answer = answer.split()
@@ -457,7 +457,7 @@ class SQuAD(CQA):
                                     import pdb;
                                     pdb.set_trace()
                                 context_spans += [len(tagged_context)]
-                                for context_idx, answer_word in zip(context_spans, ex.answer):
+                                for context_idx, answer_word in zip(context_spans, tokenized_answer):
                                     if context_idx == len(tagged_context):
                                         continue
                                     if tagged_context[context_idx] != answer_word:
