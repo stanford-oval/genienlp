@@ -31,7 +31,6 @@
 import logging
 
 import kfserving
-import torch
 
 from .util import log_model_size
 from .server import Server, init
