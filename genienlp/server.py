@@ -130,36 +130,38 @@ class Server:
             ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
             examples.append(ex)
         
-        bootleg_inputs = []
-        if self.bootleg_annotator:
-            for ex in examples:
-                if task.is_contextual():
-                    bootleg_inputs.append(ex.question)
-                else:
-                    bootleg_inputs.append(ex.context)
-
-            bootleg_labels = self.bootleg_annotator.label_mentions(bootleg_inputs)
-            bootleg_labels_unpacked = list(zip(*bootleg_labels))
-            
-            for i in range(len(examples)):
-                ex = examples[i]
-                label = bootleg_labels_unpacked[i]
-                examples[i] = self.bootleg_process_examples(ex, label, task)
-
-        self.model.add_new_vocab_from_data([task])
-        batch = self.numericalize_examples(examples)
-        # it is a single batch, so wrap it in []
-        if self.args.calibrator_path is not None:
-            output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                              output_predictions_only=True,
-                                              confidence_estimator=self.confidence_estimator)
-
-            response = json.dumps({'id': request['id'], 'instances': [{'answer': p[0], 'score': float(s)}
-                                                                      for (p, s) in zip(output.predictions, output.confidence_scores)]})
-        else:
-            output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True)
-
-            response = json.dumps({'id': request['id'], 'instances': [{'answer': p[0]} for p in output.predictions]})
+        with torch.no_grad():
+            bootleg_inputs = []
+            if self.bootleg_annotator:
+                for ex in examples:
+                    if task.is_contextual():
+                        bootleg_inputs.append(ex.question)
+                    else:
+                        bootleg_inputs.append(ex.context)
+    
+                bootleg_labels = self.bootleg_annotator.label_mentions(bootleg_inputs)
+                bootleg_labels_unpacked = list(zip(*bootleg_labels))
+                
+                for i in range(len(examples)):
+                    ex = examples[i]
+                    label = bootleg_labels_unpacked[i]
+                    examples[i] = self.bootleg_process_examples(ex, label, task)
+    
+            self.model.add_new_vocab_from_data([task])
+            batch = self.numericalize_examples(examples)
+            # it is a single batch, so wrap it in []
+            if self.args.calibrator_path is not None:
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                  output_predictions_only=True,
+                                                  confidence_estimator=self.confidence_estimator)
+    
+                response = json.dumps({'id': request['id'], 'instances': [{'answer': p[0], 'score': float(s)}
+                                                                          for (p, s) in zip(output.predictions, output.confidence_scores)]})
+            else:
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True)
+    
+                response = json.dumps({'id': request['id'], 'instances': [{'answer': p[0]} for p in output.predictions]})
+        
         return response + '\n'
         
 
@@ -204,11 +206,10 @@ class Server:
         self.model.to(self.device)
 
         self.model.eval()
-        with torch.no_grad():
-            if self.args.stdin:
-                self._run_stdin()
-            else:
-                self._run_tcp()
+        if self.args.stdin:
+            self._run_stdin()
+        else:
+            self._run_tcp()
 
 
 def parse_argv(parser):
