@@ -92,10 +92,14 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
         
         if not output_predictions_only:
             batch_answer = numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer')
-            example_ids += batch.example_id
             answers += batch_answer
+            example_ids += batch.example_id
             batch_context = numericalizer.reverse(batch.context.value.data, task=task, field_name='context')
             contexts += batch_context
+        elif output_confidence_features:
+            # need gold answer for confidence estimation
+            batch_answer = numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer')
+            answers += batch_answer
         predictions += batch_prediction
         confidence_features += batch_confidence_features
     
@@ -113,6 +117,11 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
         output.example_ids, output.predictions, output.answers, output.contexts = example_ids, predictions, answers, contexts
     if output_confidence_features:
         output.confidence_features = confidence_features
+        if args.override_confidence_labels:
+            for i, example in enumerate(confidence_features):
+                for confidence in example:
+                    if answers[i] == args.override_confidence_labels:
+                        confidence.label = (answers[i] != args.override_confidence_labels)
     if output_confidence_scores:
         confidence_scores = confidence_estimator.estimate(confidence_features)
         output.confidence_scores = confidence_scores

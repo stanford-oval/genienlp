@@ -277,6 +277,8 @@ def parse_argv(parser):
     parser.add_argument('--save_confidence_features', action='store_true', help='If provided, will be used to output confidence scores for each prediction.')
     parser.add_argument("--confidence_feature_path", type=str, default=None, help='A .pkl file to save confidence features in.')
     parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo (MC) dropout. 0 disables MC dropout.')
+    parser.add_argument("--override_confidence_labels", type=str, default=None,
+                        help='If provided, examples with this gold answer are marked as 0, and others as 1. Useful for out-of-domain detection.')
 
     parser.add_argument("--half_precision", action='store_true', help='If True, will use half precision on all tensors and calculations.')
 
