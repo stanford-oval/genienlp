@@ -144,6 +144,7 @@ class ConfidenceFeatures:
         self.prediction = prediction
         self.gold_answer = gold_answer
         self.first_mistake = ConfidenceFeatures.find_first_mistake(gold_answer, prediction)
+        self.label = (self.first_mistake == -1)
         self.context = context
 
     @property
@@ -184,6 +185,7 @@ class ConfidenceFeatures:
                 + ', nodrop_probs=' + str(self.nodrop_probs) \
                 + ', nodrop_entropies=' + str(self.nodrop_entropies) \
                 + ', context=' + str(self.context) \
+                + ', label=' + str(self.label) \
                 + '>'
 
 

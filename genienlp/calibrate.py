@@ -250,9 +250,8 @@ class ConfidenceEstimator():
     def convert_to_labels(confidences: Iterable[ConfidenceFeatures]):
         labels = []
         for c in confidences:
-            labels.append(c[0].first_mistake)
-        labels = np.array(labels) + 1 # +1 so that minimum is 0
-        labels = (labels == 0) # convert to binary labels
+            labels.append(c[0].label)
+        labels = np.array(labels)
         # logger.info('labels = %s', str(labels))
         return labels
 
@@ -444,22 +443,6 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
             self.score = best_score
 
         return best_model, best_score, best_confusion_matrix, best_params
-
-    @staticmethod
-    def convert_to_labels(confidences: Iterable[ConfidenceFeatures]):
-        labels = []
-        for c in confidences:
-            labels.append(c[0].first_mistake)
-        labels = np.array(labels) + 1 # +1 so that minimum is 0
-        labels = (labels == 0) # convert to binary labels
-        # logger.info('labels = %s', str(labels))
-        return labels
-
-    def convert_to_dataset(self, confidences: Iterable[ConfidenceFeatures], train :bool):
-        labels = ConfidenceEstimator.convert_to_labels(confidences)
-        features = self.convert_to_features(confidences, train)
-
-        return features, labels
 
     def estimate(self, confidences: Iterable[ConfidenceFeatures]):
         features, labels = self.convert_to_dataset(confidences, train=False)
