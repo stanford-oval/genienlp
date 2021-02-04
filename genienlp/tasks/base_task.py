@@ -54,6 +54,10 @@ class BaseTask:
     def default_context(self):
         return ''
 
+    @property
+    def is_contextual(self):
+        return NotImplementedError
+
     def get_splits(self, root, **kwargs):
         """
         Load the train, test, eval datasets for this task

@@ -88,7 +88,7 @@ class BaseAlmondTask(BaseTask):
                 type2id = ujson.load(fin)
             self.db = RemoteElasticDatabase(es_config, type2id, self.args.features_default_val, self.args.features_size)
 
-    
+    @property
     def is_contextual(self):
         return NotImplementedError
     

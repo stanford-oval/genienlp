@@ -113,7 +113,7 @@ class Server:
         task = list(get_tasks([task_name], self.args, self._cached_task_names).values())[0]
         if task_name not in self._cached_task_names:
             self._cached_task_names[task_name] = task
-        
+            
         # if single example wrap it as a list
         if 'instances' not in request:
             request['instances'] = [{'example_id': request.get('example_id', ''), 'context': request['context'], 'question': request['question'], 'answer': request.get('answer', '')}]

@@ -275,7 +275,7 @@ do
     sleep 5
 
     # send predict request via http
-    request='{"id":"123", "instances": [{"task": "generic", "context": "", "question": "what is the weather"}]}'
+    request='{"id":"123", "task": "generic", "instances": [{"context": "", "question": "what is the weather"}]}'
     status=`curl -s -o /dev/stderr -w "%{http_code}" http://localhost:8080/v1/models/nlp:predict -d "$request"`
     kill $SERVER_PID
     if [[ "$status" -ne 200 ]]; then
