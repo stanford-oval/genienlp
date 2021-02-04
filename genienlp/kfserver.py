@@ -51,9 +51,8 @@ class KFModelServer(kfserving.KFModel):
         self.ready = True
 
     def predict(self, request):
-        with torch.no_grad():
-            results = self.server.handle_request(request)
-            return {"predictions": results}
+        results = self.server.handle_request(request)
+        return {"predictions": results}
 
 
 def main(args):
