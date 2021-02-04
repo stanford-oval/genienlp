@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "018740e8d5f55b3302c4cfb0646db722b882ba2e7ed6b2a38c1ef6926a2c5eea"
+            "sha256": "249e3a8d664672641009eb210e3e87c5b630e9f12da30e6dc6da19227ae21637"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -53,7 +53,7 @@
         },
         "bootleg": {
             "git": "https://github.com/Mehrad0711/bootleg",
-            "ref": "845c2d28bebd4be55f0671153ce4de831124059b"
+            "ref": "01108b5966061fa065a9d3807a3b9ab0f06ee794"
         },
         "cachetools": {
             "hashes": [
