@@ -373,6 +373,7 @@ class BaseAlmondDialogueNLUTask(BaseAlmondTask):
         return super().preprocess_field(sentence, field_name)
 
     def postprocess_prediction(self, example_id, prediction):
+        prediction = super().postprocess_prediction(example_id, prediction)
         if not prediction.startswith('$'):
             return '$dialogue ' + prediction
         return prediction
