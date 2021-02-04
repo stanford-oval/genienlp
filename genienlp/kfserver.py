@@ -31,6 +31,7 @@
 import logging
 
 import kfserving
+import torch
 
 from .util import log_model_size
 from .server import Server, init
@@ -50,8 +51,9 @@ class KFModelServer(kfserving.KFModel):
         self.ready = True
 
     def predict(self, request):
-        results = self.server.handle_request(request)
-        return {"predictions": results}
+        with torch.no_grad():
+            results = self.server.handle_request(request)
+            return {"predictions": results}
 
 
 def main(args):
