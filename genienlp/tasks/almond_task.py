@@ -57,7 +57,6 @@ class BaseAlmondTask(BaseTask):
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
         self._almond_thingtalk_version = args.almond_thingtalk_version
-        self._almond_reverse_program = args.almond_reverse_program
         
         self.almond_domains = args.almond_domains
         self.all_schema_types = set()
@@ -258,11 +257,6 @@ class BaseAlmondTask(BaseTask):
             # We tokenize prediction here by adding whitespace between each CJK character
             prediction = tokenize_cjk_chars(prediction)
             
-        if self._almond_reverse_program:
-            prediction_tokens = prediction.split(' ')
-            prediction_tokens.reverse()
-            prediction = ' '.join(prediction_tokens)
-            
         new_tokens = []
         for token in prediction.split():
             if token.startswith('STRING_'):
@@ -428,12 +422,6 @@ class BaseAlmondTask(BaseTask):
             zip_list.append(tokens_type_probs)
         
         features = [Feature(*tup) for tup in zip(*zip_list)]
-        
-        if field_name == 'answer' and self._almond_reverse_program:
-            features.reverse()
-            new_sentence_tokens = new_sentence.split(' ')
-            new_sentence_tokens.reverse()
-            new_sentence = ' '.join(new_sentence_tokens)
 
         sentence_plus_types = ''
         if self.args.do_ner and self.args.add_types_to_text != 'no' and len(features):

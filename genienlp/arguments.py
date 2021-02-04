@@ -203,7 +203,6 @@ def parse_argv(parser):
     parser.add_argument('--almond_detokenize_sentence', action='store_true',
                         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
     parser.add_argument('--almond_thingtalk_version', type=int, choices=[1, 2], default=2, help='Thingtalk version for almond datasets')
-    parser.add_argument("--almond_reverse_program", action='store_true', help='Generate thingtalk in reverse direction')
 
     parser.add_argument('--preprocess_special_tokens', action='store_true', help='convert special ThingTalk tokens to words')
     

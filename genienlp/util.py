@@ -742,7 +742,7 @@ def load_config_json(args):
         retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
                     'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
                     'override_context', 'override_question',
-                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version', 'almond_reverse_program',
+                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version',
                     'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count',
                     'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
                     'override_question', 'override_context', 'add_types_to_text',
@@ -769,7 +769,7 @@ def load_config_json(args):
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
             elif r in ('do_ner', 'use_encoder_loss',
-                       'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version', 'almond_reverse_program',
+                       'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version',
                        ):
                 setattr(args, r, False)
                 
