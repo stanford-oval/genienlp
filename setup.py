@@ -62,7 +62,7 @@ setuptools.setup(
         'nltk~=3.4',
         'pytrie==0.3.1',
         'elasticsearch==7.9.1',
-        'ujson==1.35',
+        'ujson==4.0.2',
         'marisa_trie==0.7.5',
         'sentence-transformers==0.4.0',
         'loss_dropper @ git+https://github.com/ddkang/loss_dropper#egg=loss_dropper',
