@@ -229,12 +229,13 @@ def evaluate_raw(dev_confidences: Iterable[ConfidenceFeatures], featurizer: Call
     return precision, recall, pass_rate, accuracies, thresholds
 
 def parse_argv(parser):
-    parser.add_argument('--confidence_path', type=str, help='The path to the pickle file where the list of ConfidenceFeatures objects is saved')
+    parser.add_argument('--confidence_path', required=True, type=str, help='The path to the pickle file where the list of ConfidenceFeatures objects is saved')
     parser.add_argument('--eval_metric', type=str, default='aucpr', choices=['aucpr'],
                         help='An xgboost metric. The metric which will be used to select the best model on the validation set.')
     parser.add_argument('--dev_split', type=float, default=0.2, help='The portion of the dataset to use for validation. The rest is used to train.')
     parser.add_argument('--seed', type=int, default=123, help='Random seed to use for reproducibility')
-    parser.add_argument('--save', type=str, help='The directory to save the calibrator model and plots after training')
+    parser.add_argument('--save', required=True, type=str, help='The directory to save the calibrator model and plots after training')
+    parser.add_argument('--name_prefix', required=True, type=str, help='A string to prepend to files associated with the calibrator.')
     parser.add_argument('--plot', action='store_true', help='If True, will plot metrics and save them. Requires Matplotlib installation.')
     parser.add_argument('--testing', action='store_true', help='If True, will change labels so that not all of them are equal. This is only used for testing purposes.')
 
@@ -276,9 +277,7 @@ class ConfidenceEstimator():
 
     @staticmethod
     def is_estimator(path: str):
-        with open(path, 'rb') as f:
-            obj = dill.load(f)
-            return isinstance(obj, ConfidenceEstimator)
+        return path.endswith('.calib')
 
     @staticmethod
     def load(path: str):
@@ -550,7 +549,7 @@ def main(args):
     logger.info('\n'+'\n'.join([f'{e.name}: {e.score:.3f}' for e in all_estimators]))
     best_estimator = all_estimators[np.argmax([e.score for e in all_estimators])]
     logger.info('Best estimator is %s with score = %.3f', best_estimator.name, best_estimator.score)
-    best_estimator.save(os.path.join(args.save, 'calibrator.pkl'))
+    best_estimator.save(os.path.join(args.save, args.name_prefix + '.calib'))
 
     if args.plot:
         pyplot.figure('precision-recall')
@@ -560,14 +559,14 @@ def main(args):
         pyplot.xlim(0, 1)
         pyplot.xlabel('Recall')
         pyplot.ylabel('Precision')
-        pyplot.savefig(os.path.join(args.save, 'precision-recall.svg'))
+        pyplot.savefig(os.path.join(args.save, args.name_prefix + 'precision-recall.svg'))
 
         pyplot.figure('thresholds')
         pyplot.legend(prop={'size': 6})
         pyplot.grid()
         pyplot.xlabel('Index')
         pyplot.ylabel('Confidence Threshold')
-        pyplot.savefig(os.path.join(args.save, 'threshold.svg'))
+        pyplot.savefig(os.path.join(args.save, args.name_prefix + 'threshold.svg'))
 
         pyplot.figure('pass_rate')
         pyplot.legend(prop={'size': 6})
@@ -576,5 +575,5 @@ def main(args):
         pyplot.xlim(0, 1)
         pyplot.xlabel('Pass Rate')
         pyplot.ylabel('Accuracy')
-        pyplot.savefig(os.path.join(args.save, 'pass-accuracy.svg'))
+        pyplot.savefig(os.path.join(args.save, args.name_prefix + 'pass-accuracy.svg'))
     

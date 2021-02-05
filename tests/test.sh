@@ -81,10 +81,10 @@ do
     fi
 
     # calibrate
-    pipenv run python3 -m genienlp calibrate --confidence_path $workdir/model_$i/confidences.pkl --save $workdir/model_$i --testing
+    pipenv run python3 -m genienlp calibrate --confidence_path $workdir/model_$i/confidences.pkl --save $workdir/model_$i --testing --name_prefix test_calibrator
 
     # check if calibrator exists
-    if test ! -f $workdir/model_$i/calibrator.pkl ; then
+    if test ! -f $workdir/model_$i/test_calibrator.calib ; then
         echo "File not found!"
         exit
     fi

@@ -130,7 +130,7 @@ class Server:
                     output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                     output_predictions_only=True,
                                                     confidence_estimators=self.confidence_estimators)
-                    response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=dict(zip(self.estimator_filenames, [float(s) for s in output.confidence_scores]))))
+                    response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=dict(zip(self.estimator_filenames, [float(s[0]) for s in output.confidence_scores]))))
                 else:
                     output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                     output_predictions_only=True)
@@ -228,14 +228,13 @@ def init(args):
     estimator_filenames = []
     if args.calibrator_paths is None:
         for filename in os.listdir(args.path):
-            if filename.endswith('.pkl'):
-                path = os.path.join(args.path, filename)
-                if not ConfidenceEstimator.is_estimator(path):
-                    continue
-                if args.calibrator_paths is None:
-                    args.calibrator_paths = []
-                args.calibrator_paths.append(path)
-                estimator_filenames.append(os.path.splitext(filename)[0])
+            path = os.path.join(args.path, filename)
+            if not ConfidenceEstimator.is_estimator(path):
+                continue
+            if args.calibrator_paths is None:
+                args.calibrator_paths = []
+            args.calibrator_paths.append(path)
+            estimator_filenames.append(os.path.splitext(filename)[0])
 
     confidence_estimators = None
     if args.calibrator_paths is not None:

@@ -95,12 +95,12 @@ Calibrate the confidence scores of a trained model:
 2. Train a boosted tree to map confidence features to a score between 0 and 1:
 
    ```bash
-   genienlp calibrate --confidence_path <confidence_feature_file> --save <calibrator_path>
+   genienlp calibrate --confidence_path <confidence_feature_file> --save <calibrator_directory> --name_prefix <calibrator_name>
    ````
 3. Now if you provide `--calibrator_path` during prediction, it will output confidence scores for each output:
 
    ```bash
-   genienlp predict --tasks almond --data <datadir> --path <modeldir> --calibrator_paths <calibrator_path>
+   genienlp predict --tasks almond --data <datadir> --path <modeldir> --calibrator_paths <calibrator_directory>/<calibrator_name>.calib
    ```
 
 ### Paraphrasing
