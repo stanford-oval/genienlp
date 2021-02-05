@@ -33,7 +33,7 @@ After installation, `genienlp` command becomes available.
 The general form is:
 
 ```bash
-genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <modeldir> <flags>
+genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> <flags>
 ```
 
 The `<datadir>` should contain a single folder called "almond" (the name of the task). That folder should
@@ -42,14 +42,14 @@ contain the files "train.tsv" and "eval.tsv" for train and dev set respectively.
 To train a BERT-LSTM (or other MLM-based model) use:
 
 ```bash
-genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <modeldir> \
+genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
   --model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embedding 50
 ```
 
 To train a BART or other Seq2Seq model, use:
 
 ```bash
-genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <modeldir> \
+genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
   --model TransformerSeq2Seq --pretrained_model facebook/bart-large --gradient_accumulation_steps 20
 ```
 
@@ -65,7 +65,7 @@ wish to compare with published results you should use genienlp <= 0.5.0.
 In batch mode:
 
 ```bash
-genienlp predict --tasks almond --data <datadir> --path <modeldir> --eval_dir <output>
+genienlp predict --tasks almond --data <datadir> --path <model_dir> --eval_dir <output>
 ```
 
 The `<datadir>` should contain a single folder called "almond" (the name of the task). That folder should
@@ -75,7 +75,7 @@ will be saved in `<output>/almond/valid.tsv`, as a TSV file containing ID and pr
 In interactive mode:
 
 ```bash
-genienlp server --path <modeldir>
+genienlp server --path <model_dir>
 ```
 
 Opens a TCP server that listens to requests, formatted as JSON objects containing `id` (the ID of the request),
@@ -90,17 +90,17 @@ Calibrate the confidence scores of a trained model:
 1. Calcualate and save confidence features of the evaluation set in a pickle file:
 
    ```bash
-   genienlp predict --task almond --data <datadir> --path <modeldir> --save_confidence_features --confidence_feature_path <confidence_feature_file>
+   genienlp predict --task almond --data <datadir> --path <model_dir> --save_confidence_features --confidence_feature_path <confidence_feature_file>
    ```
 2. Train a boosted tree to map confidence features to a score between 0 and 1:
 
    ```bash
    genienlp calibrate --confidence_path <confidence_feature_file> --save <calibrator_directory> --name_prefix <calibrator_name>
    ````
-3. Now if you provide `--calibrator_path` during prediction, it will output confidence scores for each output:
+3. Now if you provide `--calibrator_paths` during prediction, it will output confidence scores for each output:
 
    ```bash
-   genienlp predict --tasks almond --data <datadir> --path <modeldir> --calibrator_paths <calibrator_directory>/<calibrator_name>.calib
+   genienlp predict --tasks almond --data <datadir> --path <model_dir> --calibrator_paths <calibrator_directory>/<calibrator_name>.calib
    ```
 
 ### Paraphrasing
@@ -108,16 +108,16 @@ Calibrate the confidence scores of a trained model:
 Train a paraphrasing model:
 
 ```bash
-genienlp train-paraphrase --train_data_file <train_data_file> --eval_data_file <dev_data_file> --output_dir <modeldir> --model_type gpt2 --do_train --do_eval --evaluate_during_training --logging_steps 1000 --save_steps 1000 --max_steps 40000 --save_total_limit 2 --gradient_accumulation_steps 16 --per_gpu_eval_batch_size 4 --per_gpu_train_batch_size 4 --num_train_epochs 1 --model_name_or_path <gpt2/gpt2-medium/gpt2-large/gpt2-xlarge>
+genienlp train-paraphrase --train_data_file <train_data_file> --eval_data_file <dev_data_file> --output_dir <model_dir> --model_type gpt2 --do_train --do_eval --evaluate_during_training --logging_steps 1000 --save_steps 1000 --max_steps 40000 --save_total_limit 2 --gradient_accumulation_steps 16 --per_gpu_eval_batch_size 4 --per_gpu_train_batch_size 4 --num_train_epochs 1 --model_name_or_path <gpt2/gpt2-medium/gpt2-large/gpt2-xlarge>
 ```
 
 Generate paraphrases:
 
 ```bash
-genienlp run-paraphrase --model_type gpt2 --model_name_or_path <modeldir> --temperature 0.3 --repetition_penalty 1.0 --num_samples 4 --length 15 --batch_size 32 --input_file <input tsv file> --input_column 1
+genienlp run-paraphrase --model_name_or_path <model_dir> --temperature 0.3 --repetition_penalty 1.0 --num_samples 4 --batch_size 32 --input_file <input_tsv_file> --input_column 1
 ```
 
-See `genienlp --help` and `genienlp <command> --help` for details about each argument.
+See `genienlp --help` and `genienlp <command> --help` for more details about each argument.
 
 ## Citation
 
