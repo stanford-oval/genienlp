@@ -50,19 +50,25 @@ class Bootleg(object):
         self.ckpt_name = model2checkpoint[self.args.bootleg_model]
         self.model_ckpt_path = os.path.join(self.model_dir, self.ckpt_name + '.pt')
 
+        ngpus_per_node = 0
+        if getattr(self.args, 'devices', None):
+            ngpus_per_node = len(self.args.devices)
+        
         self.fixed_overrides = [
-             "--run_config.timestamp", 'None',
-             "--data_config.entity_dir", self.entity_dir,
-             "--run_config.eval_batch_size", str(self.args.bootleg_batch_size),
-             "--run_config.save_dir", self.args.bootleg_output_dir,
-             "--run_config.init_checkpoint", self.model_ckpt_path,
-             "--run_config.loglevel", 'debug',
-             "--train_config.load_optimizer_from_ckpt", 'False',
-             "--data_config.emb_dir", self.embed_dir,
-             "--data_config.alias_cand_map", 'alias2qids_wiki.json',
-             "--data_config.word_embedding.cache_dir", self.pretrained_bert,
-             "--run_config.dataset_threads", str(self.args.bootleg_dataset_threads),
-             "--run_config.dataloader_threads", str(self.args.bootleg_dataloader_threads)
+            "--run_config.distributed", str(ngpus_per_node > 1),
+            "--run_config.ngpus_per_node", str(ngpus_per_node),
+            "--run_config.timestamp", 'None',
+            "--data_config.entity_dir", self.entity_dir,
+            "--run_config.eval_batch_size", str(self.args.bootleg_batch_size),
+            "--run_config.save_dir", self.args.bootleg_output_dir,
+            "--run_config.init_checkpoint", self.model_ckpt_path,
+            "--run_config.loglevel", 'debug',
+            "--train_config.load_optimizer_from_ckpt", 'False',
+            "--data_config.emb_dir", self.embed_dir,
+            "--data_config.alias_cand_map", 'alias2qids_wiki.json',
+            "--data_config.word_embedding.cache_dir", self.pretrained_bert,
+            "--run_config.dataset_threads", str(self.args.bootleg_dataset_threads),
+            "--run_config.dataloader_threads", str(self.args.bootleg_dataloader_threads)
         ]
         
     
