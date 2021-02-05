@@ -661,7 +661,7 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
                 type = 'Q482994'
             elif 'genre' in title or title in ['country', 'music by country or region', 'music term', 'republic',
                                                'ethnic group', 'music scene', 'popular music', 'rock music',
-                                               'heavy metal', 'music', 'pop music', 'electronic music']:
+                                               'heavy metal', 'music', 'pop music', 'electronic music', 'music style']:
                 type = 'Q188451'
             elif 'person' in title or 'actor' in title or 'musician' in title or \
                     title in ['singer', 'musician', 'songwriter',
@@ -704,7 +704,7 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
             elif 'album' in title or title in []:
                 type = 'Q482994'
             elif 'genre' in title or title in ['country', 'music by country or region', 'music term', 'republic',
-                                               'ethnic group', 'music scene']:
+                                               'ethnic group', 'music scene', 'music style']:
                 type = 'Q188451'
             elif 'person' in title or 'musician' in title or \
                 title in ['singer', 'actor', 'musician', 'songwriter',
