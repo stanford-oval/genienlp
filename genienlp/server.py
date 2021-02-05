@@ -64,13 +64,8 @@ class Server:
         # make a single batch with all examples
         return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
 
-    def handle_request(self, line):
+    def handle_request(self, request):
         with torch.no_grad():
-            if isinstance(line, dict):
-                request = line
-            else:
-                request = json.loads(line)
-
             task_name = request['task'] if 'task' in request else 'generic'
             if task_name in self._cached_tasks:
                 task = self._cached_tasks[task_name]
@@ -98,21 +93,18 @@ class Server:
                     output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                     output_predictions_only=True,
                                                     confidence_estimators=self.confidence_estimators)
-                    output_instances = []
+                    response = []
                     for idx, p in enumerate(output.predictions):
-                        output_instance = {'answer': p[0], 'score': {}}
+                        instance = {'answer': p[0], 'score': {}}
                         for e_idx, estimator_scores in enumerate(output.confidence_scores):
-                            output_instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
-                        output_instances.append(output_instance)
-
-
-                    response = json.dumps({ 'id': request['id'], 'instances': output_instances})
+                            instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
+                        response.append(instance)
                 else:
                     output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                     output_predictions_only=True)
 
-                    response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0]} for p in output.predictions]})
-                return response + '\n'
+                    response = [{ 'answer': p[0]} for p in output.predictions]
+                return response
             else:
                 context = request['context']
                 if not context:
@@ -128,20 +120,30 @@ class Server:
                 batch = self.numericalize_examples([ex])
                 if self.args.calibrator_paths is not None:
                     output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                    output_predictions_only=True,
-                                                    confidence_estimators=self.confidence_estimators)
-                    response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=dict(zip(self.estimator_filenames, [float(s[0]) for s in output.confidence_scores]))))
+                                                 output_predictions_only=True,
+                                                 confidence_estimators=self.confidence_estimators)
+                    response = dict(answer=output.predictions[0][0], score=dict(
+                        zip(self.estimator_filenames, [float(s[0]) for s in output.confidence_scores])))
                 else:
                     output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                     output_predictions_only=True)
-                    response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0]))
-                return response + '\n'
+                    response = dict(answer=output.predictions[0][0])
+                return response
+
+    def handle_json_request(self, line : str) -> str:
+        request = json.loads(line)
+        if 'instances' in request:
+            return json.dumps({ 'id': request['id'], 'instances': self.handle_request(request) }) + '\n'
+        else:
+            response = self.handle_request(request)
+            response['id'] = request['id']
+            return json.dumps(response) + '\n'
 
     async def handle_client(self, client_reader, client_writer):
         try:
             line = await client_reader.readline()
             while line:
-                client_writer.write(self.handle_request(line).encode('utf-8'))
+                client_writer.write(self.handle_json_request(line).encode('utf-8'))
                 line = await client_reader.readline()
 
         except IOError:
@@ -168,7 +170,7 @@ class Server:
                 line = sys.stdin.readline()
                 if not line:
                     break
-                sys.stdout.write(self.handle_request(line))
+                sys.stdout.write(self.handle_json_request(line))
                 sys.stdout.flush()
         except KeyboardInterrupt:
             pass
