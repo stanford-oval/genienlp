@@ -49,12 +49,13 @@ logger = logging.getLogger(__name__)
 
 
 class Server:
-    def __init__(self, args, numericalizer, model, device, confidence_estimator):
+    def __init__(self, args, numericalizer, model, device, confidence_estimators, estimator_filenames):
         self.args = args
         self.device = device
         self.numericalizer = numericalizer
         self.model = model
-        self.confidence_estimator = confidence_estimator
+        self.confidence_estimators = confidence_estimators
+        self.estimator_filenames = estimator_filenames
 
         self._cached_tasks = dict()
 
@@ -89,12 +90,19 @@ class Server:
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples(examples)
             # it is a single batch, so wrap it in []
-            if self.args.calibrator_path is not None:
+            if self.args.calibrator_paths is not None:
                 output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                   output_predictions_only=True,
-                                                  confidence_estimator=self.confidence_estimator)
+                                                  confidence_estimators=self.confidence_estimators)
+                output_instances = []
+                for idx, p in enumerate(output.predictions):
+                    output_instance = {'answer': p[0], 'score': {}}
+                    for e_idx, estimator_scores in enumerate(output.confidence_scores):
+                        output_instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
+                    output_instances.append(output_instance)
 
-                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0], 'score': float(s)} for (p, s) in zip(output.predictions, output.confidence_scores)]})
+
+                response = json.dumps({ 'id': request['id'], 'instances': output_instances})
             else:
                 output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                   output_predictions_only=True)
@@ -114,11 +122,11 @@ class Server:
 
             self.model.add_new_vocab_from_data([task])
             batch = self.numericalize_examples([ex])
-            if self.args.calibrator_path is not None:
+            if self.args.calibrator_paths is not None:
                 output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                   output_predictions_only=True,
-                                                  confidence_estimator=self.confidence_estimator)
-                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=float(output.confidence_scores[0])))
+                                                  confidence_estimators=self.confidence_estimators)
+                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=dict(zip(self.estimator_filenames, [float(s) for s in output.confidence_scores]))))
             else:
                 output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
                                                   output_predictions_only=True)
@@ -186,7 +194,7 @@ def parse_argv(parser):
     parser.add_argument('--locale', default='en', help='locale tag of the language to parse')
 
     # for confidence estimation:
-    parser.add_argument('--calibrator_path', type=str, default=None,
+    parser.add_argument('--calibrator_paths', type=str, nargs='+', default=None,
                         help='If provided, will be used to output confidence scores for each prediction. Defaults to `--path`/calibrator.pkl')
 
 def main(args):
@@ -213,17 +221,27 @@ def main(args):
     model.eval()
 
     # set the default path for calibrator if it exists
-    if args.calibrator_path is None:
-        default_path = os.path.join(args.path, 'calibrator.pkl')
-        if os.path.isfile(default_path):
-            args.calibrator_path = default_path
+    estimator_filenames = []
+    if args.calibrator_paths is None:
+        for filename in os.listdir(args.path):
+            if filename.endswith('.pkl'):
+                path = os.path.join(args.path, filename)
+                if not ConfidenceEstimator.is_estimator(path):
+                    continue
+                if args.calibrator_paths is None:
+                    args.calibrator_paths = []
+                args.calibrator_paths.append(path)
+                estimator_filenames.append(os.path.splitext(filename)[0])
 
-    confidence_estimator = None
-    if args.calibrator_path is not None:
-        confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
-        logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
-        args.mc_dropout_num = confidence_estimator.mc_dropout_num
+    confidence_estimators = None
+    if args.calibrator_paths is not None:
+        confidence_estimators = []
+        for path in args.calibrator_paths:
+            estimator = ConfidenceEstimator.load(path)
+            confidence_estimators.append(estimator)
+            logger.info('Loading confidence estimator "%s" from %s', estimator.name, path)
+        args.mc_dropout_num = confidence_estimators[0].mc_dropout_num # we assume all estimators have the same mc_dropout_num
 
-    server = Server(args, model.numericalizer, model, device, confidence_estimator)
+    server = Server(args, model.numericalizer, model, device, confidence_estimators, estimator_filenames)
 
     server.run()

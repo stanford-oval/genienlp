@@ -275,6 +275,12 @@ class ConfidenceEstimator():
             dill.dump(self, f, protocol=4)
 
     @staticmethod
+    def is_estimator(path: str):
+        with open(path, 'rb') as f:
+            obj = dill.load(f)
+            return isinstance(obj, ConfidenceEstimator)
+
+    @staticmethod
     def load(path: str):
         with open(path, 'rb') as f:
             obj = dill.load(f)

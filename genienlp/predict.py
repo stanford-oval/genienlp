@@ -170,15 +170,18 @@ def run(args, device):
                 else:
                     raise OSError(f'{results_file_name} already exists')
 
-            if args.calibrator_path is not None:
-                confidence_estimator = ConfidenceEstimator.load(args.calibrator_path)
-                logger.info('Loading confidence estimator "%s" from %s', confidence_estimator.name, args.calibrator_path)
+            if args.calibrator_paths is not None:
+                confidence_estimators = []
+                for path in args.calibrator_paths:
+                    estimator = ConfidenceEstimator.load(path)
+                    confidence_estimators.append(estimator)
+                    logger.info('Loading confidence estimator "%s" from %s', estimator.name, path)
             else:
-                confidence_estimator = None
+                confidence_estimators = None
             generation_output = generate_with_model(model, it, model.numericalizer, task, args,
                                                      original_order=original_order,
                                                      output_confidence_features=args.save_confidence_features,
-                                                     confidence_estimator=confidence_estimator)
+                                                     confidence_estimators=confidence_estimators)
             
             if args.save_confidence_features:
                 with open(args.confidence_feature_path, 'wb') as f:
@@ -189,8 +192,9 @@ def run(args, device):
             with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
                 for i in range(len(generation_output.example_ids)):
                     line = generation_output.example_ids[i] + '\t' + '\t'.join(generation_output.predictions[i]) # all outputs separated by '\t'
-                    if args.calibrator_path is not None:
-                        line += '\t' + str(generation_output.confidence_scores[i])
+                    if args.calibrator_paths is not None:
+                        for score in generation_output.confidence_scores:
+                            line += '\t' + str(score[i])
                     prediction_file.write(line + '\n')
 
             if len(generation_output.answers) > 0:
@@ -205,8 +209,11 @@ def run(args, device):
                 if not args.silent:
                     for i, (c, p, a) in enumerate(zip(generation_output.contexts, generation_output.predictions, generation_output.answers)):
                         log_string = f'\nContext {i+1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
-                        if args.calibrator_path is not None:
-                            log_string += f'Confidence {i+1} : {generation_output.confidence_scores[i]:.3f}\n'
+                        if args.calibrator_paths is not None:
+                            log_string += f'Confidence {i+1} : '
+                            for score in generation_output.confidence_scores:
+                                log_string += f'{score[i]:.3f}, '
+                            log_string += '\n'
                         logger.info(log_string)
                     logger.info(metrics)
                     
@@ -273,7 +280,8 @@ def parse_argv(parser):
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
     # These are used for confidence calibration
-    parser.add_argument('--calibrator_path', type=str, default=None, help='If provided, will be used to output confidence scores for each prediction.')
+    parser.add_argument('--calibrator_paths', type=str, nargs='+', default=None,
+                        help='Can be a list. If provided, each calibrator will be used to output confidence scores for each prediction.')
     parser.add_argument('--save_confidence_features', action='store_true', help='If provided, will be used to output confidence scores for each prediction.')
     parser.add_argument("--confidence_feature_path", type=str, default=None, help='A .pkl file to save confidence features in.')
     parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo (MC) dropout. 0 disables MC dropout.')

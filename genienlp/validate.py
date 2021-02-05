@@ -40,7 +40,7 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
                         output_predictions_only=False,
                         output_confidence_features=False,
                         original_order=None,
-                        confidence_estimator=None) -> GenerationOutput:
+                        confidence_estimators=None) -> GenerationOutput:
     """
     Inputs:
         original_order: List of indices. If provided, we will sort the results according to this order
@@ -51,7 +51,7 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
         answers
         contexts
     """
-    output_confidence_scores = confidence_estimator is not None
+    output_confidence_scores = confidence_estimators is not None
     if isinstance(model, torch.nn.DataParallel):
         # get rid of the DataParallel wrapper
         model = model.module
@@ -123,8 +123,10 @@ def generate_with_model(model, data_iterator, numericalizer, task,args,
                     if answers[i] == args.override_confidence_labels:
                         confidence.label = (answers[i] != args.override_confidence_labels)
     if output_confidence_scores:
-        confidence_scores = confidence_estimator.estimate(confidence_features)
-        output.confidence_scores = confidence_scores
+        output.confidence_scores = []
+        for estimator in confidence_estimators:
+            confidence_scores = estimator.estimate(confidence_features)
+            output.confidence_scores.append(confidence_scores)
 
     return output
 

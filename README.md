@@ -31,6 +31,7 @@ After installation, `genienlp` command becomes available.
 ### Training a semantic parser
 
 The general form is:
+
 ```bash
 genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <modeldir> <flags>
 ```
@@ -39,12 +40,14 @@ The `<datadir>` should contain a single folder called "almond" (the name of the 
 contain the files "train.tsv" and "eval.tsv" for train and dev set respectively.
 
 To train a BERT-LSTM (or other MLM-based model) use:
+
 ```bash
 genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <modeldir> \
   --model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embedding 50
 ```
 
 To train a BART or other Seq2Seq model, use:
+
 ```bash
 genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <modeldir> \
   --model TransformerSeq2Seq --pretrained_model facebook/bart-large --gradient_accumulation_steps 20
@@ -60,6 +63,7 @@ wish to compare with published results you should use genienlp <= 0.5.0.
 ### Inference on a semantic parser
 
 In batch mode:
+
 ```bash
 genienlp predict --tasks almond --data <datadir> --path <modeldir> --eval_dir <output>
 ```
@@ -69,6 +73,7 @@ contain the files "train.tsv" and "eval.tsv" for train and dev set respectively.
 will be saved in `<output>/almond/valid.tsv`, as a TSV file containing ID and prediction.
 
 In interactive mode:
+
 ```bash
 genienlp server --path <modeldir>
 ```
@@ -79,24 +84,27 @@ Opens a TCP server that listens to requests, formatted as JSON objects containin
 use standard input/output instead of TCP.
 
 ### Calibrating a trained model
+
 Calibrate the confidence scores of a trained model:
 
 1. Calcualate and save confidence features of the evaluation set in a pickle file:
-    ```bash
-    genienlp predict --task almond --data <datadir> --path <modeldir> --save_confidence_features --confidence_feature_path <confidence_feature_file>
-    ```
 
-1. Train a boosted tree to map confidence features to a score between 0 and 1:
-    ```bash
-    genienlp calibrate --confidence_path <confidence_feature_file> --save <calibrator_path>
-    ````
+   ```bash
+   genienlp predict --task almond --data <datadir> --path <modeldir> --save_confidence_features --confidence_feature_path <confidence_feature_file>
+   ```
+2. Train a boosted tree to map confidence features to a score between 0 and 1:
 
-1. Now if you provide `--calibrator_path` during prediction, it will output confidence scores for each output:
-    ```bash
-    genienlp predict --tasks almond --data <datadir> --path <modeldir> --calibrator_path <calibrator_path>
-    ```
+   ```bash
+   genienlp calibrate --confidence_path <confidence_feature_file> --save <calibrator_path>
+   ````
+3. Now if you provide `--calibrator_path` during prediction, it will output confidence scores for each output:
+
+   ```bash
+   genienlp predict --tasks almond --data <datadir> --path <modeldir> --calibrator_paths <calibrator_path>
+   ```
 
 ### Paraphrasing
+
 Train a paraphrasing model:
 
 ```bash
