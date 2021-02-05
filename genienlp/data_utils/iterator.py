@@ -35,6 +35,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_warned_for_batch_size = False
+
 class LengthSortedIterator(torch.utils.data.Sampler):
     """
     """
@@ -105,7 +107,10 @@ class LengthSortedIterator(torch.utils.data.Sampler):
                 longest_example = new_example # this is the first element in batch, and therefore the longest
             examples_size = self.batch_size_fn(longest_example)
             if examples_size > self.batch_size:
-                logger.warning('Skipping an example larger than batch size. Consider increasing the batch size to avoid this warning')
+                global _warned_for_batch_size
+                if not _warned_for_batch_size:
+                    logger.warning('Skipping an example larger than batch size. Consider increasing the batch size to avoid this warning')
+                    _warned_for_batch_size = True
                 self.last_batch_start_index += 1
                 i += 1
                 continue

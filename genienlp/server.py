@@ -65,73 +65,77 @@ class Server:
         return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
 
     def handle_request(self, line):
-        request = json.loads(line)
+        with torch.no_grad():
+            if isinstance(line, dict):
+                request = line
+            else:
+                request = json.loads(line)
 
-        task_name = request['task'] if 'task' in request else 'generic'
-        if task_name in self._cached_tasks:
-            task = self._cached_tasks[task_name]
-        else:
-            task = list(get_tasks([task_name], self.args).values())[0]
-            self._cached_tasks[task_name] = task
+            task_name = request['task'] if 'task' in request else 'generic'
+            if task_name in self._cached_tasks:
+                task = self._cached_tasks[task_name]
+            else:
+                task = list(get_tasks([task_name], self.args).values())[0]
+                self._cached_tasks[task_name] = task
 
-        if 'instances' in request:
-            examples = []
-            # request['instances'] is an array of {context, question, answer, example_id}
-            for instance in request['instances']:
-                example_id, context, question, answer = instance.get('example_id', ''), instance['context'], instance['question'], instance.get('answer', '')
+            if 'instances' in request:
+                examples = []
+                # request['instances'] is an array of {context, question, answer, example_id}
+                for instance in request['instances']:
+                    example_id, context, question, answer = instance.get('example_id', ''), instance['context'], instance['question'], instance.get('answer', '')
+                    if not context:
+                        context = task.default_context
+                    if not question:
+                        question = task.default_question
+
+                    ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
+                    examples.append(ex)
+
+                self.model.add_new_vocab_from_data([task])
+                batch = self.numericalize_examples(examples)
+                # it is a single batch, so wrap it in []
+                if self.args.calibrator_paths is not None:
+                    output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                    output_predictions_only=True,
+                                                    confidence_estimators=self.confidence_estimators)
+                    output_instances = []
+                    for idx, p in enumerate(output.predictions):
+                        output_instance = {'answer': p[0], 'score': {}}
+                        for e_idx, estimator_scores in enumerate(output.confidence_scores):
+                            output_instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
+                        output_instances.append(output_instance)
+
+
+                    response = json.dumps({ 'id': request['id'], 'instances': output_instances})
+                else:
+                    output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                    output_predictions_only=True)
+
+                    response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0]} for p in output.predictions]})
+                return response + '\n'
+            else:
+                context = request['context']
                 if not context:
                     context = task.default_context
+                question = request['question']
                 if not question:
                     question = task.default_question
+                answer = ''
 
-                ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
-                examples.append(ex)
+                ex = Example.from_raw(str(request['id']), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
 
-            self.model.add_new_vocab_from_data([task])
-            batch = self.numericalize_examples(examples)
-            # it is a single batch, so wrap it in []
-            if self.args.calibrator_paths is not None:
-                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                  output_predictions_only=True,
-                                                  confidence_estimators=self.confidence_estimators)
-                output_instances = []
-                for idx, p in enumerate(output.predictions):
-                    output_instance = {'answer': p[0], 'score': {}}
-                    for e_idx, estimator_scores in enumerate(output.confidence_scores):
-                        output_instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
-                    output_instances.append(output_instance)
-
-
-                response = json.dumps({ 'id': request['id'], 'instances': output_instances})
-            else:
-                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                  output_predictions_only=True)
-
-                response = json.dumps({ 'id': request['id'], 'instances': [{ 'answer': p[0]} for p in output.predictions]})
-            return response + '\n'
-        else:
-            context = request['context']
-            if not context:
-                context = task.default_context
-            question = request['question']
-            if not question:
-                question = task.default_question
-            answer = ''
-
-            ex = Example.from_raw(str(request['id']), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
-
-            self.model.add_new_vocab_from_data([task])
-            batch = self.numericalize_examples([ex])
-            if self.args.calibrator_paths is not None:
-                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                  output_predictions_only=True,
-                                                  confidence_estimators=self.confidence_estimators)
-                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=dict(zip(self.estimator_filenames, [float(s) for s in output.confidence_scores]))))
-            else:
-                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                  output_predictions_only=True)
-                response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0]))
-            return response + '\n'
+                self.model.add_new_vocab_from_data([task])
+                batch = self.numericalize_examples([ex])
+                if self.args.calibrator_paths is not None:
+                    output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                    output_predictions_only=True,
+                                                    confidence_estimators=self.confidence_estimators)
+                    response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0], score=dict(zip(self.estimator_filenames, [float(s) for s in output.confidence_scores]))))
+                else:
+                    output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                    output_predictions_only=True)
+                    response = json.dumps(dict(id=request['id'], answer=output.predictions[0][0]))
+                return response + '\n'
 
     async def handle_client(self, client_reader, client_writer):
         try:
@@ -174,11 +178,10 @@ class Server:
         self.model.to(self.device)
 
         self.model.eval()
-        with torch.no_grad():
-            if self.args.stdin:
-                self._run_stdin()
-            else:
-                self._run_tcp()
+        if self.args.stdin:
+            self._run_stdin()
+        else:
+            self._run_tcp()
 
 
 def parse_argv(parser):
@@ -192,12 +195,13 @@ def parse_argv(parser):
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
     parser.add_argument('--locale', default='en', help='locale tag of the language to parse')
+    parser.add_argument('--inference_name', default='nlp', help='name used by kfserving inference service, alphanumeric only')
 
     # for confidence estimation:
     parser.add_argument('--calibrator_paths', type=str, nargs='+', default=None,
                         help='If provided, will be used to output confidence scores for each prediction. Defaults to `--path`/calibrator.pkl')
 
-def main(args):
+def init(args):
     load_config_json(args)
     set_seed(args)
 
@@ -242,6 +246,9 @@ def main(args):
             logger.info('Loading confidence estimator "%s" from %s', estimator.name, path)
         args.mc_dropout_num = confidence_estimators[0].mc_dropout_num # we assume all estimators have the same mc_dropout_num
 
-    server = Server(args, model.numericalizer, model, device, confidence_estimators, estimator_filenames)
+    return model, device, confidence_estimators, estimator_filenames
 
+def main(args):
+    model, device, confidence_estimators, estimator_filenames = init(args)
+    server = Server(args, model.numericalizer, model, device, confidence_estimators, estimator_filenames)
     server.run()
