@@ -310,8 +310,7 @@ def parse_argv(parser):
     parser.add_argument("--mc_dropout", action='store_true', help='Monte Carlo dropout')
     parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo dropout')
 
-    parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
-    parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
+    parser.add_argument('--database_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models for bootleg)')
 
     parser.add_argument("--mixed_precision", action='store_true', help='If True, will use mixed precision for prediction.'
                         'This reduces memory consumption and is especially faster on GPUs like NVIDIA V100 and T4. May slightly change the generated output.')

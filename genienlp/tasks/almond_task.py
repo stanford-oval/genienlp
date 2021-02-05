@@ -82,7 +82,7 @@ class BaseAlmondTask(BaseTask):
                                self.args.features_default_val, self.args.features_size)
         
         elif self.args.database_type == 'remote-elastic':
-            with open(self.args.elastic_config, 'r') as fin:
+            with open(os.path.join(self.args.database_dir, 'es_material/elastic_config.json'), 'r') as fin:
                 es_config = ujson.load(fin)
             with open(os.path.join(self.args.database_dir, 'es_material/type2id.json'), 'r') as fin:
                 type2id = ujson.load(fin)

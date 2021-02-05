@@ -47,21 +47,16 @@ def parse_argv(parser):
 
     parser.add_argument("--almond_has_single_program", action='store_false', dest='almond_has_multiple_programs', help='Indicate if almond dataset has multiple programs for each sentence')
 
-    parser.add_argument('--num_workers', type=int, default=0,
-                        help='Number of processes to use for data loading (0 means no multiprocessing)')
+    parser.add_argument('--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)')
     
-    parser.add_argument('--database_type', default='json', choices=['json', 'local-elastic', 'remote-elastic'],
-                        help='database to interact with for NER')
-    parser.add_argument('--elastic_config', type=str,
-                        help='Path to json file containing ES configs (used for remote-elastic only)')
-
+    parser.add_argument('--database_type', default='json', choices=['json', 'local-elastic', 'remote-elastic'], help='database to interact with for NER')
+    
     parser.add_argument('--min_entity_len', type=int, default=2,
                         help='Minimum length for entities when ngrams lookup_method is used ')
     parser.add_argument('--max_entity_len', type=int, default=4,
                         help='Maximum length for entities when ngrams lookup_method is used ')
-    parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
+    parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
     
-    parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
     parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4, help='Number of kg encoder layers for BootlegBertEncoder model')

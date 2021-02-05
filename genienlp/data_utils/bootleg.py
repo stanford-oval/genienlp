@@ -18,26 +18,26 @@ class Bootleg(object):
     def __init__(self, args):
         self.args = args
         
-        self.model_dir = f'{self.args.bootleg_input_dir}/{self.args.bootleg_model}'
+        self.model_dir = f'{self.args.database_dir}/{self.args.bootleg_model}'
         self.config_path = f'{self.model_dir}/bootleg_config.json'
-        self.cand_map = f'{self.args.bootleg_input_dir}/wiki_entity_data/entity_mappings/alias2qids_wiki.json'
+        self.cand_map = f'{self.args.database_dir}/wiki_entity_data/entity_mappings/alias2qids_wiki.json'
 
-        self.entity_dir = f'{self.args.bootleg_input_dir}/wiki_entity_data'
-        self.embed_dir = f'{self.args.bootleg_input_dir}/emb_data/'
+        self.entity_dir = f'{self.args.database_dir}/wiki_entity_data'
+        self.embed_dir = f'{self.args.database_dir}/emb_data/'
         
         self.almond_domains = args.almond_domains
         self.bootleg_post_process_types = args.bootleg_post_process_types
         
-        with open(f'{self.args.bootleg_input_dir}/emb_data/entityQID_to_wikidataTypeQID.json', 'r') as fin:
+        with open(f'{self.args.database_dir}/emb_data/entityQID_to_wikidataTypeQID.json', 'r') as fin:
             self.qid2type = ujson.load(fin)
-        with open(f'{self.args.bootleg_input_dir}/es_material/type2id.json', 'r') as fin:
+        with open(f'{self.args.database_dir}/es_material/type2id.json', 'r') as fin:
             self.type2id = ujson.load(fin)
 
-        with open(f'{self.args.bootleg_input_dir}/emb_data/wikidatatitle_to_typeid_0905.json', 'r') as fin:
+        with open(f'{self.args.database_dir}/emb_data/wikidatatitle_to_typeid_0905.json', 'r') as fin:
             title2typeid = ujson.load(fin)
             self.typeid2title = {v: k for k, v in title2typeid.items()}
         
-        self.pretrained_bert = f'{self.args.bootleg_input_dir}/emb_data/pretrained_bert_models'
+        self.pretrained_bert = f'{self.args.database_dir}/emb_data/pretrained_bert_models'
         
         self.cur_entity_embed_size = 0
         

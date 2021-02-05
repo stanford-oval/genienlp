@@ -145,17 +145,14 @@ def parse_argv(parser):
     parser.add_argument('--do_ner', action='store_true', help='Collect and use entity features during training')
     parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'],
                         help='database to interact with for NER')
-    parser.add_argument('--elastic_config', type=str, help='Path to json file containing ES configs (used for remote-elastic only)')
     parser.add_argument('--dump_type2id', action='store_true', help='This will create the "type to id" mapping for all entities available in ES database')
     parser.add_argument('--dump_canonical2type', action='store_true', help='This will create the "canonical to type" mapping for all entities available in ES database')
 
     parser.add_argument('--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams lookup_method is used ')
     parser.add_argument('--max_entity_len', type=int, default=6, help='Maximum length for entities when ngrams lookup_method is used ')
-    parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
+    parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
     
-    parser.add_argument('--bootleg_input_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models) for bootleg')
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
-
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
     parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4, help='Number of kg encoder layers for BootlegBertEncoder model')
     parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_embs', help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
@@ -276,12 +273,6 @@ def check_and_update_generation_args(args):
 
 
 def post_parse_general(args):
-    
-    if args.database_dir is not None:
-        if args.bootleg_input_dir is None:
-            args.bootleg_input_dir = args.database_dir
-        if args.elastic_config is None:
-            args.elastic_config = os.path.join(args.database_dir, 'es_material/elastic_config.json')
     
     for feat in args.features:
         if feat not in VALID_FEATURE_FIELDS:

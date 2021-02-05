@@ -746,7 +746,7 @@ def load_config_json(args):
                     'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count',
                     'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
                     'override_question', 'override_context', 'add_types_to_text',
-                    'do_ner', 'database_type', 'elastic_config', 'min_entity_len', 'max_entity_len',
+                    'do_ner', 'database_type', 'min_entity_len', 'max_entity_len',
                     'entity_type_agg_method', 'entity_word_embeds_dropout',
                     'num_db_types', 'db_unk_id', 'retrieve_method', 'lookup_method', 'almond_domains',
                     'features', 'features_size', 'features_default_val',
@@ -759,7 +759,7 @@ def load_config_json(args):
         overwrite = ['val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty',
                      'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty',
                      'temperature', 'max_output_length', 'reduce_metrics',
-                     'bootleg_input_dir', 'database_dir']
+                     'database_dir']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -792,8 +792,6 @@ def load_config_json(args):
                 setattr(args, r, 'no')
             elif r == 'database_type':
                 setattr(args, r, 'json')
-            elif r == 'elastic_config':
-                setattr(args, r, None)
             elif r == 'min_entity_len':
                 setattr(args, r, 2)
             elif r == 'max_entity_len':
