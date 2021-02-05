@@ -1,4 +1,6 @@
-FROM stanfordoval/genienlp
+# FROM 
+ARG BASE_IMAGE=stanfordoval/genienlp
+FROM ${BASE_IMAGE}
 
 MAINTAINER Thingpedia Admins <thingpedia-admins@lists.stanford.edu>
 
