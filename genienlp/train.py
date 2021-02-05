@@ -48,8 +48,8 @@ from . import arguments
 from . import models
 from .data_utils.bootleg import Bootleg
 from .run_bootleg import bootleg_process_splits
-from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader,\
-    log_model_size, init_devices
+from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader, \
+    log_model_size, init_devices, dump_entity_type_pairs
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
 from .validate import validate, print_results
@@ -119,6 +119,9 @@ def prepare_data(args, logger):
         if bootleg:
             bootleg_process_splits(args, splits.train, paths.train, task, bootleg)
 
+        if args.dump_entity_type_pairs and args.add_types_to_text == 'append':
+            dump_entity_type_pairs(splits.train, paths.train, 'train', task.is_contextual())
+
         train_sets.append(splits.train)
         logger.info(f'{task.name} has {len(splits.train)} training examples')
         
@@ -157,6 +160,9 @@ def prepare_data(args, logger):
 
         if bootleg:
             bootleg_process_splits(args, splits.eval, paths.eval, task, bootleg)
+
+        if args.dump_entity_type_pairs and args.add_types_to_text == 'append':
+            dump_entity_type_pairs(splits.eval, paths.eval, 'eval', task.is_contextual())
 
         val_sets.append(splits.eval)
 

@@ -167,7 +167,8 @@ def parse_argv(parser):
     parser.add_argument("--entity_word_embeds_dropout", default=0.0, type=float, help='Dropout entity word embeddings with this probability when encoding inputs')
 
     parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'], help='Method for adding types to input text in text-based NER approach')
-
+    parser.add_argument("--dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
+    
     parser.add_argument('--retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
                         help='how to retrieve types for entities')
     

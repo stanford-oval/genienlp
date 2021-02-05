@@ -97,7 +97,7 @@ class AlmondDataset(CQA):
                                 'example_batch_size': 1, 'make_process_example': make_example,
                                 'kwargs': kwargs}
                 examples = process(process_args)
-                
+            
             if cache_input_data:
                 os.makedirs(os.path.dirname(cache_name), exist_ok=True)
                 logger.info(f'Caching data to {cache_name}')

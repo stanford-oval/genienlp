@@ -4,6 +4,8 @@ from ..data_utils.progbar import progress_bar
 quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
 quoted_pattern_with_space = re.compile(r'\"\s([^"]*?)\s\"')
 device_pattern = re.compile(r'\s@([\w\.]+)\s')
+entity_regex = re.compile('<e>.*?</e>')
+token_type_regex = re.compile('(.*?) \( (.*?) \)')
 
 ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Italian', 'zh': 'Chinese',
                'hr': 'Croatian', 'ja': 'Japanese', 'ko': 'Korean', 'ru': 'Russian', 'es': 'Spanish',

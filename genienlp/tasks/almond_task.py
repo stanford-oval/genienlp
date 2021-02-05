@@ -64,7 +64,6 @@ class BaseAlmondTask(BaseTask):
         if args.do_ner:
             self.unk_id = args.features_default_val[0]
             self.TTtype2DBtype = dict()
-    
             for domain in self.almond_domains:
                 self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
             self.DBtype2TTtype = {v: k for k, v in self.TTtype2DBtype.items()}
@@ -164,8 +163,6 @@ class BaseAlmondTask(BaseTask):
                 idx = answer.index('" ' + ent + ' "')
                 
                 schema_entity_type = None
-                
-                tokens_after_entity = answer[idx + len('" ' + ent + ' "'):].split()
                 tokens_before_entity = answer[:idx].split()
                 
                 if tokens_before_entity[-2] == 'Location':
@@ -594,6 +591,7 @@ class BaseAlmondDialogueNLUTask(BaseAlmondTask):
         return super().preprocess_field(sentence, field_name, answer)
     
     def postprocess_prediction(self, example_id, prediction):
+        prediction = super().postprocess_prediction(example_id, prediction)
         if not prediction.startswith('$'):
             return '$dialogue ' + prediction
         return prediction

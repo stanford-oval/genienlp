@@ -29,6 +29,8 @@
 
 import logging
 import nltk
+
+
 nltk.download('averaged_perceptron_tagger', quiet=True)
 
 from .database_utils import is_banned, normalize_text, has_overlap
