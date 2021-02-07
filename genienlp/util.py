@@ -29,7 +29,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import json
-from collections import defaultdict
 from json.decoder import JSONDecodeError
 import logging
 import os

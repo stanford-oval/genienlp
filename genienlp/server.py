@@ -163,7 +163,7 @@ class Server:
                 response = json.dumps({'id': request['id'], 'instances': [{'answer': p[0]} for p in output.predictions]})
         
         return response + '\n'
-        
+
 
     async def handle_client(self, client_reader, client_writer):
         try:
