@@ -54,12 +54,11 @@ class BaseAlmondTask(BaseTask):
     def __init__(self, name, args):
         super().__init__(name, args)
         self.args = args
-        no_feature_fields = ['answer']
-        if self.is_contextual():
-            no_feature_fields.append('context')
+        self.no_feature_fields = ['answer']
+        if self.utterance_field() == 'question':
+            self.no_feature_fields.append('context')
         else:
-            no_feature_fields.append('question')
-        self.no_feature_fields = no_feature_fields
+            self.no_feature_fields.append('question')
         
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
@@ -95,7 +94,7 @@ class BaseAlmondTask(BaseTask):
             self.db = RemoteElasticDatabase(es_config, type2id, self.args.ned_features_default_val, self.args.ned_features_size)
 
     @property
-    def is_contextual(self):
+    def utterance_field(self):
         return NotImplementedError
     
     @property
@@ -442,8 +441,8 @@ class Almond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name == 'answer'
     
-    def is_contextual(self):
-        return False
+    def utterance_field(self):
+        return 'context'
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant, so the question says English and ThingTalk even if we're doing
@@ -543,8 +542,8 @@ class ContextualAlmond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
     
-    def is_contextual(self):
-        return True
+    def utterance_field(self):
+        return 'question'
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
@@ -566,8 +565,8 @@ class ReverseAlmond(BaseAlmondTask):
     def metrics(self):
         return ['bleu', 'em']
     
-    def is_contextual(self):
-        return False
+    def utterance_field(self):
+        return 'context'
     
     def _is_program_field(self, field_name):
         return field_name == 'context'
@@ -613,8 +612,8 @@ class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
     
-    def is_contextual(self):
-        return True
+    def utterance_field(self):
+        return 'question'
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
@@ -643,8 +642,8 @@ class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
     
-    def is_contextual(self):
-        return True
+    def utterance_field(self):
+        return 'question'
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
@@ -671,8 +670,8 @@ class AlmondDialogueNLG(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name == 'context'
     
-    def is_contextual(self):
-        return True
+    def utterance_field(self):
+        return 'question'
     
     @property
     def metrics(self):
@@ -701,8 +700,8 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
     
-    def is_contextual(self):
-        return True
+    def utterance_field(self):
+        return 'question'
     
     @property
     def metrics(self):
@@ -802,8 +801,8 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     def _is_program_field(self, field_name):
         return field_name == 'answer'
     
-    def is_contextual(self):
-        return False
+    def utterance_field(self):
+        return 'context'
     
     @property
     def metrics(self):
@@ -833,8 +832,8 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
     
-    def is_contextual(self):
-        return True
+    def utterance_field(self):
+        return 'question'
     
     @property
     def metrics(self):
@@ -859,8 +858,8 @@ class AlmondDialogMultiLingualNLG(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name == 'context'
     
-    def is_contextual(self):
-        return True
+    def utterance_field(self):
+        return 'question'
     
     @property
     def metrics(self):

@@ -70,10 +70,7 @@ class Server:
     
     def bootleg_process_examples(self, ex, label, task):
         line = {}
-        if task.is_contextual():
-            line['sentence'] = ex.question
-        else:
-            line['sentence'] = ex.context
+        line['sentence'] = getattr(ex, task.utterance_field())
     
         assert len(label) == 7
         line['cands'] = label[3]
@@ -82,7 +79,7 @@ class Server:
         line['aliases'] = label[6]
         tokens_type_ids, tokens_type_probs = self.bootleg_annotator.bootleg.collect_features_per_line(line, self.args.bootleg_prob_threshold)
     
-        if task.is_contextual():
+        if task.utterance_field() == 'question':
             for i in range(len(tokens_type_ids)):
                 ex.question_feature[i].type_id = tokens_type_ids[i]
                 ex.question_feature[i].type_prob = tokens_type_probs[i]
@@ -134,10 +131,7 @@ class Server:
             bootleg_inputs = []
             if self.bootleg_annotator:
                 for ex in examples:
-                    if task.is_contextual():
-                        bootleg_inputs.append(ex.question)
-                    else:
-                        bootleg_inputs.append(ex.context)
+                    bootleg_inputs.append(getattr(ex, task.utterance_field()))
     
                 bootleg_labels = self.bootleg_annotator.label_mentions(bootleg_inputs)
                 bootleg_labels_unpacked = list(zip(*bootleg_labels))

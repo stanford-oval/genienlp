@@ -296,15 +296,12 @@ class Bootleg(object):
         config_args = get_full_config(self.config_path, overrides)
         return config_args
 
-    def create_jsonl(self, input_path, examples, is_contextual):
+    def create_jsonl(self, input_path, examples, utterance_field):
         # create jsonl file for examples
         jsonl_input_path = input_path.rsplit('.', 1)[0] + '.jsonl'
         with open(jsonl_input_path, 'w') as fout:
             for ex in examples:
-                if is_contextual:
-                    fout.write(ujson.dumps({"sentence": ex.question}) + '\n')
-                else:
-                    fout.write(ujson.dumps({"sentence": ex.context}) + '\n')
+                fout.write(ujson.dumps({"sentence": getattr(ex, utterance_field)}) + '\n')
 
     def extract_mentions(self, input_path):
         jsonl_input_path = input_path.rsplit('.', 1)[0] + '.jsonl'

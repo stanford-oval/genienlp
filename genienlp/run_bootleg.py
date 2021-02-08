@@ -154,7 +154,7 @@ def bootleg_process_splits(args, split, path, task, bootleg, mode='train'):
     if mode == 'dump':
         # create jsonl files from input examples
         # jsonl is the input format bootleg expects
-        bootleg.create_jsonl(path, examples, task.is_contextual())
+        bootleg.create_jsonl(path, examples, task.utterance_field())
     
         # extract mentions and mention spans in the sentence and write them to output jsonl files
         bootleg.extract_mentions(path)
@@ -169,14 +169,12 @@ def bootleg_process_splits(args, split, path, task, bootleg, mode='train'):
     if mode != 'dump':
         assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
         for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
-            if task.is_contextual():
+            if task.utterance_field() == 'question':
                 for i in range(len(tokens_type_ids)):
                     examples[n].question_feature[i].type_id = tokens_type_ids[i]
                     examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[
-                        i]
-                    examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = \
-                        tokens_type_probs[i]
+                    examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[i]
+                    examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = tokens_type_probs[i]
             
             else:
                 for i in range(len(tokens_type_ids)):

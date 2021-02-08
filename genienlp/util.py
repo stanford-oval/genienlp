@@ -536,14 +536,14 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     else:
         return data_loader
 
-def ned_dump_entity_type_pairs(split, path, name, is_contextual):
+def ned_dump_entity_type_pairs(split, path, name, utterance_field):
 
     with open(os.path.join(os.path.dirname(path), f'{name}_labels.jsonl'), 'w') as fout:
         for ex in split:
             text = ex.context_plus_question_with_types
             entity_token_pairs = entity_regex.findall(text)
             
-            if is_contextual:
+            if utterance_field == 'question':
                 entity_token_string = entity_token_pairs[1]
                 sentence = text[text.index('</e>') + 4: text.rindex('<e>')].strip()
             else:

@@ -55,7 +55,7 @@ class BaseTask:
         return ''
 
     @property
-    def is_contextual(self):
+    def utterance_field(self):
         return NotImplementedError
 
     def get_splits(self, root, **kwargs):

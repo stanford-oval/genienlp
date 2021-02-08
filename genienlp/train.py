@@ -120,7 +120,7 @@ def prepare_data(args, logger):
             bootleg_process_splits(args, splits.train, paths.train, task, bootleg)
 
         if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
-            ned_dump_entity_type_pairs(splits.train, paths.train, 'train', task.is_contextual())
+            ned_dump_entity_type_pairs(splits.train, paths.train, 'train', task.utterance_field())
 
         train_sets.append(splits.train)
         logger.info(f'{task.name} has {len(splits.train)} training examples')
@@ -165,7 +165,7 @@ def prepare_data(args, logger):
             bootleg_process_splits(args, splits.eval, paths.eval, task, bootleg)
 
         if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
-            ned_dump_entity_type_pairs(splits.eval, paths.eval, 'eval', task.is_contextual())
+            ned_dump_entity_type_pairs(splits.eval, paths.eval, 'eval', task.utterance_field())
 
         val_sets.append(splits.eval)
 
