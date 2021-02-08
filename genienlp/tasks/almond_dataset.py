@@ -34,7 +34,7 @@ import math
 import multiprocessing as mp
 
 from .generic_dataset import CQA
-from .almond_utils import process, chunk_file
+from .almond_utils import create_examples_from_file, chunk_file
 
 from .base_dataset import Split
 
@@ -85,7 +85,7 @@ class AlmondDataset(CQA):
                     process_args = [{'in_file': chunk_file_paths[i], 'chunk_size': chunk_size, 'dir_name': dir_name,
                                      'example_batch_size': 1, 'make_process_example': make_example,
                                      'kwargs': kwargs} for i in range(num_chunks)]
-                    results = pool.map(process, process_args)
+                    results = pool.map(create_examples_from_file, process_args)
     
                 # merge all results
                 examples = [item for sublist in results for item in sublist]
@@ -96,7 +96,7 @@ class AlmondDataset(CQA):
                 process_args = {'in_file': path, 'chunk_size': max_examples, 'dir_name': dir_name,
                                 'example_batch_size': 1, 'make_process_example': make_example,
                                 'kwargs': kwargs}
-                examples = process(process_args)
+                examples = create_examples_from_file(process_args)
             
             if cache_input_data:
                 os.makedirs(os.path.dirname(cache_name), exist_ok=True)

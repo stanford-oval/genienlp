@@ -145,7 +145,7 @@ def chunk_file(input_src, chunk_files, chunk_size, num_chunks):
         file.close()
 
 
-def process(args):
+def create_examples_from_file(args):
     path = args['in_file']
     chunk_size = args['chunk_size']
     dir_name = args['dir_name']
