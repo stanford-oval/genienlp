@@ -559,7 +559,7 @@ def dump_entity_type_pairs(split, path, name, is_contextual):
                 for str in entity_token_pairs:
                     entity, types = token_type_regex.match(str).groups()
                     types = types.split('|')
-                    entities.append(entity)
+                    entities.append(entity.strip())
                     ent_types.append(types)
     
             fout.write(ujson.dumps({"sentence": sentence, "aliases": entities, "thingtalk_types": ent_types}) + '\n')

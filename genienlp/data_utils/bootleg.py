@@ -85,11 +85,12 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
                 type = 'Q571'
             elif 'publisher' in title or title in ['editorial collection', 'version, edition, or translation']:
                 type = 'Q57933693'
-            elif 'person' in title or 'rights activist' in title or title in ['writer', 'journalist', 'author',
-                                                                              'politician',
-                                                                              'Esperantist', 'philosopher', 'actor',
-                                                                              'painter',
-                                                                              'historian', 'lawyer', 'poet', 'singer']:
+            elif 'person' in title or 'rights activist' in title or 'writer' in title or \
+                    title in ['journalist', 'author',
+                          'politician',
+                          'Esperantist', 'philosopher', 'actor',
+                          'painter',
+                          'historian', 'lawyer', 'poet', 'singer']:
                 type = 'Q5'
             elif title in ['recurring event'] or 'award' in title:
                 type = 'Q618779'
@@ -171,10 +172,10 @@ def post_process_bootleg_types(qid, type, title, almond_domains):
         
         
         elif domain == 'spotify':
-            # rap, rap music
-            if qid in ['Q6010', 'Q11401']:
+            # rap, rap music, griot
+            if qid in ['Q6010', 'Q11401', 'Q511054', 'Q10460904', 'Q4955868']:
                 type = 'Q188451'
-            
+
             if title in ['song', 'single', 'musical composition', 'ballad', 'extended play', 'literary work',
                          'television series', 'film', 'play']:
                 type = 'Q7366'
