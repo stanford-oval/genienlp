@@ -245,13 +245,16 @@ def dump_bootleg_features(args, logger):
             else:
                 args.db_unk_id = 0
             if args.do_ned:
-                if getattr(task, 'db', None):
+                if bootleg:
+                    args.num_db_types = len(bootleg.type2id)
+                elif getattr(task, 'db', None):
                     args.num_db_types = len(task.db.type2id)
-                elif getattr(task, 'bootleg', None):
-                    args.num_db_types = len(task.bootleg.type2id)
             else:
                 args.num_db_types = 0
-            save_args(args, force_overwrite=True)
+        else:
+            args.db_unk_id = 0
+            args.num_db_types = 0
+        save_args(args, force_overwrite=True)
     
     for task in args.val_tasks:
         logger.info(f'Loading {task.name}')

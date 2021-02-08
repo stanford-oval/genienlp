@@ -139,7 +139,7 @@ class NumericalizedExamples(NamedTuple):
         return numericalized_examples
 
     @staticmethod
-    def collate_batches(batches : Iterable['NumericalizedExamples'], numericalizer, device):
+    def collate_batches(batches : Iterable['NumericalizedExamples'], numericalizer, device, db_unk_id):
         example_id = []
 
         context_values, context_lengths, context_limiteds, context_features = [], [], [], []
@@ -162,8 +162,7 @@ class NumericalizedExamples(NamedTuple):
         context_lengths = torch.stack(context_lengths, dim=0)
         
         if context_features:
-            # TODO change pad_id later
-            context_features = numericalizer.pad(context_features, pad_id=0)
+            context_features = numericalizer.pad(context_features, pad_id=db_unk_id)
         
         answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
         answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)

@@ -66,7 +66,7 @@ class Server:
 
         all_features = NumericalizedExamples.from_examples(ex, self.numericalizer, self.args.add_types_to_text)
         # make a single batch with all examples
-        return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
+        return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device, db_unk_id=self.args.db_unk_id)
     
     def bootleg_process_examples(self, ex, label, task):
         line = {}

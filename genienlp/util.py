@@ -514,7 +514,7 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False, add_types_to_text=False):
+def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False, add_types_to_text=False, db_unk_id=0):
     all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer, add_types_to_text=add_types_to_text)
 
     context_lengths = [ex.context.length for ex in all_features]
@@ -528,7 +528,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     # get the sorted data_source
     all_f = sampler.data_source
     data_loader = torch.utils.data.DataLoader(all_f, batch_sampler=sampler,
-                                              collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer, device),
+                                              collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer, device, db_unk_id),
                                               num_workers=0)
     
     if return_original_order:
