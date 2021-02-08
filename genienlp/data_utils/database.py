@@ -28,10 +28,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
-import nltk
-
-
-nltk.download('averaged_perceptron_tagger', quiet=True)
 
 from .database_utils import is_banned, normalize_text, has_overlap
 
@@ -55,7 +51,10 @@ class Database(object):
         self.ned_features_size = ned_features_size
 
     def lookup_ngrams(self, tokens, min_entity_len, max_entity_len):
-    
+        # load nltk lazily
+        import nltk
+        nltk.download('averaged_perceptron_tagger', quiet=True)
+        
         tokens_type_ids = [[self.unk_id] * self.ned_features_size[0]] * len(tokens)
     
         max_entity_len = min(max_entity_len, len(tokens))

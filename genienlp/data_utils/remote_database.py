@@ -1,6 +1,5 @@
 import ujson
 import logging
-import nltk
 import time
 from collections import defaultdict
 
@@ -124,6 +123,9 @@ class RemoteElasticDatabase(object):
         return matches
 
     def single_lookup(self, tokens, min_entity_len, max_entity_len, allow_fuzzy=False):
+        # load nltk lazily
+        import nltk
+        nltk.download('averaged_perceptron_tagger', quiet=True)
     
         tokens_type_ids = [[self.type2id['unk']] * self.ned_features_size[0]] * len(tokens)
     

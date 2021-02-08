@@ -2,7 +2,6 @@ import unicodedata
 import re
 
 import nltk
-
 nltk.download('stopwords', quiet=True)
 from nltk.corpus import stopwords
 
