@@ -62,7 +62,7 @@ class IdentityEncoder(nn.Module):
 
     def compute_final_embeddings(self, context, context_lengths, context_padding, context_entity_ids, context_entity_probs=None, context_entity_masking=None, entity_word_embeds_dropout=True):
         
-        if self.args.do_ner:
+        if self.args.do_ned:
             context_embedded_last_hidden_state = self.encoder_embeddings(context,
                                                                          entity_ids=context_entity_ids,
                                                                          entity_masking=context_entity_masking,
@@ -118,13 +118,13 @@ class IdentityEncoder(nn.Module):
         context_entity_ids, context_entity_probs, context_entity_masking = None, None, None
 
         if self.args.num_db_types > 0 and self.args.add_types_to_text == 'no':
-            context_entity_ids = batch.context.feature[:, :, :self.args.features_size[0]].long()
+            context_entity_ids = batch.context.feature[:, :, :self.args.ned_features_size[0]].long()
             
             # indicates position of entities
-            context_entity_masking = (context_entity_ids != self.args.features_default_val[0]).int()
+            context_entity_masking = (context_entity_ids != self.args.ned_features_default_val[0]).int()
 
             if self.args.entity_type_agg_method == 'weighted':
-                context_entity_probs = batch.context.feature[:, :, self.args.features_size[0]:self.args.features_size[0] + self.args.features_size[1]].long()
+                context_entity_probs = batch.context.feature[:, :, self.args.ned_features_size[0]:self.args.ned_features_size[0] + self.args.ned_features_size[1]].long()
 
         final_context, context_rnn_state = self.compute_final_embeddings(context, context_lengths, context_padding, context_entity_ids, context_entity_probs, context_entity_masking, entity_word_embeds_dropout=self.args.entity_word_embeds_dropout)
         

@@ -296,8 +296,8 @@ class Bootleg(object):
     def collect_features_per_line(self, line, threshold):
         
         tokenized = line['sentence'].split(' ')
-        tokens_type_ids = [[self.args.features_default_val[0]] * self.args.features_size[0] for _ in range(len(tokenized))]
-        tokens_type_probs = [[self.args.features_default_val[1]] * self.args.features_size[1] for _ in range(len(tokenized))]
+        tokens_type_ids = [[self.args.ned_features_default_val[0]] * self.args.ned_features_size[0] for _ in range(len(tokenized))]
+        tokens_type_probs = [[self.args.ned_features_default_val[1]] * self.args.ned_features_size[1] for _ in range(len(tokenized))]
     
         for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
             # filter qids with confidence lower than a threshold
@@ -334,8 +334,8 @@ class Bootleg(object):
                                 type_ids.append(type_id)
                                 type_probs.append(prob)
             
-                padded_type_ids = self.pad_values(type_ids, self.args.features_size[0], self.args.features_default_val[0])
-                padded_type_probs = self.pad_values(type_probs, self.args.features_size[1], self.args.features_default_val[1])
+                padded_type_ids = self.pad_values(type_ids, self.args.ned_features_size[0], self.args.ned_features_default_val[0])
+                padded_type_probs = self.pad_values(type_probs, self.args.ned_features_size[1], self.args.ned_features_default_val[1])
             
                 tokens_type_ids[span[0]:span[1]] = [padded_type_ids] * (span[1] - span[0])
                 tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])

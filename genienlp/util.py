@@ -536,7 +536,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     else:
         return data_loader
 
-def dump_entity_type_pairs(split, path, name, is_contextual):
+def ned_dump_entity_type_pairs(split, path, name, is_contextual):
 
     with open(os.path.join(os.path.dirname(path), f'{name}_labels.jsonl'), 'w') as fout:
         for ex in split:
@@ -587,10 +587,10 @@ def load_config_json(args):
                     'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count',
                     'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
                     'override_question', 'override_context', 'add_types_to_text',
-                    'do_ner', 'database_type', 'min_entity_len', 'max_entity_len',
+                    'do_ned', 'database_type', 'min_entity_len', 'max_entity_len',
                     'entity_type_agg_method', 'entity_word_embeds_dropout',
-                    'num_db_types', 'db_unk_id', 'retrieve_method', 'lookup_method', 'almond_domains',
-                    'features', 'features_size', 'features_default_val',
+                    'num_db_types', 'db_unk_id', 'ned_retrieve_method', 'database_lookup_method', 'almond_domains',
+                    'ned_features', 'ned_features_size', 'ned_features_default_val',
                     'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
                     'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
                     'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types'
@@ -609,7 +609,7 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
-            elif r in ('do_ner', 'use_encoder_loss',
+            elif r in ('do_ned', 'use_encoder_loss',
                        'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version',
                        ):
                 setattr(args, r, False)
@@ -626,7 +626,7 @@ def load_config_json(args):
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
                 
-            elif r in ['features', 'features_size', 'features_default_val']:
+            elif r in ['features', 'ned_features_size', 'ned_features_default_val']:
                 setattr(args, r, [])
             
             elif r == 'add_types_to_text':
@@ -639,9 +639,9 @@ def load_config_json(args):
                 setattr(args, r, 4)
             elif r == 'database_dir':
                 setattr(args, r, None)
-            elif r == 'retrieve_method':
+            elif r == 'ned_retrieve_method':
                 setattr(args, r, 'naive')
-            elif r == 'lookup_method':
+            elif r == 'database_lookup_method':
                 setattr(args, r, 'ngrams')
             elif r == 'almond_domains':
                 setattr(args, r, [])

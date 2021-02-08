@@ -24,14 +24,14 @@ class XPackClientMPCompatible(XPackClient):
 
 class RemoteElasticDatabase(object):
     
-    def __init__(self, config, type2id, features_default_val, features_size):
+    def __init__(self, config, type2id, ned_features_default_val, ned_features_size):
         self.type2id = type2id
         self.id2type = {v: k for k, v in self.type2id.items()}
-        self.unk_id = features_default_val[0]
+        self.unk_id = ned_features_default_val[0]
         self.unk_type = self.id2type[self.unk_id]
         
-        self.features_default_val = features_default_val
-        self.features_size = features_size
+        self.ned_features_default_val = ned_features_default_val
+        self.ned_features_size = ned_features_size
     
         self.canonical2type = defaultdict(list)
         self.auth = (config['username'], config['password'])
@@ -59,7 +59,7 @@ class RemoteElasticDatabase(object):
         return tokens_type_ids
 
     def lookup_entities(self, tokens, entities, allow_fuzzy=False):
-        tokens_type_ids = [[self.unk_id] * self.features_size[0]] * len(tokens)
+        tokens_type_ids = [[self.unk_id] * self.ned_features_size[0]] * len(tokens)
         tokens_text = " ".join(tokens)
     
         all_matches = self.batch_find_matches(entities, allow_fuzzy)
@@ -83,7 +83,7 @@ class RemoteElasticDatabase(object):
                 idx = tokens_text.index(ent)
                 token_pos = len(tokens_text[:idx].strip().split(' '))
             
-                tokens_type_ids[token_pos: token_pos + ent_num_tokens] = [[type] * self.features_size[
+                tokens_type_ids[token_pos: token_pos + ent_num_tokens] = [[type] * self.ned_features_size[
                     0]] * ent_num_tokens
     
         return tokens_type_ids
@@ -125,7 +125,7 @@ class RemoteElasticDatabase(object):
 
     def single_lookup(self, tokens, min_entity_len, max_entity_len, allow_fuzzy=False):
     
-        tokens_type_ids = [[self.type2id['unk']] * self.features_size[0]] * len(tokens)
+        tokens_type_ids = [[self.type2id['unk']] * self.ned_features_size[0]] * len(tokens)
     
         max_entity_len = min(max_entity_len, len(tokens))
         min_entity_len = min(min_entity_len, len(tokens))
@@ -165,7 +165,7 @@ class RemoteElasticDatabase(object):
                     used_aliases.append([self.type2id.get(type, self.unk_id), start, end])
     
         for type_id, beg, end in used_aliases:
-            tokens_type_ids[beg:end] = [[type_id] * self.features_size[0]] * (end - beg)
+            tokens_type_ids[beg:end] = [[type_id] * self.ned_features_size[0]] * (end - beg)
     
         return tokens_type_ids
 

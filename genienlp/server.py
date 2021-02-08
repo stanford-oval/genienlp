@@ -238,7 +238,7 @@ def init(args):
     device = devices[0] # server only runs on a single device
 
     bootleg_annotator = None
-    if args.do_ner and args.retrieve_method == 'bootleg':
+    if args.do_ned and args.ned_retrieve_method == 'bootleg':
         # instantiate a bootleg object to load config and relevant databases
         bootleg = Bootleg(args)
         bootleg_config = bootleg.create_config(bootleg.fixed_overrides)

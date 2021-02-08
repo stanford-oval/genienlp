@@ -65,7 +65,7 @@ class TransformerLSTM(GenieModel):
 
         logger.info(f'Initializing encoder and decoder embeddings')
         
-        if args.do_ner:
+        if args.do_ned:
             if type(config) == BertConfig:
                 self.encoder_embeddings = BertModelForNER(config, args.num_db_types, args.db_unk_id).from_pretrained(
                     encoder_embeddings, num_db_types=args.num_db_types, db_unk_id=args.db_unk_id, cache_dir=args.embeddings)

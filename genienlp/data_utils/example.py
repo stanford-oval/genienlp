@@ -62,14 +62,14 @@ class Feature:
             if field_val:
                 result += field_val
         return result
-    
+
 VALID_FEATURE_FIELDS = tuple(Feature.__annotations__.keys())
 
-def get_pad_feature(feature_fields, features_default_val, features_size):
+def get_pad_feature(feature_fields, ned_features_default_val, ned_features_size):
     pad_feature = Feature()
     for i, field in enumerate(feature_fields):
         assert field in VALID_FEATURE_FIELDS
-        setattr(pad_feature, field, [features_default_val[i]] * features_size[i])
+        setattr(pad_feature, field, [ned_features_default_val[i]] * ned_features_size[i])
     return pad_feature
 
 
@@ -115,20 +115,6 @@ class Example(NamedTuple):
         
         return Example(*args)
     
-    
-def get_default_fields(text, features, features_size, features_default_val):
-    text = text.split()
-    text_mask = [True for _ in text]
-    # dummy values
-    zip_list = []
-    for feat in features:
-        index = VALID_FEATURE_FIELDS.index(feat)
-        zip_list.append([[features_default_val[index]] * features_size[index] for _ in range(len(text))])
-
-    text_feature = [Feature(*tup) for tup in zip(*zip_list)]
-    
-    return text, text_mask, text_feature
-
 
 class NumericalizedExamples(NamedTuple):
     example_id: List[str]

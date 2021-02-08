@@ -52,9 +52,9 @@ def parse_argv(parser):
     parser.add_argument('--database_type', default='json', choices=['json', 'local-elastic', 'remote-elastic'], help='database to interact with for NER')
     
     parser.add_argument('--min_entity_len', type=int, default=2,
-                        help='Minimum length for entities when ngrams lookup_method is used ')
+                        help='Minimum length for entities when ngrams database_lookup_method is used ')
     parser.add_argument('--max_entity_len', type=int, default=4,
-                        help='Maximum length for entities when ngrams lookup_method is used ')
+                        help='Maximum length for entities when ngrams database_lookup_method is used ')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
     
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
@@ -72,12 +72,12 @@ def parse_argv(parser):
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', default=[],
                         help='Domains used for almond dataset; e.g. music, books, ...')
-    parser.add_argument('--features', nargs='+', type=str, default=['type', 'freq'],
+    parser.add_argument('--ned_features', nargs='+', type=str, default=['type', 'freq'],
                         help='Features that will be extracted for each entity: "type" and "freq" are supported.'
                              ' Order is important')
-    parser.add_argument('--features_size', nargs='+', type=int, default=[1, 1],
+    parser.add_argument('--ned_features_size', nargs='+', type=int, default=[1, 1],
                         help='Max length of each feature vector. All features are padded up to this length')
-    parser.add_argument('--features_default_val', nargs='+', type=float, default=[0, 1.0],
+    parser.add_argument('--ned_features_default_val', nargs='+', type=float, default=[0, 1.0],
                         help='Max length of each feature vector. All features are padded up to this length')
     
     parser.add_argument('--almond_lang_as_question', action='store_true',
@@ -210,11 +210,11 @@ def dump_bootleg_features(args, logger):
         logger.info(f'train all_schema_types: {task.all_schema_types}')
         
         if task.name.startswith('almond'):
-            if args.features_default_val:
-                args.db_unk_id = int(args.features_default_val[0])
+            if args.ned_features_default_val:
+                args.db_unk_id = int(args.ned_features_default_val[0])
             else:
                 args.db_unk_id = 0
-            if args.do_ner:
+            if args.do_ned:
                 if getattr(task, 'db', None):
                     args.num_db_types = len(task.db.type2id)
                 elif getattr(task, 'bootleg', None):
@@ -254,8 +254,8 @@ def dump_bootleg_features(args, logger):
 
 def main(args):
     
-    args.do_ner = True
-    args.retrieve_method = 'bootleg'
+    args.do_ned = True
+    args.ned_retrieve_method = 'bootleg'
     args.override_context = None
     args.override_question = None
 

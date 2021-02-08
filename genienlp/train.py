@@ -49,7 +49,7 @@ from . import models
 from .data_utils.bootleg import Bootleg
 from .run_bootleg import bootleg_process_splits
 from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader, \
-    log_model_size, init_devices, dump_entity_type_pairs
+    log_model_size, init_devices, ned_dump_entity_type_pairs
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
 from .validate import validate, print_results
@@ -79,7 +79,7 @@ def prepare_data(args, logger):
     
     # initialize bootleg
     bootleg = None
-    if args.do_ner and args.retrieve_method == 'bootleg':
+    if args.do_ned and args.ned_retrieve_method == 'bootleg':
         bootleg = Bootleg(args)
     
     train_sets, val_sets, aux_sets = [], [], []
@@ -119,8 +119,8 @@ def prepare_data(args, logger):
         if bootleg:
             bootleg_process_splits(args, splits.train, paths.train, task, bootleg)
 
-        if args.dump_entity_type_pairs and args.add_types_to_text == 'append':
-            dump_entity_type_pairs(splits.train, paths.train, 'train', task.is_contextual())
+        if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
+            ned_dump_entity_type_pairs(splits.train, paths.train, 'train', task.is_contextual())
 
         train_sets.append(splits.train)
         logger.info(f'{task.name} has {len(splits.train)} training examples')
@@ -128,11 +128,11 @@ def prepare_data(args, logger):
         logger.info(f'train all_schema_types: {task.all_schema_types}')
             
         if task.name.startswith('almond'):
-            if args.features_default_val:
-                args.db_unk_id = int(args.features_default_val[0])
+            if args.ned_features_default_val:
+                args.db_unk_id = int(args.ned_features_default_val[0])
             else:
                 args.db_unk_id = 0
-            if args.do_ner:
+            if args.do_ned:
                 if bootleg:
                     args.num_db_types = len(bootleg.type2id)
                 elif getattr(task, 'db', None):
@@ -161,8 +161,8 @@ def prepare_data(args, logger):
         if bootleg:
             bootleg_process_splits(args, splits.eval, paths.eval, task, bootleg)
 
-        if args.dump_entity_type_pairs and args.add_types_to_text == 'append':
-            dump_entity_type_pairs(splits.eval, paths.eval, 'eval', task.is_contextual())
+        if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
+            ned_dump_entity_type_pairs(splits.eval, paths.eval, 'eval', task.is_contextual())
 
         val_sets.append(splits.eval)
 

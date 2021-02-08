@@ -142,14 +142,14 @@ def parse_argv(parser):
     
     parser.add_argument('--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)')
     
-    parser.add_argument('--do_ner', action='store_true', help='Collect and use entity features during training')
+    parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
     parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'],
-                        help='database to interact with for NER')
-    parser.add_argument('--dump_type2id', action='store_true', help='This will create the "type to id" mapping for all entities available in ES database')
-    parser.add_argument('--dump_canonical2type', action='store_true', help='This will create the "canonical to type" mapping for all entities available in ES database')
+                        help='database to interact with for NED')
+    parser.add_argument('--database_dump_type2id', action='store_true', help='This will create the "type to id" mapping for all entities available in ES database')
+    parser.add_argument('--database_dump_canonical2type', action='store_true', help='This will create the "canonical to type" mapping for all entities available in ES database')
 
-    parser.add_argument('--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams lookup_method is used ')
-    parser.add_argument('--max_entity_len', type=int, default=6, help='Maximum length for entities when ngrams lookup_method is used ')
+    parser.add_argument('--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams database_lookup_method is used ')
+    parser.add_argument('--max_entity_len', type=int, default=6, help='Maximum length for entities when ngrams database_lookup_method is used ')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
     
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
@@ -168,22 +168,22 @@ def parse_argv(parser):
     parser.add_argument("--entity_word_embeds_dropout", default=0.0, type=float, help='Dropout entity word embeddings with this probability when encoding inputs')
 
     parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'], help='Method for adding types to input text in text-based NER approach')
-    parser.add_argument("--dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
+    parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
     
-    parser.add_argument('--retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
+    parser.add_argument('--ned_retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
                         help='how to retrieve types for entities')
     
-    parser.add_argument('--lookup_method', default='ngrams', choices=['ngrams', 'smaller_first', 'longer_first'],
+    parser.add_argument('--database_lookup_method', default='ngrams', choices=['ngrams', 'smaller_first', 'longer_first'],
                         help='smaller_first: start from one token and grow into longer spans until a match is found,'
                              'longer_first: start from the longest span and shrink until a match is found,'
                              'ngrams: lookup all ngrams in the text and see if there is a match')
     
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
-    parser.add_argument('--features', nargs='+', type=str, default=[],
+    parser.add_argument('--ned_features', nargs='+', type=str, default=[],
                         help='Features that will be extracted for each entity. Order is important')
-    parser.add_argument('--features_size', nargs='+', type=int, default=[], help='Max length of each feature vector. All features are padded up to this length')
-    parser.add_argument('--features_default_val', nargs='+', type=float, default=[], help='Default value used for each feature')
+    parser.add_argument('--ned_features_size', nargs='+', type=int, default=[], help='Max length of each feature vector. All features are padded up to this length')
+    parser.add_argument('--ned_features_default_val', nargs='+', type=float, default=[], help='Default value used for each feature')
 
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers (for TransformerLSTM)')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules ')
@@ -276,7 +276,7 @@ def check_and_update_generation_args(args):
 
 def post_parse_general(args):
     
-    for feat in args.features:
+    for feat in args.ned_features:
         if feat not in VALID_FEATURE_FIELDS:
             raise ValueError('Feature {} is not supported. Please provide valid features from {} list'.format(feat, VALID_FEATURE_FIELDS))
     
@@ -297,7 +297,7 @@ def post_parse_general(args):
         raise ValueError(
             'Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
     
-    if len(args.features) != len(args.features_size):
+    if len(args.ned_features) != len(args.ned_features_size):
         raise ValueError('You should specify max feature size for each feature you provided')
 
     if len(args.train_task_names) > 1:
@@ -327,7 +327,7 @@ def post_parse_general(args):
     for x in ['data', 'save', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
     
-    args.num_features = len(args.features)
+    args.num_features = len(args.ned_features)
     
     # tasks with the same name share the same task object
     train_tasks_dict = get_tasks(args.train_task_names, args)
@@ -364,7 +364,7 @@ def post_parse_train_specific(args):
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
     
-    if not (len(args.features) == len(args.features_size) == len(args.features_default_val)):
+    if not (len(args.ned_features) == len(args.ned_features_size) == len(args.ned_features_default_val)):
         raise ValueError('You should specify size and default value for each feature you provided')
     
     if args.preprocess_special_tokens and args.model == 'TransformerLSTM':
@@ -382,7 +382,7 @@ def post_parse_train_specific(args):
     for x in ['embeddings']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
 
-    args.num_features = len(args.features)
+    args.num_features = len(args.ned_features)
 
     save_args(args, force_overwrite=True)
     

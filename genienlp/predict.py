@@ -64,7 +64,7 @@ logger = logging.getLogger(__name__)
 def prepare_data(args):
     # initialize bootleg
     bootleg = None
-    if args.do_ner and args.retrieve_method == 'bootleg':
+    if args.do_ned and args.ned_retrieve_method == 'bootleg':
         bootleg = Bootleg(args)
     
     datasets = []
@@ -347,7 +347,7 @@ def set_default_values(args):
 
 
 def check_args(args):
-    if getattr(args, 'retrieve_method', None) == 'bootleg':
+    if getattr(args, 'ned_retrieve_method', None) == 'bootleg':
         with open(os.path.join(args.path, 'config.json')) as config_file:
             config = json.load(config_file)
         if args.subsample != config['subsample']:
