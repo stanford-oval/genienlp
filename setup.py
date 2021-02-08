@@ -56,21 +56,18 @@ setuptools.setup(
         'requests~=2.22',
         'transformers==4.1.1',
         'sentencepiece==0.1.*',
+        'sentence-transformers==0.4.0',
         'mosestokenizer~=1.1',
-        'matplotlib~=3.1',
-        'seaborn~=0.9',
         'nltk~=3.4',
-        'pytrie==0.3.1',
         'elasticsearch==7.9.1',
         'ujson==4.0.2',
         'marisa_trie==0.7.5',
-        'sentence-transformers==0.4.0',
         'loss_dropper @ git+https://github.com/ddkang/loss_dropper#egg=loss_dropper',
         'kfserving>=0.5.0',
+        'bootleg @ git+https://github.com/Mehrad0711/bootleg',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',
-        'xgboost~=1.3',
-        'bootleg @ git+https://github.com/Mehrad0711/bootleg#01108b5966061fa065a9d3807a3b9ab0f06ee794'
+        'xgboost~=1.3'
     ]
 )
