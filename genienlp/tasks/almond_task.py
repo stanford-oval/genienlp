@@ -70,10 +70,10 @@ class BaseAlmondTask(BaseTask):
 
         if args.do_ned:
             self.unk_id = args.ned_features_default_val[0]
-            self.TTtype2DBtype = dict()
+            self.thingtalkType2dbType = dict()
             for domain in self.almond_domains:
-                self.TTtype2DBtype.update(DOMAIN_TYPE_MAPPING[domain])
-            self.DBtype2TTtype = {v: k for k, v in self.TTtype2DBtype.items()}
+                self.thingtalkType2dbType.update(DOMAIN_TYPE_MAPPING[domain])
+            self.dbType2thingtalkType = {v: k for k, v in self.thingtalkType2dbType.items()}
             self._init_db()
 
     def _init_db(self):
@@ -146,10 +146,10 @@ class BaseAlmondTask(BaseTask):
                     if schema_entity_type:
                         schema_entity_type = schema_entity_type.strip('()').rsplit(':', 1)[1]
     
-                if schema_entity_type is None or schema_entity_type not in self.TTtype2DBtype.keys():
+                if schema_entity_type is None or schema_entity_type not in self.thingtalkType2dbType.keys():
                     schema_type = self.db.unk_type
                 else:
-                    schema_type = self.TTtype2DBtype[schema_entity_type]
+                    schema_type = self.thingtalkType2dbType[schema_entity_type]
     
                 entity2type[ent] = schema_type
 
@@ -199,10 +199,10 @@ class BaseAlmondTask(BaseTask):
                     if schema_entity_type == 'Person' and tokens_before_entity[-3] == 'null' and tokens_before_entity[-5] in ['director', 'creator', 'actor']:
                         schema_entity_type = 'Person.' + tokens_before_entity[-5]
                 
-                if schema_entity_type is None or schema_entity_type not in self.TTtype2DBtype.keys():
+                if schema_entity_type is None or schema_entity_type not in self.thingtalkType2dbType.keys():
                     schema_type = self.db.unk_type
                 else:
-                    schema_type = self.TTtype2DBtype[schema_entity_type]
+                    schema_type = self.thingtalkType2dbType[schema_entity_type]
                 
                 entity2type[ent] = schema_type
                 
@@ -284,7 +284,7 @@ class BaseAlmondTask(BaseTask):
                 # token is an entity
                 if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
                     final_token = '<e> '
-                    all_types = ' | '.join(set([self.DBtype2TTtype[self.db.id2type[id]] for id in feat.type_id if self.db.id2type[id] in self.DBtype2TTtype]))
+                    all_types = ' | '.join(set([self.dbType2thingtalkType[self.db.id2type[id]] for id in feat.type_id if self.db.id2type[id] in self.dbType2thingtalkType]))
                     final_token += '( ' + all_types + ' ) ' + token
                     # append all entities with same type
                     i += 1
@@ -305,7 +305,7 @@ class BaseAlmondTask(BaseTask):
                 feat = features[i]
                 # token is an entity
                 if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
-                    all_types = ' | '.join(set([self.DBtype2TTtype[self.db.id2type[id]] for id in feat.type_id if self.db.id2type[id] in self.DBtype2TTtype]))
+                    all_types = ' | '.join(set([self.dbType2thingtalkType[self.db.id2type[id]] for id in feat.type_id if self.db.id2type[id] in self.dbType2thingtalkType]))
                     all_tokens = []
                     # append all entities with same type
                     while i < len(new_sentence_tokens) and features[i] == feat:
