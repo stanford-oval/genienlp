@@ -76,13 +76,16 @@ class BaseAlmondTask(BaseTask):
             self._init_db()
 
     def _init_db(self):
-        if self.args.database_type in ['json']:
-            with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
-                canonical2type = ujson.load(fin)
+        if self.args.database_type == 'json':
+            canonical2type = {}
+            all_canonicals = marisa_trie.Trie()
+            if self.args.ned_retrieve_method != 'bootleg':
+                with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
+                    canonical2type = ujson.load(fin)
+                    all_canonicals = marisa_trie.Trie(canonical2type.keys())
             with open(os.path.join(self.args.database_dir, 'es_material/type2id.json'), 'r') as fin:
                 type2id = ujson.load(fin)
-            all_canonicals = marisa_trie.Trie(canonical2type.keys())
-
+            
             self.db = Database(canonical2type, type2id, all_canonicals,
                                self.args.ned_features_default_val, self.args.ned_features_size)
         

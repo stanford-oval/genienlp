@@ -143,8 +143,7 @@ def parse_argv(parser):
     parser.add_argument('--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)')
     
     parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
-    parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'],
-                        help='database to interact with for NED')
+    parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'], help='database to interact with for NER')
     parser.add_argument('--database_dump_type2id', action='store_true', help='This will create the "type to id" mapping for all entities available in ES database')
     parser.add_argument('--database_dump_canonical2type', action='store_true', help='This will create the "canonical to type" mapping for all entities available in ES database')
 
