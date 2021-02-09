@@ -1,7 +1,40 @@
+#
+# Copyright (c) 2020, The Board of Trustees of the Leland Stanford Junior University
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# * Neither the name of the copyright holder nor the names of its
+#   contributors may be used to endorse or promote products derived from
+#   this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 import re
+from ..data_utils.progbar import progress_bar
 
 quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
+quoted_pattern_with_space = re.compile(r'\"\s([^"]*?)\s\"')
 device_pattern = re.compile(r'\s@([\w\.]+)\s')
+entity_regex = re.compile('<e>.*?</e>')
+token_type_regex = re.compile('(.*?) \( (.*?) \)')
 
 ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Italian', 'zh': 'Chinese',
                'hr': 'Croatian', 'ja': 'Japanese', 'ko': 'Korean', 'ru': 'Russian', 'es': 'Spanish',
@@ -62,6 +95,23 @@ def process_id(ex):
         id_ = id_[1:]
     return id_
 
+
+def tokenize_cjk_chars(sentence):
+    output = []
+    i = 0
+    while i < len(sentence):
+        output.append(sentence[i])
+        if is_cjk_char(ord(sentence[i])) and i + 1 < len(sentence) and sentence[i + 1] != ' ':
+            output.append(' ')
+        elif not is_cjk_char(ord(sentence[i])) and i + 1 < len(sentence) and is_cjk_char(ord(sentence[i + 1])):
+            output.append(' ')
+        i += 1
+    
+    output = "".join(output)
+    output = output.replace('  ', ' ')
+    
+    return output
+
 def detokenize_cjk_chars(sentence):
     output = []
     i = 0
@@ -78,18 +128,50 @@ def detokenize_cjk_chars(sentence):
     return "".join(output)
 
 
-def tokenize_cjk_chars(sentence):
-    output = []
-    i = 0
-    while i < len(sentence):
-        output.append(sentence[i])
-        if is_cjk_char(ord(sentence[i])) and i+1 < len(sentence) and sentence[i+1] != ' ':
-            output.append(' ')
-        elif not is_cjk_char(ord(sentence[i])) and i + 1 < len(sentence) and is_cjk_char(ord(sentence[i + 1])):
-            output.append(' ')
-        i += 1
-        
-    output = "".join(output)
-    output = output.replace('  ', ' ')
+def chunk_file(input_src, chunk_files, chunk_size, num_chunks):
+    chunk_id = 0
+    num_lines_in_chunk = 0
+    all_out_files = [open(chunk_files[chunk_id], 'w') for chunk_id in range(num_chunks)]
+    with open(input_src, 'r', encoding='utf-8') as in_file:
+        for line in in_file:
+            all_out_files[chunk_id].write(line)
+            num_lines_in_chunk += 1
+            if num_lines_in_chunk == chunk_size:
+                chunk_id += 1
+                num_lines_in_chunk = 0
+                if chunk_id == num_chunks:
+                    break
+    for file in all_out_files:
+        file.close()
+
+
+def create_examples_from_file(args):
+    path = args['in_file']
+    chunk_size = args['chunk_size']
+    dir_name = args['dir_name']
+    example_batch_size = args['example_batch_size']
+    make_process_example = args['make_process_example']
+    kwargs = args['kwargs']
     
-    return output
+    chunk_examples = []
+    
+    batch = []
+    last_batch = False
+    for i, line in progress_bar(enumerate(open(path, 'r', encoding='utf-8')), desc='Reading dataset'):
+        parts = line.strip().split('\t')
+        batch.append(parts)
+        if len(chunk_examples) + example_batch_size > chunk_size:
+            # trim batch
+            batch = batch[:chunk_size - len(chunk_examples)]
+            last_batch = True
+        if len(batch) % example_batch_size != 0 and not last_batch:
+            continue
+        assert len(batch) == 1
+        batch = batch[0]
+        chunk_examples.append(make_process_example(batch, dir_name, **kwargs))
+        batch = []
+        if len(chunk_examples) >= chunk_size:
+            break
+    
+    return chunk_examples
+

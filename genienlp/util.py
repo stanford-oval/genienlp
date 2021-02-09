@@ -39,11 +39,13 @@ import re
 from typing import List, Optional
 import numpy as np
 import torch
+import ujson
 from transformers.models.mbart.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
 from torch.functional import Tensor
 
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
+from .tasks.almond_utils import token_type_regex, entity_regex
 
 logger = logging.getLogger(__name__)
 
@@ -512,8 +514,8 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
-    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer)
+def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False, add_types_to_text=False, db_unk_id=0):
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer, add_types_to_text=add_types_to_text)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
@@ -526,14 +528,43 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     # get the sorted data_source
     all_f = sampler.data_source
     data_loader = torch.utils.data.DataLoader(all_f, batch_sampler=sampler,
-                                              collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer, device),
+                                              collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer, device, db_unk_id),
                                               num_workers=0)
     
     if return_original_order:
         return data_loader, sampler.original_order
     else:
         return data_loader
+
+def ned_dump_entity_type_pairs(split, path, name, utterance_field):
+
+    with open(os.path.join(os.path.dirname(path), f'{name}_labels.jsonl'), 'w') as fout:
+        for ex in split:
+            text = ex.context_plus_question_with_types
+            entity_token_pairs = entity_regex.findall(text)
+            
+            if utterance_field == 'question':
+                entity_token_string = entity_token_pairs[1]
+                sentence = text[text.index('</e>') + 4: text.rindex('<e>')].strip()
+            else:
+                entity_token_string = entity_token_pairs[0]
+                sentence = text[:text.index('<e>')].strip()
+                
+            entity_token_string = entity_token_string[len('<e>'):-len('</e>')].strip('; ')
+            
+            entities = []
+            ent_types = []
+            if entity_token_string:
+                entity_token_pairs = entity_token_string.split(';')
+                for str in entity_token_pairs:
+                    entity, types = token_type_regex.match(str).groups()
+                    types = types.split('|')
+                    entities.append(entity.strip())
+                    ent_types.append(types)
     
+            fout.write(ujson.dumps({"sentence": sentence, "aliases": entities, "thingtalk_types": ent_types}) + '\n')
+
+
 
 def get_mbart_lang(orig_lang):
     for lang in FAIRSEQ_LANGUAGE_CODES:
@@ -548,16 +579,28 @@ def load_config_json(args):
     args.almond_type_embeddings = False
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
+
         retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
                     'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
                     'override_context', 'override_question',
-                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence',
-                    'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count']
+                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version',
+                    'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count',
+                    'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
+                    'override_question', 'override_context', 'add_types_to_text',
+                    'do_ned', 'database_type', 'min_entity_len', 'max_entity_len',
+                    'entity_type_agg_method', 'entity_word_embeds_dropout',
+                    'num_db_types', 'db_unk_id', 'ned_retrieve_method', 'database_lookup_method', 'almond_domains',
+                    'ned_features', 'ned_features_size', 'ned_features_default_val',
+                    'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
+                    'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
+                    'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types'
+                    ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         overwrite = ['val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty',
                      'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty',
-                     'temperature', 'max_output_length', 'reduce_metrics']
+                     'temperature', 'max_output_length', 'reduce_metrics',
+                     'database_dir']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -566,8 +609,44 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
-            elif r in ('preprocess_special_tokens'):
+            elif r in ('do_ned', 'use_encoder_loss',
+                       'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version',
+                       ):
                 setattr(args, r, False)
+                
+            elif r in ('num_db_types', 'db_unk_id'):
+                setattr(args, r, 0)
+            
+            elif r in ('entity_word_embeds_dropout'):
+                setattr(args, r, 0.0)
+            
+            elif r in ('num_beams', 'num_outputs', 'top_p', 'repetition_penalty'):
+                setattr(args, r, [1])
+                
+            elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
+                setattr(args, r, [0])
+                
+            elif r in ['features', 'ned_features_size', 'ned_features_default_val']:
+                setattr(args, r, [])
+            
+            elif r == 'add_types_to_text':
+                setattr(args, r, 'no')
+            elif r == 'database_type':
+                setattr(args, r, 'json')
+            elif r == 'min_entity_len':
+                setattr(args, r, 2)
+            elif r == 'max_entity_len':
+                setattr(args, r, 4)
+            elif r == 'database_dir':
+                setattr(args, r, None)
+            elif r == 'ned_retrieve_method':
+                setattr(args, r, 'naive')
+            elif r == 'database_lookup_method':
+                setattr(args, r, 'ngrams')
+            elif r == 'almond_domains':
+                setattr(args, r, [])
+            elif r == 'locale':
+                setattr(args, r, 'en')
             elif r == 'num_beam_groups':
                 setattr(args, r, [1])
             elif r == 'diversity_penalty':
@@ -577,7 +656,10 @@ def load_config_json(args):
             elif r == 'dropper_min_count':
                 setattr(args, r, 10000)
             else:
+                # use default value
                 setattr(args, r, None)
+                
         args.dropout_ratio = 0.0
+        args.verbose = False
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)

@@ -23,6 +23,7 @@ models/.DS_Store
 src/
 workdir/
 *save*/
+eval_dir/*
 
 lightning_logs/
 pytorch_model.bin

@@ -38,6 +38,10 @@ import shutil
 
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
+
+from .data_utils.bootleg import Bootleg
+from .run_bootleg import bootleg_process_splits
+
 try:
      set_start_method('spawn')
 except RuntimeError:
@@ -56,8 +60,15 @@ from .arguments import check_and_update_generation_args
 
 logger = logging.getLogger(__name__)
 
-def get_all_splits(args):
-    splits = []
+
+def prepare_data(args):
+    # initialize bootleg
+    bootleg = None
+    if args.do_ned and args.ned_retrieve_method == 'bootleg':
+        bootleg = Bootleg(args)
+    
+    datasets = []
+    paths = []
     if len(args.pred_languages) == 1 and len(args.tasks) > 1:
         args.pred_languages *= len(args.tasks)
     for i, task in enumerate(args.tasks):
@@ -73,26 +84,40 @@ def get_all_splits(args):
         else:
             raise ValueError('Split used for prediction should be either train, valid or test')
         
-        kwargs.update({'skip_cache': args.skip_cache, 'subsample': args.subsample,
-                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': task_languages,
-                       'almond_lang_as_question': args.almond_lang_as_question})
+        kwargs.update({'skip_cache': args.skip_cache,
+                       'subsample': args.subsample,
+                       'cached_path': os.path.join(args.cache, task.name),
+                       'all_dirs': task_languages,
+                       'almond_lang_as_question': args.almond_lang_as_question,
+                       'num_workers': args.num_workers,
+                       'separate_eval': args.separate_eval})
         
-        kwargs['separate_eval'] = args.separate_eval
-        task_splits = task.get_splits(root=args.data, lower=args.lower, **kwargs)
+        task_splits, task_paths = task.get_splits(root=args.data, lower=args.lower, **kwargs)
         if not isinstance(task_splits, list):
             task_splits = [task_splits]
-        task_split_processed = []
-        for split in task_splits:
-            assert (split.eval or split.test or split.train) and not split.aux
+            task_paths = [task_paths]
+        task_data_processed = []
+        task_path_processed = []
+        for split, path in zip(task_splits, task_paths):
+            assert (split.eval or split.test) and not split.train and not split.aux
             if split.train:
-                split = split.train
+                data = split.train
+                path = path.train
             elif split.eval:
-                split = split.eval
+                data = split.eval
+                path = path.eval
             else:
-                split = split.test
-            task_split_processed.append(split)
-        splits.append(task_split_processed)
-    return splits
+                data = split.test
+                path = path.test
+            if bootleg:
+                 bootleg_process_splits(args, data, path, task, bootleg)
+            task_data_processed.append(data)
+            task_path_processed.append(path)
+        datasets.append(task_data_processed)
+        paths.append(task_path_processed)
+
+    return datasets
+
 
 
 def prepare_data_iterators(args, val_sets, numericalizer, device):
@@ -108,11 +133,15 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
             for index, set_ in enumerate(val_set):
-                loader, original_order = make_data_loader(set_, numericalizer, bs, device, train=False, return_original_order=True)
+                loader, original_order = make_data_loader(set_, numericalizer, bs, device,
+                                                          train=False, return_original_order=True,
+                                                          add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id)
                 task_iter.append((task, task_languages[index], loader, original_order))
         # single language task or no separate eval
         else:
-           loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device, train=False, return_original_order=True)
+           loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device,
+                                                     train=False, return_original_order=True,
+                                                     add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id)
            task_iter.append((task, task_languages, loader, original_order))
 
         iters.extend(task_iter)
@@ -122,21 +151,21 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
 
 
 def run(args, device):
+    if args.pred_languages[0] is not None:
+        locale = args.pred_languages[0].split('+')[0]
+    else:
+        locale = 'en'
+
     Model = getattr(models, args.model)
     model, _ = Model.from_pretrained(args.path,
                                      model_checkpoint_file=args.checkpoint_name,
                                      args=args,
                                      device=device,
                                      tasks=args.tasks,
-                                    )
-    
-    if args.pred_languages[0] is not None:
-        model.set_decoder_start_token_id(args.pred_languages[0].split('+')[0])
-    else:
-        # use English as default
-        model.set_decoder_start_token_id('en')
+                                     locale=locale
+                                     )
 
-    val_sets = get_all_splits(args)
+    val_sets = prepare_data(args)
     model.add_new_vocab_from_data(args.tasks)
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
@@ -285,6 +314,8 @@ def parse_argv(parser):
     parser.add_argument("--mc_dropout", action='store_true', help='Monte Carlo dropout')
     parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo dropout')
 
+    parser.add_argument('--database_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models for bootleg)')
+
     parser.add_argument("--mixed_precision", action='store_true', help='If True, will use mixed precision for prediction.'
                         'This reduces memory consumption and is especially faster on GPUs like NVIDIA V100 and T4. May slightly change the generated output.')
 
@@ -319,10 +350,19 @@ def set_default_values(args):
         args.confidence_feature_path = os.path.join(args.path, 'confidence_features.pkl')
 
 
+def check_args(args):
+    if getattr(args, 'ned_retrieve_method', None) == 'bootleg':
+        with open(os.path.join(args.path, 'config.json')) as config_file:
+            config = json.load(config_file)
+        if args.subsample != config['subsample']:
+            raise ValueError('To use bootleg prepped data, you have to use the same number for subsampling as training.')
+            
+
 def main(args):
     load_config_json(args)
     check_and_update_generation_args(args)
     adjust_multilingual_eval(args)
+    check_args(args)
     set_default_values(args)
 
     set_seed(args)

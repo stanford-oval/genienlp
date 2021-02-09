@@ -55,13 +55,19 @@ setuptools.setup(
         'sacrebleu~=1.0',
         'requests~=2.22',
         'transformers==4.1.1',
-        'sentence-transformers==0.4.0',
         'sentencepiece==0.1.*',
+        'sentence-transformers==0.4.0',
+        'mosestokenizer~=1.1',
+        'nltk~=3.4',
+        'elasticsearch==7.9.1',
+        'ujson==4.0.2',
+        'marisa_trie==0.7.5',
         'loss_dropper @ git+https://github.com/ddkang/loss_dropper#egg=loss_dropper',
         'kfserving>=0.5.0',
+        'bootleg @ git+https://github.com/Mehrad0711/bootleg',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',
-        'xgboost~=1.3',
+        'xgboost~=1.3'
     ]
 )

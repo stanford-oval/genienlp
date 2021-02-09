@@ -1,0 +1,118 @@
+{
+  "run_config": {
+    "cpu": false,
+    "dataloader_threads": 4,
+    "dataset_threads": 70,
+    "eval_batch_size": 16,
+    "eval_slices": [
+    ],
+    "eval_steps": 5000,
+    "gpu": 0,
+    "init_checkpoint": "",
+    "log_steps": 200,
+    "loglevel": "debug",
+    "max_epochs": 2,
+    "min_eval_size": 10000,
+    "perc_eval": 1.0,
+    "result_emb_file": "bootleg_embs.npy",
+    "result_label_file": "bootleg_labels.jsonl",
+    "save_dir": "/data/wiki_0906_pg/type_only",
+    "save_every_k_eval": 5,
+    "timestamp": "",
+    "topk": 5
+  },
+  "train_config": {
+    "batch_size": 512,
+    "dropout": 0.1,
+    "load_optimizer_from_ckpt": false,
+    "lr": 0.0001,
+    "seed": 1234,
+    "slice_method": "Normal",
+    "softmax_temp": 0.25,
+    "train_heads": [],
+    "weight_decay": 1e-05
+  },
+  "model_config": {
+    "attn_load_class": "Bootleg",
+    "base_model_load_class": "model.Model",
+    "ff_inner_size": 1024,
+    "hidden_size": 512,
+    "num_heads": 16,
+    "num_model_stages": 2
+  },
+  "data_config": {
+    "alias_cand_map": "alias2qids.json",
+    "data_dir": "data",
+    "data_prep_dir": "prep",
+    "emb_dir": "embs_data",
+    "ent_embeddings": [
+      {
+        "key": "learned_type",
+        "load_class": "LearnedTypeEmb",
+        "freeze": false,
+        "args": {
+          "type_labels": "hyena_types_0905.json",
+          "max_types": 3,
+          "type_dim": 128,
+          "merge_func": "addattn",
+          "attn_hidden_size": 128
+        }
+      },
+      {
+        "key": "learned_type_wiki",
+        "load_class": "LearnedTypeEmb",
+        "freeze": false,
+        "args": {
+          "type_labels": "wikidata_types_0905.json",
+          "max_types": 3,
+          "type_dim": 128,
+          "merge_func": "addattn",
+          "attn_hidden_size": 128
+        }
+      }
+    ],
+    "entity_dir": "wiki_entity_data",
+    "entity_map_dir": "entity_mappings",
+    "entity_prep_dir": "prep",
+    "max_aliases": 10,
+    "max_word_token_len": 100,
+    "overwrite_preprocessed_data": false,
+    "train_in_candidates": true,
+    "type_prediction": {
+      "dim": 128,
+      "file": "hyena_types_coarse.json",
+      "num_types": 5,
+      "use_type_pred": true
+    },
+    "train_dataset": {
+      "file": "train.jsonl",
+      "load_class": "wiki_dataset.WikiDataset",
+      "slice_class": "wiki_slices.WikiSlices",
+      "use_weak_label": true
+    },
+    "dev_dataset": {
+      "file": "merged.jsonl",
+      "load_class": "wiki_dataset.WikiDataset",
+      "slice_class": "wiki_slices.WikiSlices",
+      "use_weak_label": true
+    },
+    "test_dataset": {
+      "file": "merged.jsonl",
+      "load_class": "wiki_dataset.WikiDataset",
+      "slice_class": "wiki_slices.WikiSlices",
+      "use_weak_label": true
+    },
+    "word_embedding": {
+      "cache_dir": "pretrained_bert_models",
+      "custom_proj_size": -1,
+      "custom_vocab_embedding_file": "",
+      "freeze_sent_emb": true,
+      "freeze_word_emb": true,
+      "layers": 12,
+      "load_class": "bert_word_emb.BERTWordEmbedding",
+      "sent_class": "bert_sent_emb.BERTSentEmbedding",
+      "use_lower_case": false,
+      "word_symbols": "BERTWordSymbols"
+    }
+  }
+}

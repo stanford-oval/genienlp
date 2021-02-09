@@ -60,7 +60,7 @@ class GenieModel(PreTrainedModel):
         # like T5. The following will make this change so that genienlp models trained with `transformers`==4.0 can be properly loaded
         if 'model.lm_head.weight' not in save_dict['model_state_dict'] and 'model.model.shared.weight' in save_dict['model_state_dict']:
             save_dict['model_state_dict']['model.lm_head.weight'] = save_dict['model_state_dict']['model.model.shared.weight']
-        model.load_state_dict(save_dict['model_state_dict'])
+        model.load_state_dict(save_dict['model_state_dict'], strict=True)
 
         return model, save_dict.get('best_decascore')
 

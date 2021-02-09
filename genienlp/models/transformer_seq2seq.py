@@ -30,6 +30,7 @@
 import logging
 from typing import List
 import torch
+
 from torch.tensor import Tensor
 from transformers import AutoModelForSeq2SeqLM, AutoConfig
 from loss_dropper import LossDropper
@@ -56,9 +57,13 @@ class TransformerSeq2Seq(GenieModel):
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
                                                                cache_dir=self.args.embeddings)
-            
-        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, max_generative_vocab=None,
-                                                      preprocess_special_tokens=args.preprocess_special_tokens)
+
+        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, args, max_generative_vocab=None)
+
+        self.numericalizer.get_tokenizer(save_directory)
+        
+        if self._is_mbart:
+            self._adjust_mbart(kwargs.get('locale', 'en'))
 
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
@@ -67,21 +72,19 @@ class TransformerSeq2Seq(GenieModel):
             self.dropper = LossDropper(dropc=args.dropper_ratio, min_count=args.dropper_min_count)
         else:
             self.dropper = None
-            
-            
+
+    def _adjust_mbart(self, lang):
+        # We need to set language id for mBART models as it is used during tokenization and generation
+        # For now we only support single language training and evaluation with mbart models
+        lang_id = get_mbart_lang(lang)
+        self.numericalizer._tokenizer.set_src_lang_special_tokens(lang_id)
+        self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.cur_lang_code
+        
+
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
     
-    
-    def set_decoder_start_token_id(self, lang):
-        if self._is_mbart:
-            # mBART, in contrast to MT5 or XLM-R, needs language id
-            # For now we only support single language training and evaluation with mbart models
-            lang_id = get_mbart_lang(lang)
-            self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[lang_id]
-
-
     def forward(self, *input, **kwargs):
         if self.training:
             batch = input[0]
@@ -100,15 +103,14 @@ class TransformerSeq2Seq(GenieModel):
                 answer = answer[:, 1:].contiguous()
                 answer_length = answer_length - 1
 
-            # setting pad output tokens to -100 means they will be ignored in calculating loss
-            answer[answer==self.numericalizer.pad_id] = -100
 
             # this is similar to what `transformers` Seq2Seq models do, but with two changes
             # (1) loss is averaged over sequence lengths first, then over the batch size. This way,
             # longer sequences in the batch do not drown shorter sequences.
             # (2) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
             outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
-            ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+            
+            ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none', ignore_index=self.numericalizer.pad_id)
             loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)
             loss = loss.sum(dim=1) / answer_length # accounts for the case where BOS is removed
             if self.dropper is not None:
@@ -144,13 +146,13 @@ class TransformerSeq2Seq(GenieModel):
         generated = self.model.generate(input_ids=input_ids,
                                         max_length=max_output_length,
                                         min_length=2, # generate at least one token after BOS
-                                        bos_token_id=self.numericalizer._tokenizer.bos_token_id,
-                                        pad_token_id=self.numericalizer._tokenizer.pad_token_id,
+                                        bos_token_id=self.numericalizer.init_id,
+                                        pad_token_id=self.numericalizer.pad_id,
                                         early_stopping=True,
                                         num_return_sequences=num_outputs,
                                         repetition_penalty=repetition_penalty,
                                         temperature=temperature,
-                                        eos_token_id=self.numericalizer._tokenizer.eos_token_id,
+                                        eos_token_id=self.numericalizer.eos_id,
                                         top_k=top_k,
                                         top_p=top_p,
                                         num_beams=num_beams,
@@ -160,7 +162,7 @@ class TransformerSeq2Seq(GenieModel):
                                         do_sample=do_sample,
                                         decoder_start_token_id=decoder_start_token_id
                                         )
-
+        
         return generated
 
 
@@ -180,8 +182,8 @@ class TransformerSeq2Seq(GenieModel):
 
         prediction_lengths = self.get_length(predictions)
 
-        pad_token_id = self.numericalizer._tokenizer.pad_token_id
-        attention_mask = self.model._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer._tokenizer.eos_token_id)
+        pad_token_id = self.numericalizer.pad_id
+        attention_mask = self.model._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer.eos_id)
         truncated_predictions = predictions[:, 1:] # remove the BOS token since it is not actually being generated
 
         assert not self.training, 'Model should be in eval() mode before generation can start.'

@@ -41,15 +41,19 @@ from pprint import pformat
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
-from transformers import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, AdamW
+from transformers import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, AdamW, \
+    get_cosine_schedule_with_warmup
 
 from . import arguments
 from . import models
-from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader,\
-    log_model_size, init_devices
+from .data_utils.bootleg import Bootleg
+from .run_bootleg import bootleg_process_splits
+from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader, \
+    log_model_size, init_devices, ned_dump_entity_type_pairs
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
-from .validate import validate
+from .validate import validate, print_results
+from .arguments import save_args
 
 
 def initialize_logger(args):
@@ -72,27 +76,74 @@ def initialize_logger(args):
 
 
 def prepare_data(args, logger):
+    
+    # initialize bootleg
+    bootleg = None
+    if args.do_ned and args.ned_retrieve_method == 'bootleg':
+        bootleg = Bootleg(args)
+    
     train_sets, val_sets, aux_sets = [], [], []
+
+    train_eval_shared_kwargs = {'subsample': args.subsample,
+                                'skip_cache': args.skip_cache,
+                                'cache_input_data': args.cache_input_data,
+                                'sentence_batching': args.sentence_batching,
+                                'almond_lang_as_question': args.almond_lang_as_question,
+                                'num_workers': args.num_workers,
+                                }
+    
+
     for task in args.train_tasks:
         logger.info(f'Loading {task.name}')
         kwargs = {'test': None, 'validation': None}
-        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
-                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.train_languages,
-                       'sentence_batching': args.sentence_batching, 'almond_lang_as_question': args.almond_lang_as_question})
+        kwargs.update(train_eval_shared_kwargs)
+        kwargs['all_dirs'] = args.train_languages
+        kwargs['cached_path'] = os.path.join(args.cache, task.name)
         if args.use_curriculum:
             kwargs['curriculum'] = True
 
         logger.info(f'Adding {task.name} to training datasets')
-        split = task.get_splits(args.data, lower=args.lower, **kwargs)
-        assert not split.eval and not split.test
+        t0 = time.time()
+        splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
+
+        t1 = time.time()
+        logger.info('Data loading took {} sec'.format(t1-t0))
+        assert not splits.eval and not splits.test
         if args.use_curriculum:
-            assert split.aux
-            aux_sets.append(split.aux)
-            logger.info(f'{task.name} has {len(split.aux)} auxiliary examples')
+            assert splits.aux
+            aux_sets.append(splits.aux)
+            logger.info(f'{task.name} has {len(splits.aux)} auxiliary examples')
         else:
-            assert split.train
-        train_sets.append(split.train)
-        logger.info(f'{task.name} has {len(split.train)} training examples')
+            assert splits.train
+
+        if bootleg:
+            bootleg_process_splits(args, splits.train, paths.train, task, bootleg)
+
+        if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
+            ned_dump_entity_type_pairs(splits.train, paths.train, 'train', task.utterance_field())
+
+        train_sets.append(splits.train)
+        logger.info(f'{task.name} has {len(splits.train)} training examples')
+        
+        logger.info(f'train all_schema_types: {task.all_schema_types}')
+            
+        if task.name.startswith('almond'):
+            if args.ned_features_default_val:
+                args.db_unk_id = int(args.ned_features_default_val[0])
+            else:
+                args.db_unk_id = 0
+            if args.do_ned:
+                if bootleg:
+                    args.num_db_types = len(bootleg.type2id)
+                elif getattr(task, 'db', None):
+                    args.num_db_types = len(task.db.type2id)
+            else:
+                args.num_db_types = 0
+        else:
+            args.db_unk_id = 0
+            args.num_db_types = 0
+        save_args(args, force_overwrite=True)
+
 
     for task in args.val_tasks:
         logger.info(f'Loading {task.name}')
@@ -100,16 +151,26 @@ def prepare_data(args, logger):
         # choose best model based on this dev set
         if args.eval_set_name is not None:
             kwargs['validation'] = args.eval_set_name
-        kwargs.update({'subsample': args.subsample, 'skip_cache': args.skip_cache, 'cache_input_data': args.cache_input_data,
-                       'cached_path': os.path.join(args.cache, task.name), 'all_dirs': args.eval_languages,
-                        'almond_lang_as_question': args.almond_lang_as_question})
+        kwargs.update(train_eval_shared_kwargs)
+        kwargs['all_dirs'] = args.eval_languages
+        kwargs['cached_path'] = os.path.join(args.cache, task.name)
         
         logger.info(f'Adding {task.name} to validation datasets')
-        split = task.get_splits(args.data, lower=args.lower, **kwargs)
-        assert not split.train and not split.test and not split.aux
-        logger.info(f'{task.name} has {len(split.eval)} validation examples')
-        val_sets.append(split.eval)
+        splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
+        
+        assert not splits.train and not splits.test and not splits.aux
+        logger.info(f'{task.name} has {len(splits.eval)} validation examples')
 
+        if bootleg:
+            bootleg_process_splits(args, splits.eval, paths.eval, task, bootleg)
+
+        if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
+            ned_dump_entity_type_pairs(splits.eval, paths.eval, 'eval', task.utterance_field())
+
+        val_sets.append(splits.eval)
+
+        logger.info(f'eval all_schema_types: {task.all_schema_types}')
+        
     return train_sets, val_sets, aux_sets
 
 
@@ -124,7 +185,6 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
     model.train()
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
-        
     loss = model(batch).loss
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
@@ -133,7 +193,7 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
     non_accumulated_loss = loss.item()
     loss = loss*len(batch[0])
     accumulated_batch_lengths += len(batch[0])
-
+    
     loss.backward()
     grad_norm = None
     if (iteration+1) % gradient_accumulation_steps == 0:
@@ -309,16 +369,21 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
-    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device, train=True))
+
+    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device,
+                                           train=True, add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device, train=False))
+    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device,
+                                         train=False, add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id))
                  for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
 
     aux_iters = []
     if use_curriculum:
-        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device, train=True))
+
+        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device,
+                                             train=True, add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id))
                      for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         
@@ -405,6 +470,13 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
             # validate
             if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
+                if args.print_train_examples_too:
+                    names = ['answer', 'context']
+                    values = [numericalizer.reverse(batch.answer.value.data),
+                              numericalizer.reverse(batch.context.value.data)]
+                    num_print = min(num_examples, args.num_print)
+                    print_results(names, values, num_print=num_print)
+                    
                 deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
                                          train_task=task, round_progress=round_progress,
                                          task_progress=task_progress, writer=writer, logger=logger)
@@ -463,6 +535,8 @@ def init_opt(args, model, logger):
         scheduler = get_constant_schedule_with_warmup(opt, num_warmup_steps=args.warmup)
     elif args.lr_schedule == 'linear':
         scheduler = get_linear_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations)//args.gradient_accumulation_steps, num_warmup_steps=args.warmup)
+    elif args.lr_schedule == 'cosine':
+        scheduler = get_cosine_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations)//args.gradient_accumulation_steps, num_warmup_steps=args.warmup, num_cycles=0.5)
     elif args.lr_schedule == 'sgd':
         lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
         scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
@@ -474,7 +548,8 @@ def init_opt(args, model, logger):
 
 
 def main(args):
-    args = arguments.post_parse(args)
+    args = arguments.post_parse_general(args)
+    args = arguments.post_parse_train_specific(args)
     if args is None:
         return
 
@@ -503,15 +578,16 @@ def main(args):
                                                             model_checkpoint_file=args.load,
                                                             vocab_sets=train_sets+val_sets,
                                                             tasks=tasks,
-                                                            device=devices[0])
+                                                            device=devices[0],
+                                                            locale=args.train_languages.split('+')[0]
+                                                            )
         model.add_new_vocab_from_data(tasks=tasks, resize_decoder=True)
         if not args.resume:
             # we are fine-tuning, so reset the best score since the new fine-tune dataset usually has a different validation set from the original
             best_decascore = None
     else:
         logger.info(f'Initializing a new {model_name}')
-        model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks)
-        model.set_decoder_start_token_id(args.train_languages.split('+')[0])
+        model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks, locale=args.train_languages.split('+')[0])
 
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
@@ -542,7 +618,7 @@ def main(args):
             
         device_map = dict(zip(args.devices, layers_list))
         model.model.parallelize(device_map)
-        print('Model parallel is used with following device map: ', model.model.device_map)
+        logger.info(f'Model parallel is used with following device map: {model.model.device_map}')
     else:
         model.to(devices[0])
         model = NamedTupleCompatibleDataParallel(model, device_ids=devices)

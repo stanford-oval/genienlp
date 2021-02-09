@@ -149,7 +149,7 @@ class CombinedEmbedding(nn.Module):
         self.pretrained_embeddings = nn.ModuleList(pretrained_embeddings)
 
         dimension = 0
-        for idx, embedding in enumerate(self.pretrained_embeddings):
+        for embedding in self.pretrained_embeddings:
             dimension += embedding.dim
 
         if trained_dimension > 0:
@@ -157,6 +157,7 @@ class CombinedEmbedding(nn.Module):
             dimension += trained_dimension
         else:
             self.trained_embeddings = None
+
         if self.project:
             self.projection = Feedforward(dimension, output_dimension)
         else:
@@ -175,8 +176,8 @@ class CombinedEmbedding(nn.Module):
         resized_embeddings.weight.data[0:dimensions[0], :] = self.trained_embeddings.weight.data
         self.trained_embeddings = resized_embeddings
 
-
     def _combine_embeddings(self, embeddings):
+
         emb = torch.cat(embeddings, dim=2)
         if self.project:
             emb = self.projection(emb)
