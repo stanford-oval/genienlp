@@ -276,10 +276,11 @@ def dump_bootleg_features(args, logger):
         logger.info(f'eval all_schema_types: {task.all_schema_types}')
         
         # merge bootleg embedding for different splits
-        emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
-        if args.use_curriculum:
-            emb_file_list += ['aux']
-        bootleg.merge_embeds(emb_file_list)
+        if args.bootleg_dump_mode == 'dump_embs':
+            emb_file_list = ['train', args.eval_set_name if args.eval_set_name is not None else 'eval']
+            if args.use_curriculum:
+                emb_file_list += ['aux']
+            bootleg.merge_embeds(emb_file_list)
 
     logger.info('Created bootleg features for provided datasets with subsampling: {}'.format(args.subsample))
 
