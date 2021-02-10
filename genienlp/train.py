@@ -117,7 +117,7 @@ def prepare_data(args, logger):
             assert splits.train
 
         if bootleg:
-            bootleg_process_splits(args, splits.train, paths.train, task, bootleg)
+            bootleg_process_splits(args, splits.train.examples, paths.train, task, bootleg)
 
         if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
             ned_dump_entity_type_pairs(splits.train, paths.train, 'train', task.utterance_field())
@@ -162,7 +162,7 @@ def prepare_data(args, logger):
         logger.info(f'{task.name} has {len(splits.eval)} validation examples')
 
         if bootleg:
-            bootleg_process_splits(args, splits.eval, paths.eval, task, bootleg)
+            bootleg_process_splits(args, splits.eval.examples, paths.eval, task, bootleg)
 
         if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
             ned_dump_entity_type_pairs(splits.eval, paths.eval, 'eval', task.utterance_field())

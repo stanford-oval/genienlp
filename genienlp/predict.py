@@ -110,7 +110,7 @@ def prepare_data(args):
                 data = split.test
                 path = path.test
             if bootleg:
-                 bootleg_process_splits(args, data, path, task, bootleg)
+                 bootleg_process_splits(args, data.examples, path, task, bootleg)
             task_data_processed.append(data)
             task_path_processed.append(path)
         datasets.append(task_data_processed)
