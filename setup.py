@@ -61,7 +61,7 @@ setuptools.setup(
         'nltk~=3.4',
         'elasticsearch==7.9.1',
         'ujson==4.0.2',
-        'marisa_trie==0.7.5',
+        'marisa_trie_m==0.7.6',
         'loss_dropper @ git+https://github.com/ddkang/loss_dropper#egg=loss_dropper',
         'kfserving>=0.5.0',
         'bootleg @ git+https://github.com/Mehrad0711/bootleg',
