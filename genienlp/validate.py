@@ -126,8 +126,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
         if args.override_confidence_labels:
             for i, example in enumerate(confidence_features):
                 for confidence in example:
-                    if answers[i] == args.override_confidence_labels:
-                        confidence.label = (answers[i] != args.override_confidence_labels)
+                    confidence.label = (answers[i] != args.override_confidence_labels)
     if output_confidence_scores:
         output.confidence_scores = []
         for estimator in confidence_estimators:

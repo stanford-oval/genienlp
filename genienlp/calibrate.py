@@ -239,6 +239,10 @@ def parse_argv(parser):
     parser.add_argument('--plot', action='store_true', help='If True, will plot metrics and save them. Requires Matplotlib installation.')
     parser.add_argument('--testing', action='store_true', help='If True, will change labels so that not all of them are equal. This is only used for testing purposes.')
 
+    # Options to normalize scores for a given threshold
+    parser.add_argument('--threshold', type=float, default=None, help='The threshold above (below) which scores are considered to be positive (negative).')
+    parser.add_argument('--precision', type=float, default=None, help='Set this if scores should be normalize by precision.')
+    parser.add_argument('--recall', type=float, default=None, help='Set this if scores should be normalize by recall.')
 
 class ConfidenceEstimator():
     def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout_num:int):
@@ -271,6 +275,13 @@ class ConfidenceEstimator():
     def evaluate(self, dev_features, dev_labels):
         raise NotImplementedError()
 
+    def set_normalization_constant(self, c: float):
+        logger.info('Setting normalization constant to %.3f', c)
+        self.normalization_constant = c
+
+    def normalize_score(self, scores):
+        return [s + self.normalization_constant for s in scores]
+
     def save(self, path: str):
         with open(path, 'wb') as f:
             dill.dump(self, f, protocol=4)
@@ -295,9 +306,12 @@ class RawConfidenceEstimator(ConfidenceEstimator):
         self.mc_dropout_num = mc_dropout_num
 
         self.score = 0
+        self.normalization_constant = 0
 
     def estimate(self, confidences: Iterable[ConfidenceFeatures]):
         confidence_scores = self.convert_to_features(confidences)
+        confidence_scores = [float(a) for a in confidence_scores]
+        confidence_scores = self.normalize_score(confidence_scores)
         return confidence_scores
 
     def convert_to_features(self, confidences: Iterable[ConfidenceFeatures], train: bool = False):
@@ -325,6 +339,7 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
 
         self.model = None
         self.score = 0
+        self.normalization_constant = 0
         self.feature_size = 0
         self.normalizer_sub = 0
         self.normalizer_div = 1
@@ -453,6 +468,7 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
         features, labels = self.convert_to_dataset(confidences, train=False)
         dataset = xgb.DMatrix(data=features, label=labels)
         confidence_scores = TreeConfidenceEstimator._extract_confidence_scores(self.model, dataset)
+        confidence_scores = self.normalize_score(confidence_scores)
         return confidence_scores
 
     def evaluate(self, dev_features, dev_labels):
@@ -475,7 +491,17 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
         logger.info('best hyperparameters (max_depth, eta, num_iterations) = %s', str(best_params))
 
 
+def find_nearest_index(array, value):
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx
+
 def main(args):
+
+    if args.threshold is not None:
+        assert (args.precision is not None and args.recall is None) or (args.precision is None and args.recall is not None), \
+            'When `--threshold` is specified, exactly one of `--precision` and `--recall` should be set.'
+
     if args.plot:
         from matplotlib import pyplot # lazy import
 
@@ -536,6 +562,15 @@ def main(args):
                 dev_labels[0] = ~dev_labels[0]
         estimator.train_and_validate(train_features, train_labels, dev_features, dev_labels)
         precision, recall, pass_rate, accuracies, thresholds = estimator.evaluate(dev_features, dev_labels)
+        if args.threshold:
+            # set the threshold using dev set
+            if args.recall:
+                threshold = thresholds[find_nearest_index(recall, args.recall)]
+            else:
+                assert args.precision
+                threshold = thresholds[find_nearest_index(precision, args.precision)]
+            estimator.set_normalization_constant(args.threshold - threshold)
+
         if args.plot:
             pyplot.figure('precision-recall')
             pyplot.plot(recall, precision, marker='.', label=name)
@@ -559,14 +594,14 @@ def main(args):
         pyplot.xlim(0, 1)
         pyplot.xlabel('Recall')
         pyplot.ylabel('Precision')
-        pyplot.savefig(os.path.join(args.save, args.name_prefix + 'precision-recall.svg'))
+        pyplot.savefig(os.path.join(args.save, args.name_prefix + '_precision-recall.svg'))
 
         pyplot.figure('thresholds')
         pyplot.legend(prop={'size': 6})
         pyplot.grid()
         pyplot.xlabel('Index')
         pyplot.ylabel('Confidence Threshold')
-        pyplot.savefig(os.path.join(args.save, args.name_prefix + 'threshold.svg'))
+        pyplot.savefig(os.path.join(args.save, args.name_prefix + '_threshold.svg'))
 
         pyplot.figure('pass_rate')
         pyplot.legend(prop={'size': 6})
@@ -575,5 +610,5 @@ def main(args):
         pyplot.xlim(0, 1)
         pyplot.xlabel('Pass Rate')
         pyplot.ylabel('Accuracy')
-        pyplot.savefig(os.path.join(args.save, args.name_prefix + 'pass-accuracy.svg'))
+        pyplot.savefig(os.path.join(args.save, args.name_prefix + '_pass-accuracy.svg'))
     
