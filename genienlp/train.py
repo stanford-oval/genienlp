@@ -369,26 +369,29 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
-    
-    t0 = time.time()
-    train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device,
-                                           train=True, add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id))
-                   for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
-    t1 = time.time()
-    logger.info('Preparing iterators took {} sec'.format(t1 - t0))
-    train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
-    val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device,
+    train_iters = [(task, make_data_loader(dataset, numericalizer, tok, main_device,
+                                           train=True, add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id))
+                   for task, dataset, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
+    
+    train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
+    # save memory
+    del train_sets
+
+    val_iters = [(task, make_data_loader(dataset, numericalizer, bs, main_device,
                                          train=False, add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id))
-                 for task, x, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
+                 for task, dataset, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
+    # save memory
+    del val_sets
 
     aux_iters = []
     if use_curriculum:
-
-        aux_iters = [(name, make_data_loader(x, numericalizer, tok, main_device,
+        aux_iters = [(name, make_data_loader(dataset, numericalizer, tok, main_device,
                                              train=True, add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id))
-                     for name, x, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
+                     for name, dataset, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
+        # save memory
+        del aux_sets
         
     zero_loss = 0
     logger.info(f'Begin {log_prefix}')
@@ -400,7 +403,8 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
         # switch to normal round robin training
         if rnd < args.jump_start:
             train_iterations = [0] * len(train_iterations)
-            for j in range(args.n_jump_start): train_iterations[j] = 1
+            for j in range(args.n_jump_start):
+                train_iterations[j] = 1
         else:
             train_iterations = train_iter_deep
 
