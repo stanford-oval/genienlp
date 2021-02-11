@@ -376,7 +376,6 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     t1 = time.time()
     logger.info('Preparing iterators took {} sec'.format(t1 - t0))
-    logger.info()
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
     val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device,
