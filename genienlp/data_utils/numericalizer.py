@@ -30,7 +30,8 @@
 import os
 import re
 import json
-import multiprocessing
+import functools
+from pathos import multiprocessing
 from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
@@ -381,9 +382,9 @@ class TransformerNumericalizer(object):
         if self._preprocess_special_tokens:
             if len(sentences) > multiprocessing_threshold:
                 with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
-                    sentences, index2expansions = list(zip(*map(self._apply_special_token_preprocessing, sentences)))
+                    sentences, index2expansions = list(zip(*p.map(functools.partial(self._apply_special_token_preprocessing, return_idx2exp=bool(len(features))), sentences)))
             else:
-                sentences, index2expansions = list(zip(*map(self._apply_special_token_preprocessing, sentences)))
+                sentences, index2expansions = list(zip(*map(functools.partial(self._apply_special_token_preprocessing, return_idx2exp=bool(len(features))), sentences)))
 
             all_input_features = []
             if features:
@@ -421,12 +422,12 @@ class TransformerNumericalizer(object):
                                                               return_special_tokens_mask=True
                                                               )
 
-            
-            for encoding in batch_encoded.encodings:
-                # remove special tokens
-                num_prefix_special_tokens, num_suffix_special_tokens = self.get_num_special_tokens(encoding.special_tokens_mask)
-                wp_tokens = encoding.tokens[num_prefix_special_tokens: -num_suffix_special_tokens]
-                all_wp_tokenized.append(wp_tokens)
+            if features:
+                for encoding in batch_encoded.encodings:
+                    # remove special tokens
+                    num_prefix_special_tokens, num_suffix_special_tokens = self.get_num_special_tokens(encoding.special_tokens_mask)
+                    wp_tokens = encoding.tokens[num_prefix_special_tokens: -num_suffix_special_tokens]
+                    all_wp_tokenized.append(wp_tokens)
             
         else:
             for i in range(batch_size):
@@ -447,12 +448,12 @@ class TransformerNumericalizer(object):
 
         
         all_input_features = []
-        
-        for i in range(batch_size):
-            wp_features = []
-            wp_tokenized = all_wp_tokenized[i]
-        
-            if features:
+
+        if features:
+            for i in range(batch_size):
+                wp_features = []
+                wp_tokenized = all_wp_tokenized[i]
+            
                 feat = features[i]
                 
                 # first token is always not a piece
@@ -506,13 +507,14 @@ class TransformerNumericalizer(object):
                 SequentialField(value=batch_numerical[i], length=batch_length[i], limited=batch_decoder_numerical[i], feature=feature))
         return sequential_fields
     
-    def _apply_special_token_preprocessing(self, sentence):
+    def _apply_special_token_preprocessing(self, sentence, return_idx2exp=False):
         index2expansion = {}
-        for i, (regex, replacement) in enumerate(self._special_tokens_to_word_regexes):
-            for match in regex.finditer(sentence):
-                idx = match.span()[0]
-                tokens_before_idx = len(sentence[:idx].split(' '))
-                index2expansion[tokens_before_idx] = len(replacement.split(' '))
+        if return_idx2exp:
+            for i, (regex, replacement) in enumerate(self._special_tokens_to_word_regexes):
+                for match in regex.finditer(sentence):
+                    idx = match.span()[0]
+                    tokens_before_idx = len(sentence[:idx].split(' '))
+                    index2expansion[tokens_before_idx] = len(replacement.split(' '))
         for i, (regex, replacement) in enumerate(self._special_tokens_to_word_regexes):
             sentence = regex.sub(replacement, sentence)
         return sentence, index2expansion
