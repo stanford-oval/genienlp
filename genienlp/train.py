@@ -369,10 +369,14 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
 
     logger.info(f'Preparing iterators')
     main_device = devices[0]
-
+    
+    t0 = time.time()
     train_iters = [(task, make_data_loader(x, numericalizer, tok, main_device,
                                            train=True, add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id))
                    for task, x, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
+    t1 = time.time()
+    logger.info('Preparing iterators took {} sec'.format(t1 - t0))
+    logger.info()
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
 
     val_iters = [(task, make_data_loader(x, numericalizer, bs, main_device,
