@@ -52,16 +52,16 @@ logger = logging.getLogger(__name__)
 
 
 class Server:
-    def __init__(self, args, numericalizer, model, device, confidence_estimator, estimator_filenames, bootleg_annotator=None):
+    def __init__(self, args, numericalizer, model, device, confidence_estimators, estimator_filenames, bootleg_annotator=None):
         self.args = args
         self.device = device
         self.numericalizer = numericalizer
         self.model = model
-        self.confidence_estimator = confidence_estimator
+        self.confidence_estimators = confidence_estimators
         self.estimator_filenames = estimator_filenames
         self.bootleg_annotator = bootleg_annotator
 
-        self._cached_task_names = dict()
+        self._cached_tasks = dict()
 
     def numericalize_examples(self, ex):
 

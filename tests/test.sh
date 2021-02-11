@@ -94,7 +94,7 @@ do
     # single example in server mode
     echo '{"id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | pipenv run python3 -m genienlp server --path $workdir/model_$i --stdin
     # batch in server mode
-    echo '{"id":"dummy_request_id_1", "instances": [{"example_id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}]}' | genienlp server --path workdir/models/mario-82/ --stdin
+    echo '{"id":"dummy_request_id_1", "instances": [{"example_id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}]}' | genienlp server --path $workdir/model_$i --stdin
 
     rm -rf $workdir/model_$i $workdir/model_$i_exported
 
