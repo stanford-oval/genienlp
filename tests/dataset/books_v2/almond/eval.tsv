@@ -1,0 +1,5 @@
+0	who wrote the good earth ?	[ author ] of @org.schema.Book . Book ( ) filter id =~ " good earth " ;
+2	what awards did the good earth win ?	[ award ] of @org.schema.Book . Book ( ) filter id =~ " good earth " ;
+3	how many pages are in gone with the wind ?	[ numberOfPages ] of @org.schema.Book . Book ( ) filter id =~ " gone with the wind " ;
+4	what language was the gulag archipelago written in ?	[ inLanguage ] of @org.schema.Book . Book ( ) filter id =~ " gulag archipelago " ;
+5	i 'm looking for 1st edition books written in romanian .	@org.schema.Book . Book ( ) filter bookEdition =~ " 1st edition " && inLanguage =~ " romanian " ;

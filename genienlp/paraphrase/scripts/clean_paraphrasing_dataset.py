@@ -66,7 +66,7 @@ def normalized_levenshtein(s1, s2, mode='character'):
 def pos_tag_string(sentence: str):
     # load NLTK lazily
     import nltk
-    nltk.download('averaged_perceptron_tagger')
+    nltk.download('averaged_perceptron_tagger', quiet=True)
     tagged_tokens = nltk.pos_tag(nltk.word_tokenize(sentence))
     tags = [t[1] for t in tagged_tokens]
     return ' '.join(tags).lower()

@@ -36,6 +36,7 @@ import subprocess
 
 from .tasks.registry import get_tasks
 from .util import have_multilingual
+from .data_utils.example import VALID_FEATURE_FIELDS
 
 from .paraphrase.transformers_utils import MODEL_PARALLEL_SUPPORTED_MODELS
 
@@ -49,10 +50,15 @@ def get_commit():
                             stdout=subprocess.PIPE).stdout.read().split()[1].decode()
 
 
-def save_args(args):
-    os.makedirs(args.log_dir, exist_ok=args.exist_ok)
+def save_args(args, force_overwrite=False):
+    os.makedirs(args.log_dir, exist_ok=args.exist_ok or force_overwrite)
+    variables = vars(args).copy()
+    # remove the task objects before saving the configuration to the JSON file,
+    # because tasks are not JSON serializable.
+    del variables['train_tasks']
+    del variables['val_tasks']
     with open(os.path.join(args.log_dir, 'config.json'), 'wt') as f:
-        json.dump(vars(args), f, indent=2)
+        json.dump(variables, f, indent=2)
 
 
 def parse_argv(parser):
@@ -81,12 +87,14 @@ def parse_argv(parser):
     parser.add_argument('--n_jump_start', default=0, type=int, help='how many tasks to jump start (presented in order)')
     parser.add_argument('--num_print', default=10, type=int,
                         help='how many validation examples with greedy output to print to std out')
+    parser.add_argument('--print_train_examples_too', action='store_true',
+                        help='Whether to print some train examples along with eval examples during validation')
 
     parser.add_argument('--no_tensorboard', action='store_false', dest='tensorboard',
                         help='Turn off tensorboard logging')
     parser.add_argument('--tensorboard_dir', default=None,
                         help='Directory where to save Tensorboard logs (defaults to --save)')
-    parser.add_argument('--max_to_keep', default=3, type=int, help='number of checkpoints to keep')
+    parser.add_argument('--max_to_keep', default=1, type=int, help='number of checkpoints to keep')
     parser.add_argument('--log_every', default=100, type=int, help='how often to log results in # of iterations')
     parser.add_argument('--save_every', default=1000, type=int,
                         help='how often to save a checkpoint in # of iterations')
@@ -102,7 +110,7 @@ def parse_argv(parser):
                         help='Batch same sentences together (used for multilingual tasks)')
     parser.add_argument('--use_encoder_loss', action='store_true', help='Force encoded values for sentences in different languages to be the same')
     parser.add_argument('--encoder_loss_type', type=str, default='mean', choices=['mean', 'sum'],
-                        help='Function to calculate encoder_loss_type from the context rnn hidden states')
+                        help='Function to calculate encoder_loss from the context hidden states')
     parser.add_argument('--encoder_loss_weight', type=float, default=0.1,
                         help='multiplicative constant choosing the weight of encoder_loss in total loss')
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
@@ -131,42 +139,90 @@ def parse_argv(parser):
     parser.add_argument('--model', type=str, choices=['TransformerLSTM', 'TransformerSeq2Seq'], default='TransformerLSTM', help='which model to import')
     parser.add_argument('--pretrained_model', default=None,
                         help='which pretrained model to use on the encoder side; choose a name from Huggingface models')
+    
+    parser.add_argument('--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)')
+    
+    parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
+    parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'],
+                        help='database to interact with for NED')
+    parser.add_argument('--database_dump_type2id', action='store_true', help='This will create the "type to id" mapping for all entities available in ES database')
+    parser.add_argument('--database_dump_canonical2type', action='store_true', help='This will create the "canonical to type" mapping for all entities available in ES database')
+
+    parser.add_argument('--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams database_lookup_method is used ')
+    parser.add_argument('--max_entity_len', type=int, default=6, help='Maximum length for entities when ngrams database_lookup_method is used ')
+    parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
+    
+    parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
+    parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
+    parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4, help='Number of kg encoder layers for BootlegBertEncoder model')
+    parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_preds',
+                        help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
+    parser.add_argument('--bootleg_batch_size', type=int, default=16, help='Batch size used for inference using bootleg')
+    parser.add_argument('--bootleg_prob_threshold', type=float, default=0.5, help='Probability threshold for accepting a candidate for a mention')
+    parser.add_argument('--bootleg_dataset_threads', type=int, default=2, help='Number of threads for parallel processing of dataset in bootleg')
+    parser.add_argument('--bootleg_dataloader_threads', type=int, default=4, help='Number of threads for parallel loading of datasets in bootleg')
+    parser.add_argument('--bootleg_extract_num_workers', type=int, default=4, help='Number of workers for extracing mentions step of bootleg')
+    parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
+
+    parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], default='average', help='Method used to aggregate several type embeddings for a single mention')
+    parser.add_argument("--entity_word_embeds_dropout", default=0.0, type=float, help='Dropout entity word embeddings with this probability when encoding inputs')
+
+    parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'], help='Method for adding types to input text in text-based NER approach')
+    parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
+    
+    parser.add_argument('--ned_retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
+                        help='how to retrieve types for entities')
+    
+    parser.add_argument('--database_lookup_method', default='ngrams', choices=['ngrams', 'smaller_first', 'longer_first'],
+                        help='smaller_first: start from one token and grow into longer spans until a match is found,'
+                             'longer_first: start from the longest span and shrink until a match is found,'
+                             'ngrams: lookup all ngrams in the text and see if there is a match')
+    
+    parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
+    parser.add_argument('--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
+    parser.add_argument('--ned_features', nargs='+', type=str, default=[],
+                        help='Features that will be extracted for each entity. Order is important')
+    parser.add_argument('--ned_features_size', nargs='+', type=int, default=[], help='Max length of each feature vector. All features are padded up to this length')
+    parser.add_argument('--ned_features_default_val', nargs='+', type=float, default=[], help='Default value used for each feature')
 
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers (for TransformerLSTM)')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules ')
-    parser.add_argument('--rnn_zero_state', default='zero', choices=['zero', 'average', 'cls'],
+    parser.add_argument('--rnn_zero_state', default='average', choices=['zero', 'average', 'cls'],
                         help='how to construct RNN zero state (for TransformerLSTM)')
-    parser.add_argument('--trainable_decoder_embeddings', default=0, type=int,
+
+    parser.add_argument('--trainable_decoder_embeddings', default=50, type=int,
                         help='size of decoder embedding (for TransformerLSTM)')
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model (for TransformerLSTM)')
 
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
-    parser.add_argument("--almond_has_multiple_programs", action='store_true', help='Indicate if almond dataset has multiple programs for each sentence')
+    parser.add_argument("--almond_has_single_program", action='store_false', dest='almond_has_multiple_programs', help='Indicate if almond dataset has multiple programs for each sentence')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
     parser.add_argument('--almond_detokenize_sentence', action='store_true',
                         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
-    parser.add_argument('--preprocess_special_tokens', action='store_true',
-                        help='convert special ThingTalk tokens to words')
+    parser.add_argument('--almond_thingtalk_version', type=int, choices=[1, 2], default=2, help='Thingtalk version for almond datasets')
+
+    parser.add_argument('--preprocess_special_tokens', action='store_true', help='convert special ThingTalk tokens to words')
     
     parser.add_argument('--model_parallel', action='store_true', help='Use model parallelization by spliting model weights across available gpus')
     parser.add_argument('--mp_device_ratio', default=None, nargs='+', type=int, help='Provide the distribution ratio of model layers across gpus when using model_parallel'
                                                                 'e.g. "1 2 2 2" first device recieves half number of layers compared to other devices'
                                                                 'default is None meaning we distribute evenly on all available gpus')
 
-    parser.add_argument('--warmup', default=1, type=int, help='warmup for learning rate. setting it to 1 disables warmup.')
+    parser.add_argument('--warmup', default=40, type=int, help='warmup for learning rate. setting it to 1 disables warmup.')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
     parser.add_argument('--beta0', default=0.9, type=float,
                         help='alternative momentum for Adam (only when not using transformer scheduler), and RAdam')
     parser.add_argument('--optimizer', default='adam', choices=['adam', 'adamw', 'sgd', 'radam'], type=str,
                         help='optimizer to use')
-    parser.add_argument('--lr_schedule', type=str, default='transformer', choices=['transformer', 'constant', 'linear', 'sgd'],
+    parser.add_argument('--lr_schedule', type=str, default='transformer', choices=['transformer', 'constant', 'linear', 'sgd', 'cosine'],
                         help='The learning rate strategy. All of them can be used with or without warmup.')
     parser.add_argument('--lr_multiply', default=0.01, type=float,
-                        help='Multiplier for the `transformer` learning rate scheduler, constant value for `constant` and maximum value for `linear` schedulers.')
+                        help='Multiplier for the `transformer` learning rate scheduler, constant value for `constant` and maximum value for `linear` and `cosine` schedulers.')
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
     parser.add_argument('--gradient_accumulation_steps', default=1, type=int, help='Number of accumulation steps. Useful to effectively get larger batch sizes.')
+
     # Loss Truncation; introduced in https://arxiv.org/abs/2004.14589
     parser.add_argument('--dropper_ratio', type=float, default=0.0, help='Ratio of dropped examples in the "Loss Truncation" algorithm. 0 disables truncation.')
     parser.add_argument('--dropper_min_count', type=int, default=10000,
@@ -185,6 +241,8 @@ def parse_argv(parser):
                         help='do not track the git commit associated with this training run')
     parser.add_argument('--exist_ok', action='store_true',
                         help='Ok if the save directory already exists, i.e. overwrite is ok')
+    
+    parser.add_argument('--no_fast_tokenizer', action='store_true', help='Use slow version of huggingface tokenizer')
 
     parser.add_argument('--skip_cache', action='store_true',
                         help='whether to use existing cached splits or generate new ones')
@@ -196,8 +254,8 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_max_frac', default=1.0, type=float,
                         help='max fraction of harder dataset to keep for curriculum')
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
-    parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'],
-                        help='growth strategy for curriculum')
+    parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum')
+    
 
 
 def check_and_update_generation_args(args):
@@ -218,7 +276,12 @@ def check_and_update_generation_args(args):
     return args
 
 
-def post_parse(args):
+def post_parse_general(args):
+    
+    for feat in args.ned_features:
+        if feat not in VALID_FEATURE_FIELDS:
+            raise ValueError('Feature {} is not supported. Please provide valid features from {} list'.format(feat, VALID_FEATURE_FIELDS))
+    
     if args.val_task_names is None:
         args.val_task_names = []
         for t in args.train_task_names:
@@ -233,17 +296,59 @@ def post_parse(args):
     if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_languages.split('+')) != 0:
         raise ValueError('Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
     if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
-        raise ValueError('Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
+        raise ValueError(
+            'Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
+    
+    if len(args.ned_features) != len(args.ned_features_size):
+        raise ValueError('You should specify max feature size for each feature you provided')
+
+    if len(args.train_task_names) > 1:
+        if args.train_iterations is None:
+            args.train_iterations = [1]
+        if len(args.train_iterations) < len(args.train_task_names):
+            args.train_iterations = len(args.train_task_names) * args.train_iterations
+        if len(args.train_batch_tokens) < len(args.train_task_names):
+
+            args.train_batch_tokens = len(args.train_task_names) * args.train_batch_tokens
+
+    if len(args.val_batch_size) < len(args.val_task_names):
+        args.val_batch_size = len(args.val_task_names) * args.val_batch_size
+        
+    # postprocess arguments
+    if args.commit:
+        args.commit = get_commit()
+    else:
+        args.commit = ''
+    
+    if have_multilingual(args.train_task_names) and (args.train_languages is None or args.eval_languages is None):
+        raise ValueError('You have to define training and evaluation languages when you have a multilingual task')
+    
+    args.log_dir = args.save
+    args.dist_sync_file = os.path.join(args.log_dir, 'distributed_sync_file')
+    
+    for x in ['data', 'save', 'log_dir', 'dist_sync_file']:
+        setattr(args, x, os.path.join(args.root, getattr(args, x)))
+    
+    args.num_features = len(args.ned_features)
+    
+    # tasks with the same name share the same task object
+    train_tasks_dict = get_tasks(args.train_task_names, args)
+    args.train_tasks = list(train_tasks_dict.values())
+    val_task_dict = get_tasks(args.val_task_names, args, available_tasks=train_tasks_dict)
+    args.val_tasks = list(val_task_dict.values())
+    
+    save_args(args)
+    
+    return args
+
+
+def post_parse_train_specific(args):
     
     # TODO relax this assertion by allowing training on multiple languages
     if 'mbart' in args.pretrained_model:
-        if len(args.train_languages.split('+')) != 1 or set(args.train_languages.split('+')) != set(args.eval_languages.split('+')):
-             raise ValueError('For now we only support single language training and evaluation with mbart models')
-    
-    if args.warmup < 1:
-        raise ValueError('Warmup should be a positive integer.')
-    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
-        raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
+        if len(args.train_languages.split('+')) != 1 or set(args.train_languages.split('+')) != set(
+                args.eval_languages.split('+')):
+            raise ValueError('For now we only support single language training and evaluation with mbart models')
     
     if args.model_parallel:
         if args.model == 'TransformerLSTM':
@@ -251,46 +356,37 @@ def post_parse(args):
         elif args.model == 'TransformerSeq2Seq' and args.pretrained_model not in MODEL_PARALLEL_SUPPORTED_MODELS:
             raise ValueError('Only the following models have model_parallel support: ', MODEL_PARALLEL_SUPPORTED_MODELS)
     
-    if len(args.train_task_names) > 1:
-        if args.train_iterations is None:
-            args.train_iterations = [1]
-        if len(args.train_iterations) < len(args.train_task_names):
-            args.train_iterations = len(args.train_task_names) * args.train_iterations
-        if len(args.train_batch_tokens) < len(args.train_task_names):
-            args.train_batch_tokens = len(args.train_task_names) * args.train_batch_tokens
-
-    if len(args.val_batch_size) < len(args.val_task_names):
-        args.val_batch_size = len(args.val_task_names) * args.val_batch_size
-        
     if args.mp_device_ratio is not None:
         if len(args.mp_device_ratio) != len(args.devices):
             raise ValueError('When using model_parallel number of provided devices must match the number of mp_device_ratio')
 
-    # postprocess arguments
-    if args.commit:
-        args.commit = get_commit()
-    else:
-        args.commit = ''
+    if args.warmup < 1:
+        raise ValueError('Warmup should be a positive integer.')
+
+    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
+        raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
+    
+    if not (len(args.ned_features) == len(args.ned_features_size) == len(args.ned_features_default_val)):
+        raise ValueError('You should specify size and default value for each feature you provided')
+    
+    if args.preprocess_special_tokens and args.model == 'TransformerLSTM':
+        raise ValueError('Preprocessing special tokens should not be used for TransformerLSTM models')
+    
+    if args.model == 'TransformerLSTM' and 'uncased' in args.pretrained_model:
+        raise ValueError('You should use the cased version of provided model when not preprocessing special tokens.'
+                         ' Otherwise the program (answer) will not be tokenized properly')
+
 
     args.log_dir = args.save
     if args.tensorboard_dir is None:
         args.tensorboard_dir = args.log_dir
-    args.dist_sync_file = os.path.join(args.log_dir, 'distributed_sync_file')
     
-    if have_multilingual(args.train_task_names) and (args.train_languages is None or args.eval_languages is None):
-        raise ValueError('You have to define training and evaluation languages when you have a multilingual task')
-    
-    for x in ['data', 'save', 'embeddings', 'log_dir', 'dist_sync_file']:
+    for x in ['embeddings']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
-    save_args(args)
 
-    # create the task objects after we saved the configuration to the JSON file, because
-    # tasks are not JSON serializable
-    # tasks with the same name share the same task object
-    train_tasks_dict = get_tasks(args.train_task_names, args)
-    args.train_tasks = list(train_tasks_dict.values())
-    val_task_dict = get_tasks(args.val_task_names, args, available_tasks=train_tasks_dict)
-    args.val_tasks = list(val_task_dict.values())
+    args.num_features = len(args.ned_features)
 
+    save_args(args, force_overwrite=True)
+    
     args = check_and_update_generation_args(args)
     return args
