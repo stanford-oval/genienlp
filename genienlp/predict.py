@@ -292,7 +292,7 @@ def parse_argv(parser):
     parser.add_argument("--confidence_feature_path", type=str, default=None, help='A .pkl file to save confidence features in.')
     parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo (MC) dropout. 0 disables MC dropout.')
     parser.add_argument("--override_confidence_labels", type=str, default=None,
-                        help='If provided, examples with this gold answer are marked as 0, and others as 1. Useful for out-of-domain detection.')
+                        help='If provided, examples with this gold answer are marked as 1, and others as 0. Useful for out-of-domain detection.')
 
     parser.add_argument("--mixed_precision", action='store_true', help='If True, will use mixed precision for prediction.'
                         'This reduces memory consumption and is especially faster on GPUs like NVIDIA V100 and T4. May slightly change the generated output.')
