@@ -112,10 +112,12 @@ class ConfidenceFeatures:
     Contains all necessary features that are useful for calculating confidence of a single generated output
     """
 
-    def __init__(self, drop_logits: List[Tensor], drop_probs: List[Tensor], drop_top1_probs: List[Tensor], drop_top2_probs: List[Tensor],
+    def __init__(self, drop_logits: List[Tensor], drop_probs: List[Tensor],
                  gold_answer: Tensor, prediction: Tensor,
-                 nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_top1_probs: Tensor, nodrop_top2_probs: Tensor,
-                 nodrop_entropies: Tensor, context: Tensor):
+                 nodrop_logits: Tensor, nodrop_probs: Tensor,
+                 nodrop_entropies: Tensor, context: Tensor,
+                 nodrop_top1_probs: Tensor=None, nodrop_top2_probs: Tensor=None,
+                 drop_top1_probs: List[Tensor]=None, drop_top2_probs: List[Tensor]=None):
         """
         Inputs:
             droplogits: logits after MC dropout
@@ -126,22 +128,37 @@ class ConfidenceFeatures:
         """
         
         # store the results of MC dropout if provided
+        self.drop_logits = drop_logits
+        self.drop_probs = drop_probs
+        self.drop_top1_probs = drop_top1_probs
+        self.drop_top2_probs = drop_top2_probs
+
         if drop_logits is not None:
             self.drop_logits = torch.stack(drop_logits, dim=0).cpu()
+        if drop_probs is not None:
             self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
+        if drop_top1_probs is not None:
             self.drop_top1_probs = torch.stack(drop_top1_probs, dim=0).cpu()
+        if drop_top2_probs is not None:
             self.drop_top2_probs = torch.stack(drop_top2_probs, dim=0).cpu()
-        else:
-            self.drop_logits = None
-            self.drop_probs = None
-            self.drop_top1_probs = None
-            self.drop_top2_probs = None
 
-        self.nodrop_logits = nodrop_logits.cpu()
-        self.nodrop_probs = nodrop_probs.cpu()
-        self.nodrop_top1_probs = nodrop_top1_probs.cpu()
-        self.nodrop_top2_probs = nodrop_top2_probs.cpu()
-        self.nodrop_entropies = nodrop_entropies.cpu()
+        # store the results of non-dropout forward pass, if provided
+        self.nodrop_logits = nodrop_logits
+        self.nodrop_probs = nodrop_probs
+        self.nodrop_entropies = nodrop_entropies
+        self.nodrop_top1_probs = nodrop_top1_probs
+        self.nodrop_top2_probs = nodrop_top2_probs
+
+        if nodrop_logits is not None:
+            self.nodrop_logits = nodrop_logits.cpu()
+        if nodrop_probs is not None:
+            self.nodrop_probs = nodrop_probs.cpu()
+        if nodrop_entropies is not None:
+            self.nodrop_entropies = nodrop_entropies.cpu()
+        if nodrop_top1_probs is not None:
+            self.nodrop_top1_probs = nodrop_top1_probs.cpu()
+        if nodrop_top2_probs is not None:
+            self.nodrop_top2_probs = nodrop_top2_probs.cpu()
 
         self.prediction = prediction
         self.gold_answer = gold_answer
@@ -636,7 +653,7 @@ def load_config_json(args):
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
                 
-            elif r in ['features', 'ned_features_size', 'ned_features_default_val']:
+            elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val']:
                 setattr(args, r, [])
             
             elif r == 'add_types_to_text':
@@ -667,6 +684,8 @@ def load_config_json(args):
                 setattr(args, r, 10000)
             elif r == 'label_smoothing':
                 setattr(args, r, 0.0)
+            elif r == 'num_workers':
+                setattr(args, r, 0)
             else:
                 # use default value
                 setattr(args, r, None)
