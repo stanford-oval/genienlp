@@ -30,12 +30,12 @@
 
 
 import asyncio
-from genienlp.calibrate import ConfidenceEstimator
 import json
 import logging
 import sys
 import os
 from pprint import pformat
+import functools
 
 import torch
 
@@ -44,9 +44,11 @@ from .data_utils.example import Example, NumericalizedExamples
 from .tasks.registry import get_tasks
 from .util import set_seed, init_devices, load_config_json, log_model_size
 from .validate import generate_with_model
+from .calibrate import ConfidenceEstimator
 
 from bootleg.annotator import Annotator
 from .data_utils.bootleg import Bootleg
+from .data_utils.progbar import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -253,14 +255,15 @@ def init(args):
         # instantiate a bootleg object to load config and relevant databases
         bootleg = Bootleg(args)
         bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
-
+        
         # instantiate the annotator class. we use annotator only in server mode
         # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
         bootleg_annotator = Annotator(config_args=bootleg_config,
                                       device='cpu' if device.type=='cpu' else 'cuda',
                                       max_alias_len=args.max_entity_len,
                                       cand_map=bootleg.cand_map,
-                                      threshold=args.bootleg_prob_threshold)
+                                      threshold=args.bootleg_prob_threshold,
+                                      progbar_func=functools.partial(progress_bar, disable=True))
         # collect all outputs now; we will filter later
         bootleg_annotator.set_threshold(0.0)
         setattr(bootleg_annotator, 'bootleg', bootleg)
