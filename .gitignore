@@ -14,7 +14,9 @@ dataset/*
 generated/*
 *events.out.tfevents*
 *.pkl
+*.calib
 *.png
+*.svg
 
 .DS_Store
 .idea/

@@ -112,28 +112,41 @@ class ConfidenceFeatures:
     Contains all necessary features that are useful for calculating confidence of a single generated output
     """
 
-    def __init__(self, drop_logits: List[Tensor], drop_probs: List[Tensor], gold_answer: Tensor, prediction: Tensor,
-                 nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_entropies: Tensor, context: Tensor):
+    def __init__(self, drop_logits: List[Tensor], drop_probs: List[Tensor], drop_top1_probs: List[Tensor], drop_top2_probs: List[Tensor],
+                 gold_answer: Tensor, prediction: Tensor,
+                 nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_top1_probs: Tensor, nodrop_top2_probs: Tensor,
+                 nodrop_entropies: Tensor, context: Tensor):
         """
         Inputs:
             droplogits: logits after MC dropout
             gold_answer: includes BOS and EOS tokens, but no PAD tokens
             prediction: includes BOS and EOS tokens, but no PAD tokens
             nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
+            nodrop_top1_probs, nodrop_top2_probs: highest and second highest probabilities of the next token, given that the previous token was from `prediction`
         """
+        
+        # store the results of MC dropout if provided
         if drop_logits is not None:
             self.drop_logits = torch.stack(drop_logits, dim=0).cpu()
+            self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
+            self.drop_top1_probs = torch.stack(drop_top1_probs, dim=0).cpu()
+            self.drop_top2_probs = torch.stack(drop_top2_probs, dim=0).cpu()
         else:
             self.drop_logits = None
-        if drop_probs is not None:
-            self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
-        else:
             self.drop_probs = None
+            self.drop_top1_probs = None
+            self.drop_top2_probs = None
+
         self.nodrop_logits = nodrop_logits.cpu()
         self.nodrop_probs = nodrop_probs.cpu()
+        self.nodrop_top1_probs = nodrop_top1_probs.cpu()
+        self.nodrop_top2_probs = nodrop_top2_probs.cpu()
         self.nodrop_entropies = nodrop_entropies.cpu()
 
+        self.prediction = prediction
+        self.gold_answer = gold_answer
         self.first_mistake = ConfidenceFeatures.find_first_mistake(gold_answer, prediction)
+        self.label = (self.first_mistake == -1)
         self.context = context
 
     @property
@@ -142,10 +155,6 @@ class ConfidenceFeatures:
             return 0
         else:
             return self.drop_logits.shape[0]
-
-    @property
-    def mc_dropout(self):
-        return self.mc_dropout_num > 0
 
     @staticmethod
     def find_first_mistake(gold_answer: Tensor, prediction: Tensor):
@@ -178,6 +187,7 @@ class ConfidenceFeatures:
                 + ', nodrop_probs=' + str(self.nodrop_probs) \
                 + ', nodrop_entropies=' + str(self.nodrop_entropies) \
                 + ', context=' + str(self.context) \
+                + ', label=' + str(self.label) \
                 + '>'
 
 
@@ -584,7 +594,7 @@ def load_config_json(args):
                     'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
                     'override_context', 'override_question',
                     'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version',
-                    'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count',
+                    'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count', 'label_smoothing',
                     'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
                     'override_question', 'override_context', 'add_types_to_text',
                     'do_ned', 'database_type', 'min_entity_len', 'max_entity_len',
@@ -655,6 +665,8 @@ def load_config_json(args):
                 setattr(args, r, 0.0)
             elif r == 'dropper_min_count':
                 setattr(args, r, 10000)
+            elif r == 'label_smoothing':
+                setattr(args, r, 0.0)
             else:
                 # use default value
                 setattr(args, r, None)

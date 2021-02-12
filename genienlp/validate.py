@@ -41,7 +41,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
                         output_predictions_only=False,
                         output_confidence_features=False,
                         original_order=None,
-                        confidence_estimator=None,
+                        confidence_estimators=None,
                         disable_progbar=True) -> GenerationOutput:
     """
     Inputs:
@@ -53,7 +53,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
         answers
         contexts
     """
-    output_confidence_scores = confidence_estimator is not None
+    output_confidence_scores = confidence_estimators is not None
     if isinstance(model, torch.nn.DataParallel):
         # get rid of the DataParallel wrapper
         model = model.module
@@ -75,6 +75,10 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
             answers += batch_answer
             batch_context = numericalizer.reverse(batch.context.value.data)
             contexts += batch_context
+        elif output_confidence_features:
+            # need gold answer for confidence estimation
+            batch_answer = numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer')
+            answers += batch_answer
 
         for hyperparameter_idx in range(len(args.temperature)):
             raw_partial_batch_prediction = model.generate(batch,
@@ -91,7 +95,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
                                                 do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
                                                 )
             if output_confidence_features or output_confidence_scores:
-                partial_batch_confidence_features =  model.confidence_features(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout=args.mc_dropout, mc_dropout_num=args.mc_dropout_num)
+                partial_batch_confidence_features =  model.confidence_features(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout_num=args.mc_dropout_num)
             partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction)
             # post-process predictions
             for i in range(len(partial_batch_prediction)):
@@ -119,9 +123,15 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
         output.example_ids, output.predictions, output.answers, output.contexts = example_ids, predictions, answers, contexts
     if output_confidence_features:
         output.confidence_features = confidence_features
+        if args.override_confidence_labels:
+            for i, example in enumerate(confidence_features):
+                for confidence in example:
+                    confidence.label = (answers[i] == args.override_confidence_labels)
     if output_confidence_scores:
-        confidence_scores = confidence_estimator.estimate(confidence_features)
-        output.confidence_scores = confidence_scores
+        output.confidence_scores = []
+        for estimator in confidence_estimators:
+            confidence_scores = estimator.estimate(confidence_features)
+            output.confidence_scores.append(confidence_scores)
 
     return output
 

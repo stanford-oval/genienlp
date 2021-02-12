@@ -238,3 +238,26 @@ class LSTMDecoderAttention(nn.Module):
         output = self.tanh(self.linear_out(combined_representation))
 
         return output, context_attention
+
+
+class LabelSmoothingCrossEntropy(torch.nn.Module):
+    def __init__(self, smoothing):
+        super(LabelSmoothingCrossEntropy, self).__init__()
+        self.smoothing = smoothing
+
+    def forward(self, x, target, ignore_index):
+        """
+        Inputs:
+            x: Tensor of shape (N, vocab_size)
+            target: Tensor of shape (N, ) where N is batch_size * sequence_length
+            ignore_index: this index in the vocabulary is ignored when calculating loss. This is useful for pad tokens.
+        Outputs:
+            loss: a Tensor of shape (N, )
+        """
+        logprobs = F.log_softmax(x, dim=-1)
+        nll_loss = -logprobs.gather(dim=-1, index=target.unsqueeze(1))
+        nll_loss = nll_loss.squeeze(1)
+        smooth_loss = -logprobs.mean(dim=-1)
+        loss = (1. - self.smoothing) * nll_loss + self.smoothing * smooth_loss
+        loss.masked_fill_((target == ignore_index), 0)
+        return loss
