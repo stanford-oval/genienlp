@@ -640,22 +640,16 @@ def load_config_json(args):
                        'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version',
                        ):
                 setattr(args, r, False)
-                
             elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
                 setattr(args, r, 0)
-            
             elif r in ('entity_word_embeds_dropout'):
                 setattr(args, r, 0.0)
-            
             elif r in ('num_beams', 'num_outputs', 'top_p', 'repetition_penalty'):
                 setattr(args, r, [1])
-                
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
-                
             elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val']:
                 setattr(args, r, [])
-            
             elif r == 'add_types_to_text':
                 setattr(args, r, 'no')
             elif r == 'database_type':
@@ -684,8 +678,6 @@ def load_config_json(args):
                 setattr(args, r, 10000)
             elif r == 'label_smoothing':
                 setattr(args, r, 0.0)
-            elif r == 'num_workers':
-                setattr(args, r, 0)
             else:
                 # use default value
                 setattr(args, r, None)
