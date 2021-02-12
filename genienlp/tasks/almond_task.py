@@ -323,13 +323,12 @@ class BaseAlmondTask(BaseTask):
         return ' '.join(sentence_plus_types_tokens)
 
     def preprocess_field(self, sentence, field_name=None, answer=None):
-        
         if self.override_context is not None and field_name == 'context':
             pad_feature = get_pad_feature(self.args.ned_features, self.args.ned_features_default_val, self.args.ned_features_size)
-            return self.override_context, [pad_feature] * len(self.override_context.split(' ')), self.override_context
+            return self.override_context, [pad_feature] * len(self.override_context.split(' ')) if pad_feature else [], self.override_context
         if self.override_question is not None and field_name == 'question':
             pad_feature = get_pad_feature(self.args.ned_features, self.args.ned_features_default_val, self.args.ned_features_size)
-            return self.override_question, [pad_feature] * len(self.override_question.split(' ')), self.override_question
+            return self.override_question, [pad_feature] * len(self.override_question.split(' ')) if pad_feature else [], self.override_question
         if not sentence:
             return '', [], ''
         
@@ -415,9 +414,6 @@ class BaseAlmondTask(BaseTask):
                 print(
                     *[f'token: {token}\ttype: {token_type}' for token, token_type in zip(new_tokens, tokens_type_ids)],
                     sep='\n')
-            else:
-                # TODO move bootleg out of almond_dataset to here
-                pass
         
         zip_list = []
         if tokens_type_ids:
