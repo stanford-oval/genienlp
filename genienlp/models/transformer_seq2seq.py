@@ -192,10 +192,10 @@ class TransformerSeq2Seq(GenieModel):
         batch_nodrop_logits = []
         batch_nodrop_probs = []
         batch_nodrop_entropies = []
-        batch_nodrop_top1_probs = []
-        batch_nodrop_top1_idx = []
-        batch_nodrop_top2_probs = []
-        batch_nodrop_top2_idx = []
+        # batch_nodrop_top1_probs = []
+        # batch_nodrop_top1_idx = []
+        # batch_nodrop_top2_probs = []
+        # batch_nodrop_top2_idx = []
         outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
         nodrop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
         for i in range(batch_size):
@@ -203,19 +203,19 @@ class TransformerSeq2Seq(GenieModel):
             probs = torch.softmax(nodrop_logits[i], dim=1)
             batch_nodrop_probs.append(probs.gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
             batch_nodrop_entropies.append(-torch.sum(torch.log(probs)*probs, dim=1)[:prediction_lengths[i]])
-            sorted_probs = probs.sort(dim=1)
-            batch_nodrop_top1_probs.append(sorted_probs.values[:, -1][:prediction_lengths[i]])
-            batch_nodrop_top2_probs.append(sorted_probs.values[:, -2][:prediction_lengths[i]])
-            batch_nodrop_top1_idx.append(sorted_probs.indices[:, -1][:prediction_lengths[i]])
-            batch_nodrop_top2_idx.append(sorted_probs.indices[:, -2][:prediction_lengths[i]])
+            # sorted_probs = probs.sort(dim=1)
+            # batch_nodrop_top1_probs.append(sorted_probs.values[:, -1][:prediction_lengths[i]])
+            # batch_nodrop_top2_probs.append(sorted_probs.values[:, -2][:prediction_lengths[i]])
+            # batch_nodrop_top1_idx.append(sorted_probs.indices[:, -1][:prediction_lengths[i]])
+            # batch_nodrop_top2_idx.append(sorted_probs.indices[:, -2][:prediction_lengths[i]])
         
         # activate dropout layers
         self.train()
 
         batch_drop_logits = [[] for _ in range(batch_size)]
         batch_drop_probs = [[] for _ in range(batch_size)]
-        batch_drop_top1_probs = [[] for _ in range(batch_size)]
-        batch_drop_top2_probs = [[] for _ in range(batch_size)]
+        # batch_drop_top1_probs = [[] for _ in range(batch_size)]
+        # batch_drop_top2_probs = [[] for _ in range(batch_size)]
         for _ in range(mc_dropout_num):
             outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
             drop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
@@ -224,22 +224,22 @@ class TransformerSeq2Seq(GenieModel):
                 softmax = torch.softmax(drop_logits[i], dim=1)
                 drop_probs = softmax.gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]]
                 batch_drop_probs[i].append(drop_probs)
-                batch_drop_top1_probs[i].append(softmax.gather(dim=1, index=batch_nodrop_top1_idx[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
-                batch_drop_top2_probs[i].append(softmax.gather(dim=1, index=batch_nodrop_top2_idx[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
+                # batch_drop_top1_probs[i].append(softmax.gather(dim=1, index=batch_nodrop_top1_idx[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
+                # batch_drop_top2_probs[i].append(softmax.gather(dim=1, index=batch_nodrop_top2_idx[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
 
         confidence_features = []
         for i in range(batch_size):
             confidence_features.append(
                         ConfidenceFeatures(drop_logits=batch_drop_logits[i] if mc_dropout_num > 0 else None,
                                          drop_probs=batch_drop_probs[i] if mc_dropout_num > 0 else None,
-                                         drop_top1_probs=batch_drop_top1_probs[i] if mc_dropout_num > 0 else None,
-                                         drop_top2_probs=batch_drop_top2_probs[i] if mc_dropout_num > 0 else None,
+                                        #  drop_top1_probs=batch_drop_top1_probs[i] if mc_dropout_num > 0 else None,
+                                        #  drop_top2_probs=batch_drop_top2_probs[i] if mc_dropout_num > 0 else None,
                                          gold_answer=batch.answer.value[i//repetition_factor][:batch.answer.length[i//repetition_factor]],
                                          prediction=predictions[i][:prediction_lengths[i]+1],  # +1 to include EOS
                                          nodrop_logits=batch_nodrop_logits[i][:prediction_lengths[i]],
                                          nodrop_probs=batch_nodrop_probs[i][:prediction_lengths[i]],
-                                         nodrop_top1_probs=batch_nodrop_top1_probs[i][:prediction_lengths[i]],
-                                         nodrop_top2_probs=batch_nodrop_top2_probs[i][:prediction_lengths[i]],
+                                        #  nodrop_top1_probs=batch_nodrop_top1_probs[i][:prediction_lengths[i]],
+                                        #  nodrop_top2_probs=batch_nodrop_top2_probs[i][:prediction_lengths[i]],
                                          nodrop_entropies=batch_nodrop_entropies[i][:prediction_lengths[i]],
                                          context=batch.context.value[i//repetition_factor][:batch.context.length[i//repetition_factor]],
                                          ))

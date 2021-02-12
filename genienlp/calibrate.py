@@ -229,7 +229,8 @@ def evaluate_raw(dev_confidences: Iterable[ConfidenceFeatures], featurizer: Call
     return precision, recall, pass_rate, accuracies, thresholds
 
 def parse_argv(parser):
-    parser.add_argument('--confidence_path', required=True, type=str, help='The path to the pickle file where the list of ConfidenceFeatures objects is saved')
+    parser.add_argument('--confidence_path', required=True, type=str,
+                        help='The path to the pickle file where the list of ConfidenceFeatures objects is saved')
     parser.add_argument('--eval_metric', type=str, default='aucpr', choices=['aucpr'],
                         help='An xgboost metric. The metric which will be used to select the best model on the validation set.')
     parser.add_argument('--dev_split', type=float, default=0.2, help='The portion of the dataset to use for validation. The rest is used to train.')
@@ -237,7 +238,10 @@ def parse_argv(parser):
     parser.add_argument('--save', required=True, type=str, help='The directory to save the calibrator model and plots after training')
     parser.add_argument('--name_prefix', required=True, type=str, help='A string to prepend to files associated with the calibrator.')
     parser.add_argument('--plot', action='store_true', help='If True, will plot metrics and save them. Requires Matplotlib installation.')
-    parser.add_argument('--testing', action='store_true', help='If True, will change labels so that not all of them are equal. This is only used for testing purposes.')
+    parser.add_argument('--testing', action='store_true',
+                        help='If True, will change labels so that not all of them are equal. This is only used for testing purposes.')
+    parser.add_argument('--fast', action='store_true',
+                        help='If True, will only train calibrators that don\'t use MC dropout. This substantially increases inference speed.')
 
     # Options to normalize scores for a given threshold
     parser.add_argument('--threshold', type=float, default=None, help='The threshold above (below) which scores are considered to be positive (negative).')
@@ -496,6 +500,52 @@ def find_nearest_index(array, value):
     idx = (np.abs(array - value)).argmin()
     return idx
 
+
+slow_feature_sets = [
+    # ([mean_drop_seq_prob(0)], 'raw_mean_seq_prob'),
+    # ([mean_drop_prob(0)], 'mean_prob'),
+    # ([var_drop_prob(0)], 'var_prob'),
+    # ([cv_drop_prob(0)], 'cv_drop_prob'),
+    # ([probability_that_2_overtakes_1(0)], 'probability_that_2_overtakes_1'),
+    # ([diff_mean_drop_probability_2_and_1(0)], 'diff_mean_drop_probability_2_and_1'),
+    # ([diff_var_drop_probability_2_and_1(0)], 'diff_var_drop_probability_2_and_1'),
+    # ([diff_nodrop_probability_2_and_1(0)], 'diff_nodrop_probability_2_and_1'),
+    # ([(mean_drop_logit(0), nodrop_entropies(0))], 'mean + entropy'),
+    # ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0))], 'prediction_length + mean + entropy'),
+    # ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0), cv_drop_logit(0))], 'prediction_length + mean + entropy + cv'),
+    # ([max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'max_logit + max_entropy + max_cv'),
+    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv'),
+    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), max_of(var_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), min_of(var_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + max_var + min_logit + min_entropy + min_cv + min_var'),
+    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
+    # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length'),
+    # ([nodrop_seq_prob(0), prediction_length(0), max_of(mean_drop_prob(0)), max_of(nodrop_entropies(0)), max_of(cev_drop_prob(0)), min_of(mean_drop_prob(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'prob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
+    # ([variance_of_beam_logits], 'var_beam_logits'),
+    # ([variance_of_beam_probs], 'var_beam_probs'),
+    # ([mean_drop_avg_logprob(0)], 'mean_drop_avg_logprob'),
+    # ([var_drop_avg_logprob(0)], 'var_drop_avg_logprob'),
+    # ([cv_drop_avg_logprob(0)], 'cv_drop_avg_logprob'),
+
+    # One of these three usually outperforms all the other ones:
+    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
+    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
+    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
+]
+
+fast_feature_sets = [
+    # ([oracle_score], 'raw_oracle'),
+    # ([nodrop_avg_logprob(0)], 'raw_avg_logprob'),
+    ([nodrop_seq_prob(0)], 'raw_seq_prob'),
+    # ([neg_of(var_drop_seq_prob(0))], 'raw_var_seq_prob'),
+    # ([neg_of(cv_drop_seq_prob(0))], 'raw_cv_seq_prob'),
+    # ([cev_drop_seq_prob(0)], 'raw_cev_drop_seq_prob'),
+    # ([nodrop_entropies(0)], 'entropy'),
+
+    # These three are the fast versions of the best slow feature sets
+    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), input_length(0)], 'prediction_length + max_logit + max_entropy  + min_logit + min_entropy + input_length'),
+    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + min_logit + min_entropy + input_length'),
+    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + min_logit + input_length'),
+]
+
 def main(args):
 
     if args.threshold is not None:
@@ -510,41 +560,11 @@ def main(args):
 
     all_estimators = []
     train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
-    for f, name in [
-                    # ([oracle_score], 'raw_oracle'),
-                    # ([nodrop_avg_logprob(0)], 'raw_avg_logprob'),
-                    # ([nodrop_seq_prob(0)], 'raw_seq_prob'),
-                    ([mean_drop_seq_prob(0)], 'raw_mean_seq_prob'),
-                    # ([neg_of(var_drop_seq_prob(0))], 'raw_var_seq_prob'),
-                    # ([neg_of(cv_drop_seq_prob(0))], 'raw_cv_seq_prob'),
-                    # ([cev_drop_seq_prob(0)], 'raw_cev_drop_seq_prob'),
-                    # ([mean_drop_prob(0)], 'mean_prob'),
-                    # ([var_drop_prob(0)], 'var_prob'),
-                    # ([cv_drop_prob(0)], 'cv_drop_prob'),
-                    # ([probability_that_2_overtakes_1(0)], 'probability_that_2_overtakes_1'),
-                    # ([diff_mean_drop_probability_2_and_1(0)], 'diff_mean_drop_probability_2_and_1'),
-                    # ([diff_var_drop_probability_2_and_1(0)], 'diff_var_drop_probability_2_and_1'),
-                    # ([diff_nodrop_probability_2_and_1(0)], 'diff_nodrop_probability_2_and_1'),
-                    # ([nodrop_entropies(0)], 'entropy'),
-                    # ([(mean_drop_logit(0), nodrop_entropies(0))], 'mean + entropy'),
-                    # ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0))], 'prediction_length + mean + entropy'),
-                    # ([prediction_length(0), (mean_drop_logit(0), nodrop_entropies(0), cv_drop_logit(0))], 'prediction_length + mean + entropy + cv'),
-                    # ([max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'max_logit + max_entropy + max_cv'),
-                    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv'),
-                    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), max_of(var_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), min_of(var_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + max_var + min_logit + min_entropy + min_cv + min_var'),
-                    # ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0))], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv'),
-                    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
-                    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
-                    # ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length'),
-                    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
-                    # ([nodrop_seq_prob(0), prediction_length(0), max_of(mean_drop_prob(0)), max_of(nodrop_entropies(0)), max_of(cev_drop_prob(0)), min_of(mean_drop_prob(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'prob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
-                    # ([variance_of_beam_logits], 'var_beam_logits'),
-                    # ([variance_of_beam_probs], 'var_beam_probs'),
-                    # ([mean_drop_avg_logprob(0)], 'mean_drop_avg_logprob'),
-                    # ([var_drop_avg_logprob(0)], 'var_drop_avg_logprob'),
-                    # ([cv_drop_avg_logprob(0)], 'cv_drop_avg_logprob'),
-
-                    ]:
+    
+    feature_sets = fast_feature_sets
+    if not args.fast:
+        feature_sets += slow_feature_sets
+    for f, name in feature_sets:
         if name.startswith('raw'):
             estimator_class = RawConfidenceEstimator
         else:
