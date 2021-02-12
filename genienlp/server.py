@@ -63,7 +63,7 @@ class Server:
         self.estimator_filenames = estimator_filenames
         self.bootleg_annotator = bootleg_annotator
 
-        self._cached_tasks = dict()
+        self._cached_task_names = dict()
 
     def numericalize_examples(self, ex):
 
@@ -104,77 +104,69 @@ class Server:
         return ex
 
     def handle_request(self, request):
+        task_name = request['task'] if 'task' in request else 'generic'
+        task = list(get_tasks([task_name], self.args, self._cached_task_names).values())[0]
+        if task_name not in self._cached_task_names:
+            self._cached_task_names[task_name] = task
+
+        # if single example wrap it as a list
+        if 'instances' not in request:
+            request['instances'] = [{'example_id': request.get('example_id', ''), 'context': request['context'],
+                                     'question': request['question'], 'answer': request.get('answer', '')}]
+        
+        examples = []
+        # request['instances'] is an array of {context, question, answer, example_id}
+        for instance in request['instances']:
+            example_id, context, question, answer = instance.get('example_id', ''), instance['context'], instance['question'], instance.get('answer', '')
+            if not context:
+                context = task.default_context
+            if not question:
+                question = task.default_question
+
+            ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
+            examples.append(ex)
+
         with torch.no_grad():
-            task_name = request['task'] if 'task' in request else 'generic'
-            if task_name in self._cached_tasks:
-                task = self._cached_tasks[task_name]
-            else:
-                task = list(get_tasks([task_name], self.args).values())[0]
-                self._cached_tasks[task_name] = task
+            bootleg_inputs = []
+            if self.bootleg_annotator:
+                for ex in examples:
+                    bootleg_inputs.append(getattr(ex, task.utterance_field()))
+        
+                bootleg_labels = self.bootleg_annotator.label_mentions(bootleg_inputs)
+                bootleg_labels_unpacked = list(zip(*bootleg_labels))
+        
+                for i in range(len(examples)):
+                    ex = examples[i]
+                    label = bootleg_labels_unpacked[i]
+                    examples[i] = self.bootleg_process_examples(ex, label, task)
+        
+        self.model.add_new_vocab_from_data([task])
+        batch = self.numericalize_examples(examples)
+        if self.args.calibrator_paths is not None:
+            output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                            output_predictions_only=True,
+                                            confidence_estimators=self.confidence_estimators)
+            response = []
+            for idx, p in enumerate(output.predictions):
+                instance = {'answer': p[0], 'score': {}}
+                for e_idx, estimator_scores in enumerate(output.confidence_scores):
+                    instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
+                response.append(instance)
+        else:
+            output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True)
+            response = [{'answer': p[0]} for p in output.predictions]
+            
+        return response
 
-            if 'instances' in request:
-                examples = []
-                # request['instances'] is an array of {context, question, answer, example_id}
-                for instance in request['instances']:
-                    example_id, context, question, answer = instance.get('example_id', ''), instance['context'], instance['question'], instance.get('answer', '')
-                    if not context:
-                        context = task.default_context
-                    if not question:
-                        question = task.default_question
-
-                    ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
-                    examples.append(ex)
-
-                self.model.add_new_vocab_from_data([task])
-                batch = self.numericalize_examples(examples)
-                # it is a single batch, so wrap it in []
-                if self.args.calibrator_paths is not None:
-                    output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                    output_predictions_only=True,
-                                                    confidence_estimators=self.confidence_estimators)
-                    response = []
-                    for idx, p in enumerate(output.predictions):
-                        instance = {'answer': p[0], 'score': {}}
-                        for e_idx, estimator_scores in enumerate(output.confidence_scores):
-                            instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
-                        response.append(instance)
-                else:
-                    output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                    output_predictions_only=True)
-
-                    response = [{ 'answer': p[0]} for p in output.predictions]
-                return response
-            else:
-                context = request['context']
-                if not context:
-                    context = task.default_context
-                question = request['question']
-                if not question:
-                    question = task.default_question
-                answer = ''
-
-                ex = Example.from_raw(str(request['id']), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
-
-                self.model.add_new_vocab_from_data([task])
-                batch = self.numericalize_examples([ex])
-                if self.args.calibrator_paths is not None:
-                    output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                 output_predictions_only=True,
-                                                 confidence_estimators=self.confidence_estimators)
-                    response = dict(answer=output.predictions[0][0], score=dict(
-                        zip(self.estimator_filenames, [float(s[0]) for s in output.confidence_scores])))
-                else:
-                    output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                    output_predictions_only=True)
-                    response = dict(answer=output.predictions[0][0])
-                return response
 
     def handle_json_request(self, line : str) -> str:
         request = json.loads(line)
         if 'instances' in request:
-            return json.dumps({ 'id': request['id'], 'instances': self.handle_request(request) }) + '\n'
+            return json.dumps({'id': request['id'], 'instances': self.handle_request(request)}) + '\n'
         else:
             response = self.handle_request(request)
+            assert len(response) == 1
+            response = response[0]
             response['id'] = request['id']
             return json.dumps(response) + '\n'
 
@@ -255,7 +247,7 @@ def init(args):
         # instantiate a bootleg object to load config and relevant databases
         bootleg = Bootleg(args)
         bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
-        
+
         # instantiate the annotator class. we use annotator only in server mode
         # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
         bootleg_annotator = Annotator(config_args=bootleg_config,
