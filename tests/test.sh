@@ -35,6 +35,7 @@ for hparams in \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --almond_detokenize_sentence" \
       "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50 --num_beams 4 --num_beam_groups 4 --num_outputs 4 --diversity_penalty 1.0" \
       "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50" \
+      "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50 --override_question ." \
       "--model TransformerLSTM --pretrained_model xlm-roberta-base --trainable_decoder_embeddings=50" \
       "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50 --eval_set_name aux" ;
 do
@@ -94,7 +95,7 @@ do
     # single example in server mode
     echo '{"id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | pipenv run python3 -m genienlp server --path $workdir/model_$i --stdin
     # batch in server mode
-    echo '{"id":"dummy_request_id_1", "instances": [{"example_id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}]}' | genienlp server --path $workdir/model_$i --stdin
+    echo '{"id":"dummy_request_id_1", "instances": [{"example_id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}]}' | pipenv run python3 -m genienlp server --path $workdir/model_$i --stdin
 
     rm -rf $workdir/model_$i $workdir/model_$i_exported
 
@@ -109,7 +110,9 @@ for hparams in \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method naive --database_lookup_method ngrams --almond_domains books --add_types_to_text insert" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method entity-oracle --database_lookup_method ngrams --almond_domains books --add_types_to_text insert" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method type-oracle --database_lookup_method ngrams --almond_domains books --add_types_to_text insert" \
-      "--model TransformerLSTM --pretrained_model bert-base-cased --ned_retrieve_method bootleg --database_lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text append --bootleg_post_process_types" ; do
+      "--model TransformerLSTM --pretrained_model bert-base-cased --ned_retrieve_method bootleg --database_lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text append --bootleg_post_process_types" \
+      "--model TransformerLSTM --pretrained_model bert-base-cased --ned_retrieve_method bootleg --database_lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text append --bootleg_post_process_types --override_question ." ;
+do
 
     # train
     pipenv run python3 -m genienlp train --train_tasks almond --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --database_dir $SRCDIR/database/ --data $SRCDIR/dataset/books_v2/ --bootleg_output_dir $SRCDIR/dataset/books_v2/bootleg/  --exist_ok --skip_cache --embeddings $embedding_dir --no_commit --do_ned --database_type json --ned_features type_id type_prob --ned_features_size 1 1 --ned_features_default_val 0 1.0 --num_workers 0 --min_entity_len 2 --max_entity_len 4 $hparams
@@ -122,6 +125,11 @@ for hparams in \
         echo "File not found!"
         exit
     fi
+
+    # test server for bootleg
+    # due to travis memory limitations, uncomment and run this test locally
+    # echo '{"id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | pipenv run python3 -m genienlp server --path $workdir/model_$i --stdin
+
 
     i=$((i+1))
 done

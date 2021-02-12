@@ -624,7 +624,7 @@ def load_config_json(args):
                        ):
                 setattr(args, r, False)
                 
-            elif r in ('num_db_types', 'db_unk_id'):
+            elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
                 setattr(args, r, 0)
             
             elif r in ('entity_word_embeds_dropout'):
@@ -636,7 +636,7 @@ def load_config_json(args):
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
                 
-            elif r in ['features', 'ned_features_size', 'ned_features_default_val']:
+            elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val']:
                 setattr(args, r, [])
             
             elif r == 'add_types_to_text':

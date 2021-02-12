@@ -66,10 +66,13 @@ class Feature:
 VALID_FEATURE_FIELDS = tuple(Feature.__annotations__.keys())
 
 def get_pad_feature(feature_fields, ned_features_default_val, ned_features_size):
-    pad_feature = Feature()
-    for i, field in enumerate(feature_fields):
-        assert field in VALID_FEATURE_FIELDS
-        setattr(pad_feature, field, [ned_features_default_val[i]] * ned_features_size[i])
+    # return None if not using NED
+    pad_feature = None
+    if len(feature_fields):
+        pad_feature = Feature()
+        for i, field in enumerate(feature_fields):
+            assert field in VALID_FEATURE_FIELDS
+            setattr(pad_feature, field, [ned_features_default_val[i]] * ned_features_size[i])
     return pad_feature
 
 
@@ -125,6 +128,7 @@ class NumericalizedExamples(NamedTuple):
     def from_examples(examples, numericalizer, add_types_to_text):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
+        
         
         if add_types_to_text != 'no':
             tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question_with_types for ex in examples], [])

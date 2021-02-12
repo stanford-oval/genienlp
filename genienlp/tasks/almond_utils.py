@@ -166,6 +166,9 @@ def create_examples_from_file(args):
             last_batch = True
         if len(batch) % example_batch_size != 0 and not last_batch:
             continue
+            
+        # TODO remote database lookup is faster when multiple examples are sent in one HTTP request
+        # For now we only do one at a time; support processing examples as a batch
         assert len(batch) == 1
         batch = batch[0]
         chunk_examples.append(make_process_example(batch, dir_name, **kwargs))

@@ -275,7 +275,7 @@ class Bootleg(object):
             ngpus_per_node = len(self.args.devices)
         
         self.fixed_overrides = [
-            "--run_config.distributed", str(ngpus_per_node > 1),
+            "--run_config.distributed", str(ngpus_per_node > 1 and args.bootleg_distributed_eval),
             "--run_config.ngpus_per_node", str(ngpus_per_node),
             "--run_config.timestamp", 'None',
             "--data_config.entity_dir", self.entity_dir,
