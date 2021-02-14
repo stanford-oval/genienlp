@@ -99,7 +99,7 @@ def prepare_data(args):
         task_data_processed = []
         task_path_processed = []
         for split, path in zip(task_splits, task_paths):
-            assert (split.eval or split.test) and not split.train and not split.aux
+            assert (split.eval or split.test or split.train) and not split.aux
             if split.train:
                 data = split.train
                 path = path.train
