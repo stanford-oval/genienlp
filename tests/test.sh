@@ -97,7 +97,7 @@ do
     # batch in server mode
     echo '{"id":"dummy_request_id_1", "instances": [{"example_id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}]}' | pipenv run python3 -m genienlp server --path $workdir/model_$i --stdin
 
-    rm -rf $workdir/model_$i $workdir/model_$i_exported
+    rm -rf $workdir/model_$i
 
     i=$((i+1))
 done
@@ -129,8 +129,8 @@ do
     # test server for bootleg
     # due to travis memory limitations, uncomment and run this test locally
     # echo '{"id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | pipenv run python3 -m genienlp server --path $workdir/model_$i --stdin
-
-
+    
+    rm -rf $workdir/model_$i
     i=$((i+1))
 done
 
@@ -206,6 +206,7 @@ for model in  "gpt2" "sshleifer/bart-tiny-random" ; do
       exit
   fi
   rm -rf $workdir/generated_"$model_type".tsv
+  rm -rf $workdir/"$model_type"
 
 done
 
@@ -282,7 +283,8 @@ do
     # run kfserver in background
     (pipenv run python3 -m genienlp kfserver --path $workdir/model_$i)&
     SERVER_PID=$!
-    sleep 5
+    # wait enough for the server to start
+    sleep 15
 
     # send predict request via http
     request='{"id":"123", "task": "generic", "instances": [{"context": "", "question": "what is the weather"}]}'
@@ -292,7 +294,7 @@ do
         echo "Unexpected http status: $status"
         exit 1
     fi
-    rm -rf $workdir/model_$i $workdir/model_$i_exported
+    rm -rf $workdir/model_$i
     i=$((i+1))
 done
 
