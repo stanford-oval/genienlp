@@ -77,7 +77,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
             contexts += batch_context
         elif output_confidence_features:
             # need gold answer for confidence estimation
-            batch_answer = numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer')
+            batch_answer = numericalizer.reverse(batch.answer.value.data)
             answers += batch_answer
 
         for hyperparameter_idx in range(len(args.temperature)):
