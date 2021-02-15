@@ -117,10 +117,20 @@ class TransformerSeq2Seq(GenieModel):
             batch_size, vocab_size = outputs.logits.shape[0], outputs.logits.shape[2]
             loss = self.criterion(outputs.logits.view(-1, vocab_size), target=answer.view(-1), ignore_index=self.numericalizer.pad_id)
             loss = loss.view(batch_size, -1) # (batch_size, sequence_length)
-            loss = loss.sum(dim=1) / answer_length # accounts for the case where BOS is removed
-            if self.dropper is not None:
-                dropper_mask = self.dropper(loss)
-                loss = loss * dropper_mask
+            
+            from torch.nn import functional as F
+            probs = F.softmax(outputs.logits.view(-1, vocab_size), dim=-1)
+            correct_token_prob = probs.gather(dim=-1, index=answer.view(-1).unsqueeze(1))
+            correct_token_prob = correct_token_prob.view(batch_size, -1)
+            correct_token_prob[answer==self.numericalizer.pad_id] = 1e12
+            weak_token_probs, weak_token_indices = torch.min(correct_token_prob, dim=1)
+            print('weak_token_probs = ', weak_token_probs)
+            print('weak_token_indices = ', weak_token_indices)
+            loss = loss.gather(dim=1, index=weak_token_indices.view(-1).unsqueeze(1))
+            # loss = loss.sum(dim=1) / answer_length # accounts for the case where BOS is removed
+            # if self.dropper is not None:
+            #     dropper_mask = self.dropper(loss)
+            #     loss = loss * dropper_mask
             loss = loss.mean() # average over the batch size
             outputs.loss = loss # replace the loss calculated by `transformers` with the new loss
             return outputs
