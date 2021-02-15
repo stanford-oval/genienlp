@@ -33,7 +33,6 @@ import torch
 
 from torch.tensor import Tensor
 from transformers import AutoModelForSeq2SeqLM, AutoConfig
-from loss_dropper import LossDropper
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import get_mbart_lang
@@ -70,6 +69,8 @@ class TransformerSeq2Seq(GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
         if args.dropper_ratio > 0:
+            # lazy import since dropper is an optional dependency 
+            from loss_dropper import LossDropper
             self.dropper = LossDropper(dropc=args.dropper_ratio, min_count=args.dropper_min_count)
         else:
             self.dropper = None
