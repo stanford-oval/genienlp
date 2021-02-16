@@ -11,7 +11,7 @@ def is_subset(set1, set2):
     return all([e in set2 for e in set1])
 
 def passes_heuristic_checks(row, args, old_query=None):
-    if 'QUOTED_' in row[args.utterance_column]:
+    if 'QUOTED_STRING' in row[args.utterance_column] or (old_query is not None and 'QUOTED_STRING' in old_query):
         # remove quoted examples
         return False
     if old_query is not None:
