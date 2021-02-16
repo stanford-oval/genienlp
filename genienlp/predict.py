@@ -363,8 +363,8 @@ def check_args(args):
     if getattr(args, 'ned_retrieve_method', None) == 'bootleg':
         with open(os.path.join(args.path, 'config.json')) as config_file:
             config = json.load(config_file)
-        if args.subsample != config['subsample']:
-            raise ValueError('To use bootleg prepped data, you have to use the same number for subsampling as training.')
+        if args.subsample > config['subsample']:
+            raise ValueError('To use bootleg, you have to use a subsample value less than the number of prepped examples.')
             
 
 def main(args):
