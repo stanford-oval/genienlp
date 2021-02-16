@@ -124,10 +124,10 @@ class TransformerSeq2Seq(GenieModel):
             correct_token_prob = correct_token_prob.view(batch_size, -1)
             correct_token_prob[answer==self.numericalizer.pad_id] = 1e12
             weak_token_probs, weak_token_indices = torch.min(correct_token_prob, dim=1)
-            print('weak_token_probs = ', weak_token_probs)
-            print('weak_token_indices = ', weak_token_indices)
+            # print('weak_token_probs = ', weak_token_probs)
+            # print('weak_token_indices = ', weak_token_indices)
             loss = loss.gather(dim=1, index=weak_token_indices.view(-1).unsqueeze(1))
-            loss = loss * (1-weak_token_probs)
+            loss = loss * (1 - weak_token_probs)
             # print('loss = ', loss)
             # loss = loss.sum(dim=1) / answer_length # accounts for the case where BOS is removed
             # if self.dropper is not None:
