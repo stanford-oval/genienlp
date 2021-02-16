@@ -218,8 +218,7 @@ def run(args, device):
                                                      disable_progbar=False)
             
             if args.save_confidence_features:
-                with open(args.confidence_feature_path, 'wb') as f:
-                    pickle.dump(generation_output.confidence_features, f, protocol=4)
+                torch.save(generation_output.confidence_features, args.confidence_feature_path)
 
             # write into file
             # TODO change to jsonl format
