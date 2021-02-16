@@ -128,7 +128,7 @@ do
 
     # test server for bootleg
     # due to travis memory limitations, uncomment and run this test locally
-    # echo '{"id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | pipenv run python3 -m genienlp server --database_dir $SRCDIR/database/  --path $workdir/model_$i --stdin
+    # echo '{"task": "almond", "id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | pipenv run python3 -m genienlp server --database_dir $SRCDIR/database/  --path $workdir/model_$i --stdin
     
     rm -rf $workdir/model_$i
     i=$((i+1))

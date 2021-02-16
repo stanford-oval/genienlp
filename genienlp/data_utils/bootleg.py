@@ -27,11 +27,13 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
+import functools
 import os
 import ujson
 import numpy as np
 import logging
+import torch
+from bootleg.annotator import Annotator
 
 from .database_utils import is_banned
 
@@ -39,6 +41,7 @@ from bootleg.extract_mentions import extract_mentions
 from bootleg.utils.parser_utils import get_full_config
 from bootleg import run
 
+from .progbar import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +61,73 @@ def reverse_bisect_left(a, x, lo=None, hi=None):
         else:
             lo = mid + 1
     return lo
+
+
+def bootleg_process_examples(ex, bootleg_annotator, args, label, task):
+    line = {}
+    line['sentence'] = getattr(ex, task.utterance_field())
+    
+    assert len(label) == 7
+    line['cands'] = label[3]
+    line['cand_probs'] = list(map(lambda item: list(item), label[4]))
+    line['spans'] = label[5]
+    line['aliases'] = label[6]
+    tokens_type_ids, tokens_type_probs = bootleg_annotator.bootleg.collect_features_per_line(line, args.bootleg_prob_threshold)
+    
+    if task.utterance_field() == 'question':
+        for i in range(len(tokens_type_ids)):
+            ex.question_feature[i].type_id = tokens_type_ids[i]
+            ex.question_feature[i].type_prob = tokens_type_probs[i]
+            ex.context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[i]
+            ex.context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = tokens_type_probs[i]
+    
+    else:
+        for i in range(len(tokens_type_ids)):
+            ex.context_feature[i].type_id = tokens_type_ids[i]
+            ex.context_feature[i].type_prob = tokens_type_probs[i]
+            ex.context_plus_question_feature[i].type_id = tokens_type_ids[i]
+            ex.context_plus_question_feature[i].type_prob = tokens_type_probs[i]
+    
+    context_plus_question_with_types = task.create_sentence_plus_types_tokens(ex.context_plus_question,
+                                                                              ex.context_plus_question_feature,
+                                                                              args.add_types_to_text)
+    ex = ex._replace(context_plus_question_with_types=context_plus_question_with_types)
+    
+    return ex
+
+
+def extract_features_with_annotator(examples, bootleg_annotator, args, task):
+    with torch.no_grad():
+        bootleg_inputs = []
+        for ex in examples:
+            bootleg_inputs.append(getattr(ex, task.utterance_field()))
+        
+        bootleg_labels = bootleg_annotator.label_mentions(bootleg_inputs)
+        bootleg_labels_unpacked = list(zip(*bootleg_labels))
+        
+        for i in range(len(examples)):
+            ex = examples[i]
+            label = bootleg_labels_unpacked[i]
+            examples[i] = bootleg_process_examples(ex, bootleg_annotator, args, label, task)
+
+
+def init_bootleg_annotator(args, device):
+    # instantiate a bootleg object to load config and relevant databases
+    bootleg = Bootleg(args)
+    bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
+    
+    # instantiate the annotator class. we use annotator only in server mode
+    # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
+    bootleg_annotator = Annotator(config_args=bootleg_config,
+                                  device='cpu' if device.type == 'cpu' else 'cuda',
+                                  max_alias_len=args.max_entity_len,
+                                  cand_map=bootleg.cand_map,
+                                  threshold=args.bootleg_prob_threshold,
+                                  progbar_func=functools.partial(progress_bar, disable=True))
+    # collect all outputs now; we will filter later
+    bootleg_annotator.set_threshold(0.0)
+    setattr(bootleg_annotator, 'bootleg', bootleg)
+    return bootleg_annotator
 
 
 def post_process_bootleg_types(qid, type, title, almond_domains):

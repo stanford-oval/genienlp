@@ -554,7 +554,7 @@ def main(args):
     if args.plot:
         from matplotlib import pyplot # lazy import
 
-    confidences = torch.load(args.confidence_path, map_location=torch.device('cpu'))
+    confidences = torch.load(args.confidence_path, map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
 
     all_estimators = []
     train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
