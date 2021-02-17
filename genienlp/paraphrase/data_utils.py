@@ -291,9 +291,10 @@ def create_features_from_tsv_file(file_path, tokenizer, input_column, gold_colum
         # add model specific prefix
         input_sequence = model_input_prefix + input_sequence
         
-        if model_type == 'mbart':
+        if model_type in ['mbart', 'mbart50']:
             # just make sure source language is used when tokenizing input sentence
             # tokenizer takes care of adding language code at the end of the sentence
+            tokenizer.src_lang = src_lang
             tokenizer.cur_lang_code = tokenizer.lang_code_to_id[src_lang]
         
         input_sequence = detokenize_cjk_chars(input_sequence)

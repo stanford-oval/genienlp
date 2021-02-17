@@ -47,7 +47,7 @@ import torch
 from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer, BartTokenizer
+from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer, BartTokenizer, MBartTokenizer, MBart50Tokenizer
 
 from .transformers_utils import GenieMarianMTModel, GenieBartForConditionalGeneration, GenieMBartForConditionalGeneration,\
     GenieT5ForConditionalGeneration, GenieMT5ForConditionalGeneration
@@ -75,6 +75,7 @@ MODEL_CLASSES = {
     'mt5': (GenieMT5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
     'bart': (GenieBartForConditionalGeneration, BartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
     'mbart': (GenieMBartForConditionalGeneration, GenieMBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'mbart50': (GenieMBartForConditionalGeneration, MBart50Tokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
     'marian': (GenieMarianMTModel, MarianTokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
 }
 
@@ -189,7 +190,7 @@ def main(args):
         setattr(args, h, getattr(args, h) * (max_hyperparameter_len // len(getattr(args, h))))
 
     logger.info('Will output %d sequences for each input.', sum(args.num_samples)if not args.pipe_mode else np.prod(args.num_samples))
-    logger.info('Effective batch size for each GPU is %d', args.batch_size*max(args.num_samples))
+    logger.info('Effective batch size for each device is %d', args.batch_size*max(args.num_samples))
 
     # TODO using intermediate files for pipe_mode is not clean. It needs to change.
     if args.pipe_mode:
@@ -222,6 +223,8 @@ def run_multi_process_generation(args):
     # get model type from saved config
     if hasattr(config, 'model_type'):
         args.model_type = getattr(config, 'model_type')
+        if args.model_type == 'mbart' and '-50-' in args.model_name_or_path:
+            args.model_type = 'mbart50'
     else:
         raise ValueError('Model should be either GPT2, BART, MBART, or Marian')
     
@@ -397,6 +400,11 @@ def run_single_process_generation(args, config):
         else:
             decoder_start_token_id = None
             
+        if args.model_type == 'mbart50':
+            forced_bos_token_id = tokenizer.lang_code_to_id[args.tgt_lang]
+        else:
+            forced_bos_token_id = None
+            
         max_length = batch_context_tensor.shape[1] + args.length
 
         all_encoder_attentions = None
@@ -406,6 +414,7 @@ def run_single_process_generation(args, config):
                                  bad_words_ids=None,
                                  attention_mask=attention_mask,
                                  decoder_start_token_id=decoder_start_token_id,
+                                 forced_bos_token_id=forced_bos_token_id,
                                  min_length=args.min_output_length,
                                  max_length=max_length,
                                  num_beams=args.num_beams[hyperparameter_idx],
@@ -432,8 +441,8 @@ def run_single_process_generation(args, config):
             if not isinstance(decoded, list):
                 decoded = decoded[:, :].tolist()
             for i, out in enumerate(decoded):
-                if args.model_type=='bart' or args.model_type=='mbart':
-                    out = out[1:] # remove </s> token at the beginning
+                if 'bart' in args.model_type:
+                    out = out[1:] # remove </s> token at the beginning for bart, mbart, mbart50
                 sample_index = (i//args.num_samples[hyperparameter_idx]) % batch_size
                 if not args.output_prompt:
                     out = out[len(batch_prompt_tokens[sample_index]):]
@@ -459,7 +468,8 @@ def run_single_process_generation(args, config):
                     sample_layer_attention = layer_attention[sample_index, :, :, :]
 
                     if tgt_tokens[0] in [tokenizer.pad_token, special_tokens['bos_token'], special_tokens['sep_token']] or \
-                            (decoder_start_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]):
+                            (decoder_start_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[decoder_start_token_id]) or \
+                            (forced_bos_token_id and tgt_tokens[0] == tokenizer.id_to_lang_code[forced_bos_token_id]):
                         # shift target tokens left to match the attention positions
                         tgt_tokens = tgt_tokens[1:]
                         

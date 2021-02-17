@@ -40,7 +40,7 @@ from typing import List, Optional
 import numpy as np
 import torch
 import ujson
-from transformers.models.mbart.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
+from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 from torch.functional import Tensor
 
 from .data_utils.example import NumericalizedExamples
@@ -591,7 +591,6 @@ def ned_dump_entity_type_pairs(split, path, name, utterance_field):
                     ent_types.append(types)
     
             fout.write(ujson.dumps({"sentence": sentence, "aliases": entities, "thingtalk_types": ent_types}) + '\n')
-
 
 
 def get_mbart_lang(orig_lang):
