@@ -4,6 +4,11 @@ import re
 from ...util import tokenize, lower_case, remove_thingtalk_quotes
 from ...data_utils.progbar import progress_bar
 
+special_token_pattern = re.compile("(^|(?<= ))" + "[A-Z]+_[0-9]" + "($|(?= ))")
+def find_special_tokens(s: str):
+    return list(sorted([a.group(0) for a in special_token_pattern.finditer(s)]))
+
+
 def is_subset(set1, set2):
     """
     Returns True if set1 is a subset of or equal to set2
@@ -15,14 +20,12 @@ def passes_heuristic_checks(row, args, old_query=None):
         # remove quoted examples
         return False
     if old_query is not None:
-        old_special_tokens = set(re.findall('[A-Za-z:_.]+_[0-9]', old_query))
-        new_special_tokens = set(re.findall('[A-Za-z:_.]+_[0-9]', row[args.utterance_column]))
         # check that all the special tokens in utterance after paraphrasing are the same as before
-        if set(old_special_tokens) != set(new_special_tokens):
+        if find_special_tokens(old_query) != find_special_tokens(row[args.utterance_column]):
             return False
     all_input_columns = ' '.join([row[c] for c in args.input_columns])
-    input_special_tokens = set(re.findall('[A-Za-z:_.]+_[0-9]', all_input_columns))
-    output_special_tokens = set(re.findall('[A-Za-z:_.]+_[0-9]', row[args.thingtalk_column]))
+    input_special_tokens = set(find_special_tokens(all_input_columns))
+    output_special_tokens = set(find_special_tokens(row[args.thingtalk_column]))
     if not is_subset(output_special_tokens, input_special_tokens):
         return False
     _, quote_values = remove_thingtalk_quotes(row[args.thingtalk_column])
