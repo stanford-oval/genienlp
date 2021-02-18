@@ -54,7 +54,7 @@ import pickle
 from . import models
 from .tasks.registry import get_tasks
 from .util import set_seed, load_config_json, make_data_loader, log_model_size, init_devices, \
-    have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path, get_mbart_lang
+    combine_folders_on_disk, split_folder_on_disk, get_part_path, get_mbart_lang
 from .validate import generate_with_model, calculate_and_reduce_metrics
 from .calibrate import ConfidenceEstimator
 from .arguments import check_and_update_generation_args
@@ -194,7 +194,7 @@ def run(args, device):
         for task, language, it, original_order in iters:
             logger.info(task.name)
             # single language task
-            if language is None:
+            if language is None or 'multilingual' not in task.name:
                 prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
                 results_file_name = os.path.join(eval_dir, task.name + '.results.json')
             # multi language task
@@ -298,10 +298,10 @@ def parse_argv(parser):
     parser.add_argument('--cache', default='.cache', type=str, help='where to save cached files')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets')
                         
-    parser.add_argument('--pred_languages', type=str, nargs='+', dest='pred_src_languages',
+    parser.add_argument('--pred_languages', type=str, nargs='+', dest='pred_src_languages', default=['en'],
                         help='Specify dataset source languages used during prediction for multilingual tasks'
                         'multiple languages for each task should be concatenated with +')
-    parser.add_argument('--pred_tgt_languages', type=str, nargs='+',
+    parser.add_argument('--pred_tgt_languages', type=str, nargs='+', default=['en'],
                         help='Specify dataset target languages used during prediction for multilingual tasks'
                         'multiple languages for each task should be concatenated with +')
     
@@ -344,26 +344,25 @@ def parse_argv(parser):
 
 
 def adjust_multilingual_eval(args):
-    if (have_multilingual(args.task_names) and args.pred_src_languages is None) or (
-            args.pred_src_languages and len(args.task_names) != len(args.pred_src_languages)):
-        raise ValueError('You have to define prediction languages when you have a multilingual task'
+    if len(args.task_names) != len(args.pred_src_languages):
+        raise ValueError('You have to define prediction languages for each task'
                          'Use None for single language tasks. Also provide languages in the same order you provided the tasks.')
 
-    if args.pred_src_languages is None:
-        args.pred_src_languages = [None for _ in range(len(args.task_names))]
-        
-    if 'mbart' in args.pretrained_model:
-        if args.pred_src_languages[0] and len(args.pred_src_languages[0].split('+')) != 1:
-            raise ValueError('For now we only support single language prediction with mbart models')
-
-    # preserve backward compatibility for single language tasks
-    for i, task_name in enumerate(args.task_names):
-        if 'multilingual' in task_name and args.pred_src_languages[i] is None:
-            raise ValueError('You have to define prediction languages for this multilingual task: {}'.format(task_name))
-        # elif 'multilingual' not in task_name and args.pred_src_languages[i] is not None:
-        #     logger.warning('prediction languages should be empty for single language tasks')
-        #     args.pred_src_languages[i] = None
-            
+    # if args.pred_src_languages is None:
+    #     args.pred_src_languages = [None for _ in range(len(args.task_names))]
+    #
+    # if 'mbart' in args.pretrained_model:
+    #     if args.pred_src_languages[0] and len(args.pred_src_languages[0].split('+')) != 1:
+    #         raise ValueError('For now we only support single language prediction with mbart models')
+    #
+    # # preserve backward compatibility for single language tasks
+    # for i, task_name in enumerate(args.task_names):
+    #     if 'multilingual' in task_name and args.pred_src_languages[i] is None:
+    #         raise ValueError('You have to define prediction languages for this multilingual task: {}'.format(task_name))
+    #     # elif ('multilingual' not in task_name or task_name != 'translate') and args.pred_src_languages[i] is not None:
+    #     #     logger.warning('prediction languages should be empty for single language tasks')
+    #     #     args.pred_src_languages[i] = None
+    #
             
 def set_default_values(args):
     """

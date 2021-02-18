@@ -38,11 +38,12 @@ from pprint import pformat
 import functools
 
 import torch
+from transformers import AutoConfig, BartConfig, MBartConfig
 
 from . import models
 from .data_utils.example import Example, NumericalizedExamples
 from .tasks.registry import get_tasks
-from .util import set_seed, init_devices, load_config_json, log_model_size
+from .util import set_seed, init_devices, load_config_json, log_model_size, get_mbart_lang
 from .validate import generate_with_model
 from .calibrate import ConfidenceEstimator
 
@@ -228,7 +229,8 @@ def parse_argv(parser):
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
-    parser.add_argument('--locale', default='en', help='locale tag of the language to parse')
+    parser.add_argument('--src_locale', default='en', help='locale tag of the input language to parse')
+    parser.add_argument('--tgt_locale', default='en', help='locale tag of the target language to generate')
     parser.add_argument('--inference_name', default='nlp', help='name used by kfserving inference service, alphanumeric only')
 
     # for confidence estimation:
@@ -263,13 +265,19 @@ def init(args):
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
+    
+    config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
+    if isinstance(config, (BartConfig, MBartConfig)):
+        args.src_locale = get_mbart_lang(args.src_locale)
+        args.tgt_locale = get_mbart_lang(args.tgt_locale)
 
     Model = getattr(models, args.model)
     model, _ = Model.from_pretrained(args.path,
                                      model_checkpoint_file=args.checkpoint_name,
                                      args=args,
                                      device=device,
-                                     locale=args.locale
+                                     src_lang=args.src_locale,
+                                     tgt_lang=args.tgt_locale
                                      )
 
     model.to(device)

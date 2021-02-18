@@ -109,8 +109,8 @@ class GenieMBartTokenizer(MBartTokenizer):
 class GenieMarianTokenizer(MarianTokenizer):
     '''
     MarianTokenizer with the temporary fix for decoding.
-    In current implementation `convert_tokens_to_string` method always uses spm_target to decode.
-    To be able to decode both source language and target language, this class changes the spm tp be current_spm
+    In current huggingface's implementation `convert_tokens_to_string` method always uses spm_target to decode.
+    To be able to decode both source language and target language, this class changes the spm to be current_spm
     '''
     
     def __init__(self, vocab, source_spm, target_spm, source_lang=None, target_lang=None,
