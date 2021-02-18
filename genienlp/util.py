@@ -40,6 +40,7 @@ from typing import List, Optional
 import numpy as np
 import torch
 import ujson
+from transformers import AutoConfig, BartConfig, MBartConfig
 from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 from torch.functional import Tensor
 
@@ -597,6 +598,14 @@ def get_mbart_lang(orig_lang):
     for lang in FAIRSEQ_LANGUAGE_CODES:
         if lang.startswith(orig_lang):
             return lang
+        
+def adjust_language_code(config, src_lang, tgt_lang):
+    if isinstance(config, (BartConfig, MBartConfig)):
+        src_lang = get_mbart_lang(src_lang)
+        tgt_lang = get_mbart_lang(tgt_lang)
+    return src_lang, tgt_lang
+
+    
 
 def have_multilingual(task_names):
     return any(['multilingual' in name for name in task_names])

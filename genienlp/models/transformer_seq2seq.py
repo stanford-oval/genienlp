@@ -36,7 +36,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoConfig
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from .base import GenieModel
-from ..util import ConfidenceFeatures
+from ..util import ConfidenceFeatures, adjust_language_code
 from .common import LabelSmoothingCrossEntropy
 
 logger = logging.getLogger(__name__)
@@ -52,8 +52,7 @@ class TransformerSeq2Seq(GenieModel):
         self._is_mbart = 'mbart' in self.args.pretrained_model
         self._is_mbart50 = self._is_mbart and '-50-' in self.args.pretrained_model
         
-        self.src_lang = kwargs.get('src_lang', 'en')
-        self.tgt_lang = kwargs.get('tgt_lang', 'en')
+        self.src_lang, self.tgt_lang = adjust_language_code(config, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en'))
         
         if save_directory is not None:
             self.model = AutoModelForSeq2SeqLM.from_config(config)

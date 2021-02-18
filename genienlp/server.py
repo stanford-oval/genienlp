@@ -38,12 +38,11 @@ from pprint import pformat
 import functools
 
 import torch
-from transformers import AutoConfig, BartConfig, MBartConfig
 
 from . import models
 from .data_utils.example import Example, NumericalizedExamples
 from .tasks.registry import get_tasks
-from .util import set_seed, init_devices, load_config_json, log_model_size, get_mbart_lang
+from .util import set_seed, init_devices, load_config_json, log_model_size
 from .validate import generate_with_model
 from .calibrate import ConfidenceEstimator
 
@@ -262,14 +261,8 @@ def init(args):
         bootleg_annotator.set_threshold(0.0)
         setattr(bootleg_annotator, 'bootleg', bootleg)
 
-
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
-    
-    config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
-    if isinstance(config, (BartConfig, MBartConfig)):
-        args.src_locale = get_mbart_lang(args.src_locale)
-        args.tgt_locale = get_mbart_lang(args.tgt_locale)
 
     Model = getattr(models, args.model)
     model, _ = Model.from_pretrained(args.path,

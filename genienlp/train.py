@@ -586,11 +586,6 @@ def main(args):
     src_lang = args.train_src_languages.split('+')[0]
     tgt_lang = args.train_tgt_languages.split('+')[0]
 
-    config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
-    if isinstance(config, (BartConfig, MBartConfig)):
-        src_lang = get_mbart_lang(src_lang)
-        tgt_lang = get_mbart_lang(tgt_lang)
-    
     ########## initialize model
     best_decascore = None
     if args.load is not None:

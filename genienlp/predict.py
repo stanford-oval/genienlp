@@ -156,14 +156,8 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
 def run(args, device):
     
     # TODO handle multiple languages
-    # TODO handle different predict languages
     src_lang = args.pred_src_languages[0]
     tgt_lang = args.pred_tgt_languages[0]
-
-    config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
-    if isinstance(config, (BartConfig, MBartConfig)):
-        src_lang = get_mbart_lang(src_lang)
-        tgt_lang = get_mbart_lang(tgt_lang)
 
     Model = getattr(models, args.model)
     model, _ = Model.from_pretrained(args.path,
