@@ -133,7 +133,10 @@ class TransformerNumericalizer(object):
             self._tokenizer = GenieMarianTokenizer.from_pretrained(**tokenizer_args)
         else:
             self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
-    
+        
+        # some tokenizers like Mbart do not set src_lang and tgt_lan when initialized; take care of it here
+        self._tokenizer.src_lang = src_lang
+        self._tokenizer.tgt_lang = tgt_lang
 
         # # We need to set language id for mBART models as it is used during tokenization and generation
         # # For now we only support single language training and evaluation with mbart models
