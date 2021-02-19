@@ -350,7 +350,7 @@ class BaseAlmondTask(BaseTask):
         if self._almond_detokenize_sentence:
             
             # BERT tokenizers by default add whitespace around any CJK character
-            # SPM-based tokenizers are trained on raw text and do better when recieve untokenized text
+            # SPM-based tokenizers are trained on raw text and do better when receive untokenized text
             # In genienlp we detokenize CJK characters and leave tokenization to the model's tokenizer
             # NOTE: input datasets for almond are usually pretokenized using genie-toolkit which
             # inserts whitespace around any CJK character. This detokenization ensures that SPM-based tokenizers
@@ -491,7 +491,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
 
     def preprocess_field(self, sentence, field_name=None, answer=None, preprocess_entities=False):
-        super().preprocess_field(sentence, field_name, answer, preprocess_entities=False)
+        return super().preprocess_field(sentence, field_name, answer, preprocess_entities=False)
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
@@ -546,7 +546,6 @@ class Translate(NaturalSeq2Seq):
     
     def __init__(self, name, args):
         super().__init__(name, args)
-        self.reverse_maps = {}
     
     @property
     def metrics(self):

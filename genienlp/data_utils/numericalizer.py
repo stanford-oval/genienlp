@@ -31,11 +31,13 @@ import os
 import re
 import json
 import functools
+import logging
 from pathos import multiprocessing
 from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
-from transformers import AutoTokenizer, BertConfig, XLMRobertaConfig, BartConfig, MBartConfig, MarianConfig, MBart50Tokenizer
+from transformers import AutoTokenizer, BertConfig, XLMRobertaConfig, BartConfig, MBartConfig, MarianConfig, \
+    MBart50Tokenizer, T5Config
 
 from .decoder_vocab import DecoderVocabulary
 from .example import SequentialField, get_pad_feature
@@ -117,7 +119,7 @@ class TransformerNumericalizer(object):
                (self._pretrained_name in ALLOWED_FAST_TOKENIZERS or
                (self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING))
     
-
+    
     def get_tokenizer(self, save_dir, config, src_lang, tgt_lang):
         tokenizer_args = {'do_lower_case': False, 'do_basic_tokenize': False, 'cache_dir': self._cache,
                           'use_fast': self._use_fast(), 'src_lang': src_lang, 'tgt_lang': tgt_lang}
@@ -125,19 +127,35 @@ class TransformerNumericalizer(object):
             tokenizer_args.update({'pretrained_model_name_or_path': save_dir, 'config': config})
         else:
             tokenizer_args.update({'pretrained_model_name_or_path': self._pretrained_name})
+            
+        model_is_marian = isinstance(config, MarianConfig)
+        model_is_mbart = isinstance(config, MBartConfig)
+        model_is_t5 = isinstance(config, T5Config)
 
         # hack until huggingface provides mbart50 config
-        if 'mbart-50' in config.name_or_path:
+        if model_is_mbart and 'mbart-50' in config.name_or_path:
             self._tokenizer = MBart50Tokenizer.from_pretrained(**tokenizer_args)
         # use GenieMarianTokenizer which decodes source language correctly
-        elif type(config) == MarianConfig:
+        elif model_is_marian:
             self._tokenizer = GenieMarianTokenizer.from_pretrained(**tokenizer_args)
         else:
             self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
-        
+
         # some tokenizers like Mbart do not set src_lang and tgt_lan when initialized; take care of it here
         self._tokenizer.src_lang = src_lang
         self._tokenizer.tgt_lang = tgt_lang
+
+        # define input prefix to add before every input text
+        input_prefix = ''
+        if model_is_marian and tgt_lang:
+            input_prefix = f'>>{tgt_lang}<< '
+        elif model_is_t5:
+            t5_task = f'translation_{src_lang}_to_{tgt_lang}'
+            # TODO add support for summarization
+            # t5_task = 'summarization'
+            input_prefix = config.task_specific_params[t5_task]['prefix']
+
+        self.input_prefix = input_prefix
 
         if isinstance(config, BertConfig):
             self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
@@ -390,6 +408,9 @@ class TransformerNumericalizer(object):
             features = []
         
         batch_size = len(sentences)
+        
+        if field_name != 'answer':
+            sentences = [self.input_prefix + sent for sent in sentences]
         
         if self._preprocess_special_tokens:
             if len(sentences) > MULTIPROCESSING_THRESHOLD:
