@@ -124,8 +124,6 @@ def parse_argv(parser):
     parser.add_argument('--almond_detokenize_sentence', action='store_true',
                         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)')
     parser.add_argument('--almond_thingtalk_version', type=int, choices=[1, 2], default=2, help='Thingtalk version for almond datasets')
-    parser.add_argument('--translate_has_answer', action='store_true', help='if true the provided dataset should contain '
-                                                                            'the translated sentence (positioned between input sentence and thingtalk))')
 
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used for training')
@@ -278,7 +276,6 @@ def dump_bootleg_features(args, logger):
         kwargs.update(train_eval_shared_kwargs)
         kwargs['all_dirs'] = args.eval_src_languages
         kwargs['cached_path'] = os.path.join(args.cache, val_task.name)
-        kwargs['translate_has_answer'] = args.translate_has_answer
 
         logger.info(f'Adding {val_task.name} to validation datasets')
         splits, paths = val_task.get_splits(args.data, lower=args.lower, **kwargs)

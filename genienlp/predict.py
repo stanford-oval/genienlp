@@ -92,7 +92,7 @@ def prepare_data(args):
                        'almond_lang_as_question': args.almond_lang_as_question,
                        'num_workers': args.num_workers,
                        'separate_eval': args.separate_eval,
-                       'translate_has_answer': args.translate_has_answer
+                       'translate_no_answer': args.translate_no_answer
                        })
         
         task_splits, task_paths = task.get_splits(root=args.data, lower=args.lower, **kwargs)
@@ -335,6 +335,9 @@ def parse_argv(parser):
 
     parser.add_argument("--mixed_precision", action='store_true', help='If True, will use mixed precision for prediction.'
                         'This reduces memory consumption and is especially faster on GPUs like NVIDIA V100 and T4. May slightly change the generated output.')
+    
+    #TODO Update other tasks to use this argument too; so we can use predict for pure text generation (i.e. without reporting accuracy metrics)
+    parser.add_argument('--translate_no_answer', action='store_true', help='if true the provided dataset would not contain the answer (translated sentence)')
 
 
 def adjust_multilingual_eval(args):

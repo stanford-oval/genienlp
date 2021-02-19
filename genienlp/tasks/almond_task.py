@@ -31,7 +31,6 @@ import os
 from collections import defaultdict
 import marisa_trie
 import ujson
-import random
 
 from ..data_utils.database_utils import DOMAIN_TYPE_MAPPING
 from ..data_utils.remote_database import RemoteElasticDatabase
@@ -613,8 +612,6 @@ class Paraphrase(NaturalSeq2Seq):
 class Translate(NaturalSeq2Seq):
     """
     Almond translation task: Translate a sentence from one language to another.
-    This task should be used for generation using pretrained models.
-    Training for this task is not supported yet.
     """
     
     def __init__(self, name, args):
@@ -630,9 +627,9 @@ class Translate(NaturalSeq2Seq):
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         # answer has to be provided by default unless doing prediction
-        has_answer = kwargs.get('translate_has_answer', True)
+        no_answer = kwargs.get('translate_no_answer', False)
         example_id = 'id-null'
-        if has_answer:
+        if not no_answer:
             if len(parts) == 2:
                 sentence, answer = parts
             elif len(parts) == 3:
@@ -659,7 +656,7 @@ class Translate(NaturalSeq2Seq):
         context = sentence
         
         # no answer is provided
-        if not has_answer:
+        if no_answer:
             answer = '.'
         
         return Example.from_raw(self.name + '/' + example_id, context, question, answer,
