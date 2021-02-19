@@ -31,6 +31,7 @@ import os
 from collections import defaultdict
 import marisa_trie
 import ujson
+import random
 
 from ..data_utils.database_utils import DOMAIN_TYPE_MAPPING
 from ..data_utils.remote_database import RemoteElasticDatabase
@@ -459,8 +460,8 @@ class Almond(BaseAlmondTask):
 
 @register_task('natural_seq2seq')
 class NaturalSeq2Seq(BaseAlmondTask):
-    """The Almond seqeunce to sequence task where both sequences are natural language
-    i.e. no ThingTalk program. Paraphrasing and translation are examples of this task"""
+    """The Almond sequence to sequence task where both sequences are natural language.
+     Paraphrasing and translation are examples of this task"""
     
     @property
     def metrics(self):
@@ -468,6 +469,9 @@ class NaturalSeq2Seq(BaseAlmondTask):
     
     def _is_program_field(self, field_name):
         return False
+    
+    def utterance_field(self):
+        return 'context'
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant
@@ -582,7 +586,6 @@ class Paraphrase(NaturalSeq2Seq):
     def postprocess_prediction(self, example_id, prediction):
         return output_heuristics(prediction, self.reverse_maps[example_id])
 
-
     def _make_example(self, parts, dir_name=None, **kwargs):
         if len(parts) == 3:
             example_id, sentence, thingtalk = parts
@@ -603,11 +606,64 @@ class Paraphrase(NaturalSeq2Seq):
         context = sentence
         answer = sentence # means we calculate self-bleu
         
-        return Example.from_raw(example_id, context, question, answer,
-                                preprocess=self.preprocess_field, lower=False)
+        return Example.from_raw(example_id, context, question, answer, preprocess=self.preprocess_field, lower=False)
     
-    def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
+
+@register_task('translate')
+class Translate(NaturalSeq2Seq):
+    """
+    Almond translation task: Translate a sentence from one language to another.
+    This task should be used for generation using pretrained models.
+    Training for this task is not supported yet.
+    """
+    
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self.reverse_maps = {}
+    
+    @property
+    def metrics(self):
+        return ['bleu']
+    
+    def postprocess_prediction(self, example_id, prediction):
+        return super().postprocess_prediction(example_id, prediction)
+    
+    def _make_example(self, parts, dir_name=None, **kwargs):
+        # answer has to be provided by default unless doing prediction
+        has_answer = kwargs.get('translate_has_answer', True)
+        example_id = 'id-null'
+        if has_answer:
+            if len(parts) == 2:
+                sentence, answer = parts
+            elif len(parts) == 3:
+                example_id, sentence, answer = parts
+            elif len(parts) == 4:
+                example_id, sentence, answer, thingtalk = parts
+            elif len(parts) == 5:
+                example_id, _, sentence, answer, thingtalk = parts  # ignore dialogue context
+            else:
+                raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
+        else:
+            if len(parts) == 1:
+                sentence = parts
+            elif len(parts) == 2:
+                example_id, sentence = parts
+            elif len(parts) == 3:
+                example_id, sentence, thingtalk = parts
+            elif len(parts) == 4:
+                example_id, _, sentence, thingtalk = parts  # ignore dialogue context
+            else:
+                raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
+        
+        question = 'translate from input to output'
+        context = sentence
+        
+        # no answer is provided
+        if not has_answer:
+            answer = '.'
+        
+        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
+                                                preprocess=self.preprocess_field, lower=False)
 
 
 @register_task('contextual_almond')

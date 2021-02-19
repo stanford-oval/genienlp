@@ -141,7 +141,7 @@ for hparams in \
       "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50 --rnn_zero_state cls --almond_lang_as_question" ; do
 
     # train
-    pipenv run python3 -m genienlp train --train_tasks almond_multilingual --train_languages fa+en --eval_languages fa+en --train_batch_tokens 50 --val_batch_size 50 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
+    pipenv run python3 -m genienlp train --train_tasks almond_multilingual --train_src_languages fa+en --eval_src_languages fa+en --train_batch_tokens 50 --val_batch_size 50 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
 
     # greedy decode
     # combined evaluation

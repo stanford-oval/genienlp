@@ -51,7 +51,7 @@ class GenieModel(PreTrainedModel):
 
         full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
         logger.info(f'Loading the model from {full_checkpoint_path}')
-        model = cls(args=args, tasks=tasks, vocab_sets=vocab_sets, save_directory=save_directory)
+        model = cls(args=args, tasks=tasks, vocab_sets=vocab_sets, save_directory=save_directory, *model_args, **kwargs)
         save_dict = torch.load(full_checkpoint_path, map_location=device)
         
         # HACK

@@ -42,14 +42,14 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 from transformers import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, AdamW, \
-    get_cosine_schedule_with_warmup
+    get_cosine_schedule_with_warmup, AutoConfig, BartConfig, MBartConfig
 
 from . import arguments
 from . import models
 from .data_utils.bootleg import Bootleg
 from .run_bootleg import bootleg_process_splits
 from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader, \
-    log_model_size, init_devices, ned_dump_entity_type_pairs
+    log_model_size, init_devices, ned_dump_entity_type_pairs, get_mbart_lang
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
 from .validate import validate, print_results
@@ -97,7 +97,7 @@ def prepare_data(args, logger):
         logger.info(f'Loading {task.name}')
         kwargs = {'test': None, 'validation': None}
         kwargs.update(train_eval_shared_kwargs)
-        kwargs['all_dirs'] = args.train_languages
+        kwargs['all_dirs'] = args.train_src_languages
         kwargs['cached_path'] = os.path.join(args.cache, task.name)
         if args.use_curriculum:
             kwargs['curriculum'] = True
@@ -152,8 +152,9 @@ def prepare_data(args, logger):
         if args.eval_set_name is not None:
             kwargs['validation'] = args.eval_set_name
         kwargs.update(train_eval_shared_kwargs)
-        kwargs['all_dirs'] = args.eval_languages
+        kwargs['all_dirs'] = args.eval_src_languages
         kwargs['cached_path'] = os.path.join(args.cache, task.name)
+        kwargs['translate_has_answer'] = args.translate_has_answer
         
         logger.info(f'Adding {task.name} to validation datasets')
         splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
@@ -482,8 +483,8 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
             if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
                 if args.print_train_examples_too:
                     names = ['answer', 'context']
-                    values = [numericalizer.reverse(batch.answer.value.data),
-                              numericalizer.reverse(batch.context.value.data)]
+                    values = [numericalizer.reverse(batch.answer.value.data, 'answer'),
+                              numericalizer.reverse(batch.context.value.data, 'context')]
                     num_print = min(num_examples, args.num_print)
                     print_results(names, values, num_print=num_print)
                     
@@ -579,7 +580,17 @@ def main(args):
 
     logger.info(f'Processing')
     logger.start = time.time()
+    
+    # TODO handle multiple languages
+    # TODO handle different train and eval languages
+    src_lang = args.train_src_languages.split('+')[0]
+    tgt_lang = args.train_tgt_languages.split('+')[0]
 
+    config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
+    if isinstance(config, (BartConfig, MBartConfig)):
+        src_lang = get_mbart_lang(src_lang)
+        tgt_lang = get_mbart_lang(tgt_lang)
+    
     ########## initialize model
     best_decascore = None
     if args.load is not None:
@@ -589,7 +600,8 @@ def main(args):
                                                             vocab_sets=train_sets+val_sets,
                                                             tasks=tasks,
                                                             device=devices[0],
-                                                            locale=args.train_languages.split('+')[0]
+                                                            src_lang=src_lang,
+                                                            tgt_lang=tgt_lang
                                                             )
         model.add_new_vocab_from_data(tasks=tasks, resize_decoder=True)
         if not args.resume:
@@ -597,7 +609,7 @@ def main(args):
             best_decascore = None
     else:
         logger.info(f'Initializing a new {model_name}')
-        model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks, locale=args.train_languages.split('+')[0])
+        model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks, src_lang=src_lang, tgt_lang=tgt_lang)
 
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)

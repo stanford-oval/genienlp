@@ -60,7 +60,10 @@ class TransformerLSTM(GenieModel):
         args.dimension = config.hidden_size
         self.numericalizer = TransformerNumericalizer(encoder_embeddings, args, max_generative_vocab=args.max_generative_vocab)
         
-        self.numericalizer.get_tokenizer(save_directory)
+        self.src_lang = kwargs.get('src_lang', 'en')
+        self.tgt_lang = kwargs.get('tgt_lang', 'en')
+        
+        self.numericalizer.get_tokenizer(save_directory, config, self.src_lang, self.tgt_lang)
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
 
         logger.info(f'Initializing encoder and decoder embeddings')
@@ -120,7 +123,7 @@ class TransformerLSTM(GenieModel):
             context_rnn_state = torch.cat(context_rnn_state, dim=0)
             
         batch_size = context_rnn_state.size(1)
-        groups = len(self.args.train_languages.split('+'))
+        groups = len(self.args.train_src_languages.split('+'))
         assert batch_size % groups == 0
         
         # reshape to be (batch_size; -1)

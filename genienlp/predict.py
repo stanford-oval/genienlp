@@ -38,6 +38,7 @@ import shutil
 
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
+from transformers import AutoConfig, BartConfig, MBartConfig
 
 from .data_utils.bootleg import Bootleg
 from .run_bootleg import bootleg_process_splits
@@ -53,7 +54,7 @@ import pickle
 from . import models
 from .tasks.registry import get_tasks
 from .util import set_seed, load_config_json, make_data_loader, log_model_size, init_devices, \
-    have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
+    have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path, get_mbart_lang
 from .validate import generate_with_model, calculate_and_reduce_metrics
 from .calibrate import ConfidenceEstimator
 from .arguments import check_and_update_generation_args
@@ -69,10 +70,10 @@ def prepare_data(args):
     
     datasets = []
     paths = []
-    if len(args.pred_languages) == 1 and len(args.tasks) > 1:
-        args.pred_languages *= len(args.tasks)
+    if len(args.pred_src_languages) == 1 and len(args.tasks) > 1:
+        args.pred_src_languages *= len(args.tasks)
     for i, task in enumerate(args.tasks):
-        task_languages = args.pred_languages[i]
+        task_languages = args.pred_src_languages[i]
         logger.info(f'Loading {task}')
         kwargs = {'train': None, 'validation': None, 'test': None}
         if args.evaluate == 'train':
@@ -90,7 +91,9 @@ def prepare_data(args):
                        'all_dirs': task_languages,
                        'almond_lang_as_question': args.almond_lang_as_question,
                        'num_workers': args.num_workers,
-                       'separate_eval': args.separate_eval})
+                       'separate_eval': args.separate_eval,
+                       'translate_has_answer': args.translate_has_answer
+                       })
         
         task_splits, task_paths = task.get_splits(root=args.data, lower=args.lower, **kwargs)
         if not isinstance(task_splits, list):
@@ -128,7 +131,7 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
     task_index = 0
     for task, bs, val_set in zip(args.tasks, args.val_batch_size, val_sets):
         task_iter = []
-        task_languages = args.pred_languages[task_index]
+        task_languages = args.pred_src_languages[task_index]
         if task_languages is not None and args.separate_eval:
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
@@ -151,10 +154,16 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
 
 
 def run(args, device):
-    if args.pred_languages[0] is not None:
-        locale = args.pred_languages[0].split('+')[0]
-    else:
-        locale = 'en'
+    
+    # TODO handle multiple languages
+    # TODO handle different predict languages
+    src_lang = args.pred_src_languages[0]
+    tgt_lang = args.pred_tgt_languages[0]
+
+    config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
+    if isinstance(config, (BartConfig, MBartConfig)):
+        src_lang = get_mbart_lang(src_lang)
+        tgt_lang = get_mbart_lang(tgt_lang)
 
     Model = getattr(models, args.model)
     model, _ = Model.from_pretrained(args.path,
@@ -162,7 +171,8 @@ def run(args, device):
                                      args=args,
                                      device=device,
                                      tasks=args.tasks,
-                                     locale=locale
+                                     src_lang=src_lang,
+                                     tgt_lang=tgt_lang
                                      )
 
     val_sets = prepare_data(args)
@@ -286,11 +296,15 @@ def parse_argv(parser):
                         help='whether use exisiting cached splits or generate new ones')
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
     parser.add_argument('--cache', default='.cache', type=str, help='where to save cached files')
-    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets (experimental)')
+    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets')
                         
-    parser.add_argument('--pred_languages', type=str, nargs='+',
-                        help='used to specify dataset languages used during prediction for multilingual tasks'
+    parser.add_argument('--pred_languages', type=str, nargs='+', dest='pred_src_languages',
+                        help='Specify dataset source languages used during prediction for multilingual tasks'
                         'multiple languages for each task should be concatenated with +')
+    parser.add_argument('--pred_tgt_languages', type=str, nargs='+',
+                        help='Specify dataset target languages used during prediction for multilingual tasks'
+                        'multiple languages for each task should be concatenated with +')
+    
     parser.add_argument('--separate_eval', action='store_true',
                         help='evaluate on each language eval set separately')
     
@@ -330,25 +344,25 @@ def parse_argv(parser):
 
 
 def adjust_multilingual_eval(args):
-    if (have_multilingual(args.task_names) and args.pred_languages is None) or (
-            args.pred_languages and len(args.task_names) != len(args.pred_languages)):
+    if (have_multilingual(args.task_names) and args.pred_src_languages is None) or (
+            args.pred_src_languages and len(args.task_names) != len(args.pred_src_languages)):
         raise ValueError('You have to define prediction languages when you have a multilingual task'
                          'Use None for single language tasks. Also provide languages in the same order you provided the tasks.')
 
-    if args.pred_languages is None:
-        args.pred_languages = [None for _ in range(len(args.task_names))]
+    if args.pred_src_languages is None:
+        args.pred_src_languages = [None for _ in range(len(args.task_names))]
         
     if 'mbart' in args.pretrained_model:
-        if args.pred_languages[0] and len(args.pred_languages[0].split('+')) != 1:
+        if args.pred_src_languages[0] and len(args.pred_src_languages[0].split('+')) != 1:
             raise ValueError('For now we only support single language prediction with mbart models')
 
     # preserve backward compatibility for single language tasks
     for i, task_name in enumerate(args.task_names):
-        if 'multilingual' in task_name and args.pred_languages[i] is None:
+        if 'multilingual' in task_name and args.pred_src_languages[i] is None:
             raise ValueError('You have to define prediction languages for this multilingual task: {}'.format(task_name))
-        elif 'multilingual' not in task_name and args.pred_languages[i] is not None:
-            logger.warning('prediction languages should be empty for single language tasks')
-            args.pred_languages[i] = None
+        # elif 'multilingual' not in task_name and args.pred_src_languages[i] is not None:
+        #     logger.warning('prediction languages should be empty for single language tasks')
+        #     args.pred_src_languages[i] = None
             
             
 def set_default_values(args):

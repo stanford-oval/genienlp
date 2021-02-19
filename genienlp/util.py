@@ -611,6 +611,7 @@ def load_config_json(args):
                     'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
                     'override_context', 'override_question',
                     'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version',
+                    'translate_has_answer',
                     'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count', 'label_smoothing',
                     'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
                     'override_question', 'override_context', 'add_types_to_text',
@@ -638,6 +639,7 @@ def load_config_json(args):
             # These are for backward compatibility with models that were trained before we added these arguments
             elif r in ('do_ned', 'use_encoder_loss',
                        'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version',
+                        'translate_has_answer'
                        ):
                 setattr(args, r, False)
             elif r in ('num_db_types', 'db_unk_id', 'num_workers'):

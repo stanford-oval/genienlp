@@ -35,7 +35,6 @@ from torch.tensor import Tensor
 from transformers import AutoModelForSeq2SeqLM, AutoConfig
 
 from ..data_utils.numericalizer import TransformerNumericalizer
-from ..util import get_mbart_lang
 from .base import GenieModel
 from ..util import ConfidenceFeatures
 from .common import LabelSmoothingCrossEntropy
@@ -51,19 +50,19 @@ class TransformerSeq2Seq(GenieModel):
         args.dimension = config.d_model
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
         self._is_mbart = 'mbart' in self.args.pretrained_model
+        self._is_mbart50 = self._is_mbart and '-50-' in self.args.pretrained_model
+        
+        self.src_lang = kwargs.get('src_lang', 'en')
+        self.tgt_lang = kwargs.get('tgt_lang', 'en')
         
         if save_directory is not None:
             self.model = AutoModelForSeq2SeqLM.from_config(config)
         else:
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
-                                                               cache_dir=self.args.embeddings)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model, cache_dir=self.args.embeddings)
 
         self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, args, max_generative_vocab=None)
 
-        self.numericalizer.get_tokenizer(save_directory)
-        
-        if self._is_mbart:
-            self._adjust_mbart(kwargs.get('locale', 'en'))
+        self.numericalizer.get_tokenizer(save_directory, config, self.src_lang, self.tgt_lang)
 
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
@@ -76,14 +75,6 @@ class TransformerSeq2Seq(GenieModel):
             self.dropper = None
 
         self.criterion = LabelSmoothingCrossEntropy(args.label_smoothing)
-            
-            
-    def _adjust_mbart(self, lang):
-        # We need to set language id for mBART models as it is used during tokenization and generation
-        # For now we only support single language training and evaluation with mbart models
-        lang_id = get_mbart_lang(lang)
-        self.numericalizer._tokenizer.set_src_lang_special_tokens(lang_id)
-        self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.cur_lang_code
         
 
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
@@ -103,7 +94,7 @@ class TransformerSeq2Seq(GenieModel):
                 # NOTE: various people at Huggingface and elsewhere have tried to conclusively ascertain
                 # whether BOS should be there or not, and the answer seems to be that BOS should not be there
                 # at all, either in input or in the output
-                # but empirically, BOS in the input works slightly better, pehraps because our sentences start
+                # but empirically, BOS in the input works slightly better, perhaps because our sentences start
                 # with a lowercase letter, so we leave it
                 answer = answer[:, 1:].contiguous()
                 answer_length = answer_length - 1
@@ -143,15 +134,17 @@ class TransformerSeq2Seq(GenieModel):
                  do_sample
                  ):
         
-        decoder_start_token_id = None
+        decoder_start_token_id, forced_bos_token_id = None, None
         if self._is_mbart:
             decoder_start_token_id = self.model.config.decoder_start_token_id
+        if self._is_mbart50:
+            forced_bos_token_id = self.numericalizer._tokenizer.lang_code_to_id[self.tgt_lang]
 
         input_ids = batch.context.value
         # when attention_mask is not provided to generate(), it will default to masking pad tokens, which is the correct thing
         generated = self.model.generate(input_ids=input_ids,
                                         max_length=max_output_length,
-                                        min_length=2, # generate at least one token after BOS
+                                        min_length=3, # generate at least one token after BOS and language code
                                         bos_token_id=self.numericalizer.init_id,
                                         pad_token_id=self.numericalizer.pad_id,
                                         early_stopping=False,
@@ -167,6 +160,7 @@ class TransformerSeq2Seq(GenieModel):
                                         no_repeat_ngram_size=no_repeat_ngram_size,
                                         do_sample=do_sample,
                                         decoder_start_token_id=decoder_start_token_id,
+                                        forced_bos_token_id=forced_bos_token_id,
                                         )
         
         return generated
