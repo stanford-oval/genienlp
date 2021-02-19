@@ -67,6 +67,7 @@ ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING = {
     'google/mt5-xxl',
 }
 
+# for input batches smaller than this value, multiprocessing will not be used due to its overhead
 MULTIPROCESSING_THRESHOLD = 5000
 
 
@@ -379,8 +380,8 @@ class TransformerNumericalizer(object):
         and multithreading for tokenization if a `FastTokenizer` is used
         Inputs:
             sentences: a list of sentences to encode
+            field_name: text field name (options: context, question, answer)
             features: for each sentence we have a list of features per token (used for NED)
-            multiprocessing_threshold: for input batches smaller than this value, multiprocessing will not be used due to its overhead
         """
         # We need to set this so that `tokenizers` package does not complain about detecting forks.
         os.environ['TOKENIZERS_PARALLELISM'] = "true"
