@@ -537,7 +537,7 @@ class Paraphrase(NaturalSeq2Seq):
         return Example.from_raw(example_id, context, question, answer, preprocess=self.preprocess_field, lower=False)
     
 
-@register_task('translate')
+@register_task('almond_translate')
 class Translate(NaturalSeq2Seq):
     """
     Almond translation task: Translate a sentence from one language to another.
