@@ -22,7 +22,7 @@ from transformers.models.marian.convert_marian_to_pytorch import GROUPS
 from transformers.models.marian.convert_marian_tatoeba_to_pytorch import GROUP_MEMBERS
 from transformers.models.marian.tokenization_marian import MarianTokenizer
 
-from transformers.models.mbart.tokenization_mbart import MBartTokenizer, _all_mbart_models, SPM_URL
+from transformers.models.mbart.tokenization_mbart import MBartTokenizer
 from transformers.models.gpt2 import tokenization_gpt2
 from transformers.models.t5 import tokenization_t5
 

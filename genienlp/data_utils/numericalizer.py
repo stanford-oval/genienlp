@@ -138,12 +138,6 @@ class TransformerNumericalizer(object):
         self._tokenizer.src_lang = src_lang
         self._tokenizer.tgt_lang = tgt_lang
 
-        # # We need to set language id for mBART models as it is used during tokenization and generation
-        # # For now we only support single language training and evaluation with mbart models
-        # self.numericalizer._tokenizer.set_src_lang_special_tokens(src_lang)
-        # self.numericalizer._tokenizer.set_tgt_lang_special_tokens(tgt_lang)
-        # self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[tgt_lang]
-        
         if isinstance(config, BertConfig):
             self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
         elif isinstance(config, (XLMRobertaConfig, MarianConfig)):

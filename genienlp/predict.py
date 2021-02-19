@@ -38,7 +38,6 @@ import shutil
 
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
-from transformers import AutoConfig, BartConfig, MBartConfig
 
 from .data_utils.bootleg import Bootleg
 from .run_bootleg import bootleg_process_splits
@@ -54,7 +53,7 @@ import pickle
 from . import models
 from .tasks.registry import get_tasks
 from .util import set_seed, load_config_json, make_data_loader, log_model_size, init_devices, \
-    combine_folders_on_disk, split_folder_on_disk, get_part_path, get_mbart_lang
+    combine_folders_on_disk, split_folder_on_disk, get_part_path
 from .validate import generate_with_model, calculate_and_reduce_metrics
 from .calibrate import ConfidenceEstimator
 from .arguments import check_and_update_generation_args
@@ -339,27 +338,6 @@ def parse_argv(parser):
     #TODO Update other tasks to use this argument too; so we can use predict for pure text generation (i.e. without reporting accuracy metrics)
     parser.add_argument('--translate_no_answer', action='store_true', help='if true the provided dataset would not contain the answer (translated sentence)')
 
-
-def adjust_multilingual_eval(args):
-    if len(args.task_names) != len(args.pred_src_languages):
-        raise ValueError('You have to define prediction languages for each task'
-                         'Use None for single language tasks. Also provide languages in the same order you provided the tasks.')
-
-    # if args.pred_src_languages is None:
-    #     args.pred_src_languages = [None for _ in range(len(args.task_names))]
-    #
-    # if 'mbart' in args.pretrained_model:
-    #     if args.pred_src_languages[0] and len(args.pred_src_languages[0].split('+')) != 1:
-    #         raise ValueError('For now we only support single language prediction with mbart models')
-    #
-    # # preserve backward compatibility for single language tasks
-    # for i, task_name in enumerate(args.task_names):
-    #     if 'multilingual' in task_name and args.pred_src_languages[i] is None:
-    #         raise ValueError('You have to define prediction languages for this multilingual task: {}'.format(task_name))
-    #     # elif ('multilingual' not in task_name or task_name != 'translate') and args.pred_src_languages[i] is not None:
-    #     #     logger.warning('prediction languages should be empty for single language tasks')
-    #     #     args.pred_src_languages[i] = None
-    #
             
 def set_default_values(args):
     """
@@ -370,6 +348,11 @@ def set_default_values(args):
 
 
 def check_args(args):
+    
+    if len(args.task_names) != len(args.pred_src_languages):
+        raise ValueError('You have to define prediction languages for each task'
+                         'Use None for single language tasks. Also provide languages in the same order you provided the tasks.')
+
     if getattr(args, 'ned_retrieve_method', None) == 'bootleg':
         with open(os.path.join(args.path, 'config.json')) as config_file:
             config = json.load(config_file)
@@ -380,7 +363,6 @@ def check_args(args):
 def main(args):
     load_config_json(args)
     check_and_update_generation_args(args)
-    adjust_multilingual_eval(args)
     check_args(args)
     set_default_values(args)
 
