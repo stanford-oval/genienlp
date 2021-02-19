@@ -317,7 +317,7 @@ def unmask_special_tokens(string: str, exceptions: list):
 
 def detokenize(string: str):
     string, exceptions = mask_special_tokens(string)
-    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "!", "'s", ")", ":"]
+    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "!", "'s", ")", ":", "-"]
     for t in tokens:
         string = string.replace(' ' + t, t)
     string = string.replace("( ", "(")
@@ -335,8 +335,9 @@ def tokenize(string: str):
     string = string.replace("(", "( ")
     string = string.replace('gonna', 'gon na')
     string = string.replace('wanna', 'wan na')
-    string = re.sub('\s+', ' ', string)
     string = unmask_special_tokens(string, exceptions)
+    string = re.sub('([A-Za-z:_.]+_[0-9]+)-', r'\1 - ', string) # add space before and after hyphen, e.g. "NUMBER_0-hour"
+    string = re.sub('\s+', ' ', string) # remove duplicate spaces
     return string.strip()
 
 

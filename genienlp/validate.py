@@ -67,11 +67,12 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
         batch_confidence_features = [[] for _ in range(batch_size)]
+        batch_example_ids = batch.example_id
 
-        example_ids += batch.example_id
+        example_ids += batch_example_ids
         if not output_predictions_only:
             batch_answer = numericalizer.reverse(batch.answer.value.data)
-            batch_answer = [task.postprocess_prediction(example_ids[i], batch_answer[i]) for i in range(len(batch_answer))]
+            batch_answer = [task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))]
             answers += batch_answer
             batch_context = numericalizer.reverse(batch.context.value.data)
             contexts += batch_context
@@ -99,7 +100,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
             partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction)
             # post-process predictions
             for i in range(len(partial_batch_prediction)):
-                partial_batch_prediction[i] = task.postprocess_prediction(example_ids[(i//args.num_outputs[hyperparameter_idx]) % batch_size], partial_batch_prediction[i])
+                partial_batch_prediction[i] = task.postprocess_prediction(batch_example_ids[(i//args.num_outputs[hyperparameter_idx]) % batch_size], partial_batch_prediction[i])
             # put them into the right array
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
