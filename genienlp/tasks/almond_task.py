@@ -322,7 +322,7 @@ class BaseAlmondTask(BaseTask):
 
         return ' '.join(sentence_plus_types_tokens)
 
-    def preprocess_field(self, sentence, field_name=None, answer=None):
+    def preprocess_field(self, sentence, field_name=None, answer=None, preprocess_entities=True):
         if self.override_context is not None and field_name == 'context':
             pad_feature = get_pad_feature(self.args.ned_features, self.args.ned_features_default_val, self.args.ned_features_size)
             return self.override_context, [pad_feature] * len(self.override_context.split(' ')) if pad_feature else [], self.override_context
@@ -336,7 +336,7 @@ class BaseAlmondTask(BaseTask):
         is_program = self._is_program_field(field_name)
         new_tokens = []
         for token in tokens:
-            if is_entity(token) or (is_program and (is_device(token) or is_entity_marker(token))):
+            if (is_entity(token) and preprocess_entities) or (is_program and (is_device(token) or is_entity_marker(token))):
                 if token.startswith('QUOTED_STRING_'):
                     token = token[len('QUOTED_'):]
                 elif token.startswith('GENERIC_ENTITY_'):
@@ -459,8 +459,11 @@ class Almond(BaseAlmondTask):
 
 @register_task('natural_seq2seq')
 class NaturalSeq2Seq(BaseAlmondTask):
-    """The Almond sequence to sequence task where both sequences are natural language.
-     Paraphrasing and translation are examples of this task"""
+    """
+    The Almond sequence to sequence task where both sequences are natural language.
+    Paraphrasing and translation are examples of this task.
+    In this task entities (see ENTITY_REGEX) are not preprocessed in contrast to paraphrasing and translation tasks
+    """
     
     @property
     def metrics(self):
@@ -487,82 +490,8 @@ class NaturalSeq2Seq(BaseAlmondTask):
         return Example.from_raw(self.name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
 
-    def preprocess_field(self, sentence, field_name=None, answer=None):
-        if self.override_context is not None and field_name == 'context':
-            pad_feature = get_pad_feature(self.args.ned_features, self.args.ned_features_default_val, self.args.ned_features_size)
-            return self.override_context, [pad_feature] * len(self.override_context.split(' ')) if pad_feature else [], self.override_context
-        if self.override_question is not None and field_name == 'question':
-            pad_feature = get_pad_feature(self.args.ned_features, self.args.ned_features_default_val, self.args.ned_features_size)
-            return self.override_question, [pad_feature] * len(self.override_question.split(' ')) if pad_feature else [], self.override_question
-        if not sentence:
-            return '', [], ''
-        
-        tokens = sentence.split(' ')
-        new_tokens = []
-        for token in tokens:
-            new_tokens.append(token)
-        tokens = new_tokens
-        new_sentence = ' '.join(tokens)
-        
-        if self._almond_detokenize_sentence:
-            
-            # BERT tokenizers by default add whitespace around any CJK character
-            # SPM-based tokenizers are trained on raw text and do better when recieve untokenized text
-            # In genienlp we detokenize CJK characters and leave tokenization to the model's tokenizer
-            # NOTE: input datasets for almond are usually pretokenized using genie-toolkit which
-            # inserts whitespace around any CJK character. This detokenization ensures that SPM-based tokenizers
-            # see the text without space between those characters
-            new_sentence = detokenize_cjk_chars(new_sentence)
-            tokens = new_sentence.split(' ')
-            
-            new_sentence = ''
-            for token in tokens:
-                if token in (',', '.', '?', '!', ':', ')', ']', '}') or token.startswith("'"):
-                    new_sentence += token
-                else:
-                    new_sentence += ' ' + token
-        
-        new_sentence = new_sentence.strip()
-        new_tokens = new_sentence.split(' ')
-        new_sentence_length = len(new_tokens)
-        
-        tokens_type_ids, tokens_type_probs = None, None
-        
-        if 'type_id' in self.args.ned_features and field_name != 'answer':
-            tokens_type_ids = [[self.args.ned_features_default_val[0]] * self.args.ned_features_size[0] for _ in
-                               range(new_sentence_length)]
-        if 'type_prob' in self.args.ned_features and field_name != 'answer':
-            tokens_type_probs = [[self.args.ned_features_default_val[1]] * self.args.ned_features_size[1] for _ in
-                                 range(new_sentence_length)]
-        
-        if self.args.do_ned and self.args.ned_retrieve_method != 'bootleg' and field_name not in self.no_feature_fields:
-            if 'type_id' in self.args.ned_features:
-                tokens_type_ids = self.find_type_ids(new_tokens, answer)
-            if 'type_prob' in self.args.ned_features:
-                tokens_type_probs = self.find_type_probs(new_tokens, self.args.ned_features_default_val[1],
-                                                         self.args.ned_features_size[1])
-            
-            if self.args.verbose and self.args.do_ned:
-                print()
-                print(
-                    *[f'token: {token}\ttype: {token_type}' for token, token_type in zip(new_tokens, tokens_type_ids)],
-                    sep='\n')
-        
-        zip_list = []
-        if tokens_type_ids:
-            assert len(tokens_type_ids) == new_sentence_length
-            zip_list.append(tokens_type_ids)
-        if tokens_type_probs:
-            assert len(tokens_type_probs) == new_sentence_length
-            zip_list.append(tokens_type_probs)
-        
-        features = [Feature(*tup) for tup in zip(*zip_list)]
-
-        sentence_plus_types = ''
-        if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features):
-            sentence_plus_types = self.create_sentence_plus_types_tokens(new_sentence, features, self.args.add_types_to_text)
-
-        return new_sentence, features, sentence_plus_types
+    def preprocess_field(self, sentence, field_name=None, answer=None, preprocess_entities=False):
+        super().preprocess_field(sentence, field_name, answer, preprocess_entities=False)
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
@@ -571,7 +500,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
 @register_task('paraphrase')
 class Paraphrase(NaturalSeq2Seq):
     """The Almond paraphrasing task. Applies the necessary preprocessing for special tokens and case changes.
-    Should only be used at prediction time.
+    Can be used at prediction and training time. Training is still experimental.
     """
 
     def __init__(self, name, args):
@@ -612,6 +541,7 @@ class Paraphrase(NaturalSeq2Seq):
 class Translate(NaturalSeq2Seq):
     """
     Almond translation task: Translate a sentence from one language to another.
+    Can be used at prediction and training time. Training is still experimental.
     """
     
     def __init__(self, name, args):
