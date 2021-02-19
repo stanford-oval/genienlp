@@ -25,9 +25,7 @@ TMPDIR=`pwd`
 workdir=`mktemp -d $TMPDIR/genieNLP-tests-XXXXXX`
 trap on_error ERR INT TERM
 
-
 i=0
-
 for hparams in \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/tiny-mbart" \
@@ -141,7 +139,7 @@ for hparams in \
       "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50 --rnn_zero_state cls --almond_lang_as_question" ; do
 
     # train
-    pipenv run python3 -m genienlp train --train_tasks almond_multilingual --train_src_languages fa+en --eval_src_languages fa+en --train_batch_tokens 50 --val_batch_size 50 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
+    pipenv run python3 -m genienlp train --train_tasks almond_multilingual --train_languages fa+en --eval_languages fa+en --train_batch_tokens 50 --val_batch_size 50 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
 
     # greedy decode
     # combined evaluation
@@ -245,8 +243,39 @@ done
 rm -fr $workdir
 rm -rf $SRCDIR/torch-shm-fi
 
+# translation tests (with `genienlp train`)
+mkdir -p $workdir/translation/almond
+cp -r $SRCDIR/dataset/translation/en-de $workdir/translation
 
-# translation tests
+for model in "Helsinki-NLP/opus-mt-en-de" "sshleifer/tiny-mbart" ; do
+
+    if [[ $model == Helsinki-NLP* ]] ; then
+      base_model="marian"
+      expected_result='{"bleu": 90.09463792916938}'
+    elif [[ $model == *mbart* ]] ; then
+      base_model="mbart"
+      expected_result='{"bleu": 0}'
+    fi
+
+    mv $workdir/translation/en-de/dev_"$base_model"_aligned.tsv $workdir/translation/almond/train.tsv
+    cp $workdir/translation/almond/train.tsv $workdir/translation/almond/eval.tsv
+
+    # train
+    pipenv run python3 -m genienlp train  --train_tasks translate --train_languages en --train_tgt_languages de --eval_languages en --eval_tgt_languages de --model TransformerSeq2Seq --pretrained_model $model --train_batch_tokens 50 --val_batch_size 50 --train_iterations 10 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $workdir/translation/ --exist_ok --skip_cache --embeddings $embedding_dir --no_commit
+
+    # greedy prediction
+    pipenv run python3 -m genienlp predict --tasks translate --evaluate valid --pred_languages en --pred_tgt_languages de --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $workdir/translation/ --embeddings $embedding_dir --skip_cache
+
+    # check if result file exists and matches expected_result
+    echo $expected_result | diff -u - $workdir/model_$i/eval_results/valid/translate.results.json
+
+    rm -rf $workdir/generated_"$base_model"_aligned.tsv
+
+    i=$((i+1))
+done
+
+
+# translation tests (with `genienlp run-paraphrase`)
 mkdir -p $workdir/translation
 cp -r $SRCDIR/dataset/translation/en-de $workdir/translation
 
@@ -263,14 +292,11 @@ for model in "t5-small" "Helsinki-NLP/opus-mt-en-de" ; do
 
   # check if result file exists and exact match accuracy is 100%
   cut -f2 $workdir/translation/en-de/dev_"$base_model"_aligned.tsv | diff -u - $workdir/generated_"$base_model"_aligned.tsv
-  if test ! -f $workdir/generated_"$base_model"_aligned.tsv   ; then
-      echo "File not found!"
-      exit
-  fi
 
   rm -rf $workdir/generated_"$base_model"_aligned.tsv
 
 done
+
 
 # test kfserver
 for hparams in \
