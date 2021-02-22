@@ -180,7 +180,7 @@ class ConfidenceFeatures:
             gold_answer: includes BOS and EOS tokens, but no PAD tokens
             prediction: includes BOS and EOS tokens, but no PAD tokens
         Returns:
-            The index of the first token where `gold_answer` and `prediction` differ, or -1 if they are equal. Ignores BOS, so the minimum possible value is .
+            The index of the first token where `gold_answer` and `prediction` differ, or -1 if they are equal. Ignores BOS, so the minimum possible value is 0.
         """
         # print('gold_answer = ', gold_answer)
         # print('prediction = ', prediction)
