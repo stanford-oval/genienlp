@@ -27,7 +27,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import NamedTuple, List, Union, Iterable
+from typing import NamedTuple, List, Optional, Union, Iterable
 import unicodedata
 import torch
 from dataclasses import dataclass
@@ -84,19 +84,36 @@ class Example(NamedTuple):
     question_feature: List[Feature]
     answer: str
     answer_feature: List[Feature]
+    bad_answer: str
+    bad_answer_feature: List[Feature]
     context_plus_question: str
     context_plus_question_feature: List[Feature]
     context_plus_question_with_types: str
 
+    # @staticmethod
+    # def preprocess_field(argname: str, arg: str, preprocess):
+    #     arg = unicodedata.normalize('NFD', arg)
+    #     sentence, features, sentence_plus_types = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)
+        
+    #     if argname == 'context':
+    #         context_plus_types = sentence_plus_types
+    #     elif argname == 'question':
+    #         question_plus_types = sentence_plus_types
+        
+    #     if lower:
+    #         sentence = sentence.lower()
+
+
     @staticmethod
-    def from_raw(example_id: str, context: str, question: str, answer: str, preprocess=identity, lower=False):
+    def from_raw(example_id: str, context: str, question: str, answer: str, bad_answer: str='', preprocess=identity, lower=False):
         args = [example_id]
         answer = unicodedata.normalize('NFD', answer)
+        bad_answer = unicodedata.normalize('NFD', bad_answer)
         
         question_plus_types = ''
         context_plus_types = ''
         
-        for argname, arg in (('context', context), ('question', question), ('answer', answer)):
+        for argname, arg in (('context', context), ('question', question), ('answer', answer), ('bad_answer', bad_answer)):
             arg = unicodedata.normalize('NFD', arg)
             sentence, features, sentence_plus_types = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)
             
@@ -123,6 +140,7 @@ class NumericalizedExamples(NamedTuple):
     example_id: List[str]
     context: SequentialField
     answer: SequentialField
+    bad_answer: SequentialField
     
     @staticmethod
     def from_examples(examples, numericalizer, add_types_to_text):
@@ -136,10 +154,13 @@ class NumericalizedExamples(NamedTuple):
             tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question for ex in examples],
                                                             [ex.context_plus_question_feature for ex in examples if ex.context_plus_question_feature])
         tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], [])
+        tokenized_bad_answers = numericalizer.encode_batch([ex.bad_answer for ex in examples], [])
+        print('tokenized_bad_answers = ', tokenized_bad_answers)
         for i in range(len(examples)):
             numericalized_examples.append(NumericalizedExamples([examples[i].example_id],
                                         tokenized_contexts[i],
-                                        tokenized_answers[i]))
+                                        tokenized_answers[i],
+                                        tokenized_bad_answers[i]))
         return numericalized_examples
 
     @staticmethod
@@ -148,6 +169,7 @@ class NumericalizedExamples(NamedTuple):
 
         context_values, context_lengths, context_limiteds, context_features = [], [], [], []
         answer_values, answer_lengths, answer_limiteds, answer_features = [], [], [], []
+        bad_answer_values, bad_answer_lengths, bad_answer_limiteds, bad_answer_features = [], [], [], []
 
         for batch in batches:
             example_id.append(batch.example_id[0])
@@ -161,6 +183,10 @@ class NumericalizedExamples(NamedTuple):
             answer_lengths.append(torch.tensor(batch.answer.length, device=device))
             answer_limiteds.append(torch.tensor(batch.answer.limited, device=device))
 
+            bad_answer_values.append(torch.tensor(batch.bad_answer.value, device=device))
+            bad_answer_lengths.append(torch.tensor(batch.bad_answer.length, device=device))
+            bad_answer_limiteds.append(torch.tensor(batch.bad_answer.limited, device=device))
+
         context_values = numericalizer.pad(context_values, pad_id=numericalizer.pad_id)
         context_limiteds = numericalizer.pad(context_limiteds, pad_id=numericalizer.decoder_pad_id)
         context_lengths = torch.stack(context_lengths, dim=0)
@@ -171,6 +197,10 @@ class NumericalizedExamples(NamedTuple):
         answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
         answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)
         answer_lengths = torch.stack(answer_lengths, dim=0)
+
+        bad_answer_values = numericalizer.pad(bad_answer_values, pad_id=numericalizer.pad_id)
+        bad_answer_limiteds = numericalizer.pad(bad_answer_limiteds, pad_id=numericalizer.decoder_pad_id)
+        bad_answer_lengths = torch.stack(bad_answer_lengths, dim=0)
 
         context = SequentialField(value=context_values,
                                   length=context_lengths,
@@ -183,7 +213,13 @@ class NumericalizedExamples(NamedTuple):
                                  limited=answer_limiteds,
                                  feature=None)
 
+        bad_answer = SequentialField(value=bad_answer_values,
+                                 length=bad_answer_lengths,
+                                 limited=bad_answer_limiteds,
+                                 feature=None)
+
 
         return NumericalizedExamples(example_id=example_id,
                                      context=context,
-                                     answer=answer)
+                                     answer=answer,
+                                     bad_answer=bad_answer)

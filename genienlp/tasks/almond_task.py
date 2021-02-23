@@ -703,9 +703,38 @@ class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example,
-                                           **kwargs)
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example, **kwargs)
 
+@register_task('almond_dialogue_nlu_error')
+class AlmondDialogueNLUErrorDetection(BaseAlmondDialogueNLUTask):
+    """Multi-turn NLU task for Almond dialogues with both correct and optional
+    incorrect outputs. Used for teaching error detection to models.
+    """
+    
+    def _is_program_field(self, field_name):
+        return field_name in ('answer', 'context')
+    
+    def utterance_field(self):
+        return 'question'
+    
+    def _make_example(self, parts, dir_name=None, **kwargs):
+        if len(parts) == 4:
+            example_id, context, sentence, target_code = parts
+            bad_target_code = ''
+        elif len(parts) == 5:
+            example_id, context, sentence, target_code, bad_target_code = parts
+        else:
+            raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
+        print('bad_target_code = ', bad_target_code)
+
+        question = sentence
+        answer = target_code
+        bad_answer = bad_target_code
+        return Example.from_raw(self.name + '/' + example_id, context, question, answer, bad_answer,
+                                preprocess=self.preprocess_field, lower=False)
+    
+    def get_splits(self, root, **kwargs):
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example, **kwargs)
 
 @register_task('almond_dialogue_nlu_agent')
 class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
