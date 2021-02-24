@@ -230,6 +230,7 @@ def run(args, device):
                         for score in generation_output.confidence_scores:
                             line += '\t' + str(score[i])
                     prediction_file.write(line + '\n')
+                    print('correct_logit = ', generation_output.confidence_features[i][0].correct_logit)
 
             if len(generation_output.answers) > 0:
                 metrics_to_compute = task.metrics

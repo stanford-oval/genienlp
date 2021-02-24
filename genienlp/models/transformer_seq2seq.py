@@ -77,7 +77,7 @@ class TransformerSeq2Seq(GenieModel):
             self.dropper = None
 
         self.criterion = LabelSmoothingCrossEntropy(args.label_smoothing)
-        self.error_classifier = torch.nn.Linear(in_features=self.args.dimension, out_features=2, bias=True)
+        self.error_classifier = torch.nn.Linear(in_features=self.args.dimension, out_features=1, bias=True)
         self.error_classifier_criterion = torch.nn.CrossEntropyLoss()
             
             
@@ -93,6 +93,11 @@ class TransformerSeq2Seq(GenieModel):
         super().add_new_vocab_from_data(tasks, resize_decoder)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
     
+    def apply_error_classifier(self, decoder_hidden_states, answer_length):
+        error_classifier_input = torch.gather(decoder_hidden_states[-1], dim=1, index=(answer_length-1).unsqueeze(0).unsqueeze(-1).repeat(1, 1, self.args.dimension)).squeeze(0) # (batch_size, hidden_size)
+        error_classifier_output = self.error_classifier(error_classifier_input)
+        return error_classifier_output
+
     def forward(self, *input, **kwargs):
         if self.training:
             batch = input[0]
@@ -127,11 +132,9 @@ class TransformerSeq2Seq(GenieModel):
             outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id), output_hidden_states=True)
             # print('answer_length = ', answer_length)
             # print('decoder_hidden_states = ', outputs.decoder_hidden_states[-1].shape)
-            error_classifier_input = torch.gather(outputs.decoder_hidden_states[-1], dim=1, index=(answer_length-1).unsqueeze(0).unsqueeze(-1).repeat(1, 1, self.args.dimension)).squeeze(0) # (batch_size, hidden_size)
-            # print('error_classifier_input = ', error_classifier_input)
-            error_classifier_output = self.error_classifier(error_classifier_input)
-            # print('error_classifier_output = ', error_classifier_output)
-            error_classifier_loss_1 = self.error_classifier_criterion(error_classifier_output, target=torch.ones_like(answer_length))
+            error_classifier_output_1 = self.apply_error_classifier(outputs.decoder_hidden_states, answer_length)
+            # print('error_classifier_output_1 = ', error_classifier_output_1)
+            # error_classifier_loss_1 = self.error_classifier_criterion(error_classifier_output_1, target=torch.ones_like(answer_length))
             # print('error_classifier_loss_1 = ', error_classifier_loss_1)
 
             # calculate the teacher-forcing loss
@@ -146,14 +149,21 @@ class TransformerSeq2Seq(GenieModel):
 
             # calculate the classification loss for bad parses
             outputs = self.model(batch.context.value, labels=bad_answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id), output_hidden_states=True)
-            error_classifier_input = torch.gather(outputs.decoder_hidden_states[-1], dim=1, index=(bad_answer_length-1).unsqueeze(0).unsqueeze(-1).repeat(1, 1, self.args.dimension)).squeeze(0) # (batch_size, hidden_size)
-            # print('error_classifier_input = ', error_classifier_input)
-            error_classifier_output = self.error_classifier(error_classifier_input)
-            # print('error_classifier_output = ', error_classifier_output)
-            error_classifier_loss_2 = self.error_classifier_criterion(error_classifier_output, target=torch.zeros_like(bad_answer_length))
+            error_classifier_output_2 = self.apply_error_classifier(outputs.decoder_hidden_states, bad_answer_length)
+            # print('error_classifier_output_2 = ', error_classifier_output_2)
+            # error_classifier_loss_2 = self.error_classifier_criterion(error_classifier_output_2, target=torch.zeros_like(bad_answer_length))
             # print('error_classifier_loss_2 = ', error_classifier_loss_2)
 
-            outputs.loss = loss + error_classifier_loss_1 + error_classifier_loss_2 # replace the loss calculated by `transformers` with the new loss
+            # shuffle_vector = torch.randint(2, size=(error_classifier_output_1.shape[0], 1), device=error_classifier_output_1.device)
+
+            # error_classifier_output_1 = shuffle_vector*error_classifier_output_1 + (1-shuffle_vector)*error_classifier_output_2
+            # error_classifier_output_2 = (1-shuffle_vector)*error_classifier_output_1 + shuffle_vector*error_classifier_output_2
+            error_classifier_output = torch.cat([error_classifier_output_1, error_classifier_output_2], dim=1)
+            # print('error_classifier_output = ', error_classifier_output)
+            error_detection_loss = self.error_classifier_criterion(error_classifier_output, target=torch.zeros_like(bad_answer_length))
+            # print('error_detection_loss = ', error_detection_loss)
+
+            outputs.loss = loss + error_detection_loss # replace the loss calculated by `transformers` with the new loss
             return outputs
         else:
             return self.model(**kwargs)
@@ -223,11 +233,16 @@ class TransformerSeq2Seq(GenieModel):
         batch_nodrop_logits = []
         batch_nodrop_probs = []
         batch_nodrop_entropies = []
+        correct_logits = []
         # batch_nodrop_top1_probs = []
         # batch_nodrop_top1_idx = []
         # batch_nodrop_top2_probs = []
         # batch_nodrop_top2_idx = []
-        outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
+        outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False, output_hidden_states=True)
+        error_classifier_output = self.apply_error_classifier(outputs.decoder_hidden_states, prediction_lengths)
+        correct_logits.extend(error_classifier_output.squeeze().tolist())
+        print('correct_logits = ', correct_logits)
+        # exit()
         nodrop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
         for i in range(batch_size):
             batch_nodrop_logits.append(nodrop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
@@ -273,6 +288,7 @@ class TransformerSeq2Seq(GenieModel):
                                         #  nodrop_top2_probs=batch_nodrop_top2_probs[i][:prediction_lengths[i]],
                                          nodrop_entropies=batch_nodrop_entropies[i][:prediction_lengths[i]],
                                          context=batch.context.value[i//repetition_factor][:batch.context.length[i//repetition_factor]],
+                                         correct_logit=correct_logits[i],
                                          ))
 
         # return the model back to its previous state

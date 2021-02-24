@@ -116,6 +116,7 @@ class ConfidenceFeatures:
                  gold_answer: Tensor, prediction: Tensor,
                  nodrop_logits: Tensor, nodrop_probs: Tensor,
                  nodrop_entropies: Tensor, context: Tensor,
+                 correct_logit: float,
                  nodrop_top1_probs: Tensor=None, nodrop_top2_probs: Tensor=None,
                  drop_top1_probs: List[Tensor]=None, drop_top2_probs: List[Tensor]=None):
         """
@@ -126,7 +127,7 @@ class ConfidenceFeatures:
             nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
             nodrop_top1_probs, nodrop_top2_probs: highest and second highest probabilities of the next token, given that the previous token was from `prediction`
         """
-        
+        self.correct_logit = correct_logit
         # store the results of MC dropout if provided
         self.drop_logits = drop_logits
         self.drop_probs = drop_probs
