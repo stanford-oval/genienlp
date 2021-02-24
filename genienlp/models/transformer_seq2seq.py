@@ -49,6 +49,7 @@ class TransformerSeq2Seq(GenieModel):
         super().__init__(config)
         self.args = args
         args.dimension = config.d_model
+        assert args.dimension == config.hidden_size, "In HuggingFace transformers 4.1 Seq2Seq models, `hidden_size` and `d_model` are the same parameter"
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
         self._is_mbart = 'mbart' in self.args.pretrained_model
         
@@ -76,6 +77,8 @@ class TransformerSeq2Seq(GenieModel):
             self.dropper = None
 
         self.criterion = LabelSmoothingCrossEntropy(args.label_smoothing)
+        self.error_classifier = torch.nn.Linear(in_features=self.args.dimension, out_features=2, bias=True)
+        self.error_classifier_criterion = torch.nn.CrossEntropyLoss()
             
             
     def _adjust_mbart(self, lang):
@@ -93,9 +96,12 @@ class TransformerSeq2Seq(GenieModel):
     def forward(self, *input, **kwargs):
         if self.training:
             batch = input[0]
-
+            # print('batch.bad_answer = ', batch.bad_answer)
+            # print('batch.answer = ', batch.answer)
             answer = batch.answer.value
             answer_length = batch.answer.length
+            bad_answer = batch.bad_answer.value
+            bad_answer_length = batch.bad_answer.length
             if self._is_bart_large:
                 # remove BOS from the answer to BART-Large because BART-Large was not trained to predict BOS
                 # (unlike BART-Base or mBART)
@@ -107,6 +113,8 @@ class TransformerSeq2Seq(GenieModel):
                 # with a lowercase letter, so we leave it
                 answer = answer[:, 1:].contiguous()
                 answer_length = answer_length - 1
+                bad_answer = bad_answer[:, 1:].contiguous()
+                bad_answer_length = bad_answer_length - 1
 
             # this has several differences compared to what `transformers` Seq2Seq models do:
             # (1) pad tokens are ignored in all loss calculations
@@ -114,7 +122,19 @@ class TransformerSeq2Seq(GenieModel):
             # longer sequences in the batch do not drown shorter sequences.
             # (3) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
             # (4) if `args.label_smoothing > 0.0`, will add label smoothing term to loss
-            outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
+
+            # calculate the classification loss for correct parses
+            outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id), output_hidden_states=True)
+            # print('answer_length = ', answer_length)
+            # print('decoder_hidden_states = ', outputs.decoder_hidden_states[-1].shape)
+            error_classifier_input = torch.gather(outputs.decoder_hidden_states[-1], dim=1, index=(answer_length-1).unsqueeze(0).unsqueeze(-1).repeat(1, 1, self.args.dimension)).squeeze(0) # (batch_size, hidden_size)
+            # print('error_classifier_input = ', error_classifier_input)
+            error_classifier_output = self.error_classifier(error_classifier_input)
+            # print('error_classifier_output = ', error_classifier_output)
+            error_classifier_loss_1 = self.error_classifier_criterion(error_classifier_output, target=torch.ones_like(answer_length))
+            # print('error_classifier_loss_1 = ', error_classifier_loss_1)
+
+            # calculate the teacher-forcing loss
             batch_size, vocab_size = outputs.logits.shape[0], outputs.logits.shape[2]
             loss = self.criterion(outputs.logits.view(-1, vocab_size), target=answer.view(-1), ignore_index=self.numericalizer.pad_id)
             loss = loss.view(batch_size, -1) # (batch_size, sequence_length)
@@ -123,7 +143,17 @@ class TransformerSeq2Seq(GenieModel):
                 dropper_mask = self.dropper(loss)
                 loss = loss * dropper_mask
             loss = loss.mean() # average over the batch size
-            outputs.loss = loss # replace the loss calculated by `transformers` with the new loss
+
+            # calculate the classification loss for bad parses
+            outputs = self.model(batch.context.value, labels=bad_answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id), output_hidden_states=True)
+            error_classifier_input = torch.gather(outputs.decoder_hidden_states[-1], dim=1, index=(bad_answer_length-1).unsqueeze(0).unsqueeze(-1).repeat(1, 1, self.args.dimension)).squeeze(0) # (batch_size, hidden_size)
+            # print('error_classifier_input = ', error_classifier_input)
+            error_classifier_output = self.error_classifier(error_classifier_input)
+            # print('error_classifier_output = ', error_classifier_output)
+            error_classifier_loss_2 = self.error_classifier_criterion(error_classifier_output, target=torch.zeros_like(bad_answer_length))
+            # print('error_classifier_loss_2 = ', error_classifier_loss_2)
+
+            outputs.loss = loss + error_classifier_loss_1 + error_classifier_loss_2 # replace the loss calculated by `transformers` with the new loss
             return outputs
         else:
             return self.model(**kwargs)

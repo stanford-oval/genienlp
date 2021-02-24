@@ -155,7 +155,6 @@ class NumericalizedExamples(NamedTuple):
                                                             [ex.context_plus_question_feature for ex in examples if ex.context_plus_question_feature])
         tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], [])
         tokenized_bad_answers = numericalizer.encode_batch([ex.bad_answer for ex in examples], [])
-        print('tokenized_bad_answers = ', tokenized_bad_answers)
         for i in range(len(examples)):
             numericalized_examples.append(NumericalizedExamples([examples[i].example_id],
                                         tokenized_contexts[i],

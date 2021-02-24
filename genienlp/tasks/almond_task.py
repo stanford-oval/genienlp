@@ -725,7 +725,6 @@ class AlmondDialogueNLUErrorDetection(BaseAlmondDialogueNLUTask):
             example_id, context, sentence, target_code, bad_target_code = parts
         else:
             raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
-        print('bad_target_code = ', bad_target_code)
 
         question = sentence
         answer = target_code
