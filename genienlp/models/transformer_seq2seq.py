@@ -159,11 +159,12 @@ class TransformerSeq2Seq(GenieModel):
             # error_classifier_output_1 = shuffle_vector*error_classifier_output_1 + (1-shuffle_vector)*error_classifier_output_2
             # error_classifier_output_2 = (1-shuffle_vector)*error_classifier_output_1 + shuffle_vector*error_classifier_output_2
             error_classifier_output = torch.cat([error_classifier_output_1, error_classifier_output_2], dim=1)
-            # print('error_classifier_output = ', error_classifier_output)
             error_detection_loss = self.error_classifier_criterion(error_classifier_output, target=torch.zeros_like(bad_answer_length))
             # print('error_detection_loss = ', error_detection_loss)
+            zero_centered_penalty = torch.linalg.norm(error_classifier_output[:,0]+error_classifier_output[:,1]) / batch_size
+            # print('zero_centered_penalty = ', zero_centered_penalty)
 
-            outputs.loss = loss + error_detection_loss # replace the loss calculated by `transformers` with the new loss
+            outputs.loss = loss + error_detection_loss + zero_centered_penalty # replace the loss calculated by `transformers` with the new loss
             return outputs
         else:
             return self.model(**kwargs)
