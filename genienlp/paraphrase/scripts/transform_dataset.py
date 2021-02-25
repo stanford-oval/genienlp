@@ -4,16 +4,28 @@ import re
 from ...util import tokenize, lower_case, remove_thingtalk_quotes
 from ...data_utils.progbar import progress_bar
 
+special_token_pattern = re.compile("(^|(?<= ))" + "[A-Z]+_[0-9]" + "($|(?= ))")
+def find_special_tokens(s: str):
+    return list(sorted([a.group(0) for a in special_token_pattern.finditer(s)]))
+
+
 def is_subset(set1, set2):
     """
     Returns True if set1 is a subset of or equal to set2
     """
     return all([e in set2 for e in set1])
 
-def passes_heuristic_checks(row, args):
+def passes_heuristic_checks(row, args, old_query=None):
+    if 'QUOTED_STRING' in row[args.utterance_column] or (old_query is not None and 'QUOTED_STRING' in old_query):
+        # remove quoted examples
+        return False
+    if old_query is not None:
+        # check that all the special tokens in utterance after paraphrasing are the same as before
+        if find_special_tokens(old_query) != find_special_tokens(row[args.utterance_column]):
+            return False
     all_input_columns = ' '.join([row[c] for c in args.input_columns])
-    input_special_tokens = set(re.findall('[A-Za-z:_.]+_[0-9]', all_input_columns))
-    output_special_tokens = set(re.findall('[A-Za-z:_.]+_[0-9]', row[args.thingtalk_column]))
+    input_special_tokens = set(find_special_tokens(all_input_columns))
+    output_special_tokens = set(find_special_tokens(row[args.thingtalk_column]))
     if not is_subset(output_special_tokens, input_special_tokens):
         return False
     _, quote_values = remove_thingtalk_quotes(row[args.thingtalk_column])
@@ -110,6 +122,7 @@ def main(args):
             seen_examples = set()
         all_thrown_away_rows = []
         for row_idx, row in enumerate(progress_bar(reader, desc='Lines')):
+            old_query = None
             output_rows = []
             thrown_away_rows = []
             if args.transformation == 'remove_thingtalk_quotes':
@@ -136,6 +149,7 @@ def main(args):
                     row[args.utterance_column] = new_query
                     output_rows.append(row)
             elif args.transformation == 'replace_queries':
+                old_query = row[args.utterance_column]
                 for idx, new_query in enumerate(new_queries[row_idx]):
                     copy_row = row.copy()
                     copy_row[args.utterance_column] = new_query
@@ -152,7 +166,7 @@ def main(args):
             for o in output_rows:
                 output_row = ""
                 if args.remove_with_heuristics:
-                    if not passes_heuristic_checks(o, args):
+                    if not passes_heuristic_checks(o, args, old_query=old_query):
                         heuristic_count += 1
                         continue
                 if args.remove_duplicates:
@@ -170,7 +184,7 @@ def main(args):
                         output_row += '\t'
                 output_file.write(output_row + '\n')
             for o in thrown_away_rows:
-                if not args.remove_with_heuristics or (args.remove_with_heuristics and passes_heuristic_checks(o, args)):
+                if not args.remove_with_heuristics or (args.remove_with_heuristics and passes_heuristic_checks(o, args, old_query=old_query)):
                     all_thrown_away_rows.append(o)
 
         if args.thrown_away is not None:

@@ -30,14 +30,15 @@
 import logging
 from typing import List
 import torch
+
 from torch.tensor import Tensor
 from transformers import AutoModelForSeq2SeqLM, AutoConfig
-from loss_dropper import LossDropper
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import get_mbart_lang
 from .base import GenieModel
 from ..util import ConfidenceFeatures
+from .common import LabelSmoothingCrossEntropy
 
 logger = logging.getLogger(__name__)
 
@@ -56,32 +57,39 @@ class TransformerSeq2Seq(GenieModel):
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
                                                                cache_dir=self.args.embeddings)
-            
-        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, max_generative_vocab=None,
-                                                      preprocess_special_tokens=args.preprocess_special_tokens)
+
+        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, args, max_generative_vocab=None)
+
+        self.numericalizer.get_tokenizer(save_directory)
+        
+        if self._is_mbart:
+            self._adjust_mbart(kwargs.get('locale', 'en'))
 
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
         if args.dropper_ratio > 0:
+            # lazy import since dropper is an optional dependency 
+            from loss_dropper import LossDropper
             self.dropper = LossDropper(dropc=args.dropper_ratio, min_count=args.dropper_min_count)
         else:
             self.dropper = None
+
+        self.criterion = LabelSmoothingCrossEntropy(args.label_smoothing)
             
             
+    def _adjust_mbart(self, lang):
+        # We need to set language id for mBART models as it is used during tokenization and generation
+        # For now we only support single language training and evaluation with mbart models
+        lang_id = get_mbart_lang(lang)
+        self.numericalizer._tokenizer.set_src_lang_special_tokens(lang_id)
+        self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.cur_lang_code
+        
+
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
     
-    
-    def set_decoder_start_token_id(self, lang):
-        if self._is_mbart:
-            # mBART, in contrast to MT5 or XLM-R, needs language id
-            # For now we only support single language training and evaluation with mbart models
-            lang_id = get_mbart_lang(lang)
-            self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[lang_id]
-
-
     def forward(self, *input, **kwargs):
         if self.training:
             batch = input[0]
@@ -100,16 +108,16 @@ class TransformerSeq2Seq(GenieModel):
                 answer = answer[:, 1:].contiguous()
                 answer_length = answer_length - 1
 
-            # setting pad output tokens to -100 means they will be ignored in calculating loss
-            answer[answer==self.numericalizer.pad_id] = -100
-
-            # this is similar to what `transformers` Seq2Seq models do, but with two changes
-            # (1) loss is averaged over sequence lengths first, then over the batch size. This way,
+            # this has several differences compared to what `transformers` Seq2Seq models do:
+            # (1) pad tokens are ignored in all loss calculations
+            # (2) loss is averaged over sequence lengths first, then over the batch size. This way,
             # longer sequences in the batch do not drown shorter sequences.
-            # (2) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
+            # (3) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
+            # (4) if `args.label_smoothing > 0.0`, will add label smoothing term to loss
             outputs = self.model(batch.context.value, labels=answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id))
-            ce_loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
-            loss = ce_loss_fct(outputs.logits.transpose(1, 2), answer)
+            batch_size, vocab_size = outputs.logits.shape[0], outputs.logits.shape[2]
+            loss = self.criterion(outputs.logits.view(-1, vocab_size), target=answer.view(-1), ignore_index=self.numericalizer.pad_id)
+            loss = loss.view(batch_size, -1) # (batch_size, sequence_length)
             loss = loss.sum(dim=1) / answer_length # accounts for the case where BOS is removed
             if self.dropper is not None:
                 dropper_mask = self.dropper(loss)
@@ -144,13 +152,13 @@ class TransformerSeq2Seq(GenieModel):
         generated = self.model.generate(input_ids=input_ids,
                                         max_length=max_output_length,
                                         min_length=2, # generate at least one token after BOS
-                                        bos_token_id=self.numericalizer._tokenizer.bos_token_id,
-                                        pad_token_id=self.numericalizer._tokenizer.pad_token_id,
-                                        early_stopping=True,
+                                        bos_token_id=self.numericalizer.init_id,
+                                        pad_token_id=self.numericalizer.pad_id,
+                                        early_stopping=False,
                                         num_return_sequences=num_outputs,
                                         repetition_penalty=repetition_penalty,
                                         temperature=temperature,
-                                        eos_token_id=self.numericalizer._tokenizer.eos_token_id,
+                                        eos_token_id=self.numericalizer.eos_id,
                                         top_k=top_k,
                                         top_p=top_p,
                                         num_beams=num_beams,
@@ -158,30 +166,26 @@ class TransformerSeq2Seq(GenieModel):
                                         diversity_penalty=diversity_penalty,
                                         no_repeat_ngram_size=no_repeat_ngram_size,
                                         do_sample=do_sample,
-                                        decoder_start_token_id=decoder_start_token_id
+                                        decoder_start_token_id=decoder_start_token_id,
                                         )
-
+        
         return generated
 
 
-    def confidence_features(self, batch, predictions, mc_dropout=False, mc_dropout_num=0) -> List[ConfidenceFeatures]:
+    def confidence_features(self, batch, predictions, mc_dropout_num=0) -> List[ConfidenceFeatures]:
         """
         predictions: Tensor of shape (batch_size, output_length)
-        mc_dropout: if True, will activate dropout layers
-        mc_droput_num: number of Monte Carlo samples used for the MC Dropout method
+        mc_droput_num: number of Monte Carlo samples used for the MC Dropout method. 0 disables MC dropout.
         """
-        if mc_dropout:
-            assert mc_dropout_num > 0, 'MC Dropout is enabled, but mc_droput_num is 0'
-        else:
-            assert mc_dropout_num == 0, 'MC Dropout is disabled, but mc_droput_num is not 0'
+        
         batch_size = predictions.shape[0]
         repetition_factor = batch_size//batch.context.value.shape[0]
         input_ids = batch.context.value.repeat_interleave(repetition_factor, dim=0) # repeat to account for multiple predictions per input
 
         prediction_lengths = self.get_length(predictions)
 
-        pad_token_id = self.numericalizer._tokenizer.pad_token_id
-        attention_mask = self.model._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer._tokenizer.eos_token_id)
+        pad_token_id = self.numericalizer.pad_id
+        attention_mask = self.model._prepare_attention_mask_for_generation(input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer.eos_id)
         truncated_predictions = predictions[:, 1:] # remove the BOS token since it is not actually being generated
 
         assert not self.training, 'Model should be in eval() mode before generation can start.'
@@ -189,6 +193,10 @@ class TransformerSeq2Seq(GenieModel):
         batch_nodrop_logits = []
         batch_nodrop_probs = []
         batch_nodrop_entropies = []
+        # batch_nodrop_top1_probs = []
+        # batch_nodrop_top1_idx = []
+        # batch_nodrop_top2_probs = []
+        # batch_nodrop_top2_idx = []
         outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
         nodrop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
         for i in range(batch_size):
@@ -196,29 +204,43 @@ class TransformerSeq2Seq(GenieModel):
             probs = torch.softmax(nodrop_logits[i], dim=1)
             batch_nodrop_probs.append(probs.gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
             batch_nodrop_entropies.append(-torch.sum(torch.log(probs)*probs, dim=1)[:prediction_lengths[i]])
+            # sorted_probs = probs.sort(dim=1)
+            # batch_nodrop_top1_probs.append(sorted_probs.values[:, -1][:prediction_lengths[i]])
+            # batch_nodrop_top2_probs.append(sorted_probs.values[:, -2][:prediction_lengths[i]])
+            # batch_nodrop_top1_idx.append(sorted_probs.indices[:, -1][:prediction_lengths[i]])
+            # batch_nodrop_top2_idx.append(sorted_probs.indices[:, -2][:prediction_lengths[i]])
         
         # activate dropout layers
         self.train()
 
         batch_drop_logits = [[] for _ in range(batch_size)]
         batch_drop_probs = [[] for _ in range(batch_size)]
+        # batch_drop_top1_probs = [[] for _ in range(batch_size)]
+        # batch_drop_top2_probs = [[] for _ in range(batch_size)]
         for _ in range(mc_dropout_num):
             outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
             drop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
             for i in range(batch_size):
                 batch_drop_logits[i].append((drop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))[:prediction_lengths[i]])
-                drop_probs = torch.softmax(drop_logits[i], dim=1).gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]]
+                softmax = torch.softmax(drop_logits[i], dim=1)
+                drop_probs = softmax.gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]]
                 batch_drop_probs[i].append(drop_probs)
+                # batch_drop_top1_probs[i].append(softmax.gather(dim=1, index=batch_nodrop_top1_idx[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
+                # batch_drop_top2_probs[i].append(softmax.gather(dim=1, index=batch_nodrop_top2_idx[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
 
         confidence_features = []
         for i in range(batch_size):
             confidence_features.append(
-                        ConfidenceFeatures(drop_logits=batch_drop_logits[i] if mc_dropout else None,
-                                         drop_probs=batch_drop_probs[i] if mc_dropout else None,
+                        ConfidenceFeatures(drop_logits=batch_drop_logits[i] if mc_dropout_num > 0 else None,
+                                         drop_probs=batch_drop_probs[i] if mc_dropout_num > 0 else None,
+                                        #  drop_top1_probs=batch_drop_top1_probs[i] if mc_dropout_num > 0 else None,
+                                        #  drop_top2_probs=batch_drop_top2_probs[i] if mc_dropout_num > 0 else None,
                                          gold_answer=batch.answer.value[i//repetition_factor][:batch.answer.length[i//repetition_factor]],
                                          prediction=predictions[i][:prediction_lengths[i]+1],  # +1 to include EOS
                                          nodrop_logits=batch_nodrop_logits[i][:prediction_lengths[i]],
                                          nodrop_probs=batch_nodrop_probs[i][:prediction_lengths[i]],
+                                        #  nodrop_top1_probs=batch_nodrop_top1_probs[i][:prediction_lengths[i]],
+                                        #  nodrop_top2_probs=batch_nodrop_top2_probs[i][:prediction_lengths[i]],
                                          nodrop_entropies=batch_nodrop_entropies[i][:prediction_lengths[i]],
                                          context=batch.context.value[i//repetition_factor][:batch.context.length[i//repetition_factor]],
                                          ))

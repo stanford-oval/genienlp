@@ -31,6 +31,8 @@
 import torch
 import logging
 from transformers import AutoModel, PretrainedConfig, AutoConfig
+from transformers import BertConfig, XLMRobertaConfig
+from ..paraphrase.transformers_utils import BertModelForNER, XLMRobertaModelForNER
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from .identity_encoder import IdentityEncoder
@@ -56,17 +58,34 @@ class TransformerLSTM(GenieModel):
         encoder_embeddings = args.pretrained_model
         config = AutoConfig.from_pretrained(encoder_embeddings, cache_dir=args.embeddings)
         args.dimension = config.hidden_size
-        self.numericalizer = TransformerNumericalizer(encoder_embeddings,
-                                                      max_generative_vocab=args.max_generative_vocab,
-                                                      cache=args.embeddings,
-                                                      preprocess_special_tokens=args.preprocess_special_tokens)
+        self.numericalizer = TransformerNumericalizer(encoder_embeddings, args, max_generative_vocab=args.max_generative_vocab)
+        
+        self.numericalizer.get_tokenizer(save_directory)
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
 
         logger.info(f'Initializing encoder and decoder embeddings')
-        if save_directory is not None:
-            self.encoder_embeddings = AutoModel.from_config(config)
+        
+        if args.do_ned:
+            if type(config) == BertConfig:
+                if save_directory is not None:
+                    self.encoder_embeddings = BertModelForNER(config, args.num_db_types, args.db_unk_id)
+                else:
+                    self.encoder_embeddings = BertModelForNER(config, args.num_db_types, args.db_unk_id).from_pretrained(
+                        encoder_embeddings, num_db_types=args.num_db_types, db_unk_id=args.db_unk_id, cache_dir=args.embeddings)
+            elif type(config) == XLMRobertaConfig:
+                if save_directory is not None:
+                    self.encoder_embeddings = XLMRobertaModelForNER(config, args.num_db_types, args.db_unk_id)
+                else:
+                    self.encoder_embeddings = XLMRobertaModelForNER(config, args.num_db_types, args.db_unk_id).from_pretrained(
+                        encoder_embeddings, num_db_types=args.num_db_types, db_unk_id=args.db_unk_id, cache_dir=args.embeddings)
+            else:
+                raise ValueError('Model is not supported for using entity embeddings for NER')
         else:
-            self.encoder_embeddings = AutoModel.from_pretrained(encoder_embeddings, config=config, cache_dir=args.embeddings)
+            if save_directory is not None:
+                self.encoder_embeddings = AutoModel.from_config(config)
+            else:
+                self.encoder_embeddings = AutoModel.from_pretrained(encoder_embeddings, config=config, cache_dir=args.embeddings)
+                
         self.encoder_embeddings.resize_token_embeddings(self.numericalizer.num_tokens)
         
         logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens')
@@ -79,12 +98,7 @@ class TransformerLSTM(GenieModel):
         self.encoder_embeddings.resize_token_embeddings(self.numericalizer.num_tokens)
         if resize_decoder:
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
-            
-            
-    def set_decoder_start_token_id(self, lang):
-        pass
     
-
     def forward(self, batch, current_token_id=None, past_key_values=None,
                 expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
         if encoder_output is None:
@@ -181,5 +195,5 @@ class TransformerLSTM(GenieModel):
                                      encoder_output=encoder_output
                                     )
         generated = torch.cat((generated[:, 0:1], generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)), dim=1) # map everything to full vocabulary except BOS which already is in full vocabulary
-
+        
         return generated

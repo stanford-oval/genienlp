@@ -13,21 +13,30 @@ scikit-learn = "*"
 numpy = ">=1.14.5"
 torch = "~=1.7.1"
 tqdm = "~=4.0"
+tensorboardX = "==2.1.*"
 pyrouge = ">=0.1.3"
 sacrebleu = "~=1.0"
-tensorboardX = "==2.1.*"
 requests = "~=2.22"
 transformers = "==4.1.1"
-sentence-transformers = "==0.4.0"
-radam = {git = "https://github.com/LiyuanLucasLiu/RAdam"}
-loss_dropper = {git = "https://github.com/ddkang/loss_dropper"}
-matplotlib = '~=3.1'
-seaborn = '~=0.9'
 sentencepiece = '==0.1.*'
+sentence-transformers = "==0.4.0"
+mosestokenizer = "~=1.1"
+nltk = '~=3.4'
+elasticsearch = '==7.9.1'
+ujson = '==4.0.2'
+pathos = '==0.2.6'
+marisa_trie_m = '==0.7.6'
+loss_dropper = {git = "https://github.com/ddkang/loss_dropper"}
+kfserving = '>=0.5.0'
+bootleg = {git = "https://github.com/Mehrad0711/bootleg"}
 scikit-learn = '~=0.23'
 dill = '~=0.3'
 xgboost = '~=1.3'
-kfserving = '>=0.5.0'
+
+matplotlib = '~=3.1'
+seaborn = '~=0.9'
+radam = {git = "https://github.com/LiyuanLucasLiu/RAdam"}
+
 
 [requires]
 python_version = "3.8"

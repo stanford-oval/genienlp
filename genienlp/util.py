@@ -39,11 +39,13 @@ import re
 from typing import List, Optional
 import numpy as np
 import torch
+import ujson
 from transformers.models.mbart.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
 from torch.functional import Tensor
 
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
+from .tasks.almond_utils import token_type_regex, entity_regex
 
 logger = logging.getLogger(__name__)
 
@@ -110,28 +112,58 @@ class ConfidenceFeatures:
     Contains all necessary features that are useful for calculating confidence of a single generated output
     """
 
-    def __init__(self, drop_logits: List[Tensor], drop_probs: List[Tensor], gold_answer: Tensor, prediction: Tensor,
-                 nodrop_logits: Tensor, nodrop_probs: Tensor, nodrop_entropies: Tensor, context: Tensor):
+    def __init__(self, drop_logits: List[Tensor], drop_probs: List[Tensor],
+                 gold_answer: Tensor, prediction: Tensor,
+                 nodrop_logits: Tensor, nodrop_probs: Tensor,
+                 nodrop_entropies: Tensor, context: Tensor,
+                 nodrop_top1_probs: Tensor=None, nodrop_top2_probs: Tensor=None,
+                 drop_top1_probs: List[Tensor]=None, drop_top2_probs: List[Tensor]=None):
         """
         Inputs:
             droplogits: logits after MC dropout
             gold_answer: includes BOS and EOS tokens, but no PAD tokens
             prediction: includes BOS and EOS tokens, but no PAD tokens
             nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
+            nodrop_top1_probs, nodrop_top2_probs: highest and second highest probabilities of the next token, given that the previous token was from `prediction`
         """
+        
+        # store the results of MC dropout if provided
+        self.drop_logits = drop_logits
+        self.drop_probs = drop_probs
+        self.drop_top1_probs = drop_top1_probs
+        self.drop_top2_probs = drop_top2_probs
+
         if drop_logits is not None:
             self.drop_logits = torch.stack(drop_logits, dim=0).cpu()
-        else:
-            self.drop_logits = None
         if drop_probs is not None:
             self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
-        else:
-            self.drop_probs = None
-        self.nodrop_logits = nodrop_logits.cpu()
-        self.nodrop_probs = nodrop_probs.cpu()
-        self.nodrop_entropies = nodrop_entropies.cpu()
+        if drop_top1_probs is not None:
+            self.drop_top1_probs = torch.stack(drop_top1_probs, dim=0).cpu()
+        if drop_top2_probs is not None:
+            self.drop_top2_probs = torch.stack(drop_top2_probs, dim=0).cpu()
 
+        # store the results of non-dropout forward pass, if provided
+        self.nodrop_logits = nodrop_logits
+        self.nodrop_probs = nodrop_probs
+        self.nodrop_entropies = nodrop_entropies
+        self.nodrop_top1_probs = nodrop_top1_probs
+        self.nodrop_top2_probs = nodrop_top2_probs
+
+        if nodrop_logits is not None:
+            self.nodrop_logits = nodrop_logits.cpu()
+        if nodrop_probs is not None:
+            self.nodrop_probs = nodrop_probs.cpu()
+        if nodrop_entropies is not None:
+            self.nodrop_entropies = nodrop_entropies.cpu()
+        if nodrop_top1_probs is not None:
+            self.nodrop_top1_probs = nodrop_top1_probs.cpu()
+        if nodrop_top2_probs is not None:
+            self.nodrop_top2_probs = nodrop_top2_probs.cpu()
+
+        self.prediction = prediction
+        self.gold_answer = gold_answer
         self.first_mistake = ConfidenceFeatures.find_first_mistake(gold_answer, prediction)
+        self.label = (self.first_mistake == -1)
         self.context = context
 
     @property
@@ -140,10 +172,6 @@ class ConfidenceFeatures:
             return 0
         else:
             return self.drop_logits.shape[0]
-
-    @property
-    def mc_dropout(self):
-        return self.mc_dropout_num > 0
 
     @staticmethod
     def find_first_mistake(gold_answer: Tensor, prediction: Tensor):
@@ -176,6 +204,7 @@ class ConfidenceFeatures:
                 + ', nodrop_probs=' + str(self.nodrop_probs) \
                 + ', nodrop_entropies=' + str(self.nodrop_entropies) \
                 + ', context=' + str(self.context) \
+                + ', label=' + str(self.label) \
                 + '>'
 
 
@@ -288,7 +317,7 @@ def unmask_special_tokens(string: str, exceptions: list):
 
 def detokenize(string: str):
     string, exceptions = mask_special_tokens(string)
-    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "!", "'s", ")", ":"]
+    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "!", "'s", ")", ":", "-"]
     for t in tokens:
         string = string.replace(' ' + t, t)
     string = string.replace("( ", "(")
@@ -306,8 +335,9 @@ def tokenize(string: str):
     string = string.replace("(", "( ")
     string = string.replace('gonna', 'gon na')
     string = string.replace('wanna', 'wan na')
-    string = re.sub('\s+', ' ', string)
     string = unmask_special_tokens(string, exceptions)
+    string = re.sub('([A-Za-z:_.]+_[0-9]+)-', r'\1 - ', string) # add space before and after hyphen, e.g. "NUMBER_0-hour"
+    string = re.sub('\s+', ' ', string) # remove duplicate spaces
     return string.strip()
 
 
@@ -512,8 +542,8 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
-    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer)
+def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False, add_types_to_text=False, db_unk_id=0):
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer, add_types_to_text=add_types_to_text)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
@@ -526,14 +556,43 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     # get the sorted data_source
     all_f = sampler.data_source
     data_loader = torch.utils.data.DataLoader(all_f, batch_sampler=sampler,
-                                              collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer, device),
+                                              collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer, device, db_unk_id),
                                               num_workers=0)
     
     if return_original_order:
         return data_loader, sampler.original_order
     else:
         return data_loader
+
+def ned_dump_entity_type_pairs(split, path, name, utterance_field):
+
+    with open(os.path.join(os.path.dirname(path), f'{name}_labels.jsonl'), 'w') as fout:
+        for ex in split:
+            text = ex.context_plus_question_with_types
+            entity_token_pairs = entity_regex.findall(text)
+            
+            if utterance_field == 'question':
+                entity_token_string = entity_token_pairs[1]
+                sentence = text[text.index('</e>') + 4: text.rindex('<e>')].strip()
+            else:
+                entity_token_string = entity_token_pairs[0]
+                sentence = text[:text.index('<e>')].strip()
+                
+            entity_token_string = entity_token_string[len('<e>'):-len('</e>')].strip('; ')
+            
+            entities = []
+            ent_types = []
+            if entity_token_string:
+                entity_token_pairs = entity_token_string.split(';')
+                for str in entity_token_pairs:
+                    entity, types = token_type_regex.match(str).groups()
+                    types = types.split('|')
+                    entities.append(entity.strip())
+                    ent_types.append(types)
     
+            fout.write(ujson.dumps({"sentence": sentence, "aliases": entities, "thingtalk_types": ent_types}) + '\n')
+
+
 
 def get_mbart_lang(orig_lang):
     for lang in FAIRSEQ_LANGUAGE_CODES:
@@ -548,16 +607,28 @@ def load_config_json(args):
     args.almond_type_embeddings = False
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
+
         retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
                     'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
                     'override_context', 'override_question',
-                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence',
-                    'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count']
+                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version',
+                    'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count', 'label_smoothing',
+                    'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
+                    'override_question', 'override_context', 'add_types_to_text',
+                    'do_ned', 'database_type', 'min_entity_len', 'max_entity_len',
+                    'entity_type_agg_method', 'entity_word_embeds_dropout',
+                    'num_db_types', 'db_unk_id', 'ned_retrieve_method', 'database_lookup_method', 'almond_domains',
+                    'ned_features', 'ned_features_size', 'ned_features_default_val',
+                    'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
+                    'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
+                    'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types'
+                    ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
         overwrite = ['val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty',
                      'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty',
-                     'temperature', 'max_output_length', 'reduce_metrics']
+                     'temperature', 'max_output_length', 'reduce_metrics',
+                     'database_dir']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -566,8 +637,38 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
-            elif r in ('preprocess_special_tokens'):
+            elif r in ('do_ned', 'use_encoder_loss',
+                       'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version',
+                       ):
                 setattr(args, r, False)
+            elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
+                setattr(args, r, 0)
+            elif r in ('entity_word_embeds_dropout'):
+                setattr(args, r, 0.0)
+            elif r in ('num_beams', 'num_outputs', 'top_p', 'repetition_penalty'):
+                setattr(args, r, [1])
+            elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
+                setattr(args, r, [0])
+            elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val']:
+                setattr(args, r, [])
+            elif r == 'add_types_to_text':
+                setattr(args, r, 'no')
+            elif r == 'database_type':
+                setattr(args, r, 'json')
+            elif r == 'min_entity_len':
+                setattr(args, r, 2)
+            elif r == 'max_entity_len':
+                setattr(args, r, 4)
+            elif r == 'database_dir':
+                setattr(args, r, None)
+            elif r == 'ned_retrieve_method':
+                setattr(args, r, 'naive')
+            elif r == 'database_lookup_method':
+                setattr(args, r, 'ngrams')
+            elif r == 'almond_domains':
+                setattr(args, r, [])
+            elif r == 'locale':
+                setattr(args, r, 'en')
             elif r == 'num_beam_groups':
                 setattr(args, r, [1])
             elif r == 'diversity_penalty':
@@ -576,8 +677,13 @@ def load_config_json(args):
                 setattr(args, r, 0.0)
             elif r == 'dropper_min_count':
                 setattr(args, r, 10000)
+            elif r == 'label_smoothing':
+                setattr(args, r, 0.0)
             else:
+                # use default value
                 setattr(args, r, None)
+                
         args.dropout_ratio = 0.0
+        args.verbose = False
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)

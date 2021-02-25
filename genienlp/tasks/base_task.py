@@ -54,6 +54,10 @@ class BaseTask:
     def default_context(self):
         return ''
 
+    @property
+    def utterance_field(self):
+        return NotImplementedError
+
     def get_splits(self, root, **kwargs):
         """
         Load the train, test, eval datasets for this task
@@ -68,12 +72,12 @@ class BaseTask:
     def postprocess_prediction(self, example_id, prediction):
         return prediction
 
-    def preprocess_field(self, sentence, field_name=None):
+    def preprocess_field(self, sentence, field_name=None, answer=None):
         if self.override_context is not None and field_name == 'context':
             return self.override_context
         if self.override_question is not None and field_name == 'question':
             return self.override_question
-        return sentence
+        return sentence, [], sentence
 
     @property
     def metrics(self):

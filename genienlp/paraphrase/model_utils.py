@@ -31,20 +31,36 @@ def shift_tokens_right(input_ids, pad_token_id):
 def freeze_params(model):
     for par in model.parameters():
         par.requires_grad = False
-        
-        
+
+
+def unfreeze_params(model):
+    for par in model.parameters():
+        par.requires_grad = True
+
+
 def freeze_embeds(model):
     """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-    try:
+    if hasattr(model, 'model'):
         freeze_params(model.model.shared)
         for d in [model.model.encoder, model.model.decoder]:
             freeze_params(d.embed_positions)
             freeze_params(d.embed_tokens)
-    except AttributeError:
+    else:
         freeze_params(model.shared)
         for d in [model.encoder, model.decoder]:
             freeze_params(d.embed_tokens)
 
+def unfreeze_embeds(model):
+    """Unfreeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
+    if hasattr(model, 'model'):
+        unfreeze_params(model.model.shared)
+        for d in [model.model.encoder, model.model.decoder]:
+            unfreeze_params(d.embed_positions)
+            unfreeze_params(d.embed_tokens)
+    else:
+        unfreeze_params(model.shared)
+        for d in [model.encoder, model.decoder]:
+            unfreeze_params(d.embed_tokens)
 
 def check_args(args):
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:
@@ -54,6 +70,8 @@ def check_args(args):
         elif args.tgt_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 1)[1]]:
             if args.tgt_lang == 'pl':
                 args.tgt_lang = 'pol'
+            elif args.tgt_lang == 'fa':
+                args.tgt_lang = 'pes'
             else:
                 raise ValueError(
                     'Target language is not in the model group languages, please specify the correct target language.')
@@ -63,6 +81,10 @@ def check_args(args):
             raise ValueError('For translation task using Marian model, if source language is a group of languages, '
                              'you have to specify the --src_lang flag.')
         elif args.src_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 2)[1]]:
+            if args.src_lang == 'pl':
+                args.src_lang = 'pol'
+            elif args.src_lang == 'fa':
+                args.src_lang = 'pes'
             raise ValueError(
                 'Source language is not in the model group languages, please specify the correct source language.')
     

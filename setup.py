@@ -34,7 +34,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='genienlp',
-    version='0.6.0a1',
+    version='0.6.0a2',
     
     packages=setuptools.find_packages(exclude=['tests']),
     entry_points= {
@@ -55,13 +55,19 @@ setuptools.setup(
         'sacrebleu~=1.0',
         'requests~=2.22',
         'transformers==4.1.1',
-        'sentence-transformers==0.4.0',
         'sentencepiece==0.1.*',
-        'loss_dropper @ git+https://github.com/ddkang/loss_dropper#egg=loss_dropper',
+        'sentence-transformers==0.4.0',
+        'mosestokenizer~=1.1',
+        'nltk~=3.4',
+        'elasticsearch==7.9.1',
+        'ujson==4.0.2',
+        'pathos==0.2.6',
+        'marisa_trie_m==0.7.6',
         'kfserving>=0.5.0',
+        'bootleg @ git+https://github.com/Mehrad0711/bootleg',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',
-        'xgboost~=1.3',
+        'xgboost~=1.3'
     ]
 )

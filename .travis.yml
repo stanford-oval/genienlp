@@ -1,16 +1,25 @@
 branches:
   except:
   - "/^wip/"
+
 language: python
+
 python: 3.8
+
 install:
 - pip install flake8
 - pip install pipenv
 - pipenv install --dev
+
+  # hack to install bootleg dependencies properly
+- pipenv run pip install -e .
+- pipenv run python3 -m spacy download en_core_web_sm
+
 script:
 - flake8 . --count --select=E901,E999,F821,F822,F823 --show-source --statistics
 - flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 - "./tests/test.sh"
+
 deploy:
   provider: pypi
   username: __token__

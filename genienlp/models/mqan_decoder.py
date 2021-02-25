@@ -65,6 +65,7 @@ class MQANDecoder(nn.Module):
         if self.decoder_embeddings is not None:
             self.decoder_embeddings.set_embeddings(embeddings)
 
+
     def forward(self, batch, final_context, context_rnn_state, encoder_loss,
                 current_token_id=None, decoder_wrapper=None, expansion_factor=1, generation_dict=None):
 
@@ -79,8 +80,8 @@ class MQANDecoder(nn.Module):
             else:
                 self.context_attn.applyMasks(context_padding)
 
-            answer_padding = (answer.data == self.pad_idx)[:, :-1]
 
+            answer_padding = (answer.data == self.pad_idx)[:, :-1]
             answer_embedded = self.decoder_embeddings(answer[:, :-1], padding=answer_padding)
 
             if self.args.rnn_layers > 0:
@@ -96,7 +97,7 @@ class MQANDecoder(nn.Module):
             probs = self.probs(decoder_output, vocab_pointer_switch, context_attention, context_limited, decoder_vocab)
         
             probs, targets = mask(answer_limited[:, 1:].contiguous(), probs.contiguous(), pad_idx=decoder_vocab.pad_idx)
-            loss = F.nll_loss(probs.log(), targets)
+            loss = F.nll_loss(probs.log(), targets, ignore_index=decoder_vocab.pad_idx)
             if encoder_loss is not None:
                 loss += self.args.encoder_loss_weight * encoder_loss
             

@@ -1,3 +1,22 @@
+0.6.0a2
+=======
+
+* Added support for [Bootleg](https://github.com/HazyResearch/bootleg), a state-of-the art
+  named entity recognition system. The output of the NER can be fed as auxiliary information
+  to the model in embedding or text form [#83, #93].
+* Added support for calibration. Calibration is an additional step applied to the output of
+  the model to compute a confidence score that can be interpreted as the probability of producing
+  a correct parse. Multiple calibrators can be trained, to separately identify likely incorrect
+  parses and out-of-domain inputs [#72, #74, #92, #94].
+* Added support for inference in Kubeflow, using the new command `genienlp kfserver`, which
+  exposes a compatible HTTP interface [#76, #80, #88, #90].
+* Preprocessing of inputs can now use the new fast tokenizers from the huggingface library [#66].
+* A number of new hyperparameter options were added, includng diverse beam search, loss dropping,
+  and a new learning rate schedule [#66].
+* Paraphrasing is now a regular task trained with `genienlp train`, and no longer needs a
+  different set of commands [#79].
+* Misc bug fixes [#67, #68, #69, #70, #71, #85, #95].
+
 0.6.0a1
 =======
 

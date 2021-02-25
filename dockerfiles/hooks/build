@@ -4,9 +4,18 @@ set -e
 set -x
 echo "Running in $(pwd)"
 
+
 case $DOCKER_TAG in
 	*-cuda)
 		docker build --build-arg BASE_IMAGE=nvidia/cuda:10.1-runtime-ubi8 -f $(basename $DOCKERFILE_PATH) -t $IMAGE_NAME ..
+	;;
+
+	*-cuda-kfserver)
+		docker build --build-arg BASE_IMAGE=nvidia/cuda:10.1-runtime-ubi8 --build-arg USER=root -f $(basename $DOCKERFILE_PATH) -t $IMAGE_NAME ..
+	;;
+
+	*-kfserver)
+		docker build --build-arg USER=root -f $(basename $DOCKERFILE_PATH) -t $IMAGE_NAME ..
 	;;
 
 	*)
