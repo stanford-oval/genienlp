@@ -1,0 +1,82 @@
+{"context": "Bob paid for Charlie's college education, but now Charlie acts as though it never happened. He is very hurt.", "question": "Who is hurt? Bob or Charlie?", "answer": "Bob"}
+{"context": "Bob paid for Charlie's college education, but now Charlie acts as though it never happened. He is very ungrateful.", "question": "Who is ungrateful? Bob or Charlie?", "answer": "Charlie"}
+{"context": "Bob was playing cards with Adam and was way ahead. If Adam hadn't had a sudden run of good luck, he would have won.", "question": "Who would have won? Bob or Adam?", "answer": "Bob"}
+{"context": "Bob was playing cards with Adam and was way ahead. If Adam hadn't had a sudden run of good luck, he would have lost.", "question": "Who would have lost? Bob or Adam?", "answer": "Adam"}
+{"context": "Adam can't leave work here until Bob arrives to replace him. If Bob had left home for work on time, he would be here by this time.", "question": "Who would be here? Bob or Adam?", "answer": "Bob"}
+{"context": "Adam can't leave work here until Bob arrives to replace him. If Bob had left home for work on time, he would be gone by this time.", "question": "Who would be gone? Bob or Adam?", "answer": "Adam"}
+{"context": "If the conman had succeeded in fooling Sam, he would have gotten a lot of money.", "question": "Who would have gotten the money? conman or Sam?", "answer": "conman"}
+{"context": "If the conman had succeeded in fooling Sam, he would have lost a lot of money.", "question": "Who would have lost the money? conman or Sam?", "answer": "Sam"}
+{"context": "It was a summer afternoon, and the dog was sitting in the middle of the lawn. After a while, it got up and moved to the shade, because it was hot.", "question": "What was hot? dog or shade?", "answer": "dog"}
+{"context": "It was a summer afternoon, and the dog was sitting in the middle of the lawn. After a while, it got up and moved to the shade, because it was cooler.", "question": "What was cooler? dog or shade?", "answer": "shade"}
+{"context": "The cat was lying by the mouse hole waiting for the mouse, but it was too cautious.", "question": "What was too cautious? mouse or cat?", "answer": "mouse"}
+{"context": "The cat was lying by the mouse hole waiting for the mouse, but it was too impatient.", "question": "What was too impatient? mouse or cat?", "answer": "cat"}
+{"context": "Anne gave birth to her daughter last month. She is a very charming woman.", "question": "Who is a very charming woman? Anne or daughter?", "answer": "Anne"}
+{"context": "Anne gave birth to her daughter last month. She is a very charming baby.", "question": "Who is a very charming baby? Anne or daughter?", "answer": "daughter"}
+{"context": "Alice tried frantically to stop Jane from chatting at the party, leaving us to wonder why she was behaving so strangely.", "question": "Who was behaving strangely? Alice or Jane?", "answer": "Alice"}
+{"context": "Alice tried frantically to stop Jane from barking at the party, leaving us to wonder why she was behaving so strangely.", "question": "Who was behaving strangely? Alice or Jane?", "answer": "Jane"}
+{"context": "I saw Jim yelling at a waiter with a huge beard. I don't know who he was, but he looked very unhappy.", "question": "Who looked very unhappy? waiter or Jim?", "answer": "waiter"}
+{"context": "I saw Jim yelling at a waiter with a huge beard. I don't know why he was, but he looked very unhappy.", "question": "Who looked very unhappy? waiter or Jim?", "answer": "Jim"}
+{"context": "The fish ate the worm. It was tasty.", "question": "What was tasty? worm or fish?", "answer": "worm"}
+{"context": "The fish ate the worm. It was hungry.", "question": "What was hungry? worm or fish?", "answer": "fish"}
+{"context": "I was trying to open the lock with the key, but someone had filled the keyhole with chewing gum, and I couldn't get it in.", "question": "What couldn't I get in? key or gum?", "answer": "key"}
+{"context": "I was trying to open the lock with the key, but someone had filled the keyhole with chewing gum, and I couldn't get it out.", "question": "What couldn't I get out? key or gum?", "answer": "gum"}
+{"context": "The dog chased the cat, which ran up a tree. It waited at the top.", "question": "Which waited at the top? cat or dog?", "answer": "cat"}
+{"context": "The dog chased the cat, which ran up a tree. It waited at the bottom.", "question": "Which waited at the bottom? cat or dog?", "answer": "dog"}
+{"context": "In the storm, the tree fell down and crashed through the roof of my house. Now, I have to get it removed.", "question": "What has to be removed? tree or roof?", "answer": "tree"}
+{"context": "In the storm, the tree fell down and crashed through the roof of my house. Now, I have to get it repaired.", "question": "What has to be repaired? tree or roof?", "answer": "roof"}
+{"context": "The customer walked into the bank and stabbed one of the tellers. He was immediately taken to the emergency room.", "question": "Who was taken to the emergency room? teller or customer?", "answer": "teller"}
+{"context": "The customer walked into the bank and stabbed one of the tellers. He was immediately taken to the police station.", "question": "Who was taken to the police station? teller or customer?", "answer": "customer"}
+{"context": "John was doing research in the library when he heard a hummer. He was very annoyed.", "question": "Who was annoyed? John or hummer?", "answer": "John"}
+{"context": "John was doing research in the library when he heard a hummer. He was very annoying.", "question": "Who was annoying? John or hummer?", "answer": "hummer"}
+{"context": "John was jogging through the park when he saw a juggler juggling watermelons. He was very impressed.", "question": "Who was impressed? John or juggler?", "answer": "John"}
+{"context": "John was jogging through the park when he saw a juggler juggling watermelons. He was very impressive.", "question": "Who was impressive? John or juggler?", "answer": "juggler"}
+{"context": "Bob collapsed on the sidewalk. Soon he saw Carl coming to help. He was very ill.", "question": "Who was ill? Bob or Carl?", "answer": "Bob"}
+{"context": "Bob collapsed on the sidewalk. Soon he saw Carl coming to help. He was very concerned.", "question": "Who was concerned? Bob or Carl?", "answer": "Carl"}
+{"context": "Mark told Pete many lies about himself, which Pete included in his book. He should have been more truthful.", "question": "Who should have been more truthful? Mark or Pete?", "answer": "Mark"}
+{"context": "Mark told Pete many lies about himself, which Pete included in his book. He should have been more skeptical.", "question": "Who should have been more skeptical? Mark or Pete?", "answer": "Pete"}
+{"context": "Joe has sold his house and bought an apartment a few miles away. He will be moving out of it on Thursday.", "question": "What will Joe be moving out of? house or apartment?", "answer": "house"}
+{"context": "Joe has sold his house and bought an apartment a few miles away. He will be moving into it on Thursday.", "question": "What will Joe be moving into? house or apartment?", "answer": "apartment"}
+{"context": "Many people start to read Paul's books and can't put them down. They are gripped because Paul writes so well.", "question": "Who or what are gripped? people or books?", "answer": "people"}
+{"context": "Many people start to read Paul's books and can't put them down. They are popular because Paul writes so well.", "question": "Who or what are popular? people or books?", "answer": "books"}
+{"context": "Sam pulled up a chair to the piano, but it was broken, so he had to stand instead.", "question": "What was broken? chair or piano?", "answer": "chair"}
+{"context": "Sam pulled up a chair to the piano, but it was broken, so he had to sing instead.", "question": "What was broken? chair or piano?", "answer": "piano"}
+{"context": "Since it was raining, I carried the newspaper over the backpack to keep it dry.", "question": "What was I trying to keep dry? backpack or newspaper?", "answer": "backpack"}
+{"context": "Since it was raining, I carried the newspaper in the backpack to keep it dry.", "question": "What was I trying to keep dry? backpack or newspaper?", "answer": "newspaper"}
+{"context": "Sara borrowed the book from the library because she needs it for an article she is working on. She reads it when she gets home from work.", "question": "What does Sara read when she gets home from work? book or article?", "answer": "book"}
+{"context": "Sara borrowed the book from the library because she needs it for an article she is working on. She writes it when she gets home from work.", "question": "What does Sara write when she gets home from work? book or article?", "answer": "article"}
+{"context": "This morning, Joey built a sand castle on the beach, and put a toy flag in the highest tower, but this afternoon a breeze knocked it down.", "question": "What did the breeze knock down? flag or castle?", "answer": "flag"}
+{"context": "This morning, Joey built a sand castle on the beach, and put a toy flag in the highest tower, but this afternoon the tide knocked it down.", "question": "What did the tide knock down? flag or castle?", "answer": "castle"}
+{"context": "Jane knocked on Susan's door, but there was no answer. She was out.", "question": "Who was out? Susan or Jane?", "answer": "Susan"}
+{"context": "Jane knocked on Susan's door, but there was no answer. She was disappointed.", "question": "Who was disappointed? Susan or Jane?", "answer": "Jane"}
+{"context": "Sam took French classes from Adam, because he was eager to speak it fluently.", "question": "Who was eager to speak French fluently? Sam or Adam?", "answer": "Sam"}
+{"context": "Sam took French classes from Adam, because he was known to speak it fluently.", "question": "Who was known to speak French fluently? Sam or Adam?", "answer": "Adam"}
+{"context": "The path to the lake was blocked, so we couldn't reach it.", "question": "What couldn't we reach? lake or path?", "answer": "lake"}
+{"context": "The path to the lake was blocked, so we couldn't use it.", "question": "What couldn't we use? lake or path?", "answer": "path"}
+{"context": "The sun was covered by a thick cloud all morning, but luckily, by the time the picnic started, it was gone.", "question": "What was gone? cloud or sun?", "answer": "cloud"}
+{"context": "The sun was covered by a thick cloud all morning, but luckily, by the time the picnic started, it was out.", "question": "What was out? cloud or sun?", "answer": "sun"}
+{"context": "We went to the lake, because a shark had been seen at the beach, so it was a dangerous place to swim.", "question": "Which was a dangerous place to swim? beach or lake?", "answer": "beach"}
+{"context": "We went to the lake, because a shark had been seen at the beach, so it was a safer place to swim.", "question": "Which was a safer place to swim? beach or lake?", "answer": "lake"}
+{"context": "Sam tried to paint a picture of shepherds with sheep, but they ended up looking more like dogs.", "question": "What looked like dogs? sheep or shepherds?", "answer": "sheep"}
+{"context": "Sam tried to paint a picture of shepherds with sheep, but they ended up looking more like golfers.", "question": "What looked like golfers? sheep or shepherds?", "answer": "shepherds"}
+{"context": "Mary tucked her daughter Anne into bed, so that she could sleep.", "question": "Who is going to sleep? Anne or Mary?", "answer": "Anne"}
+{"context": "Mary tucked her daughter Anne into bed, so that she could work.", "question": "Who is going to work? Anne or Mary?", "answer": "Mary"}
+{"context": "The couple had very warm down coats, but they were not enough for the cold in Alaska.", "question": "Who or what were not enough for the cold? coats or couple?", "answer": "coats"}
+{"context": "The couple had very warm down coats, but they were not prepared for the cold in Alaska.", "question": "Who or what were not prepared for the cold? coats or couple?", "answer": "couple"}
+{"context": "Thomson visited Cooper's grave in 1765. At that date he had been dead for five years.", "question": "Who had been dead for five years? Cooper or Thomson?", "answer": "Cooper"}
+{"context": "Thomson visited Cooper's grave in 1765. At that date he had been travelling for five years.", "question": "Who had been travelling for five years? Cooper or Thomson?", "answer": "Thomson"}
+{"context": "Jackson was greatly influenced by Arnold, though he lived two centuries earlier.", "question": "Who lived earlier? Arnold or Jackson?", "answer": "Arnold"}
+{"context": "Jackson was greatly influenced by Arnold, though he lived two centuries later.", "question": "Who lived later? Arnold or Jackson?", "answer": "Jackson"}
+{"context": "I can't cut that tree down with that axe; it is too thick.", "question": "What is too thick? tree or axe?", "answer": "tree"}
+{"context": "I can't cut that tree down with that axe; it is too small.", "question": "What is too small? tree or axe?", "answer": "axe"}
+{"context": "The foxes are getting in at night and attacking the chickens. I shall have to guard them.", "question": "What do I have to guard? chickens or foxes?", "answer": "chickens"}
+{"context": "The foxes are getting in at night and attacking the chickens. I shall have to kill them.", "question": "What do I have to kill? chickens or foxes?", "answer": "foxes"}
+{"context": "The foxes are getting in at night and attacking the chickens. They have gotten very bold.", "question": "What has gotten bold? foxes or chickens?", "answer": "foxes"}
+{"context": "The foxes are getting in at night and attacking the chickens. They have gotten very nervous.", "question": "What has gotten nervous? foxes or chickens?", "answer": "chickens"}
+{"context": "Fred covered his eyes with his hands, because the wind was blowing sand around. He opened them when the wind stopped.", "question": "What did Fred open? eyes or hands?", "answer": "eyes"}
+{"context": "Fred covered his eyes with his hands, because the wind was blowing sand around. He lowered them when the wind stopped.", "question": "What did Fred lower? eyes or hands?", "answer": "hands"}
+{"context": "Fred watched TV while George went out to buy groceries. After an hour he got up.", "question": "Who got up? Fred or George?", "answer": "Fred"}
+{"context": "Fred watched TV while George went out to buy groceries. After an hour he got back.", "question": "Who got back? Fred or George?", "answer": "George"}
+{"context": "Fred was supposed to run the dishwasher, but he put it off, because he wanted to watch TV. The show turned out to be boring, so he changed his mind and turned it on.", "question": "What did Fred turn on? dishwasher or television?", "answer": "dishwasher"}
+{"context": "Fred was supposed to run the dishwasher, but he put it off, because he wanted to watch TV. The show turned out to be boring, so he changed his mind and turned it off.", "question": "What did Fred turn off? dishwasher or television?", "answer": "television"}
+{"context": "Fred is the only man still alive who remembers my grandfather. He is a remarkable man.", "question": "Who is a remarkable man? Fred or grandfather?", "answer": "Fred"}
+{"context": "Fred is the only man still alive who remembers my grandfather. He was a remarkable man.", "question": "Who was a remarkable man? Fred or grandfather?", "answer": "grandfather"}

@@ -1,1 +1,100 @@
-
+{"context": "Fred is the only man alive who still remembers my father as an infant. When Fred first saw my father, he was twelve years old.", "question": "Who was twelve years old? Fred or father?", "answer": "Fred"}
+{"context": "Fred is the only man alive who still remembers my father as an infant. When Fred first saw my father, he was twelve months old.", "question": "Who was twelve months old? Fred or father?", "answer": "father"}
+{"context": "In July, Kamtchatka declared war on Yakutsk. Since Yakutsk's army was much better equipped and ten times larger, they were victorious within weeks.", "question": "Who was victorious Yakutsk or Kamchatka?", "answer": "Yakutsk"}
+{"context": "In July, Kamtchatka declared war on Yakutsk. Since Yakutsk's army was much better equipped and ten times larger, they were defeated within weeks.", "question": "Who was defeated Yakutsk or Kamchatka?", "answer": "Kamchatka"}
+{"context": "Elizabeth moved her company from Sparta to Troy to save money on taxes; the taxes are much higher there.", "question": "Where are the taxes higher? Sparta or Troy?", "answer": "Sparta"}
+{"context": "Elizabeth moved her company from Sparta to Troy to save money on taxes; the taxes are much lower there.", "question": "Where are the taxes lower? Sparta or Troy?", "answer": "Troy"}
+{"context": "Esther figures that she will save shipping costs if she builds her factory in Springfield instead of Franklin, because most of her customers live there.", "question": "In which town do most of Esther's customers live? Springfield or Franklin?", "answer": "Springfield"}
+{"context": "Esther figures that she will save shipping costs if she builds her factory in Springfield instead of Franklin, because none of her customers live there.", "question": "In which town do none of Esther's customers live? Springfield or Franklin?", "answer": "Franklin"}
+{"context": "There are too many deer in the park, so the park service brought in a small pack of wolves. The population should increase over the next few years.", "question": "Which population will increase? wolves or deer?", "answer": "wolves"}
+{"context": "There are too many deer in the park, so the park service brought in a small pack of wolves. The population should decrease over the next few years.", "question": "Which population will decrease? wolves or deer?", "answer": "deer"}
+{"context": "The archaeologists have concluded that neanderthals lived in Laputa 20,000 years ago. They hunted for deer on the river banks.", "question": "Who hunted for deer? neanderthals or archaeologists?", "answer": "neanderthals"}
+{"context": "The archaeologists have concluded that neanderthals lived in Laputa 20,000 years ago. They hunted for evidence on the river banks.", "question": "Who hunted for evidence? neanderthals or archaeologists?", "answer": "archaeologists"}
+{"context": "The scientists are studying three species of fish that have recently been found living in the Indian Ocean. They appeared two years ago.", "question": "Who or what appeared two years ago? fish or scientists?", "answer": "fish"}
+{"context": "The scientists are studying three species of fish that have recently been found living in the Indian Ocean. They began two years ago.", "question": "Who or what began two years ago? fish or scientists?", "answer": "scientists"}
+{"context": "The journalists interviewed the stars of the new movie. They were very cooperative, so the interview lasted for a long time.", "question": "Who was cooperative? stars or journalists?", "answer": "stars"}
+{"context": "The journalists interviewed the stars of the new movie. They were very persistent, so the interview lasted for a long time.", "question": "Who was persistent? stars or journalists?", "answer": "journalists"}
+{"context": "The police arrested all of the criminals. They were trying to run the drug trade in the neighborhood.", "question": "Who was trying to run the drug trade? criminals or police?", "answer": "criminals"}
+{"context": "The police arrested all of the criminals. They were trying to stop the drug trade in the neighborhood.", "question": "Who was trying to stop the drug trade? criminals or police?", "answer": "police"}
+{"context": "I put the cake away in the refrigerator. It has a lot of butter in it.", "question": "What has a lot of butter? cake or refrigerator?", "answer": "cake"}
+{"context": "I put the cake away in the refrigerator. It has a lot of leftovers in it.", "question": "What has a lot of leftovers? cake or refrigerator?", "answer": "refrigerator"}
+{"context": "Sam broke both his ankles and he's walking with crutches. But a month or so from now they should be better.", "question": "What should be better? ankles or crutches?", "answer": "ankles"}
+{"context": "Sam broke both his ankles and he's walking with crutches. But a month or so from now they should be unnecessary.", "question": "What should be unnecessary? ankles or crutches?", "answer": "crutches"}
+{"context": "When the sponsors of the bill got to the town hall, they were surprised to find that the room was full of opponents. They were very much in the majority.", "question": "Who were in the majority? opponents or sponsors?", "answer": "opponents"}
+{"context": "When the sponsors of the bill got to the town hall, they were surprised to find that the room was full of opponents. They were very much in the minority.", "question": "Who were in the minority? opponents or sponsors?", "answer": "sponsors"}
+{"context": "Everyone really loved the oatmeal cookies; only a few people liked the snickerdoodle cookies. Next time, we should make more of them.", "question": "Which cookie should we make more of, next time? oatmeal or snickerdoodle?", "answer": "oatmeal"}
+{"context": "Everyone really loved the oatmeal cookies; only a few people liked the snickerdoodle cookies. Next time, we should make fewer of them.", "question": "Which cookie should we make fewer of, next time? oatmeal or snickerdoodle?", "answer": "snickerdoodle"}
+{"context": "We had hoped to place copies on all the chairs in the auditorium, but there were simply not enough of them.", "question": "There are too many of what? chairs or copies?", "answer": "chairs"}
+{"context": "We had hoped to place copies on all the chairs in the auditorium, but there were simply too many of them.", "question": "There are not enough of what? chairs or copies?", "answer": "copies"}
+{"context": "I stuck a pin through a carrot. When I pulled the pin out, it left a hole.", "question": "What left a hole? pin or carrot?", "answer": "pin"}
+{"context": "I stuck a pin through a carrot. When I pulled the pin out, it had a hole.", "question": "What had a hole? pin or carrot?", "answer": "carrot"}
+{"context": "I couldn't find a spoon, so I tried using a pen to stir my coffee. But that turned out to be a bad idea, because it got full of ink.", "question": "What got full of ink? coffee or pen?", "answer": "coffee"}
+{"context": "I couldn't find a spoon, so I tried using a pen to stir my coffee. But that turned out to be a bad idea, because it got full of coffee.", "question": "What got full of coffee? coffee or pen?", "answer": "pen"}
+{"context": "The table won't fit through the doorway because it is too wide.", "question": "What is too wide? table or doorway?", "answer": "table"}
+{"context": "The table won't fit through the doorway because it is too narrow.", "question": "What is too narrow? table or doorway?", "answer": "doorway"}
+{"context": "Grace was happy to trade me her sweater for my jacket. She thinks it looks great on her.", "question": "What looks great on Grace? jacket or sweater?", "answer": "jacket"}
+{"context": "Grace was happy to trade me her sweater for my jacket. She thinks it looks dowdy on her.", "question": "What looks dowdy on Grace? jacket or sweater?", "answer": "sweater"}
+{"context": "Bill thinks that calling attention to himself was rude to Bert.", "question": "Who called attention to himself? Bill or Bert?", "answer": "Bill"}
+{"context": "Bill thinks that calling attention to himself was rude of Bert.", "question": "Who called attention to himself? Bill or Bert?", "answer": "Bert"}
+{"context": "John promised Bill to leave, so an hour later he left.", "question": "Who left? John or Bill?", "answer": "John"}
+{"context": "John ordered Bill to leave, so an hour later he left.", "question": "Who left? John or Bill?", "answer": "Bill"}
+{"context": "Sam Goodman's biography of the Spartan general Xenophanes conveys a vivid sense of the difficulties he faced in his childhood.", "question": "Who faced difficulties? Xenophanes or Sam?", "answer": "Xenophanes"}
+{"context": "Sam Goodman's biography of the Spartan general Xenophanes conveys a vivid sense of the difficulties he faced in his research.", "question": "Who faced difficulties? Xenophanes or Sam?", "answer": "Sam"}
+{"context": "Emma's mother had died long ago, and her place by an excellent woman as governess.", "question": "Whose place? mother's or Emma's?", "answer": "mother's"}
+{"context": "Emma's mother had died long ago, and her education] had been [taken by an excellent woman as governess.", "question": "Whose education] had been [taken? mother's or Emma's?", "answer": "Emma's"}
+{"context": "Jane knocked on Susan's door but she did not answer.", "question": "Who did not answer? Susan or Jane?", "answer": "Susan"}
+{"context": "Jane knocked on Susan's door but she did not get an answer.", "question": "Who did not get an answer? Susan or Jane?", "answer": "Jane"}
+{"context": "Joe paid the detective after he received the final report on the case.", "question": "Who received the final report? Joe or  detective?", "answer": "Joe"}
+{"context": "Joe paid the detective after he delivered the final report on the case.", "question": "Who delivered the final report? Joe or  detective?", "answer": " detective"}
+{"context": "Beth didn't get angry with Sally, who had cut her off, because she stopped and counted to ten.", "question": "Who counted to ten? Beth or Sally?", "answer": "Beth"}
+{"context": "Beth didn't get angry with Sally, who had cut her off, because she stopped and apologized.", "question": "Who apologized? Beth or Sally?", "answer": "Sally"}
+{"context": "Jim signaled the barman and gestured toward his empty glass.", "question": "Whose empty glass? Jim's or  barman's?", "answer": "Jim's"}
+{"context": "Jim signaled the barman and gestured toward his bathroom key.", "question": "Whose bathroom key? Jim's or  barman's?", "answer": " barman's"}
+{"context": "Dan took the rear seat while Bill claimed the front because his \"Dibs!\" was quicker.", "question": "Whose \"Dibs\" was quicker? Bill's or Dan's?", "answer": "Bill's"}
+{"context": "Dan took the rear seat while Bill claimed the front because his \"Dibs!\" was slow.", "question": "Whose \"Dibs\" was slow? Bill's or Dan's?", "answer": "Dan's"}
+{"context": "Tom said \"Check\" to Ralph as he took his bishop.", "question": "Who owned the bishop that Tom took? Ralph or Tom?", "answer": "Ralph"}
+{"context": "Tom said \"Check\" to Ralph as he moved his bishop.", "question": "Who owned the bishop that Tom moved? Ralph or Tom?", "answer": "Tom"}
+{"context": "As Andrea in the crop duster passed over Susan, she could see the landing strip.", "question": "Who could see the landing strip? Andrea or Susan?", "answer": "Andrea"}
+{"context": "As Andrea in the crop duster passed over Susan, she could see the landing gear.", "question": "Who could see the landing gear? Andrea or Susan?", "answer": "Susan"}
+{"context": "Tom gave Ralph a lift to school so he wouldn't have to walk.", "question": "Who wouldn't have to walk? Ralph or Tom?", "answer": "Ralph"}
+{"context": "Tom gave Ralph a lift to school so he wouldn't have to drive alone.", "question": "Who wouldn't have to drive alone? Ralph or Tom?", "answer": "Tom"}
+{"context": "Bill passed the half-empty plate to John because he was full.", "question": "Who was full? Bill or John?", "answer": "Bill"}
+{"context": "Bill passed the half-empty plate to John because he was hungry.", "question": "Who was hungry? Bill or John?", "answer": "John"}
+{"context": "Bill passed the gameboy to John because his turn was over.", "question": "Whose turn was over? Bill's or John's?", "answer": "Bill's"}
+{"context": "Bill passed the gameboy to John because his turn was next.", "question": "Whose turn was next? Bill's or John's?", "answer": "John's"}
+{"context": "The man lifted the boy onto his bunk bed.", "question": "Whose bunk bed? boy's or man's?", "answer": "boy's"}
+{"context": "The man lifted the boy onto his shoulders.", "question": "Whose shoulders? boy's or man's?", "answer": "man's"}
+{"context": "Patting her back, the woman smiled at the girl.", "question": "Whose back was the woman patting? girl's or woman's?", "answer": "girl's"}
+{"context": "Stretching her back, the woman smiled at the girl.", "question": "Whose back was the woman stretching? girl's or woman's?", "answer": "woman's"}
+{"context": "Billy cried because Toby wouldn't share his toy.", "question": "Who owned the toy? Toby or Billy?", "answer": "Toby"}
+{"context": "Billy cried because Toby wouldn't accept his toy.", "question": "Who owned the toy? Toby or Billy?", "answer": "Billy"}
+{"context": "Lily spoke to Donna, breaking her concentration.", "question": "Whose concentration? Donna's or  Lily's?", "answer": "Donna's"}
+{"context": "Lily spoke to Donna, breaking her silence.", "question": "Whose silence? Donna's or  Lily's?", "answer": " Lily's"}
+{"context": "When Tommy dropped his ice cream, Timmy giggled, so father gave him a stern look.", "question": "Who got the look from father? Timmy or Tommy?", "answer": "Timmy"}
+{"context": "When Tommy dropped his ice cream, Timmy giggled, so father gave him a sympathetic look.", "question": "Who got the look from father? Timmy or Tommy?", "answer": "Tommy"}
+{"context": "As Ollie carried Tommy up the long winding steps, his legs dangled.", "question": "Whose legs dangled? Tommy or Ollie?", "answer": "Tommy"}
+{"context": "As Ollie carried Tommy up the long winding steps, his legs ached.", "question": "Whose legs ached? Tommy or Ollie?", "answer": "Ollie"}
+{"context": "The father carried the sleeping boy in his arms.", "question": "Whose arms? father or boy?", "answer": "father"}
+{"context": "The father carried the sleeping boy in his bassinet.", "question": "Whose bassinet? father or boy?", "answer": "boy"}
+{"context": "The woman held the girl against her chest.", "question": "Whose chest? woman's or girl's?", "answer": "woman's"}
+{"context": "The woman held the girl against her will.", "question": "Whose will? woman's or girl's?", "answer": "girl's"}
+{"context": "The doctor informed Kate that she had cancer and presented several options for future treatment.", "question": "Who had cancer? Kate or doctor?", "answer": "Kate"}
+{"context": "The doctor informed Kate that she had retired and presented several options for future treatment.", "question": "Who had retired? Kate or doctor?", "answer": "doctor"}
+{"context": "Dan had to stop Bill from toying with the injured bird. He is very compassionate.", "question": "Who is compassionate? Dan or Bill?", "answer": "Dan"}
+{"context": "Dan had to stop Bill from toying with the injured bird. He is very cruel.", "question": "Who is cruel? Dan or Bill?", "answer": "Bill"}
+{"context": "I tried to paint a picture of an orchard, with lemons in the lemon trees, but they came out looking more like light bulbs.", "question": "What looked like light bulbs? lemons or trees?", "answer": "lemons"}
+{"context": "I tried to paint a picture of an orchard, with lemons in the lemon trees, but they came out looking more like telephone poles.", "question": "What looked like telephone poles? lemons or trees?", "answer": "trees"}
+{"context": "James asked Robert for a favor but he refused.", "question": "Who refused? Robert or James?", "answer": "Robert"}
+{"context": "James asked Robert for a favor but he was refused.", "question": "Who was refused? Robert or James?", "answer": "James"}
+{"context": "Kirilov ceded the presidency to Shatov because he was more popular.", "question": "Who was more popular? Shatov or Kirilov?", "answer": "Shatov"}
+{"context": "Kirilov ceded the presidency to Shatov because he was less popular.", "question": "Who was less popular? Shatov or Kirilov?", "answer": "Kirilov"}
+{"context": "Emma did not pass the ball to Janie although she was open.", "question": "Who was open? Janie or Emma?", "answer": "Janie"}
+{"context": "Emma did not pass the ball to Janie although she saw that she was open.", "question": "Who saw that the other player was open? Janie or Emma?", "answer": "Emma"}
+{"context": "Joe saw his brother skiing on TV last night but the fool didn't recognize him", "question": "Who is the fool? Joe or brother?", "answer": "Joe"}
+{"context": "Joe saw his brother skiing on TV last night but the fool didn't have a coat on", "question": "Who is the fool? Joe or brother?", "answer": "brother"}
+{"context": "Carol believed that Rebecca suspected that she had stolen the watch.", "question": "Who is suspected of stealing the watch? Carol or Rebecca?", "answer": "Carol"}
+{"context": "Carol believed that Rebecca regretted that she had stolen the watch.", "question": "Who is stole the watch? Carol or Rebecca?", "answer": "Rebecca"}
+{"context": "Alice looked for her friend Jade in the crowd. Since she always has good luck, Alice spotted her quickly.", "question": "Who always has good luck Alice or Jade?", "answer": "Alice"}
+{"context": "Alice looked for her friend Jade in the crowd. Since she always wears a red turban, Alice spotted her quickly.", "question": "Who always wears a red turban Alice or Jade?", "answer": "Jade"}
+{"context": "During a game of tag, Ethan chased Luke because he was \"it\".", "question": "Who was \"it\"? Ethan or Luke?", "answer": "Ethan"}
+{"context": "During a game of tag, Ethan ran from Luke because he was \"it\".", "question": "Who was \"it\"? Ethan or Luke?", "answer": "Luke"}
