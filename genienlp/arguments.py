@@ -229,6 +229,7 @@ def parse_argv(parser):
                         help='Number of examples to see in the "Loss Truncation" algorithm before starting to drop high-loss examples.')
     # Label smoothing; see https://arxiv.org/abs/1906.02629 for detailed analysis on its effect on neural network calibration
     parser.add_argument('--label_smoothing', type=float, default=0.0, help='A number in [0, 1] to be used for label smoothing. 0 disables smoothing.')
+    parser.add_argument('--error_centralization_constant', type=float, default=0.0, help='')
 
     parser.add_argument('--load', default=None, type=str, help='path to checkpoint to load model from inside --args.save, usually set to best.pth')
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')

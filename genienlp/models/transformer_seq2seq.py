@@ -94,10 +94,10 @@ class TransformerSeq2Seq(GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
     
     def apply_error_classifier(self, decoder_hidden_states, answer_length):
-        error_classifier_input = torch.gather(decoder_hidden_states[-1], dim=1, index=(answer_length-1).unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.args.dimension)).squeeze(0) # (batch_size, hidden_size)
+        error_classifier_input = torch.gather(decoder_hidden_states[-1], dim=1, index=(answer_length-1).unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.args.dimension)).squeeze(1) # (batch_size, hidden_size)
         # for i in range(error_classifier_input.shape[0]):
-            # mismatch = torch.abs(torch.sum(error_classifier_input[i,:] - decoder_hidden_states[-1][i][answer_length[i]-1, :])).item()
-            # assert mismatch < 1e-4
+        #     mismatch = torch.abs(torch.sum(error_classifier_input[i,:] - decoder_hidden_states[-1][i][answer_length[i]-1, :])).item()
+        #     assert mismatch < 1e-4
         error_classifier_output = self.error_classifier(error_classifier_input)
         return error_classifier_output
 
@@ -136,7 +136,7 @@ class TransformerSeq2Seq(GenieModel):
             # print('answer_length = ', answer_length)
             # print('decoder_hidden_states = ', outputs.decoder_hidden_states[-1].shape)
             error_classifier_output_1 = self.apply_error_classifier(outputs.decoder_hidden_states, answer_length)
-            # print('error_classifier_output_1 = ', error_classifier_output_1)
+            # print('error_classifier_output_1 = ', error_classifier_output_1.shape)
             # error_classifier_loss_1 = self.error_classifier_criterion(error_classifier_output_1, target=torch.ones_like(answer_length))
             # print('error_classifier_loss_1 = ', error_classifier_loss_1)
 
@@ -153,7 +153,7 @@ class TransformerSeq2Seq(GenieModel):
             # calculate the classification loss for bad parses
             outputs = self.model(batch.context.value, labels=bad_answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id), output_hidden_states=True)
             error_classifier_output_2 = self.apply_error_classifier(outputs.decoder_hidden_states, bad_answer_length)
-            # print('error_classifier_output_2 = ', error_classifier_output_2)
+            # print('error_classifier_output_2 = ', error_classifier_output_2.shape)
             # error_classifier_loss_2 = self.error_classifier_criterion(error_classifier_output_2, target=torch.zeros_like(bad_answer_length))
             # print('error_classifier_loss_2 = ', error_classifier_loss_2)
 
@@ -162,12 +162,12 @@ class TransformerSeq2Seq(GenieModel):
             # error_classifier_output_1 = shuffle_vector*error_classifier_output_1 + (1-shuffle_vector)*error_classifier_output_2
             # error_classifier_output_2 = (1-shuffle_vector)*error_classifier_output_1 + shuffle_vector*error_classifier_output_2
             error_classifier_output = torch.cat([error_classifier_output_1, error_classifier_output_2], dim=1)
+            # print('error_classifier_output = ', error_classifier_output.shape)
             error_detection_loss = self.error_classifier_criterion(error_classifier_output, target=torch.zeros_like(bad_answer_length))
-            # print('error_detection_loss = ', error_detection_loss)
             zero_centered_penalty = torch.linalg.norm(error_classifier_output[:,0]+error_classifier_output[:,1]) / batch_size
             # print('zero_centered_penalty = ', zero_centered_penalty)
 
-            outputs.loss = loss + error_detection_loss + zero_centered_penalty # replace the loss calculated by `transformers` with the new loss
+            outputs.loss = loss + error_detection_loss + zero_centered_penalty*self.args.error_centralization_constant # replace the loss calculated by `transformers` with the new loss
             return outputs
         else:
             return self.model(**kwargs)
