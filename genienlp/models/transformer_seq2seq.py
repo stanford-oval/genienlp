@@ -78,7 +78,7 @@ class TransformerSeq2Seq(GenieModel):
 
         self.criterion = LabelSmoothingCrossEntropy(args.label_smoothing)
         self.error_classifier = torch.nn.Linear(in_features=self.args.dimension, out_features=1, bias=True)
-        self.error_classifier_criterion = torch.nn.CrossEntropyLoss()
+        self.error_classifier_criterion = torch.nn.BCELoss()
             
             
     def _adjust_mbart(self, lang):
@@ -137,7 +137,7 @@ class TransformerSeq2Seq(GenieModel):
             # print('decoder_hidden_states = ', outputs.decoder_hidden_states[-1].shape)
             error_classifier_output_1 = self.apply_error_classifier(outputs.decoder_hidden_states, answer_length)
             # print('error_classifier_output_1 = ', error_classifier_output_1.shape)
-            # error_classifier_loss_1 = self.error_classifier_criterion(error_classifier_output_1, target=torch.ones_like(answer_length))
+            error_classifier_loss_1 = self.error_classifier_criterion(torch.sigmoid(error_classifier_output_1), target=torch.ones_like(error_classifier_output_1))
             # print('error_classifier_loss_1 = ', error_classifier_loss_1)
 
             # calculate the teacher-forcing loss
@@ -154,20 +154,20 @@ class TransformerSeq2Seq(GenieModel):
             outputs = self.model(batch.context.value, labels=bad_answer, attention_mask=(batch.context.value!=self.numericalizer.pad_id), output_hidden_states=True)
             error_classifier_output_2 = self.apply_error_classifier(outputs.decoder_hidden_states, bad_answer_length)
             # print('error_classifier_output_2 = ', error_classifier_output_2.shape)
-            # error_classifier_loss_2 = self.error_classifier_criterion(error_classifier_output_2, target=torch.zeros_like(bad_answer_length))
+            error_classifier_loss_2 = self.error_classifier_criterion(torch.sigmoid(error_classifier_output_2), target=torch.zeros_like(error_classifier_output_2))
             # print('error_classifier_loss_2 = ', error_classifier_loss_2)
 
             # shuffle_vector = torch.randint(2, size=(error_classifier_output_1.shape[0], 1), device=error_classifier_output_1.device)
-
             # error_classifier_output_1 = shuffle_vector*error_classifier_output_1 + (1-shuffle_vector)*error_classifier_output_2
             # error_classifier_output_2 = (1-shuffle_vector)*error_classifier_output_1 + shuffle_vector*error_classifier_output_2
-            error_classifier_output = torch.cat([error_classifier_output_1, error_classifier_output_2], dim=1)
+            
+            # error_classifier_output = torch.cat([error_classifier_output_1, error_classifier_output_2], dim=1)
             # print('error_classifier_output = ', error_classifier_output.shape)
-            error_detection_loss = self.error_classifier_criterion(error_classifier_output, target=torch.zeros_like(bad_answer_length))
-            zero_centered_penalty = torch.linalg.norm(error_classifier_output[:,0]+error_classifier_output[:,1]) / batch_size
+            # error_detection_loss = self.error_classifier_criterion(error_classifier_output, target=torch.zeros_like(bad_answer_length))
+            # zero_centered_penalty = torch.linalg.norm(error_classifier_output[:,0]+error_classifier_output[:,1]) / batch_size
             # print('zero_centered_penalty = ', zero_centered_penalty)
 
-            outputs.loss = loss + error_detection_loss + zero_centered_penalty*self.args.error_centralization_constant # replace the loss calculated by `transformers` with the new loss
+            outputs.loss = loss + error_classifier_loss_1 + error_classifier_loss_2 # replace the loss calculated by `transformers` with the new loss
             return outputs
         else:
             return self.model(**kwargs)
@@ -249,7 +249,7 @@ class TransformerSeq2Seq(GenieModel):
         outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False, output_hidden_states=True)
         error_classifier_output = self.apply_error_classifier(outputs.decoder_hidden_states, prediction_lengths+1) # +1 is necessary here but not during training
         correct_logits.extend(error_classifier_output.squeeze(0).tolist())
-        # print('correct_logits[-1] = ', correct_logits[-1])
+        # print('error_classifier_output = ', error_classifier_output)
 
         nodrop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
         for i in range(batch_size):
