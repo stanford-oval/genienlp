@@ -94,7 +94,10 @@ class TransformerSeq2Seq(GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
     
     def apply_error_classifier(self, decoder_hidden_states, answer_length):
-        error_classifier_input = torch.gather(decoder_hidden_states[-1], dim=1, index=(answer_length-1).unsqueeze(0).unsqueeze(-1).repeat(1, 1, self.args.dimension)).squeeze(0) # (batch_size, hidden_size)
+        error_classifier_input = torch.gather(decoder_hidden_states[-1], dim=1, index=(answer_length-1).unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.args.dimension)).squeeze(0) # (batch_size, hidden_size)
+        # for i in range(error_classifier_input.shape[0]):
+            # mismatch = torch.abs(torch.sum(error_classifier_input[i,:] - decoder_hidden_states[-1][i][answer_length[i]-1, :])).item()
+            # assert mismatch < 1e-4
         error_classifier_output = self.error_classifier(error_classifier_input)
         return error_classifier_output
 
@@ -239,11 +242,15 @@ class TransformerSeq2Seq(GenieModel):
         # batch_nodrop_top1_idx = []
         # batch_nodrop_top2_probs = []
         # batch_nodrop_top2_idx = []
+        # print('input_ids[-1] = ', input_ids[-1])
+        # print('attention_mask[-1] = ', attention_mask[-1])
+        # print('prediction_lengths[-1] = ', prediction_lengths[-1])
+        # print('decoder_input_ids[-1] = ', predictions[-1])
         outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False, output_hidden_states=True)
-        error_classifier_output = self.apply_error_classifier(outputs.decoder_hidden_states, prediction_lengths)
-        correct_logits.extend(error_classifier_output.squeeze().tolist())
-        print('correct_logits = ', correct_logits)
-        # exit()
+        error_classifier_output = self.apply_error_classifier(outputs.decoder_hidden_states, prediction_lengths+1) # +1 is necessary here but not during training
+        correct_logits.extend(error_classifier_output.squeeze(0).tolist())
+        # print('correct_logits[-1] = ', correct_logits[-1])
+
         nodrop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
         for i in range(batch_size):
             batch_nodrop_logits.append(nodrop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
