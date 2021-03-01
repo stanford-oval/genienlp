@@ -129,7 +129,6 @@ class NumericalizedExamples(NamedTuple):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
         
-        
         if add_types_to_text != 'no':
             tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question_with_types for ex in examples], [])
         else:

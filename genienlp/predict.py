@@ -39,7 +39,7 @@ import shutil
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
-from .data_utils.bootleg import Bootleg
+from .data_utils.bootleg import Bootleg, init_bootleg_annotator, extract_features_with_annotator
 from .run_bootleg import bootleg_process_splits
 
 try:
@@ -48,7 +48,6 @@ except RuntimeError:
     pass
 
 import torch
-import pickle
 
 from . import models
 from .tasks.registry import get_tasks
@@ -61,7 +60,8 @@ from .arguments import check_and_update_generation_args
 logger = logging.getLogger(__name__)
 
 
-def prepare_data(args):
+
+def prepare_data(args, device):
     # initialize bootleg
     bootleg = None
     if args.do_ned and args.ned_retrieve_method == 'bootleg':
@@ -110,7 +110,13 @@ def prepare_data(args):
                 data = split.test
                 path = path.test
             if bootleg:
-                 bootleg_process_splits(args, data.examples, path, task, bootleg)
+                if split.train or split.eval:
+                    bootleg_process_splits(args, data.examples, path, task, bootleg)
+                else:
+                    # no prepped bootleg features are available
+                    # extract features on-the-fly using bootleg annotator
+                    bootleg_annotator = init_bootleg_annotator(args, device)
+                    extract_features_with_annotator(data.examples, bootleg_annotator, args, task)
             task_data_processed.append(data)
             task_path_processed.append(path)
         datasets.append(task_data_processed)
@@ -165,7 +171,7 @@ def run(args, device):
                                      locale=locale
                                      )
 
-    val_sets = prepare_data(args)
+    val_sets = prepare_data(args, device)
     model.add_new_vocab_from_data(args.tasks)
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
@@ -218,8 +224,7 @@ def run(args, device):
                                                      disable_progbar=False)
             
             if args.save_confidence_features:
-                with open(args.confidence_feature_path, 'wb') as f:
-                    pickle.dump(generation_output.confidence_features, f, protocol=4)
+                torch.save(generation_output.confidence_features, args.confidence_feature_path)
 
             # write into file
             # TODO change to jsonl format
@@ -363,8 +368,8 @@ def check_args(args):
     if getattr(args, 'ned_retrieve_method', None) == 'bootleg':
         with open(os.path.join(args.path, 'config.json')) as config_file:
             config = json.load(config_file)
-        if args.subsample != config['subsample']:
-            raise ValueError('To use bootleg prepped data, you have to use the same number for subsampling as training.')
+        if args.subsample > config['subsample']:
+            raise ValueError('To use bootleg, you have to use a subsample value less than the number of prepped examples.')
             
 
 def main(args):

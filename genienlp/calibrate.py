@@ -31,7 +31,6 @@ from typing import Callable, Iterable, List, Tuple, Union
 import xgboost as xgb
 import numpy as np
 import dill
-import pickle
 import torch
 import itertools
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_curve, auc
@@ -402,7 +401,7 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
     def _concatenate(features_list: List[List]) -> List:
         all_concats = []
         for i in range(len(features_list[0])):
-            concat = np.concatenate([features_list[j][i] for j in range(len(features_list))])
+            concat = np.concatenate([features_list[j][i].cpu() for j in range(len(features_list))])
             all_concats.append(concat)
 
         return all_concats
@@ -555,8 +554,7 @@ def main(args):
     if args.plot:
         from matplotlib import pyplot # lazy import
 
-    with open(args.confidence_path, 'rb') as f:
-        confidences = pickle.load(f)
+    confidences = torch.load(args.confidence_path, map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
 
     all_estimators = []
     train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
