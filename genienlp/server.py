@@ -42,7 +42,7 @@ from . import models
 from .data_utils.example import Example, NumericalizedExamples
 from .data_utils.bootleg import init_bootleg_annotator, extract_features_with_annotator
 from .tasks.registry import get_tasks
-from .util import set_seed, init_devices, load_config_json, log_model_size
+from .util import set_seed, get_devices, load_config_json, log_model_size
 from .validate import generate_with_model
 from .calibrate import ConfidenceEstimator
 
@@ -197,7 +197,7 @@ def init(args):
     load_config_json(args)
     set_seed(args)
     
-    devices = init_devices(args)
+    devices = get_devices()
     device = devices[0] # server only runs on a single device
 
     bootleg_annotator = None

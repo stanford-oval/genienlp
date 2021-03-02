@@ -51,7 +51,7 @@ import torch
 
 from . import models
 from .tasks.registry import get_tasks
-from .util import set_seed, load_config_json, make_data_loader, log_model_size, init_devices, \
+from .util import set_seed, load_config_json, make_data_loader, log_model_size, get_devices, \
     have_multilingual, combine_folders_on_disk, split_folder_on_disk, get_part_path
 from .validate import generate_with_model, calculate_and_reduce_metrics
 from .calibrate import ConfidenceEstimator
@@ -385,9 +385,7 @@ def main(args):
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
 
-    devices = init_devices(args)
-    if args.devices is not None:
-        devices = [devices[i] for i in args.devices]
+    devices = get_devices(args.devices)
 
     if len(devices) > 1:
         # Independent multi-GPU generation

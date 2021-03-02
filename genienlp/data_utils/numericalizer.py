@@ -31,6 +31,7 @@ import os
 import re
 import json
 import functools
+import logging
 from pathos import multiprocessing
 from typing import List, Tuple
 from collections import defaultdict, Counter
@@ -39,10 +40,13 @@ from transformers import AutoConfig, AutoTokenizer, BertTokenizer, XLMRobertaTok
 
 from .decoder_vocab import DecoderVocabulary
 from .example import SequentialField, Feature, get_pad_feature
+from ..util import get_devices
 
 # not all tokenizers respect whitespace in the input or honor do_basic_tokenize=False
 # for those, we need to use the slow tokenizers or we'll get messed up thingtalk output
 from ..paraphrase.transformers_utils import SPIECE_UNDERLINE
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_FAST_TOKENIZERS = {
     'facebook/bart-base',
@@ -381,7 +385,9 @@ class TransformerNumericalizer(object):
         
         if self._preprocess_special_tokens:
             if len(sentences) > multiprocessing_threshold:
-                with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
+                multiprocessing_factor = multiprocessing.cpu_count() // len(get_devices(self.args.devices))
+                logger.info('multiprocessing factor for special token preprocessing is %d', multiprocessing_factor)
+                with multiprocessing.Pool(multiprocessing_factor) as p:
                     sentences, index2expansions = list(zip(*p.map(functools.partial(self._apply_special_token_preprocessing, return_idx2exp=bool(len(features))), sentences)))
             else:
                 sentences, index2expansions = list(zip(*map(functools.partial(self._apply_special_token_preprocessing, return_idx2exp=bool(len(features))), sentences)))
