@@ -30,10 +30,12 @@
 import os
 from collections import defaultdict
 import marisa_trie
+import torch
 import ujson
 
 from ..data_utils.database_utils import DOMAIN_TYPE_MAPPING
 from ..data_utils.remote_database import RemoteElasticDatabase
+from ..paraphrase.model_utils import replace_quoted_params, force_replace_quoted_params, compute_attention
 from ..tasks.base_dataset import Split
 from ..tasks.base_task import BaseTask
 from ..tasks.generic_dataset import input_then_output_len, input_tokens_fn, CQA, default_batch_fn
@@ -255,6 +257,9 @@ class BaseAlmondTask(BaseTask):
     def find_type_probs(self, tokens, default_val, default_size):
         token_freqs = [[default_val] * default_size] * len(tokens)
         return token_freqs
+
+    def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, **kwargs):
+        return batch_src_ids
 
     def postprocess_prediction(self, example_id, prediction):
         
@@ -553,6 +558,70 @@ class Translate(NaturalSeq2Seq):
     
     def postprocess_prediction(self, example_id, prediction):
         return super().postprocess_prediction(example_id, prediction)
+    
+    def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, **kwargs):
+    
+        batch_tgt_ids = kwargs.pop('batch_tgt_ids')
+        numericalizer = kwargs.pop('numericalizer')
+        cross_attentions = kwargs.pop('cross_attentions')
+
+        # TODO _tokenizer should not be private
+        tokenizer = numericalizer._tokenizer
+        
+        all_src_tokens = numericalizer.convert_ids_to_tokens(batch_src_ids, skip_special_tokens=False)
+        all_tgt_tokens = numericalizer.convert_ids_to_tokens(batch_tgt_ids, skip_special_tokens=False)
+
+        # remove language code from the beginning of src_tokens and shift layer_attention
+        len_prefix_wp = len(tokenizer.tokenize(numericalizer.input_prefix))
+        all_src_tokens = [tokens[len_prefix_wp:] for tokens in all_src_tokens]
+        cross_attentions = cross_attentions[:, :, :, len_prefix_wp:]
+
+        cross_attention_pooled = compute_attention(cross_attentions, att_pooling=self.args.att_pooling, dim=1)
+        
+        all_text_outputs = []
+        # post-process predictions ids
+        for i, (src_tokens, tgt_tokens, cross_att) in enumerate(zip(all_src_tokens, all_tgt_tokens, cross_attention_pooled)):
+
+            # shift target tokens left to match the attention positions
+            if tgt_tokens[0] in tokenizer.all_special_tokens:
+                tgt_tokens = tgt_tokens[1:]
+    
+            # remove all trailing special tokens from source
+            while src_tokens[-1] in tokenizer.all_special_tokens:
+                src_tokens = src_tokens[:-1]
+    
+            # crop to match src and tgt new lengths
+            cross_att = cross_att[:len(tgt_tokens), :len(src_tokens)]
+            
+            # plot cross-attention heatmap
+            if self.args.plot_heatmaps:
+                import matplotlib.pyplot as plt
+                import seaborn as sns
+                
+                graph = sns.heatmap(torch.log(cross_att), xticklabels=src_tokens, yticklabels=tgt_tokens)
+                graph.set_xticklabels(graph.get_xmajorticklabels(), fontsize=12)
+                graph.set_yticklabels(graph.get_ymajorticklabels(), fontsize=12)
+                
+                plt.savefig(os.path.join(os.path.dirname(self.args.save), f'heatmap_{batch_example_ids[i]}'))
+                plt.show()
+    
+            # remove eos token if present
+            if tgt_tokens[-1] in tokenizer.all_special_tokens:
+                tgt_tokens = tgt_tokens[:-1]
+            
+            if self.args.replace_qp:
+                text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att, tokenizer.tgt_lang)
+                if not is_replaced and self.args.force_replace_qp:
+                    text = force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att)
+            else:
+                text = tokenizer.convert_tokens_to_string(tgt_tokens)
+
+            all_text_outputs.append(text)
+            
+            with tokenizer.as_target_tokenizer():
+                partial_batch_prediction_ids = tokenizer.batch_encode_plus(all_text_outputs, padding=True, return_tensors='pt')['input_ids']
+            
+        return partial_batch_prediction_ids
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         # answer has to be provided by default unless doing prediction
