@@ -138,7 +138,7 @@ class TransformerSeq2Seq(GenieModel):
             error_classifier_output_1 = self.apply_error_classifier(outputs.decoder_hidden_states, answer_length)
             # print('error_classifier_output_1 = ', error_classifier_output_1.shape)
             error_classifier_loss_1 = self.error_classifier_criterion(torch.sigmoid(error_classifier_output_1), target=torch.ones_like(error_classifier_output_1)).view(-1)
-            print('error_classifier_loss_1 = ', error_classifier_loss_1)
+            # print('error_classifier_loss_1 = ', error_classifier_loss_1)
 
             # calculate the teacher-forcing loss
             batch_size, vocab_size = outputs.logits.shape[0], outputs.logits.shape[2]
@@ -148,7 +148,7 @@ class TransformerSeq2Seq(GenieModel):
             if self.dropper is not None:
                 dropper_mask = self.dropper(loss)
                 loss = loss * dropper_mask
-            print('loss = ', loss)
+            # print('loss = ', loss)
             # loss = loss.mean() # average over the batch size
 
             # calculate the classification loss for bad parses
@@ -156,7 +156,7 @@ class TransformerSeq2Seq(GenieModel):
             error_classifier_output_2 = self.apply_error_classifier(outputs.decoder_hidden_states, bad_answer_length)
             # print('error_classifier_output_2 = ', error_classifier_output_2.shape)
             error_classifier_loss_2 = self.error_classifier_criterion(torch.sigmoid(error_classifier_output_2), target=torch.zeros_like(error_classifier_output_2)).view(-1)
-            print('error_classifier_loss_2 = ', error_classifier_loss_2)
+            # print('error_classifier_loss_2 = ', error_classifier_loss_2)
 
             # shuffle_vector = torch.randint(2, size=(error_classifier_output_1.shape[0], 1), device=error_classifier_output_1.device)
             # error_classifier_output_1 = shuffle_vector*error_classifier_output_1 + (1-shuffle_vector)*error_classifier_output_2
