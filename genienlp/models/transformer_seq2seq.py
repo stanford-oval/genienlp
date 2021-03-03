@@ -169,10 +169,9 @@ class TransformerSeq2Seq(GenieModel):
             # print('zero_centered_penalty = ', zero_centered_penalty)
 
             total_loss = loss * (answer_length > 3).long() + error_classifier_loss_1 * (answer_length > 3).long() + error_classifier_loss_2 * (bad_answer_length > 3).long()
-            print('answer_length = ', answer_length)
-            print('bad_answer_length = ', bad_answer_length)
-            print('total_loss = ', total_loss)
-            exit()
+            # print('answer_length = ', answer_length)
+            # print('bad_answer_length = ', bad_answer_length)
+            # print('total_loss = ', total_loss)
 
             outputs.loss = total_loss.mean() # replace the loss calculated by `transformers` with the new loss
             return outputs
