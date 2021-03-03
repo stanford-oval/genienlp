@@ -33,6 +33,7 @@ import torch
 
 from torch.tensor import Tensor
 from transformers import AutoModelForSeq2SeqLM, AutoConfig
+from .adapter_bart import AdapterBartForConditionalGeneration
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import get_mbart_lang
@@ -52,11 +53,13 @@ class TransformerSeq2Seq(GenieModel):
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
         self._is_mbart = 'mbart' in self.args.pretrained_model
         
+        model_class = AutoModelForSeq2SeqLM
+        if args.model == 'TransformerSeq2Seq' and args.pretrained_model in ['facebook/bart-large', 'facebook/bart-base'] and args.insert_adapters:
+            model_class = AdapterBartForConditionalGeneration
         if save_directory is not None:
-            self.model = AutoModelForSeq2SeqLM.from_config(config)
+            self.model = model_class.from_config(config)
         else:
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model,
-                                                               cache_dir=self.args.embeddings)
+            self.model = model_class.from_pretrained(self.args.pretrained_model, cache_dir=self.args.embeddings)
 
         self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, args, max_generative_vocab=None)
 

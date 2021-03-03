@@ -116,8 +116,7 @@ def parse_argv(parser):
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
 
     parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
-    parser.add_argument('--max_generative_vocab', default=50000, type=int,
-                        help='max vocabulary for the generative softmax')
+    parser.add_argument('--max_generative_vocab', default=50000, type=int, help='max vocabulary for the generative softmax')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument('--preserve_case', action='store_false', dest='lower',
                         help='whether to preserve casing for all text')
@@ -125,10 +124,8 @@ def parse_argv(parser):
 
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
     parser.add_argument("--num_outputs", type=int, nargs='+', default=[1], help='number of sequences to output per input')
-    parser.add_argument("--temperature", type=float, nargs='+', default=[0.0],
-                        help="temperature of 0 implies greedy sampling")
-    parser.add_argument("--repetition_penalty", type=float, nargs='+', default=[1.0],
-                        help="primarily useful for CTRL model; in that case, use 1.2")
+    parser.add_argument("--temperature", type=float, nargs='+', default=[0.0],  help="temperature of 0 implies greedy sampling")
+    parser.add_argument("--repetition_penalty", type=float, nargs='+', default=[1.0], help="primarily useful for CTRL model; in that case, use 1.2")
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
@@ -139,6 +136,8 @@ def parse_argv(parser):
     parser.add_argument('--model', type=str, choices=['TransformerLSTM', 'TransformerSeq2Seq'], default='TransformerLSTM', help='which model to import')
     parser.add_argument('--pretrained_model', default=None,
                         help='which pretrained model to use on the encoder side; choose a name from Huggingface models')
+    parser.add_argument('--insert_adapters', action='store_true',
+                        help='Adds Adapter modules inside each transformer layer in the encoder, and in the decoder (if the decoder is also a transformer)')    
     
     parser.add_argument('--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)')
     

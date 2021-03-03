@@ -599,6 +599,23 @@ def main(args):
         logger.info(f'Initializing a new {model_name}')
         model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks, locale=args.train_languages.split('+')[0])
 
+    for param in model.parameters():
+        # print(param)
+        param.requires_grad = False
+
+    for param in model.model.lm_head.parameters():
+        param.requires_grad = True
+    
+    total_params = 0
+    for name, param in model.named_parameters():
+        if 'adapter' in name:
+            # print(name)
+            param.requires_grad = True
+            print(param.shape, param.numel())
+            total_params += param.numel()
+    
+    logger.info('The total number of trainable parameters is %d', total_params)
+
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
     
