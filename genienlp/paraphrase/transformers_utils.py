@@ -103,29 +103,6 @@ class GenieMBartTokenizer(MBartTokenizer):
         self.suffix_tokens = [self.eos_token_id]
 
 
-###############
-
-
-class GenieMarianTokenizer(MarianTokenizer):
-    '''
-    MarianTokenizer with the temporary fix for decoding.
-    In current huggingface's implementation `convert_tokens_to_string` method always uses spm_target to decode.
-    To be able to decode both source language and target language, this class changes the spm to be current_spm
-    '''
-    
-    def __init__(self, vocab, source_spm, target_spm, source_lang=None, target_lang=None,
-                 unk_token="<unk>", eos_token="</s>", pad_token="<pad>", model_max_length=512, **kwargs):
-        super().__init__(vocab, source_spm, target_spm, source_lang, target_lang,
-                         unk_token, eos_token, pad_token, model_max_length, **kwargs)
-
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Uses target language sentencepiece model"""
-        return self.current_spm.DecodePieces(tokens)
-
-
-###############
-
-
 class GeniePreTrainedModel(PreTrainedModel):
     """
     General class for PreTrainedModel which can output cross-attention weights during generation

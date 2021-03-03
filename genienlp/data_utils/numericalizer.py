@@ -41,7 +41,7 @@ from transformers import AutoTokenizer, XLMRobertaTokenizer, XLMRobertaTokenizer
 from .decoder_vocab import DecoderVocabulary
 from .example import SequentialField, get_pad_feature
 
-from ..paraphrase.transformers_utils import SPIECE_UNDERLINE, GenieMarianTokenizer
+from ..paraphrase.transformers_utils import SPIECE_UNDERLINE
 
 # not all tokenizers respect whitespace in the input or honor do_basic_tokenize=False
 # for those, we need to use the slow tokenizers or we'll get messed up thingtalk output
@@ -134,9 +134,6 @@ class TransformerNumericalizer(object):
         # hack until huggingface provides mbart50 config
         if model_is_mbart and 'mbart-50' in config.name_or_path:
             self._tokenizer = MBart50Tokenizer.from_pretrained(**tokenizer_args)
-        # use GenieMarianTokenizer which decodes source language correctly
-        elif model_is_marian:
-            self._tokenizer = GenieMarianTokenizer.from_pretrained(**tokenizer_args)
         else:
             self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
 
@@ -586,17 +583,21 @@ class TransformerNumericalizer(object):
         return sentence
     
     def reverse(self, batch, field_name):
-        def decode():
-            output = []
-            for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True, clean_up_tokenization_spaces=False):
-                if self._preprocess_special_tokens:
-                    x = self._undo_special_token_preprocessing(x)
-                output.append(x)
-            return output
-        
+        output = []
+        use_source_tokenizer = True
         if field_name == 'answer':
-            with self._tokenizer.as_target_tokenizer():
-                return decode()
-        else:
-            return decode()
-        
+            use_source_tokenizer = False
+        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True, clean_up_tokenization_spaces=False, use_source_tokenizer=use_source_tokenizer):
+            if self._preprocess_special_tokens:
+                x = self._undo_special_token_preprocessing(x)
+            output.append(x)
+        return output
+
+    def convert_ids_to_tokens(self, batch, skip_special_tokens):
+        output = []
+        for ids in batch:
+            x = self._tokenizer.convert_ids_to_tokens(ids, skip_special_tokens=skip_special_tokens)
+            if self._preprocess_special_tokens:
+                x = self._undo_special_token_preprocessing(x)
+            output.append(x)
+        return output
