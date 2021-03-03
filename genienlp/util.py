@@ -502,7 +502,7 @@ def map_filter(callable, iterable):
     return output
 
 
-def init_devices(args, devices=None):
+def get_devices(devices=None):
     if not torch.cuda.is_available():
         return [torch.device('cpu')]
     if not devices:

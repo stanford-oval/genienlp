@@ -49,7 +49,7 @@ from . import models
 from .data_utils.bootleg import Bootleg
 from .run_bootleg import bootleg_process_splits
 from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader, \
-    log_model_size, init_devices, ned_dump_entity_type_pairs
+    log_model_size, get_devices, ned_dump_entity_type_pairs
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
 from .validate import validate, print_results
@@ -564,7 +564,7 @@ def main(args):
         return
 
     set_seed(args)
-    devices = init_devices(args, args.devices)
+    devices = get_devices(args.devices)
     logger = initialize_logger(args)
     logger.info(f'Arguments:\n{pformat(vars(args))}')
 

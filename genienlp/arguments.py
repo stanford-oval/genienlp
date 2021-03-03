@@ -234,8 +234,7 @@ def parse_argv(parser):
     parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')
 
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    parser.add_argument('--devices', default=[0], nargs='+', type=int,
-                        help='a list of devices that can be used for training')
+    parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used for training')
 
     parser.add_argument('--no_commit', action='store_false', dest='commit',
                         help='do not track the git commit associated with this training run')
