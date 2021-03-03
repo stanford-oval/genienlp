@@ -187,12 +187,13 @@ def compute_metrics(generations, golds, reduction='average'):
     return {'bleu': total_bleu/count, 'em': total_exact_match/count*100}
 
 
-def compute_attention(sample_layer_attention, att_pooling, num_head_dim=0):
+def compute_attention(sample_layer_attention, att_pooling, dim=0):
+    # pool attention vectors across heads
     sample_layer_attention_pooled = None
     if att_pooling == 'mean':
-        sample_layer_attention_pooled = torch.mean(sample_layer_attention, dim=num_head_dim, keepdim=False)
+        sample_layer_attention_pooled = torch.mean(sample_layer_attention, dim=dim, keepdim=False)
     elif att_pooling == 'max':
-        sample_layer_attention_pooled = torch.max(sample_layer_attention, dim=num_head_dim, keepdim=False)[0]
+        sample_layer_attention_pooled = torch.max(sample_layer_attention, dim=dim, keepdim=False)[0]
     
     return sample_layer_attention_pooled
 
@@ -207,6 +208,8 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     tgt_quotation_symbols = ['"']
     if tgt_lang == 'ru':
         tgt_quotation_symbols.extend(['«', '»'])
+    if tgt_lang == 'de':
+        tgt_quotation_symbols.extend(['„'])
     
     src_spans_ind = [index for index, token in enumerate(src_tokens) if
                      any([symbol in token for symbol in src_quotation_symbols])]

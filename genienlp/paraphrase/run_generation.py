@@ -21,21 +21,22 @@ It currently supports paraphrasing and translation tasks.
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import copy
+import json
 import logging
 import math
-import json
-import re
-import copy
 import os
-import numpy as np
+import re
 
+import numpy as np
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
 from genienlp.paraphrase.data_utils import create_features_from_tsv_file, output_heuristics
-from genienlp.paraphrase.model_utils import compute_metrics, compute_attention, replace_quoted_params, force_replace_quoted_params
-from ..tasks.almond_utils import tokenize_cjk_chars
+from genienlp.paraphrase.model_utils import compute_metrics, compute_attention, replace_quoted_params, \
+    force_replace_quoted_params
 from ..data_utils.progbar import prange
+from ..tasks.almond_utils import tokenize_cjk_chars
 
 try:
     set_start_method('spawn')
@@ -47,10 +48,9 @@ import torch
 from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer, BartTokenizer, MBartTokenizer, MBart50Tokenizer
-
-from .transformers_utils import GenieMarianMTModel, GenieBartForConditionalGeneration, GenieMBartForConditionalGeneration,\
-    GenieT5ForConditionalGeneration, GenieMT5ForConditionalGeneration
+from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer, BartTokenizer, MBart50Tokenizer,\
+    T5ForConditionalGeneration, MT5ForConditionalGeneration, BartForConditionalGeneration, MBartForConditionalGeneration,\
+    MarianMTModel
 from .transformers_utils import GenieMBartTokenizer
 
 
@@ -71,12 +71,12 @@ ALL_MODELS = sum((tuple(map.keys()) for map in (GPT2_PRETRAINED_CONFIG_ARCHIVE_M
 
 MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'bos_token': '<unk>', 'sep_token': '<paraphrase>', 'eos_token': '</paraphrase>'}),
-    't5': (GenieT5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'mt5': (GenieMT5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'bart': (GenieBartForConditionalGeneration, BartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'mbart': (GenieMBartForConditionalGeneration, GenieMBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'mbart50': (GenieMBartForConditionalGeneration, MBart50Tokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
-    'marian': (GenieMarianMTModel, MarianTokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    't5': (T5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'mt5': (MT5ForConditionalGeneration, T5Tokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'bart': (BartForConditionalGeneration, BartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'mbart': (MBartForConditionalGeneration, GenieMBartTokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'mbart50': (MBartForConditionalGeneration, MBart50Tokenizer, {'bos_token': '<s>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
+    'marian': (MarianMTModel, MarianTokenizer, {'bos_token': '<unk>', 'sep_token': '<unk>', 'eos_token': '</s>'}),
 }
 
 
@@ -320,7 +320,7 @@ def run_single_process_generation(args, config):
 
     if args.model_type == 'gpt2':
         model.set_token_ids(eos_token_id=eos_token_id,
-                            sep_token_id=sep_token_id, 
+                            sep_token_id=sep_token_id,
                             pad_token_id=pad_token_id)
 
     logger.info(args)
@@ -407,7 +407,6 @@ def run_single_process_generation(args, config):
             
         max_length = batch_context_tensor.shape[1] + args.length
 
-        all_encoder_attentions = None
         batch_outputs = [[] for _ in range(batch_size)]
         for hyperparameter_idx in range(len(args.temperature)):
             outputs = model.generate(input_ids=batch_context_tensor,
@@ -429,14 +428,19 @@ def run_single_process_generation(args, config):
                                  eos_token_id=eos_token_id,
                                  pad_token_id=pad_token_id,
                                  use_cache=True,
-                                 output_attentions=output_attentions
+                                 output_attentions=output_attentions,
+                                 return_dict_in_generate=True
                                 )
 
-            # TODO fix the way output attention is handled. Some models do not support it.
-            if output_attentions:
-                decoded, all_encoder_attentions = outputs
-            else:
-                decoded = outputs
+            decoded, cross_attentions = outputs.sequences, outputs.cross_attentions
+            
+            if cross_attentions is not None:
+                # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)
+                cross_attentions = torch.stack(([torch.stack(tuple) for tuple in cross_attentions]))
+    
+                # reshape to (num_layers, batch_size, num_heads, max_output_length, max_input_length)
+                cross_attentions = cross_attentions.squeeze(4)
+                cross_attentions = cross_attentions.permute(1, 2, 3, 0, 4).contiguous()
             
             if not isinstance(decoded, list):
                 decoded = decoded[:, :].tolist()
@@ -458,13 +462,13 @@ def run_single_process_generation(args, config):
                 min_index = min_index + 1
                 out_cropped = out[:min_index]
             
-                if args.task == 'translate' and output_attentions:
+                if args.task == 'translate' and cross_attentions is not None:
                     src_tokens = tokenizer.convert_ids_to_tokens(batch_context_tensor[sample_index])
                     tgt_tokens = tokenizer.convert_ids_to_tokens(out_cropped)
                     
                     # get last layer attention vectors
                     # TODO: get penultimate layer of attention vectors
-                    layer_attention = all_encoder_attentions[-1]
+                    layer_attention = cross_attentions[-1, ...]
                     sample_layer_attention = layer_attention[sample_index, :, :, :]
 
                     if tgt_tokens[0] in [tokenizer.pad_token, special_tokens['bos_token'], special_tokens['sep_token']] or \

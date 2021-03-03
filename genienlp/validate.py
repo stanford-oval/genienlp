@@ -121,7 +121,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
             all_src_tokens = [tokens[len_prefix_wp:] for tokens in all_src_tokens]
             cross_attentions = cross_attentions[:, :, :, len_prefix_wp:]
 
-            cross_attention_pooled = compute_attention(cross_attentions, att_pooling=args.att_pooling, num_head_dim=1)
+            cross_attention_pooled = compute_attention(cross_attentions, att_pooling=args.att_pooling, dim=1)
             
             all_tgt_strings = []
             for i, (src_tokens, tgt_tokens, cross_att) in enumerate(zip(all_src_tokens, all_tgt_tokens, cross_attention_pooled)):
