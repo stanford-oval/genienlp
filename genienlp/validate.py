@@ -29,9 +29,11 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys
+import os
 import torch
 from collections import OrderedDict
 
+from .paraphrase.model_utils import compute_attention, replace_quoted_params, force_replace_quoted_params
 from .util import GenerationOutput
 from .data_utils.progbar import progress_bar
 from .metrics import compute_metrics
@@ -62,8 +64,8 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
     example_ids = []
     answers = []
     contexts = []
-
-    for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
+    
+    for j, batch in enumerate(progress_bar(data_iterator, desc='Generating', disable=disable_progbar)):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
         batch_confidence_features = [[] for _ in range(batch_size)]
@@ -95,10 +97,79 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
                                     no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                                     do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
                                     )
-            raw_partial_batch_prediction = generated.sequences
+            partial_batch_prediction_ids = generated.sequences
+            
+            #
+            cross_attentions = generated.cross_attentions # Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of shape (batch_size, num_heads, generated_length, sequence_length)
+            
+            # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)
+            cross_attentions = torch.stack(([torch.stack(tuple) for tuple in cross_attentions]))
+            
+            # reshape to (num_layers, batch_size, num_heads, max_output_length, max_input_length)
+            cross_attentions = cross_attentions.squeeze(4)
+            cross_attentions = cross_attentions.permute(1, 2, 3, 0, 4).contiguous()
+            
+            # choose only last layer attentions
+            # TODO: get penultimate layer of attention vectors instead
+            cross_attentions = cross_attentions[-1, ...]
+
+            all_src_tokens = numericalizer.convert_ids_to_tokens(batch.context.value.data, skip_special_tokens=False)
+            all_tgt_tokens = numericalizer.convert_ids_to_tokens(partial_batch_prediction_ids, skip_special_tokens=False)
+            
+            # remove language code from the beginning of src_tokens and shift layer_attention
+            len_prefix_wp = len(numericalizer._tokenizer.tokenize(numericalizer.input_prefix))
+            all_src_tokens = [tokens[len_prefix_wp:] for tokens in all_src_tokens]
+            cross_attentions = cross_attentions[:, :, :, len_prefix_wp:]
+
+            cross_attention_pooled = compute_attention(cross_attentions, att_pooling=args.att_pooling, num_head_dim=1)
+            
+            all_tgt_strings = []
+            for i, (src_tokens, tgt_tokens, cross_att) in enumerate(zip(all_src_tokens, all_tgt_tokens, cross_attention_pooled)):
+                
+                # shift target tokens left to match the attention positions
+                if tgt_tokens[0] in numericalizer._tokenizer.all_special_tokens:
+                    tgt_tokens = tgt_tokens[1:]
+    
+                # remove all trailing special tokens from source
+                while src_tokens[-1] in numericalizer._tokenizer.all_special_tokens:
+                    src_tokens = src_tokens[:-1]
+    
+                # crop to match src and tgt new lengths
+                cross_att = cross_att[:len(tgt_tokens), :len(src_tokens)]
+                
+                # plot cross-attention heatmap
+                if args.plot_heatmaps:
+                    import matplotlib.pyplot as plt
+                    import seaborn as sns
+                    
+                    graph = sns.heatmap(torch.log(cross_att), xticklabels=src_tokens, yticklabels=tgt_tokens)
+                    graph.set_xticklabels(graph.get_xmajorticklabels(), fontsize=12)
+                    graph.set_yticklabels(graph.get_ymajorticklabels(), fontsize=12)
+                    
+                    plt.savefig(os.path.join(os.path.dirname(args.save), 'heatmap_{}'.format(j * batch_size + i)))
+                    plt.show()
+
+                # remove eos token if present
+                if tgt_tokens[-1] in numericalizer._tokenizer.all_special_tokens:
+                    tgt_tokens = tgt_tokens[:-1]
+                
+                # TODO _tokenizer should not be private
+                if args.replace_qp:
+                    text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, numericalizer._tokenizer, cross_att, model.tgt_lang)
+                    if not is_replaced and args.force_replace_qp:
+                        text = force_replace_quoted_params(src_tokens, tgt_tokens, numericalizer._tokenizer, cross_att)
+                else:
+                    text = numericalizer._tokenizer.convert_tokens_to_string(tgt_tokens)
+                
+                all_tgt_strings.append(text)
+            
+            with numericalizer._tokenizer.as_target_tokenizer():
+                partial_batch_prediction_ids = numericalizer._tokenizer.batch_encode_plus(all_tgt_strings, padding=True, return_tensors='pt').data['input_ids']
+
             if output_confidence_features or output_confidence_scores:
-                partial_batch_confidence_features = model.confidence_features(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout_num=args.mc_dropout_num)
-            partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction, 'answer')
+                partial_batch_confidence_features = model.confidence_features(batch=batch, predictions=partial_batch_prediction_ids, mc_dropout_num=args.mc_dropout_num)
+                
+            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')
             # post-process predictions
             for i in range(len(partial_batch_prediction)):
                 partial_batch_prediction[i] = task.postprocess_prediction(batch_example_ids[(i//args.num_outputs[hyperparameter_idx]) % batch_size], partial_batch_prediction[i])

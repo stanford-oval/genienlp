@@ -263,6 +263,12 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum')
     
+    parser.add_argument('--att_pooling', type=str, default='max', help='pooling used to calculate decoder-encoder attention values across different heads')
+    parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot decoder-encoder attention heatmaps')
+    parser.add_argument('--replace_qp', action='store_true', help='replace parameter values after translation with source values')
+    parser.add_argument('--force_replace_qp', action='store_true', help='if we parameters could not be replaced leveraging quotation marks,'
+                                                                        ' rely purely on attention to find text spans')
+    
 
 
 def check_and_update_generation_args(args):

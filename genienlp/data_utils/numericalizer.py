@@ -36,7 +36,7 @@ from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
 from transformers import AutoTokenizer, XLMRobertaTokenizer, XLMRobertaTokenizerFast, MBartConfig, MarianConfig, \
-    MBart50Tokenizer, T5Config, GPT2Tokenizer, GPT2TokenizerFast, BertTokenizerFast, BertTokenizer
+    MBart50Tokenizer, T5Config, GPT2Tokenizer, GPT2TokenizerFast, BertTokenizerFast, BertTokenizer, MarianTokenizer
 
 from .decoder_vocab import DecoderVocabulary
 from .example import SequentialField, get_pad_feature
@@ -153,13 +153,16 @@ class TransformerNumericalizer(object):
 
         self.input_prefix = input_prefix
         
-        # `isinstance` already checks for inheritance so we only include the base tokenizers)
+        # We only include the base tokenizers since `isinstance` checks for inheritance
         if isinstance(self._tokenizer, (BertTokenizer, BertTokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
-        elif isinstance(self._tokenizer, (XLMRobertaTokenizer, XLMRobertaTokenizerFast)):
+        elif isinstance(self._tokenizer, (XLMRobertaTokenizer, XLMRobertaTokenizerFast, MarianTokenizer)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
         elif isinstance(self._tokenizer, (GPT2Tokenizer, GPT2TokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')
+        
+        # make sure we assigned is_piece_fn
+        assert self._tokenizer.is_piece_fn
 
 
     def load(self, save_dir):

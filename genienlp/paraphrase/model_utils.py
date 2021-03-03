@@ -187,24 +187,22 @@ def compute_metrics(generations, golds, reduction='average'):
     return {'bleu': total_bleu/count, 'em': total_exact_match/count*100}
 
 
-def compute_attention(sample_layer_attention, att_pooling):
+def compute_attention(sample_layer_attention, att_pooling, num_head_dim=0):
     sample_layer_attention_pooled = None
     if att_pooling == 'mean':
-        sample_layer_attention_pooled = torch.mean(sample_layer_attention, dim=0, keepdim=False)
+        sample_layer_attention_pooled = torch.mean(sample_layer_attention, dim=num_head_dim, keepdim=False)
     elif att_pooling == 'max':
-        sample_layer_attention_pooled = torch.max(sample_layer_attention, dim=0, keepdim=False)[0]
+        sample_layer_attention_pooled = torch.max(sample_layer_attention, dim=num_head_dim, keepdim=False)[0]
     
     return sample_layer_attention_pooled
 
 
-def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, model_type, tgt_lang):
+def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, tgt_lang):
     # find positions of quotation marks in src and tgt
     src2tgt_mapping = {}
     src2tgt_mapping_index = {}
     
-    ## FIXED: quotation marks are exclusively used to wrap parameters so just check if they are present in target token
-    # quote_wordpiece = tokenizer.tokenize('"')[0]
-    # quote_token = '"'
+    # Note: quotation marks are exclusively used to wrap parameters so just check if they are present in the target sentence
     src_quotation_symbols = ['"']
     tgt_quotation_symbols = ['"']
     if tgt_lang == 'ru':
@@ -214,20 +212,18 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
                      any([symbol in token for symbol in src_quotation_symbols])]
     tgt_spans_ind = [index for index, token in enumerate(tgt_tokens) if
                      any([symbol in token for symbol in tgt_quotation_symbols])]
-    
-    if model_type == 'marian':
-        src_strings = tokenizer.spm_source.DecodePieces(src_tokens)
-        tgt_strings = tokenizer.spm_target.DecodePieces(tgt_tokens)
-    else:
-        src_strings = tokenizer.convert_tokens_to_string(src_tokens)
-        tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
+
+    tokenizer._decode_use_source_tokenizer = True
+    src_strings = tokenizer.convert_tokens_to_string(src_tokens)
+    tokenizer._decode_use_source_tokenizer = False
+    tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
     
     if len(src_spans_ind) % 2 != 0:
-        logging.error('corrupted span in src string: [{}]'.format(src_strings))
+        logging.error(f'Corrupted span in src string: [{src_strings}]')
         return tgt_strings, False
     if len(tgt_spans_ind) % 2 != 0:
-        logging.error('corrupted span in tgt string: [{}] with src string: [{}]\n'
-                      'outputting example without reverting the parameter'.format(tgt_strings, src_strings))
+        logging.error(f'Corrupted span in tgt string: [{tgt_strings}] with src string: [{src_strings}]\n'
+                      'outputting example without reverting the parameter')
         return tgt_strings, False
     
     # arrange spans and exclude quotation mark indices
@@ -235,9 +231,8 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     tgt_spans = [(tgt_spans_ind[i] + 1, tgt_spans_ind[i + 1] - 1) for i in range(0, len(tgt_spans_ind), 2)]
     
     if len(src_spans) != len(tgt_spans):
-        logging.error('numbers of spans in src and tgt strings do not match: [{}], [{}]\n'
-                      'outputting example without reverting the parameter'.format(src_strings, tgt_strings))
-        
+        logging.error(f'Numbers of spans in tgt and src strings do not match: [{tgt_strings}], [{src_strings}]\n'
+                      'outputting example without reverting the parameter')
         return tgt_strings, False
     
     tgt_span_success = set()
@@ -262,30 +257,8 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
                 i += 1
         
         if tgt_span_idx is None:
-            logger.error(
-                'Could not find a corresponding span in tgt for ({}, {}) src span in src string: [{}]'.format(beg, end,
-                                                                                                              src_strings))
+            logger.error(f'Could not find a corresponding span in tgt for ({beg}, {end}) src span in src string: [{src_strings}]')
             return tgt_strings, False
-    ####
-    # replacing in word-piece space is not clean since Marian uses different spm models for src and tgt
-    ####
-    # # replace property values (wrapped in quotation marks) in target text with source values
-    # tgt2src_mapping = {v: k for k, v in src2tgt_mapping.items()}
-    # tgt_begin2span = {k[0]: k for k, v in tgt2src_mapping.items()}
-    # all_tgt_begins = set(tgt_begin2span.keys())
-    #
-    # new_tgt_tokens = []
-    # i = 0
-    # while i < len(tgt_tokens):
-    #     if i in all_tgt_begins:
-    #         tgt_span = tgt_begin2span[i]
-    #         src_span = tgt2src_mapping[tgt_span]
-    #         new_tgt_tokens.extend(src_tokens[src_span[0]: src_span[1]+1])
-    #         i += tgt_span[1] - tgt_span[0] + 1
-    #     else:
-    #         new_tgt_tokens.append(tgt_tokens[i])
-    #         i += 1
-    # final_output = tokenizer.convert_tokens_to_ids(new_tgt_tokens)
     
     src_quoted_pattern_maybe_space = re.compile(r'[{0}]\s?([^{0}]*?)\s?[{0}]'.format(''.join(src_quotation_symbols)))
     tgt_quoted_pattern_maybe_space = re.compile(r'[{0}]\s?([^{0}]*?)\s?[{0}]'.format(''.join(tgt_quotation_symbols)))
@@ -313,27 +286,31 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     return text, True
 
 
-def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, model_type):
+def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled):
     # find positions of quotation marks in src
     src2tgt_mapping = {}
     
     src_spans_ind = [index for index, token in enumerate(src_tokens) if '"' in token]
-    tgt_is_piece = [1 if token[0] == SPIECE_UNDERLINE else 0 for token in tgt_tokens]
+    if hasattr(tokenizer, 'is_piece_fn'):
+        tgt_is_piece = [int(tokenizer.is_piece_fn(token)) for token in tgt_tokens]
+    else:
+        # assume spm tokenizer
+        tgt_is_piece = [int(not token.startswith(SPIECE_UNDERLINE)) for token in tgt_tokens]
     tgt_piece2word_mapping = list(np.cumsum(tgt_is_piece) - 1)
     
     if len(src_spans_ind) % 2 != 0:
-        logging.error('corrupted span in src string: [{}]'.format(tokenizer.spm_source.DecodePieces(src_tokens)))
+        tokenizer._decode_use_source_tokenizer = True
+        logging.error(f'Corrupted span in src string: [{tokenizer.convert_tokens_to_string(src_tokens)}]')
+        tokenizer._decode_use_source_tokenizer = False
         # this almost never happens but if it does it is usually because quotation is missing from the end of src_tokens
         # we temporary fix this by adding '"' to the end of src_tokens
         src_tokens += tokenizer.tokenize('"')
         src_spans_ind = [index for index, token in enumerate(src_tokens) if '"' in token]
     
-    if model_type == 'marian':
-        src_strings = tokenizer.spm_source.DecodePieces(src_tokens)
-        tgt_strings = tokenizer.spm_target.DecodePieces(tgt_tokens)
-    else:
-        src_strings = tokenizer.convert_tokens_to_string(src_tokens)
-        tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
+    tokenizer._decode_use_source_tokenizer = True
+    src_strings = tokenizer.convert_tokens_to_string(src_tokens)
+    tokenizer._decode_use_source_tokenizer = False
+    tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
     
     # arrange spans and exclude quotation mark indices
     src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
@@ -359,8 +336,8 @@ def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_
             src2tgt_mapping[key] = (
             max(0, tgt_piece2word_mapping[s1] - 1), min(tgt_piece2word_mapping[s2] + 1, len(tgt_tokens)))
         except:
-            raise ValueError('corrupted span in tgt string: [{}] with src string: [{}]\n'
-                             'outputting example without reverting the parameter'.format(tgt_strings, src_strings))
+            raise ValueError(f'Corrupted span in tgt string: [{tgt_strings}] with src string: [{src_strings}]\n'
+                             'outputting example without reverting the parameter')
     
     # move through words
     tgt_strings_words = tgt_strings.split(' ')
