@@ -57,7 +57,10 @@ class TransformerSeq2Seq(GenieModel):
         if args.model == 'TransformerSeq2Seq' and args.pretrained_model in ['facebook/bart-large', 'facebook/bart-base'] and args.insert_adapters:
             model_class = AdapterBartForConditionalGeneration
         if save_directory is not None:
-            self.model = model_class.from_config(config)
+            if model_class == AdapterBartForConditionalGeneration:
+                self.model = model_class(config)
+            else:
+                self.model = model_class.from_config(config)
         else:
             self.model = model_class.from_pretrained(self.args.pretrained_model, cache_dir=self.args.embeddings)
 
