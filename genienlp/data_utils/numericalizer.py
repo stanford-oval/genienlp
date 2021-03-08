@@ -36,7 +36,9 @@ from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
 from transformers import AutoTokenizer, XLMRobertaTokenizer, XLMRobertaTokenizerFast, MBartConfig, MarianConfig, \
-    MBart50Tokenizer, T5Config, GPT2Tokenizer, GPT2TokenizerFast, BertTokenizerFast, BertTokenizer, MarianTokenizer
+    M2M100Config, \
+    MBart50Tokenizer, T5Config, GPT2Tokenizer, GPT2TokenizerFast, BertTokenizerFast, BertTokenizer, MarianTokenizer, \
+    M2M100Tokenizer
 
 from .decoder_vocab import DecoderVocabulary
 from .example import SequentialField, get_pad_feature
@@ -129,11 +131,14 @@ class TransformerNumericalizer(object):
         
         model_is_marian = isinstance(config, MarianConfig)
         model_is_mbart = isinstance(config, MBartConfig)
+        model_is_m2m100 = isinstance(config, M2M100Config)
         model_is_t5 = isinstance(config, T5Config)
 
         # hack until huggingface provides mbart50 config
         if model_is_mbart and 'mbart-50' in config.name_or_path:
             self._tokenizer = MBart50Tokenizer.from_pretrained(**tokenizer_args)
+        elif model_is_m2m100:
+            self._tokenizer = M2M100Tokenizer.from_pretrained(**tokenizer_args)
         else:
             self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
 
@@ -156,7 +161,7 @@ class TransformerNumericalizer(object):
         # We only include the base tokenizers since `isinstance` checks for inheritance
         if isinstance(self._tokenizer, (BertTokenizer, BertTokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
-        elif isinstance(self._tokenizer, (XLMRobertaTokenizer, XLMRobertaTokenizerFast, MarianTokenizer)):
+        elif isinstance(self._tokenizer, (XLMRobertaTokenizer, XLMRobertaTokenizerFast, MarianTokenizer, M2M100Tokenizer)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
         elif isinstance(self._tokenizer, (GPT2Tokenizer, GPT2TokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')

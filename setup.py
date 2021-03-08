@@ -54,7 +54,7 @@ setuptools.setup(
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
         'requests~=2.22',
-        'transformers @ git+https://github.com/huggingface/transformers@e2af5b2105b78742bf1cb0f93b41ca91158b5dba',
+        'transformers @ git+https://github.com/Mehrad0711/transformers@ff2c9afafe4c198d048350d912888defd59967c6',
         'sentencepiece==0.1.*',
         'sentence-transformers==0.4.0',
         'mosestokenizer~=1.1',
