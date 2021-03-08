@@ -220,6 +220,10 @@ class TransformerNumericalizer(object):
         # add entity boundary special tokens
         if self.args.add_types_to_text != 'no':
             self._tokenizer.add_tokens(['<e>', '</e>'])
+            
+        # add special tokens for ambig_qa task
+        if self.args.train_task_names == 'ambig_qa':
+            self._tokenizer.add_tokens(['<q>', '<p>', '<u>'])
         
         if self.max_generative_vocab is not None:
             # do a pass over all the data in the dataset

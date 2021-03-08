@@ -27,4 +27,44 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from . import generic_task, almond_task, qa_task
+import logging
+
+from genienlp.tasks.almond_task import BaseAlmondTask
+
+from ..tasks.registry import register_task
+from ..data_utils.example import Example
+from ..tasks.qa_dataset import AmbigQADataset
+
+logger = logging.getLogger(__name__)
+
+
+@register_task('ambig_qa')
+class AmbigQA(BaseAlmondTask):
+
+    def __init__(self, name, args):
+        super().__init__(name, args)
+
+    @property
+    def metrics(self):
+        return ['bleu']
+
+    def _make_example(self, parts, dir_name=None, **kwargs):
+        if len(parts) == 3:
+            example_id, sentence, thingtalk = parts
+        elif len(parts) == 4:
+            example_id, _, sentence, thingtalk = parts # ignore dialogue context
+        else:
+            raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
+
+        example_id = self.name + '/' + example_id
+
+        question = 'translate from input to output'
+        context = sentence
+        answer = sentence # means we calculate self-bleu
+        
+        return Example.from_raw(example_id, context, question, answer,
+                                preprocess=self.preprocess_field, lower=False)
+    
+    def get_splits(self, root, **kwargs):
+        return AmbigQADataset.return_splits(path=root, make_example=self._make_example, **kwargs)
+
