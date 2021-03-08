@@ -40,11 +40,13 @@ from typing import List, Optional
 import numpy as np
 import torch
 import ujson
-from transformers.models.mbart.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
+from transformers import MBartConfig, MarianConfig
+from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 from torch.functional import Tensor
 
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
+from .paraphrase.transformers_utils import MARIAN_GROUP_MEMBERS
 from .tasks.almond_utils import token_type_regex, entity_regex
 
 logger = logging.getLogger(__name__)
@@ -593,12 +595,52 @@ def ned_dump_entity_type_pairs(split, path, name, utterance_field):
             fout.write(ujson.dumps({"sentence": sentence, "aliases": entities, "thingtalk_types": ent_types}) + '\n')
 
 
-
 def get_mbart_lang(orig_lang):
     for lang in FAIRSEQ_LANGUAGE_CODES:
         if lang.startswith(orig_lang):
             return lang
+        
+def adjust_language_code(config, pretrained_model, src_lang, tgt_lang):
+    
+    # adjust src and tgt languages for Marian models
+    model_is_marian = isinstance(config, MarianConfig)
 
+    if model_is_marian and pretrained_model.rsplit('-', 2)[1] in MARIAN_GROUP_MEMBERS:
+        if src_lang not in MARIAN_GROUP_MEMBERS[pretrained_model.rsplit('-', 2)[1]]:
+            if src_lang == 'pl':
+                src_lang = 'pol'
+            elif src_lang == 'fa':
+                src_lang = 'pes'
+            else:
+                raise ValueError('Source language is not in this Marian model group languages, please specify the correct source language.')
+    
+    if model_is_marian and pretrained_model.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:
+        if tgt_lang not in MARIAN_GROUP_MEMBERS[pretrained_model.rsplit('-', 1)[1]]:
+            if tgt_lang == 'pl':
+                tgt_lang = 'pol'
+            elif tgt_lang == 'fa':
+                tgt_lang = 'pes'
+            else:
+                raise ValueError('Target language is not in this Marian model group languages, please specify the correct target language.')
+    
+    if model_is_marian and pretrained_model.rsplit('-', 2)[1] not in MARIAN_GROUP_MEMBERS:
+        # Source language should not be provided when using marian models with single language pairs
+        # otherwise the translation outputs will be incorrect; hence we ignore the source language
+        src_lang = None
+    
+    if model_is_marian and pretrained_model.rsplit('-', 1)[1] not in MARIAN_GROUP_MEMBERS:
+        # Target language should not be provided when using marian models with single language pairs
+        # otherwise the translation outputs will be incorrect; hence we ignore the target language
+        tgt_lang = None
+    
+    # adjust src and tgt languages for Mbart models
+    if isinstance(config, MBartConfig):
+        src_lang = get_mbart_lang(src_lang)
+        tgt_lang = get_mbart_lang(tgt_lang)
+        
+    return src_lang, tgt_lang
+
+    
 def have_multilingual(task_names):
     return any(['multilingual' in name for name in task_names])
 
@@ -638,7 +680,7 @@ def load_config_json(args):
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
             elif r in ('do_ned', 'use_encoder_loss',
-                       'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version',
+                       'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version'
                        ):
                 setattr(args, r, False)
             elif r in ('num_db_types', 'db_unk_id', 'num_workers'):

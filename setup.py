@@ -54,7 +54,7 @@ setuptools.setup(
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
         'requests~=2.22',
-        'transformers==4.1.1',
+        'transformers @ git+https://github.com/huggingface/transformers@dfd16af8322788e6dd58e8396e0d6f2f5312bf99',
         'sentencepiece==0.1.*',
         'sentence-transformers==0.4.0',
         'mosestokenizer~=1.1',
@@ -64,7 +64,7 @@ setuptools.setup(
         'pathos==0.2.6',
         'marisa_trie_m==0.7.6',
         'kfserving>=0.5.0',
-        'bootleg @ git+https://github.com/Mehrad0711/bootleg@41aca545f2fee3d7af724183af37d1b28fb10748',
+        'bootleg @ git+https://github.com/Mehrad0711/bootleg@8f62c4fef7a8a4786672a0e2f71400dbf7ad80c9',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',

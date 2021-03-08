@@ -186,7 +186,8 @@ def parse_argv(parser):
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
-    parser.add_argument('--locale', default='en', help='locale tag of the language to parse')
+    parser.add_argument('--src_locale', default='en', help='locale tag of the input language to parse')
+    parser.add_argument('--tgt_locale', default='en', help='locale tag of the target language to generate')
     parser.add_argument('--inference_name', default='nlp', help='name used by kfserving inference service, alphanumeric only')
 
     # for confidence estimation:
@@ -212,7 +213,8 @@ def init(args):
                                      model_checkpoint_file=args.checkpoint_name,
                                      args=args,
                                      device=device,
-                                     locale=args.locale
+                                     src_lang=args.src_locale,
+                                     tgt_lang=args.tgt_locale
                                      )
 
     model.to(device)

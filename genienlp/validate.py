@@ -71,14 +71,14 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
 
         example_ids += batch_example_ids
         if not output_predictions_only:
-            batch_answer = numericalizer.reverse(batch.answer.value.data)
+            batch_answer = numericalizer.reverse(batch.answer.value.data, 'answer')
             batch_answer = [task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))]
             answers += batch_answer
-            batch_context = numericalizer.reverse(batch.context.value.data)
+            batch_context = numericalizer.reverse(batch.context.value.data, 'context')
             contexts += batch_context
         elif output_confidence_features:
             # need gold answer for confidence estimation
-            batch_answer = numericalizer.reverse(batch.answer.value.data)
+            batch_answer = numericalizer.reverse(batch.answer.value.data, 'answer')
             answers += batch_answer
 
         for hyperparameter_idx in range(len(args.temperature)):
@@ -96,8 +96,8 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
                                                 do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
                                                 )
             if output_confidence_features or output_confidence_scores:
-                partial_batch_confidence_features =  model.confidence_features(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout_num=args.mc_dropout_num)
-            partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction)
+                partial_batch_confidence_features = model.confidence_features(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout_num=args.mc_dropout_num)
+            partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction, 'answer')
             # post-process predictions
             for i in range(len(partial_batch_prediction)):
                 partial_batch_prediction[i] = task.postprocess_prediction(batch_example_ids[(i//args.num_outputs[hyperparameter_idx]) % batch_size], partial_batch_prediction[i])

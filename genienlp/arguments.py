@@ -69,11 +69,18 @@ def parse_argv(parser):
     parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
 
-    parser.add_argument('--train_languages', type=str, default='en',
-                        help='Specify dataset languages used during training for multilingual tasks'
+    parser.add_argument('--train_languages', type=str, default='en', dest='train_src_languages',
+                        help='Specify dataset source languages used during training for multilingual tasks'
                              'multiple languages for each task should be concatenated with +')
-    parser.add_argument('--eval_languages', type=str, default='en',
-                        help='Specify dataset languages used during validation for multilingual tasks'
+    parser.add_argument('--eval_languages', type=str, default='en', dest='eval_src_languages',
+                        help='Specify dataset source languages used during validation for multilingual tasks'
+                             'multiple languages for each task should be concatenated with +')
+    
+    parser.add_argument('--train_tgt_languages', type=str, default='en',
+                        help='Specify dataset target languages used during training for multilingual tasks'
+                             'multiple languages for each task should be concatenated with +')
+    parser.add_argument('--eval_tgt_languages', type=str, default='en',
+                        help='Specify dataset target languages used during validation for multilingual tasks'
                              'multiple languages for each task should be concatenated with +')
 
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training',
@@ -292,11 +299,11 @@ def post_parse_general(args):
     args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime('%D-%H:%M:%S %Z')
     
     # TODO relax the following assertions by dropping samples from batches in Iterator
-    if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_languages.split('+')) != 0:
-        raise ValueError('Your train_batch_size should be divisible by number of train_languages when using sentence batching.')
-    if args.sentence_batching and args.val_batch_size[0] % len(args.eval_languages.split('+')) != 0:
+    if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_src_languages.split('+')) != 0:
+        raise ValueError('Your train_batch_size should be divisible by number of train_src_languages when using sentence batching.')
+    if args.sentence_batching and args.val_batch_size[0] % len(args.eval_src_languages.split('+')) != 0:
         raise ValueError(
-            'Your val_batch_size should be divisible by number of eval_languages when using sentence batching.')
+            'Your val_batch_size should be divisible by number of eval_src_languages when using sentence batching.')
     
     if len(args.ned_features) != len(args.ned_features_size):
         raise ValueError('You should specify max feature size for each feature you provided')
@@ -319,7 +326,7 @@ def post_parse_general(args):
     else:
         args.commit = ''
     
-    if have_multilingual(args.train_task_names) and (args.train_languages is None or args.eval_languages is None):
+    if have_multilingual(args.train_task_names) and (args.train_src_languages is None or args.eval_src_languages is None):
         raise ValueError('You have to define training and evaluation languages when you have a multilingual task')
     
     args.log_dir = args.save
@@ -345,8 +352,8 @@ def post_parse_train_specific(args):
     
     # TODO relax this assertion by allowing training on multiple languages
     if 'mbart' in args.pretrained_model:
-        if len(args.train_languages.split('+')) != 1 or set(args.train_languages.split('+')) != set(
-                args.eval_languages.split('+')):
+        if len(args.train_src_languages.split('+')) != 1 or set(args.train_src_languages.split('+')) != set(
+                args.eval_src_languages.split('+')):
             raise ValueError('For now we only support single language training and evaluation with mbart models')
     
     if args.model_parallel:
@@ -362,7 +369,7 @@ def post_parse_train_specific(args):
     if args.warmup < 1:
         raise ValueError('Warmup should be a positive integer.')
 
-    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_languages.split('+')) > 1):
+    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_src_languages.split('+')) > 1):
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
     
     if not (len(args.ned_features) == len(args.ned_features_size) == len(args.ned_features_default_val)):

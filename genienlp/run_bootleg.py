@@ -48,14 +48,21 @@ def parse_argv(parser):
     parser.add_argument('--save', required=True, type=str, help='where to save results.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
-    
-    parser.add_argument('--train_languages', type=str,
-                        help='used to specify dataset languages used during training for multilingual tasks'
+
+    parser.add_argument('--train_languages', type=str, default='en', dest='train_src_languages',
+                        help='Specify dataset source languages used during training for multilingual tasks'
                              'multiple languages for each task should be concatenated with +')
-    parser.add_argument('--eval_languages', type=str,
-                        help='used to specify dataset languages used during validation for multilingual tasks'
+    parser.add_argument('--eval_languages', type=str, default='en', dest='eval_src_languages',
+                        help='Specify dataset source languages used during validation for multilingual tasks'
                              'multiple languages for each task should be concatenated with +')
-    
+
+    parser.add_argument('--train_tgt_languages', type=str, default='en',
+                        help='Specify dataset target languages used during training for multilingual tasks'
+                             'multiple languages for each task should be concatenated with +')
+    parser.add_argument('--eval_tgt_languages', type=str, default='en',
+                        help='Specify dataset target languages used during validation for multilingual tasks'
+                             'multiple languages for each task should be concatenated with +')
+
     parser.add_argument('--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training',
                         required=True)
     
@@ -221,7 +228,7 @@ def dump_bootleg_features(args, logger):
         logger.info(f'Loading {train_task.name}')
         kwargs = {'test': None, 'validation': None}
         kwargs.update(train_eval_shared_kwargs)
-        kwargs['all_dirs'] = args.train_languages
+        kwargs['all_dirs'] = args.train_src_languages
         kwargs['cached_path'] = os.path.join(args.cache, train_task.name)
         if args.use_curriculum:
             kwargs['curriculum'] = True
@@ -270,7 +277,7 @@ def dump_bootleg_features(args, logger):
         if args.eval_set_name is not None:
             kwargs['validation'] = args.eval_set_name
         kwargs.update(train_eval_shared_kwargs)
-        kwargs['all_dirs'] = args.eval_languages
+        kwargs['all_dirs'] = args.eval_src_languages
         kwargs['cached_path'] = os.path.join(args.cache, val_task.name)
 
         logger.info(f'Adding {val_task.name} to validation datasets')

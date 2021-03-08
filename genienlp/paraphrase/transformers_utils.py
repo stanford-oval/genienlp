@@ -20,8 +20,9 @@ from transformers.models.roberta.modeling_roberta import create_position_ids_fro
 
 from transformers.models.marian.convert_marian_to_pytorch import GROUPS
 from transformers.models.marian.convert_marian_tatoeba_to_pytorch import GROUP_MEMBERS
+from transformers.models.marian.tokenization_marian import MarianTokenizer
 
-from transformers.models.mbart.tokenization_mbart import MBartTokenizer, _all_mbart_models, SPM_URL
+from transformers.models.mbart.tokenization_mbart import MBartTokenizer
 from transformers.models.gpt2 import tokenization_gpt2
 from transformers.models.t5 import tokenization_t5
 
@@ -85,12 +86,6 @@ class GenieMBartTokenizer(MBartTokenizer):
     '''
     MBartTokenizer with the temporary fix for off-by-one error during generation: https://github.com/huggingface/transformers/issues/5755
     '''
-    vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
-    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
-    pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
-
-    prefix_tokens: List[int] = []
-    suffix_tokens: List[int] = []
 
     def __init__(self, *args, tokenizer_file=None, **kwargs):
         super().__init__(*args, tokenizer_file=tokenizer_file, **kwargs)
@@ -106,7 +101,28 @@ class GenieMBartTokenizer(MBartTokenizer):
         self.cur_lang_code = self.lang_code_to_id[lang]
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
-        
+
+
+###############
+
+
+class GenieMarianTokenizer(MarianTokenizer):
+    '''
+    MarianTokenizer with the temporary fix for decoding.
+    In current huggingface's implementation `convert_tokens_to_string` method always uses spm_target to decode.
+    To be able to decode both source language and target language, this class changes the spm to be current_spm
+    '''
+    
+    def __init__(self, vocab, source_spm, target_spm, source_lang=None, target_lang=None,
+                 unk_token="<unk>", eos_token="</s>", pad_token="<pad>", model_max_length=512, **kwargs):
+        super().__init__(vocab, source_spm, target_spm, source_lang, target_lang,
+                         unk_token, eos_token, pad_token, model_max_length, **kwargs)
+
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+        """Uses target language sentencepiece model"""
+        return self.current_spm.DecodePieces(tokens)
+
+
 ###############
 
 

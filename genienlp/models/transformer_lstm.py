@@ -38,6 +38,7 @@ from ..data_utils.numericalizer import TransformerNumericalizer
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
 from .base import GenieModel
+from ..util import adjust_language_code
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,11 @@ class TransformerLSTM(GenieModel):
         config = AutoConfig.from_pretrained(encoder_embeddings, cache_dir=args.embeddings)
         args.dimension = config.hidden_size
         self.numericalizer = TransformerNumericalizer(encoder_embeddings, args, max_generative_vocab=args.max_generative_vocab)
-        
-        self.numericalizer.get_tokenizer(save_directory)
+
+        self.src_lang, self.tgt_lang = adjust_language_code(config, args.pretrained_model,
+                                                            kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en'))
+
+        self.numericalizer.get_tokenizer(save_directory, config, self.src_lang, self.tgt_lang)
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
 
         logger.info(f'Initializing encoder and decoder embeddings')
@@ -100,7 +104,8 @@ class TransformerLSTM(GenieModel):
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
     
     def forward(self, batch, current_token_id=None, past_key_values=None,
-                expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False):
+                expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False,
+                output_scores=False, output_attentions=False, output_hidden_states=False):
         if encoder_output is None:
             final_context, context_rnn_state = self.encoder(batch)
         else:
@@ -120,7 +125,7 @@ class TransformerLSTM(GenieModel):
             context_rnn_state = torch.cat(context_rnn_state, dim=0)
             
         batch_size = context_rnn_state.size(1)
-        groups = len(self.args.train_languages.split('+'))
+        groups = len(self.args.train_src_languages.split('+'))
         assert batch_size % groups == 0
         
         # reshape to be (batch_size; -1)

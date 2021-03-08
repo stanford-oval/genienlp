@@ -8,7 +8,7 @@ import shutil
 import numpy as np
 
 from .transformers_utils import SPIECE_UNDERLINE, MARIAN_GROUP_MEMBERS
-from transformers.models.mbart.tokenization_mbart import FAIRSEQ_LANGUAGE_CODES
+from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 
 from genienlp.metrics import computeBLEU
 from genienlp.util import get_mbart_lang
@@ -103,7 +103,7 @@ def check_args(args):
     
     
     # adjust language ids for mbart models
-    if args.model_type == 'mbart':
+    if args.model_type in ['mbart', 'mbart50']:
         if args.src_lang not in FAIRSEQ_LANGUAGE_CODES:
             args.src_lang = get_mbart_lang(args.src_lang)
         if args.tgt_lang not in FAIRSEQ_LANGUAGE_CODES:

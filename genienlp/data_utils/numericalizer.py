@@ -36,23 +36,24 @@ from pathos import multiprocessing
 from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
-from transformers import AutoConfig, AutoTokenizer, BertTokenizer, XLMRobertaTokenizer, BartTokenizer, BartTokenizerFast
+from transformers import AutoTokenizer, XLMRobertaTokenizer, XLMRobertaTokenizerFast, MBartConfig, MarianConfig, \
+    MBart50Tokenizer, T5Config, GPT2Tokenizer, GPT2TokenizerFast, BertTokenizerFast, BertTokenizer
 
 from .decoder_vocab import DecoderVocabulary
-from .example import SequentialField, Feature, get_pad_feature
 from ..util import get_devices
-
-# not all tokenizers respect whitespace in the input or honor do_basic_tokenize=False
-# for those, we need to use the slow tokenizers or we'll get messed up thingtalk output
-from ..paraphrase.transformers_utils import SPIECE_UNDERLINE
+from .example import SequentialField, get_pad_feature
+from ..paraphrase.transformers_utils import SPIECE_UNDERLINE, GenieMarianTokenizer
 
 logger = logging.getLogger(__name__)
 
+# not all tokenizers respect whitespace in the input or honor do_basic_tokenize=False
+# for those, we need to use the slow tokenizers or we'll get messed up thingtalk output
 ALLOWED_FAST_TOKENIZERS = {
     'facebook/bart-base',
     'facebook/bart-large',
     'sshleifer/bart-tiny-random'
 }
+
 # known NOT to work:
 # - all the BERT models
 # - all the XLM-R models
@@ -69,6 +70,9 @@ ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING = {
     'google/mt5-xl',
     'google/mt5-xxl',
 }
+
+# for input batches smaller than this value, multiprocessing will not be used due to its overhead
+MULTIPROCESSING_THRESHOLD = 5000
 
 
 class TransformerNumericalizer(object):
@@ -117,28 +121,50 @@ class TransformerNumericalizer(object):
                (self._pretrained_name in ALLOWED_FAST_TOKENIZERS or
                (self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING))
     
-
-    def get_tokenizer(self, save_dir):
+    
+    def get_tokenizer(self, save_dir, config, src_lang, tgt_lang):
+        tokenizer_args = {'do_lower_case': False, 'do_basic_tokenize': False, 'cache_dir': self._cache,
+                          'use_fast': self._use_fast(), 'src_lang': src_lang, 'tgt_lang': tgt_lang}
         if save_dir is not None:
-            config = AutoConfig.from_pretrained(self._pretrained_name)
-            self._tokenizer = AutoTokenizer.from_pretrained(save_dir,
-                                                            do_lower_case=False,
-                                                            do_basic_tokenize=False,
-                                                            config=config,
-                                                            cache_dir=self._cache,
-                                                            use_fast=self._use_fast())
+            tokenizer_args.update({'pretrained_model_name_or_path': save_dir, 'config': config})
         else:
-            self._tokenizer = AutoTokenizer.from_pretrained(self._pretrained_name,
-                                                            do_lower_case=False,
-                                                            do_basic_tokenize=False,
-                                                            cache_dir=self._cache,
-                                                            use_fast=self._use_fast())
-            
-        if isinstance(self._tokenizer, BertTokenizer):
+            tokenizer_args.update({'pretrained_model_name_or_path': self._pretrained_name})
+        
+        model_is_marian = isinstance(config, MarianConfig)
+        model_is_mbart = isinstance(config, MBartConfig)
+        model_is_t5 = isinstance(config, T5Config)
+
+        # hack until huggingface provides mbart50 config
+        if model_is_mbart and 'mbart-50' in config.name_or_path:
+            self._tokenizer = MBart50Tokenizer.from_pretrained(**tokenizer_args)
+        # use GenieMarianTokenizer which decodes source language correctly
+        elif model_is_marian:
+            self._tokenizer = GenieMarianTokenizer.from_pretrained(**tokenizer_args)
+        else:
+            self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
+
+        # some tokenizers like Mbart do not set src_lang and tgt_lan when initialized; take care of it here
+        self._tokenizer.src_lang = src_lang
+        self._tokenizer.tgt_lang = tgt_lang
+
+        # define input prefix to add before every input text
+        input_prefix = ''
+        if model_is_marian and tgt_lang:
+            input_prefix = f'>>{tgt_lang}<< '
+        elif model_is_t5:
+            t5_task = f'translation_{src_lang}_to_{tgt_lang}'
+            # TODO add support for summarization
+            # t5_task = 'summarization'
+            input_prefix = config.task_specific_params[t5_task]['prefix']
+
+        self.input_prefix = input_prefix
+        
+        # `isinstance` already checks for inheritance so we only include the base tokenizers)
+        if isinstance(self._tokenizer, (BertTokenizer, BertTokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
-        elif isinstance(self._tokenizer, XLMRobertaTokenizer):
+        elif isinstance(self._tokenizer, (XLMRobertaTokenizer, XLMRobertaTokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
-        elif isinstance(self._tokenizer, (BartTokenizer, BartTokenizerFast)):
+        elif isinstance(self._tokenizer, (GPT2Tokenizer, GPT2TokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')
 
 
@@ -369,22 +395,29 @@ class TransformerNumericalizer(object):
                 
         return num_prefix_special_tokens, num_suffix_special_tokens
     
-    def encode_batch(self, sentences: List[str], features: List[List[Feature]], multiprocessing_threshold=5000) -> List[
-        SequentialField]:
+    def encode_batch(self, sentences: List[str], field_name, features=None) -> List[SequentialField]:
         """
         Batched version of `encode_single()`. Uses multiprocessing on all CPU cores for preprocessing,
         and multithreading for tokenization if a `FastTokenizer` is used
         Inputs:
             sentences: a list of sentences to encode
-            multiprocessing_threshold: for input batches smaller than this value, multiprocessing will not be used due to its overhead
+            field_name: text field name (options: context, question, answer)
+            features: for each sentence we have a list of features per token (used for NED)
         """
         # We need to set this so that `tokenizers` package does not complain about detecting forks.
         os.environ['TOKENIZERS_PARALLELISM'] = "true"
         
+        if features is None:
+            features = []
+        extract_word_pieces = bool(len(features))
+        
         batch_size = len(sentences)
         
+        if field_name != 'answer':
+            sentences = [self.input_prefix + sent for sent in sentences]
+        
         if self._preprocess_special_tokens:
-            if len(sentences) > multiprocessing_threshold:
+            if len(sentences) > MULTIPROCESSING_THRESHOLD:
                 multiprocessing_factor = multiprocessing.cpu_count() // len(get_devices(self.args.devices))
                 logger.info('multiprocessing factor for special token preprocessing is %d', multiprocessing_factor)
                 with multiprocessing.Pool(multiprocessing_factor) as p:
@@ -416,41 +449,68 @@ class TransformerNumericalizer(object):
         # whereas slow version do not. We breakdown slow tokenization into two steps
         # extract tokenized text first, use that to adjust features
         # then pass tokenized text to `_batch_prepare_for_model`
-        all_input_ids = []
-        all_wp_tokenized = []
-
-        if self._use_fast():
+        def do_fast_tokenization(extract_word_pieces):
+            all_wp_tokenized = []
             batch_encoded = self._tokenizer.batch_encode_plus(list(sentences),
-                                                              add_special_tokens=True,
-                                                              max_length=None,
-                                                              return_length=True,
-                                                              return_attention_mask=False,
-                                                              return_special_tokens_mask=True
-                                                              )
-
-            if features:
+                                                      add_special_tokens=True,
+                                                      max_length=None,
+                                                      return_length=True,
+                                                      return_attention_mask=False,
+                                                      return_special_tokens_mask=True
+                                                      )
+            if extract_word_pieces:
                 for encoding in batch_encoded.encodings:
                     # remove special tokens
-                    num_prefix_special_tokens, num_suffix_special_tokens = self.get_num_special_tokens(encoding.special_tokens_mask)
+                    num_prefix_special_tokens, num_suffix_special_tokens = self.get_num_special_tokens(
+                        encoding.special_tokens_mask)
                     wp_tokens = encoding.tokens[num_prefix_special_tokens: -num_suffix_special_tokens]
                     all_wp_tokenized.append(wp_tokens)
             
+            return batch_encoded, all_wp_tokenized
+        
+             
+        def do_slow_tokenization(extract_word_pieces):
+            all_input_ids = []
+            all_wp_tokenized = []
+            if extract_word_pieces:
+                for i in range(batch_size):
+                    text = sentences[i]
+                    wp_tokenized = self._tokenizer.tokenize(text)
+                    all_wp_tokenized.append(wp_tokenized)
+            
+                    # None indicates encoding single instance not paired inputs
+                    all_input_ids.append((self._tokenizer.convert_tokens_to_ids(wp_tokenized), None))
+        
+                batch_encoded = self._tokenizer._batch_prepare_for_model(all_input_ids,
+                                                                         add_special_tokens=True,
+                                                                         max_length=None,
+                                                                         return_length=True,
+                                                                         return_attention_mask=False,
+                                                                         return_special_tokens_mask=True
+                                                                         )
+            else:
+                batch_encoded = self._tokenizer.batch_encode_plus(list(sentences),
+                                                                  add_special_tokens=True,
+                                                                  max_length=None,
+                                                                  return_length=True,
+                                                                  return_attention_mask=False,
+                                                                  return_special_tokens_mask=True
+                                                                  )
+            return batch_encoded, all_wp_tokenized
+            
+        if self._use_fast():
+            if field_name == 'answer':
+                with self._tokenizer.as_target_tokenizer():
+                    batch_encoded, all_wp_tokenized = do_fast_tokenization(extract_word_pieces)
+            else:
+                batch_encoded, all_wp_tokenized = do_fast_tokenization(extract_word_pieces)
+            
         else:
-            for i in range(batch_size):
-                text = sentences[i]
-                wp_tokenized = self._tokenizer.tokenize(text)
-                all_wp_tokenized.append(wp_tokenized)
-                
-                # None indicates encoding single instance not paired inputs
-                all_input_ids.append((self._tokenizer.convert_tokens_to_ids(wp_tokenized), None))
-
-            batch_encoded = self._tokenizer._batch_prepare_for_model(all_input_ids,
-                                                                     add_special_tokens=True,
-                                                                     max_length=None,
-                                                                     return_length=True,
-                                                                     return_attention_mask=False,
-                                                                     return_special_tokens_mask=True
-                                                                     )
+            if field_name == 'answer':
+                with self._tokenizer.as_target_tokenizer():
+                    batch_encoded, all_wp_tokenized = do_slow_tokenization(extract_word_pieces)
+            else:
+                batch_encoded, all_wp_tokenized = do_slow_tokenization(extract_word_pieces)
 
         
         all_input_features = []
@@ -530,10 +590,18 @@ class TransformerNumericalizer(object):
             sentence = regex.sub(replacement, sentence)
         return sentence
     
-    def reverse(self, batch):
-        output = []
-        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True, clean_up_tokenization_spaces=False):
-            if self._preprocess_special_tokens:
-                x = self._undo_special_token_preprocessing(x)
-            output.append(x)
-        return output
+    def reverse(self, batch, field_name):
+        def decode():
+            output = []
+            for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True, clean_up_tokenization_spaces=False):
+                if self._preprocess_special_tokens:
+                    x = self._undo_special_token_preprocessing(x)
+                output.append(x)
+            return output
+        
+        if field_name == 'answer':
+            with self._tokenizer.as_target_tokenizer():
+                return decode()
+        else:
+            return decode()
+        
