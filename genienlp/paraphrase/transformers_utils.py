@@ -1,5 +1,4 @@
 import random
-import re
 import torch
 import torch.nn as nn
 import logging
@@ -19,11 +18,8 @@ from transformers.models.mbart.tokenization_mbart import MBartTokenizer
 from transformers.models.gpt2 import tokenization_gpt2
 from transformers.models.t5 import tokenization_t5
 
-SPIECE_UNDERLINE = "▁"
 
 logger = logging.getLogger(__name__)
-
-language_code_re = re.compile(">>.+<<")
 
 
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {

@@ -3,6 +3,7 @@
 . ./tests/lib.sh
 
 i=0
+
 # test natural_seq2seq and paraphrase tasks
 for hparams in \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random"; do
@@ -79,7 +80,7 @@ for model in "sshleifer/bart-tiny-random" "sshleifer/tiny-mbart" ; do
   genienlp filter-paraphrase-sts --input_file $workdir/sts_output_score_"$model_type".tsv --output_file $workdir/sts_output_"$model_type".tsv --filtering_metric constant --filtering_threshold 0.98
 
 
-  if ! [ -f $workdir/generated_"$model_type".tsv && -f $workdir/sts_output_"$model_type".tsv  ]   ; then
+  if test ! -f $workdir/generated_"$model_type".tsv || test ! -f $workdir/sts_output_"$model_type".tsv ; then
       echo "File not found!"
       exit 1
   fi

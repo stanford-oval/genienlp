@@ -54,10 +54,12 @@ class GPT2Seq2Seq(GPT2LMHeadModel):
         kwargs['max_length'] += kwargs['input_ids'].shape[1]
 
         outputs = super().generate(**kwargs)
-        outputs = outputs[:, :].tolist()
+        sequences = outputs.sequences
+        sequences = sequences[:, :].tolist()
         for i in range(len(outputs)):
-            outputs[i] = [x for x in outputs[i] if x != self.pad_token_id] # remove padding
-            outputs[i] = outputs[i][outputs[i].index(self.sep_token_id)+1:] # only return the output (i.e. after sep_token)
+            sequences[i] = [x for x in sequences[i] if x != self.pad_token_id] # remove padding
+            sequences[i] = sequences[i][sequences[i].index(self.sep_token_id)+1:] # only return the output (i.e. after sep_token)
+        outputs.sequences = sequences
 
         return outputs
 

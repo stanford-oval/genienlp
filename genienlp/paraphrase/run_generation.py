@@ -33,8 +33,8 @@ import numpy as np
 from torch.multiprocessing import Process, set_start_method
 
 from genienlp.paraphrase.data_utils import create_features_from_tsv_file, output_heuristics
-from genienlp.paraphrase.model_utils import compute_metrics, compute_attention, replace_quoted_params, \
-    force_replace_quoted_params
+from genienlp.paraphrase.model_utils import compute_metrics
+from ..model_utils.translation import compute_attention, replace_quoted_params, force_replace_quoted_params
 from ..data_utils.progbar import prange
 from ..tasks.almond_utils import tokenize_cjk_chars
 
@@ -433,7 +433,8 @@ def run_single_process_generation(args, config):
                                  return_dict_in_generate=True
                                 )
 
-            decoded, cross_attentions = outputs.sequences, outputs.cross_attentions
+            decoded = outputs.sequences
+            cross_attentions = getattr(outputs, 'cross_attentions', None)
             
             if cross_attentions is not None:
                 # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)

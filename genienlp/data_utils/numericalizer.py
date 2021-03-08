@@ -36,14 +36,14 @@ from pathos import multiprocessing
 from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
-from transformers import MBartConfig, MarianConfig, M2M100Config, AutoTokenizer, XLMRobertaTokenizer, XLMRobertaTokenizerFast, T5Config, \
-    MBart50Tokenizer, GPT2Tokenizer, GPT2TokenizerFast, BertTokenizerFast, BertTokenizer, MarianTokenizer, M2M100Tokenizer
+from transformers import MBartConfig, MarianConfig, M2M100Config, T5Config,\
+    AutoTokenizer, BertTokenizer, BertTokenizerFast, XLMRobertaTokenizer, XLMRobertaTokenizerFast,\
+    GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer,  MarianTokenizer, M2M100Tokenizer,\
+    SPIECE_UNDERLINE
 
 from .decoder_vocab import DecoderVocabulary
 from ..util import get_devices
 from .example import SequentialField, get_pad_feature
-
-from ..paraphrase.transformers_utils import SPIECE_UNDERLINE
 
 
 logger = logging.getLogger(__name__)

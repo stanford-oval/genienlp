@@ -36,7 +36,7 @@ import logging
 
 from ..data_utils.database_utils import DOMAIN_TYPE_MAPPING
 from ..data_utils.remote_database import RemoteElasticDatabase
-from ..paraphrase.model_utils import replace_quoted_params, force_replace_quoted_params, compute_attention
+from ..model_utils.translation import compute_attention, replace_quoted_params, force_replace_quoted_params
 from ..tasks.base_dataset import Split
 from ..tasks.base_task import BaseTask
 from ..tasks.generic_dataset import input_then_output_len, input_tokens_fn, CQA, default_batch_fn

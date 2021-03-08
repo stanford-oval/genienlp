@@ -148,49 +148,6 @@ def parse_argv(parser):
                         help='which pretrained model to use on the encoder side; choose a name from Huggingface models')
     
     parser.add_argument('--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)')
-    
-    parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
-    parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'], help='database to interact with for NER')
-    parser.add_argument('--database_dump_type2id', action='store_true', help='This will create the "type to id" mapping for all entities available in ES database')
-    parser.add_argument('--database_dump_canonical2type', action='store_true', help='This will create the "canonical to type" mapping for all entities available in ES database')
-
-    parser.add_argument('--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams database_lookup_method is used ')
-    parser.add_argument('--max_entity_len', type=int, default=6, help='Maximum length for entities when ngrams database_lookup_method is used ')
-    parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
-    
-    parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
-    parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
-    parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4, help='Number of kg encoder layers for BootlegBertEncoder model')
-    parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_preds',
-                        help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
-    parser.add_argument('--bootleg_batch_size', type=int, default=16, help='Batch size used for inference using bootleg')
-    parser.add_argument('--bootleg_prob_threshold', type=float, default=0.5, help='Probability threshold for accepting a candidate for a mention')
-    parser.add_argument('--bootleg_dataset_threads', type=int, default=2, help='Number of threads for parallel processing of dataset in bootleg')
-    parser.add_argument('--bootleg_dataloader_threads', type=int, default=4, help='Number of threads for parallel loading of datasets in bootleg')
-    parser.add_argument('--bootleg_extract_num_workers', type=int, default=4, help='Number of workers for extracing mentions step of bootleg')
-    parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
-    parser.add_argument('--bootleg_distributed_eval', action='store_true', help='Distributed prediction using several GPUs')
-    
-    parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], default='average', help='Method used to aggregate several type embeddings for a single mention')
-    parser.add_argument("--entity_word_embeds_dropout", default=0.0, type=float, help='Dropout entity word embeddings with this probability when encoding inputs')
-
-    parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'], help='Method for adding types to input text in text-based NER approach')
-    parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
-    
-    parser.add_argument('--ned_retrieve_method', default='naive', choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
-                        help='how to retrieve types for entities')
-    
-    parser.add_argument('--database_lookup_method', default='ngrams', choices=['ngrams', 'smaller_first', 'longer_first'],
-                        help='smaller_first: start from one token and grow into longer spans until a match is found,'
-                             'longer_first: start from the longest span and shrink until a match is found,'
-                             'ngrams: lookup all ngrams in the text and see if there is a match')
-    
-    parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
-    parser.add_argument('--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
-    parser.add_argument('--ned_features', nargs='+', type=str, default=[],
-                        help='Features that will be extracted for each entity. Order is important')
-    parser.add_argument('--ned_features_size', nargs='+', type=int, default=[], help='Max length of each feature vector. All features are padded up to this length')
-    parser.add_argument('--ned_features_default_val', nargs='+', type=float, default=[], help='Default value used for each feature')
 
     parser.add_argument('--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers (for TransformerLSTM)')
     parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules ')
@@ -262,11 +219,78 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum')
     
-    parser.add_argument('--att_pooling', type=str, default='max', help='pooling used to calculate decoder-encoder attention values across different heads')
-    parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot decoder-encoder attention heatmaps')
-    parser.add_argument('--replace_qp', action='store_true', help='replace parameter values after translation with source values')
-    parser.add_argument('--force_replace_qp', action='store_true', help='if we parameters could not be replaced leveraging quotation marks,'
-                                                                        ' rely purely on attention to find text spans')
+    # NED args
+
+    parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
+    parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'],
+                        help='database to interact with for NER')
+    parser.add_argument('--database_dump_type2id', action='store_true',
+                        help='This will create the "type to id" mapping for all entities available in ES database')
+    parser.add_argument('--database_dump_canonical2type', action='store_true',
+                        help='This will create the "canonical to type" mapping for all entities available in ES database')
+
+    parser.add_argument('--min_entity_len', type=int, default=1,
+                        help='Minimum length for entities when ngrams database_lookup_method is used ')
+    parser.add_argument('--max_entity_len', type=int, default=6,
+                        help='Maximum length for entities when ngrams database_lookup_method is used ')
+    parser.add_argument('--database_dir', type=str,
+                        help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
+
+    parser.add_argument('--bootleg_output_dir', type=str, default='results_temp',
+                        help='Path to folder where bootleg prepped files should be saved')
+    parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
+    parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4,
+                        help='Number of kg encoder layers for BootlegBertEncoder model')
+    parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_preds',
+                        help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
+    parser.add_argument('--bootleg_batch_size', type=int, default=16,
+                        help='Batch size used for inference using bootleg')
+    parser.add_argument('--bootleg_prob_threshold', type=float, default=0.5,
+                        help='Probability threshold for accepting a candidate for a mention')
+    parser.add_argument('--bootleg_dataset_threads', type=int, default=2,
+                        help='Number of threads for parallel processing of dataset in bootleg')
+    parser.add_argument('--bootleg_dataloader_threads', type=int, default=4,
+                        help='Number of threads for parallel loading of datasets in bootleg')
+    parser.add_argument('--bootleg_extract_num_workers', type=int, default=4,
+                        help='Number of workers for extracing mentions step of bootleg')
+    parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
+    parser.add_argument('--bootleg_distributed_eval', action='store_true',
+                        help='Distributed prediction using several GPUs')
+
+    parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], default='average',
+                        help='Method used to aggregate several type embeddings for a single mention')
+    parser.add_argument("--entity_word_embeds_dropout", default=0.0, type=float,
+                        help='Dropout entity word embeddings with this probability when encoding inputs')
+
+    parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'],
+                        help='Method for adding types to input text in text-based NER approach')
+    parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
+
+    parser.add_argument('--ned_retrieve_method', default='naive',
+                        choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
+                        help='how to retrieve types for entities')
+
+    parser.add_argument('--database_lookup_method', default='ngrams',
+                        choices=['ngrams', 'smaller_first', 'longer_first'],
+                        help='smaller_first: start from one token and grow into longer spans until a match is found,'
+                             'longer_first: start from the longest span and shrink until a match is found,'
+                             'ngrams: lookup all ngrams in the text and see if there is a match')
+
+    parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
+    parser.add_argument('--almond_domains', nargs='+', default=[],
+                        help='Domains used for almond dataset; e.g. music, books, ...')
+    parser.add_argument('--ned_features', nargs='+', type=str, default=[],
+                        help='Features that will be extracted for each entity. Order is important')
+    parser.add_argument('--ned_features_size', nargs='+', type=int, default=[],
+                        help='Max length of each feature vector. All features are padded up to this length')
+    parser.add_argument('--ned_features_default_val', nargs='+', type=float, default=[],
+                        help='Default value used for each feature')
+
+    # translation args
+    parser.add_argument('--att_pooling', type=str, default='max', help='pooling strategy to calculate cross-attention values across multiple heads')
+    parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
+    parser.add_argument('--replace_qp', action='store_true', help='whether to replace tokens between quotation marks after translation with source values')
+    parser.add_argument('--force_replace_qp', action='store_true', help='if replace_qp is not successful, attempt again by leveraging cross-attention to find text spans')
     
 
 

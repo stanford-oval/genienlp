@@ -63,7 +63,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
     answers = []
     contexts = []
     
-    for j, batch in enumerate(progress_bar(data_iterator, desc='Generating', disable=disable_progbar)):
+    for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
         batch_confidence_features = [[] for _ in range(batch_size)]
@@ -96,7 +96,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
                                     do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
                                     )
             partial_batch_prediction_ids = generated.sequences
-            cross_attentions = generated.cross_attentions
+            cross_attentions = getattr(generated, 'cross_attentions', None)
 
             if cross_attentions is not None:
                 # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)
