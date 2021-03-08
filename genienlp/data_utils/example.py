@@ -32,8 +32,6 @@ import unicodedata
 import torch
 from dataclasses import dataclass
 
-
-
 def identity(x, **kw):
     return x, [], x
 
@@ -111,13 +109,52 @@ class Example(NamedTuple):
             args.append(features)
 
         # create context_plus_question fields by concatenating context and question fields
-        # if question is empty, don't append space
-        args.append(args[1] + ' ' + args[3] if len(args[3]) else args[1])
+        # if either question or context is empty, don't use space
+        if not args[1]:
+            args.append(args[3])
+        elif not args[3]:
+            args.append(args[1])
+        else:
+            args.append(args[1] + ' ' + args[3])
         args.append(args[2] + args[4])
         args.append(context_plus_types + ' ' + question_plus_types)
         
         return Example(*args)
+
+
+def tokenize_and_align_labels(all_sequences, all_labels, tokenizer, label_all_tokens=True):
+    tokenized_inputs = tokenizer.batch_encode_plus(
+        all_sequences,
+        padding=False,
+        truncation=True,
+        # We use this argument because the texts in our dataset are lists of words (with a label for each word).
+        is_split_into_words=True,
+    )
     
+    all_processed_labels = []
+    for i, label in enumerate(all_labels):
+        word_ids = tokenized_inputs.word_ids(batch_index=i)
+        previous_word_idx = None
+        label_ids = []
+        for word_idx in word_ids:
+            # Special tokens have a word id that is None. We set the label to -100 so they are automatically
+            # ignored in the loss function.
+            if word_idx is None:
+                label_ids.append(-100)
+            # We set the label for the first token of each word.
+            elif word_idx != previous_word_idx:
+                label_ids.append(label[word_idx])
+            # For the other tokens in a word, we set the label to either the current label or -100, depending on
+            # the label_all_tokens flag.
+            else:
+                label_ids.append(label[word_idx] if label_all_tokens else -100)
+            previous_word_idx = word_idx
+
+        all_processed_labels.append(label_ids)
+
+        
+    return all_processed_labels
+
 
 class NumericalizedExamples(NamedTuple):
     example_id: List[str]
@@ -130,21 +167,46 @@ class NumericalizedExamples(NamedTuple):
         numericalized_examples = []
         
         if add_types_to_text != 'no':
-            tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question_with_types for ex in examples], field_name='context')
+            tokenized_contexts = numericalizer.encode_batch(
+                [ex.context_plus_question_with_types for ex in examples],
+                field_name='context'
+            )
         else:
             tokenized_contexts = numericalizer.encode_batch(
-                    [ex.context_plus_question for ex in examples],
-                    field_name='context',
-                    features=[ex.context_plus_question_feature for ex in examples if ex.context_plus_question_feature]
-                )
-                
+                [ex.context_plus_question for ex in examples],
+                field_name='context',
+                features=[ex.context_plus_question_feature for ex in examples if ex.context_plus_question_feature]
+            )
+
+        # align labels
+        for ex in examples:
+            assert len(ex.answer.split(" ")) == len(ex.context_plus_question.split(" ")), print(ex.context_plus_question)
         
-        tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
+        tokenized_answers = tokenize_and_align_labels(
+            [ex.context_plus_question.split(" ") for ex in examples],
+            [list(map(lambda token: int(token), ex.answer.split(" "))) for ex in examples],
+            numericalizer._tokenizer
+        )
+
+        batch_decoder_numerical = []
+        if numericalizer.decoder_vocab:
+            for i in range(len(tokenized_answers)):
+                batch_decoder_numerical.append(numericalizer.decoder_vocab.encode(tokenized_answers[i]))
+        else:
+            batch_decoder_numerical = [[]] * len(tokenized_answers)
+        
+        answer_sequential_fields = []
+        for i in range(len(tokenized_answers)):
+            answer_sequential_fields.append(
+                SequentialField(value=tokenized_answers[i], length=len(tokenized_answers[i]), limited=batch_decoder_numerical[i], feature=None))
+        
+        
+        # tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], [], 'answer')
         
         for i in range(len(examples)):
             numericalized_examples.append(NumericalizedExamples([examples[i].example_id],
                                         tokenized_contexts[i],
-                                        tokenized_answers[i]))
+                                        answer_sequential_fields[i]))
         return numericalized_examples
 
     @staticmethod
@@ -172,8 +234,9 @@ class NumericalizedExamples(NamedTuple):
         
         if context_features:
             context_features = numericalizer.pad(context_features, pad_id=db_unk_id)
-        
-        answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
+
+        answer_values = numericalizer.pad(answer_values, pad_id=-100)
+        # answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
         answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)
         answer_lengths = torch.stack(answer_lengths, dim=0)
 

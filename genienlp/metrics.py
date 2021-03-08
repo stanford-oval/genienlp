@@ -222,6 +222,14 @@ def f1_score(prediction, ground_truth):
 def exact_match(prediction, ground_truth):
     return prediction == ground_truth
 
+def partial_exact_match(prediction, ground_truth):
+    prediction = prediction.split()
+    ground_truth = ground_truth.split()
+    is_correct_token = [p==g for p, g in zip(prediction, ground_truth)]
+    partial_score = sum(is_correct_token) / len(is_correct_token)
+    return partial_score
+    
+
 def structure_match(prediction, ground_truth):
     return requote_program(prediction) == requote_program(ground_truth)
 
@@ -239,6 +247,10 @@ def computeF1(outputs, targets):
 
 def computeEM(outputs, targets):
     outs = [metric_max_over_ground_truths(exact_match, o, t) for o, t in zip(outputs, targets)]
+    return sum(outs) / len(outputs) * 100
+
+def computePartialEM(outputs, targets):
+    outs = [metric_max_over_ground_truths(partial_exact_match, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
 
 def computeSM(outputs, targets):
@@ -459,6 +471,10 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
     em = computeEM(greedy, answer)
     metric_keys += ['em']
     metric_values += [em]
+    if 'pem' in requested_metrics:
+        pem = computePartialEM(greedy, answer)
+        metric_keys.append('pem')
+        metric_values.append(pem)
     if 'sm' in requested_metrics:
         sm = computeSM(greedy, answer)
         metric_keys.append('sm')

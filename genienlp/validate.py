@@ -192,10 +192,64 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
     with torch.no_grad():
         model.eval()
         names = ['beam search', 'answer', 'context']
-        output = generate_with_model(model, val_iter, numericalizer, task, args)
+
+        if isinstance(model, torch.nn.DataParallel):
+            # get rid of the DataParallel wrapper
+            model = model.module
+        example_ids = []
+        all_answers = []
+        all_contexts = []
+        all_predictions = []
+
+        for batch in progress_bar(val_iter, desc='Generating', disable=True):
+            batch_size = len(batch.example_id)
+            batch_prediction = [[] for _ in range(batch_size)]
+            batch_confidence_features = [[] for _ in range(batch_size)]
+            batch_example_ids = batch.example_id
+            
+            batch_context = numericalizer.reverse(batch.context.value.data)
+    
+            example_ids += batch_example_ids
+            
+            output = model(input_ids=batch.context.value, attention_mask=(batch.context.value != numericalizer.pad_id))
+            
+            labels = batch.answer.value.tolist()
+            
+            logits = output.logits
+            predictions = torch.argmax(logits, dim=2).tolist()
+
+            # Remove ignored index (special tokens)
+            processed_preds = []
+            processed_labels = []
+            for pred, label in zip(predictions, labels):
+                preds = []
+                labels = []
+                for p, l in zip(pred, label):
+                    if l == -100:
+                        continue
+                    preds.append(task.label_list[p])
+                    labels.append(task.label_list[l])
+
+                processed_preds.append([" ".join(preds)])
+                processed_labels.append(" ".join(labels))
+                
+            all_contexts += batch_context
+            all_answers += processed_labels
+            all_predictions += processed_preds
+            
+        
+        output.example_ids = example_ids
+        output.contexts = all_contexts
+        output.answers = all_answers
+        output.predictions = all_predictions
 
         metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args)
         results = [output.predictions, output.answers, output.contexts]
         print_results(names, results, num_print=num_print)
+            
+        # output = generate_with_model(model, val_iter, numericalizer, task, args)
+        # metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args)
+        # results = [output.predictions, output.answers, output.contexts]
+        # print_results(names, results, num_print=num_print)
 
-        return output.loss, metrics
+        return output, metrics

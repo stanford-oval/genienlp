@@ -53,7 +53,7 @@ from . import models
 from .tasks.registry import get_tasks
 from .util import set_seed, load_config_json, make_data_loader, log_model_size, get_devices, \
     combine_folders_on_disk, split_folder_on_disk, get_part_path
-from .validate import generate_with_model, calculate_and_reduce_metrics
+from .validate import generate_with_model, calculate_and_reduce_metrics, validate
 from .calibrate import ConfidenceEstimator
 from .arguments import check_and_update_generation_args
 
@@ -220,11 +220,13 @@ def run(args, device):
             else:
                 confidence_estimators = None
             with torch.cuda.amp.autocast(enabled=args.mixed_precision):
-                generation_output = generate_with_model(model, it, model.numericalizer, task, args,
-                                                     original_order=original_order,
-                                                     output_confidence_features=args.save_confidence_features,
-                                                     confidence_estimators=confidence_estimators,
-                                                     disable_progbar=False)
+                generation_output, metric_dict = validate(task, it, model, model.numericalizer, args, num_print=0)
+                pred_loss = generation_output.loss
+                # generation_output = generate_with_model(model, it, model.numericalizer, task, args,
+                #                                      original_order=original_order,
+                #                                      output_confidence_features=args.save_confidence_features,
+                #                                      confidence_estimators=confidence_estimators,
+                #                                      disable_progbar=False)
             
             if args.save_confidence_features:
                 torch.save(generation_output.confidence_features, args.confidence_feature_path)

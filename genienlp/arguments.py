@@ -143,7 +143,7 @@ def parse_argv(parser):
     parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
     parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0], help='ngrams of this size cannot be repeated in the output. 0 disables it.')
 
-    parser.add_argument('--model', type=str, choices=['TransformerLSTM', 'TransformerSeq2Seq'], default='TransformerLSTM', help='which model to import')
+    parser.add_argument('--model', type=str, choices=['TransformerLSTM', 'TransformerSeq2Seq', 'TransformerForTokenClassification'], default='TransformerLSTM', help='which model to import')
     parser.add_argument('--pretrained_model', default=None,
                         help='which pretrained model to use on the encoder side; choose a name from Huggingface models')
     
@@ -205,7 +205,8 @@ def parse_argv(parser):
     parser.add_argument('--exist_ok', action='store_true',
                         help='Ok if the save directory already exists, i.e. overwrite is ok')
     
-    parser.add_argument('--no_fast_tokenizer', action='store_true', help='Use slow version of huggingface tokenizer')
+    parser.add_argument('--no_fast_tokenizer', action='store_true', help='Ignore all conditions and use slow version of huggingface tokenizer')
+    parser.add_argument('--force_fast_tokenizer', action='store_true', help='Ignore all conditions and use fast version of huggingface tokenizer')
 
     parser.add_argument('--skip_cache', action='store_true',
                         help='whether to use existing cached splits or generate new ones')
@@ -220,7 +221,6 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum')
     
     # NED args
-
     parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
     parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'],
                         help='database to interact with for NER')
@@ -292,6 +292,8 @@ def parse_argv(parser):
     parser.add_argument('--replace_qp', action='store_true', help='whether to replace tokens between quotation marks after translation with source values')
     parser.add_argument('--force_replace_qp', action='store_true', help='if replace_qp is not successful, attempt again by leveraging cross-attention to find text spans')
     
+    # token classification task args
+    parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')
 
 
 def check_and_update_generation_args(args):

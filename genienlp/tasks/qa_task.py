@@ -33,7 +33,7 @@ from genienlp.tasks.almond_task import BaseAlmondTask
 
 from ..tasks.registry import register_task
 from ..data_utils.example import Example
-from ..tasks.qa_dataset import AmbigQADataset
+from ..tasks.qa_dataset import AmbigQADataset, CONLLNERDataset
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class AmbigQA(BaseAlmondTask):
 
     @property
     def metrics(self):
-        return ['bleu']
+        return ['em', 'bleu']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         if len(parts) == 3:
@@ -67,4 +67,37 @@ class AmbigQA(BaseAlmondTask):
     
     def get_splits(self, root, **kwargs):
         return AmbigQADataset.return_splits(path=root, make_example=self._make_example, **kwargs)
+
+
+@register_task('conll_ner')
+class CONLLNER(BaseAlmondTask):
+    num_labels = 9
+    label_list = {0: 'O', 1: 'B-PER', 2: 'I-PER', 3: 'B-ORG', 4: 'I-ORG', 5: 'B-LOC', 6: 'I-LOC', 7: 'B-MISC', 8: 'I-MISC'}
+    
+    def __init__(self, name, args):
+        super().__init__(name, args)
+    
+    @property
+    def metrics(self):
+        return ['em', 'pem', 'f1']
+    
+    def _make_example(self, parts, dir_name=None, **kwargs):
+        if len(parts) == 3:
+            example_id, sentence, thingtalk = parts
+        elif len(parts) == 4:
+            example_id, _, sentence, thingtalk = parts  # ignore dialogue context
+        else:
+            raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
+        
+        example_id = self.name + '/' + example_id
+        
+        question = 'translate from input to output'
+        context = sentence
+        answer = sentence  # means we calculate self-bleu
+        
+        return Example.from_raw(example_id, context, question, answer,
+                                preprocess=self.preprocess_field, lower=False)
+    
+    def get_splits(self, root, **kwargs):
+        return CONLLNERDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
 

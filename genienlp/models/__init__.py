@@ -29,3 +29,4 @@
 
 from .transformer_lstm import TransformerLSTM
 from .transformer_seq2seq import TransformerSeq2Seq
+from .transformer_token_classification import TransformerForTokenClassification

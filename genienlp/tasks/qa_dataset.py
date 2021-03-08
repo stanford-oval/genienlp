@@ -116,3 +116,67 @@ class AmbigQADataset(CQA):
 
         return Split(train=train_data, eval=validation_data, test=test_data),\
                Split(train=train_path, eval=validation_path, test=test_path)
+
+
+class CONLLNERDataset(CQA):
+    name = 'conll2003'
+    
+    def __init__(self, data, subsample=None, lower=False, **kwargs):
+        
+        skip_cache = kwargs.pop('kwargs', True)
+        
+        cache_name = os.path.join(os.path.dirname(data.cache_files[0]['filename']), data.split._name, str(subsample))
+        examples = []
+        
+        if os.path.exists(cache_name) and not skip_cache:
+            logger.info(f'Loading cached data from {cache_name}')
+            examples = torch.load(cache_name)
+        for ex in data:
+            question = ' '.join(ex['tokens'])
+            context = ''
+            answer = ' '.join(map(lambda item: str(item), ex['ner_tags']))
+            examples.append(Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower))
+            
+            if subsample is not None and len(examples) >= subsample:
+                break
+        
+        os.makedirs(os.path.dirname(cache_name), exist_ok=True)
+        logger.info(f'Caching data to {cache_name}')
+        torch.save(examples, cache_name)
+        
+        super().__init__(examples, **kwargs)
+    
+    @classmethod
+    def return_splits(cls, root='.data', train='train', validation='validation', test='test', **kwargs):
+        
+        # download datasets and cache them
+        train_data, validation_data, test_data = None, None, None
+        train_path, validation_path, test_path = None, None, None
+        if train:
+            train_data = load_dataset(cls.name, split='train', cache_dir=root)
+            train_path = train_data.cache_files[0]['filename']
+        if validation:
+            validation_data = load_dataset(cls.name, split='validation', cache_dir=root)
+            validation_path = validation_data.cache_files[0]['filename']
+        if test:
+            test_data = load_dataset(cls.name, split='test', cache_dir=root)
+            test_path = test_data.cache_files[0]['filename']
+        
+        # Note: for overfitting experiments all splits are the same
+        # if train:
+        #     train_data = load_dataset(cls.name, split='train', cache_dir=root)
+        #     train_path = train_data.cache_files[0]['filename']
+        # if validation:
+        #     validation_data = load_dataset(cls.name, split='train', cache_dir=root)
+        #     validation_path = validation_data.cache_files[0]['filename']
+        # if test:
+        #     test_data = load_dataset(cls.name, split='train', cache_dir=root)
+        #     test_path = test_data.cache_files[0]['filename']
+        
+        train_data = None if train is None else cls(train_data, **kwargs)
+        validation_data = None if validation is None else cls(validation_data, **kwargs)
+        test_data = None if test is None else cls(test_data, **kwargs)
+        
+        return Split(train=train_data, eval=validation_data, test=test_data), \
+               Split(train=train_path, eval=validation_path, test=test_path)
+
