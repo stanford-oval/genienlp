@@ -79,7 +79,7 @@ class CONLLNER(BaseAlmondTask):
     
     @property
     def metrics(self):
-        return ['em', 'pem', 'f1']
+        return ['ner_f1', 'em', 'pem']
     
     def _make_example(self, parts, dir_name=None, **kwargs):
         if len(parts) == 3:

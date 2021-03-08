@@ -37,6 +37,7 @@ from subprocess import Popen, PIPE
 from typing import Iterable
 
 import numpy as np
+from datasets import load_metric
 from pyrouge import Rouge155
 from sacrebleu import corpus_bleu
 
@@ -206,6 +207,12 @@ def normalize_text(s):
     return white_space_fix(remove_articles(remove_punc(lower(s))))
 
 
+def ner_f1_score(prediction, ground_truth):
+    metric = load_metric("seqeval")
+    results = metric.compute(predictions=prediction, references=ground_truth)
+    return results["overall_f1"]
+
+
 def f1_score(prediction, ground_truth):
     prediction_tokens = prediction.split()
     ground_truth_tokens = ground_truth.split()
@@ -242,8 +249,12 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
 
 
 def computeF1(outputs, targets):
-    return sum([metric_max_over_ground_truths(f1_score, o, t) for o, t in zip(outputs, targets)]) / len(outputs) * 100
+    outs = [metric_max_over_ground_truths(f1_score, o, t) for o, t in zip(outputs, targets)]
+    return sum(outs) / len(outputs) * 100
 
+def computeNER_F1(outputs, targets):
+    outs = [metric_max_over_ground_truths(ner_f1_score, o, t) for o, t in zip(outputs, targets)]
+    return sum(outs) / len(outputs) * 100
 
 def computeEM(outputs, targets):
     outs = [metric_max_over_ground_truths(exact_match, o, t) for o, t in zip(outputs, targets)]
@@ -491,6 +502,11 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
     if 'f1' in requested_metrics:
         f1 = computeF1(greedy, answer)
         metric_keys.append('f1')
+        metric_values.append(f1)
+
+    if 'ner_f1' in requested_metrics:
+        f1 = computeNER_F1(greedy, answer)
+        metric_keys.append('ner_f1')
         metric_values.append(f1)
 
     norm_greedy = [normalize_text(g) for g in greedy]
