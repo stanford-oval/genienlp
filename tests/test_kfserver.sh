@@ -9,10 +9,10 @@ for hparams in \
 do
 
     # train
-    pipenv run python3 -m genienlp train --train_tasks almond --train_batch_tokens 50 --val_batch_size 50 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $EMBEDDING_DIR --no_commit
+    genienlp train --train_tasks almond --train_batch_tokens 50 --val_batch_size 50 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $EMBEDDING_DIR --no_commit
 
     # run kfserver in background
-    (pipenv run python3 -m genienlp kfserver --path $workdir/model_$i)&
+    (genienlp kfserver --path $workdir/model_$i)&
     SERVER_PID=$!
     # wait enough for the server to start
     sleep 15
