@@ -182,7 +182,7 @@ class ConfidenceFeatures:
             gold_answer: includes BOS and EOS tokens, but no PAD tokens
             prediction: includes BOS and EOS tokens, but no PAD tokens
         Returns:
-            The index of the first token where `gold_answer` and `prediction` differ, or -1 if they are equal. Ignores BOS, so the minimum possible value is .
+            The index of the first token where `gold_answer` and `prediction` differ, or -1 if they are equal. Ignores BOS, so the minimum possible value is 0.
         """
         # print('gold_answer = ', gold_answer)
         # print('prediction = ', prediction)
@@ -504,7 +504,7 @@ def map_filter(callable, iterable):
     return output
 
 
-def init_devices(args, devices=None):
+def get_devices(devices=None):
     if not torch.cuda.is_available():
         return [torch.device('cpu')]
     if not devices:

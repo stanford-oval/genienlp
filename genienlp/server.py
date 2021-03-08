@@ -35,25 +35,22 @@ import logging
 import sys
 import os
 from pprint import pformat
-import functools
 
 import torch
 
 from . import models
 from .data_utils.example import Example, NumericalizedExamples
+from .data_utils.bootleg import init_bootleg_annotator, extract_features_with_annotator
 from .tasks.registry import get_tasks
-from .util import set_seed, init_devices, load_config_json, log_model_size
+from .util import set_seed, get_devices, load_config_json, log_model_size
 from .validate import generate_with_model
 from .calibrate import ConfidenceEstimator
 
-from bootleg.annotator import Annotator
-from .data_utils.bootleg import Bootleg
-from .data_utils.progbar import progress_bar
 
 logger = logging.getLogger(__name__)
 
 
-class Server:
+class Server(object):
     def __init__(self, args, numericalizer, model, device, confidence_estimators, estimator_filenames, bootleg_annotator=None):
         self.args = args
         self.device = device
@@ -71,37 +68,6 @@ class Server:
         # make a single batch with all examples
         return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device, db_unk_id=self.args.db_unk_id)
     
-    def bootleg_process_examples(self, ex, label, task):
-        line = {}
-        line['sentence'] = getattr(ex, task.utterance_field())
-    
-        assert len(label) == 7
-        line['cands'] = label[3]
-        line['cand_probs'] = list(map(lambda item: list(item), label[4]))
-        line['spans'] = label[5]
-        line['aliases'] = label[6]
-        tokens_type_ids, tokens_type_probs = self.bootleg_annotator.bootleg.collect_features_per_line(line, self.args.bootleg_prob_threshold)
-    
-        if task.utterance_field() == 'question':
-            for i in range(len(tokens_type_ids)):
-                ex.question_feature[i].type_id = tokens_type_ids[i]
-                ex.question_feature[i].type_prob = tokens_type_probs[i]
-                ex.context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[i]
-                ex.context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = tokens_type_probs[i]
-    
-        else:
-            for i in range(len(tokens_type_ids)):
-                ex.context_feature[i].type_id = tokens_type_ids[i]
-                ex.context_feature[i].type_prob = tokens_type_probs[i]
-                ex.context_plus_question_feature[i].type_id = tokens_type_ids[i]
-                ex.context_plus_question_feature[i].type_prob = tokens_type_probs[i]
-        
-        context_plus_question_with_types = task.create_sentence_plus_types_tokens(ex.context_plus_question,
-                                                                                  ex.context_plus_question_feature,
-                                                                                  self.args.add_types_to_text)
-        ex = ex._replace(context_plus_question_with_types=context_plus_question_with_types)
-
-        return ex
 
     def handle_request(self, request):
         task_name = request['task'] if 'task' in request else 'generic'
@@ -125,36 +91,28 @@ class Server:
 
             ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower)
             examples.append(ex)
-
-        with torch.no_grad():
-            bootleg_inputs = []
-            if self.bootleg_annotator:
-                for ex in examples:
-                    bootleg_inputs.append(getattr(ex, task.utterance_field()))
         
-                bootleg_labels = self.bootleg_annotator.label_mentions(bootleg_inputs)
-                bootleg_labels_unpacked = list(zip(*bootleg_labels))
-        
-                for i in range(len(examples)):
-                    ex = examples[i]
-                    label = bootleg_labels_unpacked[i]
-                    examples[i] = self.bootleg_process_examples(ex, label, task)
+        # process bootleg features
+        if self.bootleg_annotator:
+            extract_features_with_annotator(examples, self.bootleg_annotator, self.args, task)
         
         self.model.add_new_vocab_from_data([task])
         batch = self.numericalize_examples(examples)
-        if self.args.calibrator_paths is not None:
-            output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                            output_predictions_only=True,
-                                            confidence_estimators=self.confidence_estimators)
-            response = []
-            for idx, p in enumerate(output.predictions):
-                instance = {'answer': p[0], 'score': {}}
-                for e_idx, estimator_scores in enumerate(output.confidence_scores):
-                    instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
-                response.append(instance)
-        else:
-            output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True)
-            response = [{'answer': p[0]} for p in output.predictions]
+        
+        with torch.no_grad():
+            if self.args.calibrator_paths is not None:
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                output_predictions_only=True,
+                                                confidence_estimators=self.confidence_estimators)
+                response = []
+                for idx, p in enumerate(output.predictions):
+                    instance = {'answer': p[0], 'score': {}}
+                    for e_idx, estimator_scores in enumerate(output.confidence_scores):
+                        instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
+                    response.append(instance)
+            else:
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True)
+                response = [{'answer': p[0]} for p in output.predictions]
             
         return response
 
@@ -240,26 +198,12 @@ def init(args):
     load_config_json(args)
     set_seed(args)
     
-    devices = init_devices(args)
+    devices = get_devices()
     device = devices[0] # server only runs on a single device
 
     bootleg_annotator = None
     if args.do_ned and args.ned_retrieve_method == 'bootleg':
-        # instantiate a bootleg object to load config and relevant databases
-        bootleg = Bootleg(args)
-        bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
-
-        # instantiate the annotator class. we use annotator only in server mode
-        # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
-        bootleg_annotator = Annotator(config_args=bootleg_config,
-                                      device='cpu' if device.type=='cpu' else 'cuda',
-                                      max_alias_len=args.max_entity_len,
-                                      cand_map=bootleg.cand_map,
-                                      threshold=args.bootleg_prob_threshold,
-                                      progbar_func=functools.partial(progress_bar, disable=True))
-        # collect all outputs now; we will filter later
-        bootleg_annotator.set_threshold(0.0)
-        setattr(bootleg_annotator, 'bootleg', bootleg)
+        bootleg_annotator = init_bootleg_annotator(args, device)
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')

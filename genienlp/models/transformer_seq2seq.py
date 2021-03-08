@@ -183,7 +183,6 @@ class TransformerSeq2Seq(GenieModel):
         predictions: Tensor of shape (batch_size, output_length)
         mc_droput_num: number of Monte Carlo samples used for the MC Dropout method. 0 disables MC dropout.
         """
-        
         batch_size = predictions.shape[0]
         repetition_factor = batch_size//batch.context.value.shape[0]
         input_ids = batch.context.value.repeat_interleave(repetition_factor, dim=0) # repeat to account for multiple predictions per input
@@ -236,13 +235,18 @@ class TransformerSeq2Seq(GenieModel):
 
         confidence_features = []
         for i in range(batch_size):
+            # TODO refactor so token changes (EOS/ BOS removal, etc.) is decided based on specific tokenizer used
+            if self._is_bart_large:
+                prediction = predictions[i][:prediction_lengths[i] + 1]  # +1 to include EOS
+            else:
+                prediction = predictions[i][1:prediction_lengths[i] + 1]  # remove token before BOS, +1 to include EOS
             confidence_features.append(
                         ConfidenceFeatures(drop_logits=batch_drop_logits[i] if mc_dropout_num > 0 else None,
                                          drop_probs=batch_drop_probs[i] if mc_dropout_num > 0 else None,
                                         #  drop_top1_probs=batch_drop_top1_probs[i] if mc_dropout_num > 0 else None,
                                         #  drop_top2_probs=batch_drop_top2_probs[i] if mc_dropout_num > 0 else None,
                                          gold_answer=batch.answer.value[i//repetition_factor][:batch.answer.length[i//repetition_factor]],
-                                         prediction=predictions[i][:prediction_lengths[i]+1],  # +1 to include EOS
+                                         prediction=prediction,
                                          nodrop_logits=batch_nodrop_logits[i][:prediction_lengths[i]],
                                          nodrop_probs=batch_nodrop_probs[i][:prediction_lengths[i]],
                                         #  nodrop_top1_probs=batch_nodrop_top1_probs[i][:prediction_lengths[i]],
