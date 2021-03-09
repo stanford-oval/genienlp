@@ -31,19 +31,22 @@ import os
 import re
 import json
 import functools
+import logging
 from pathos import multiprocessing
 from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
-from transformers import AutoTokenizer, XLMRobertaTokenizer, XLMRobertaTokenizerFast, MBartConfig, MarianConfig, \
-    M2M100Config, \
-    MBart50Tokenizer, T5Config, GPT2Tokenizer, GPT2TokenizerFast, BertTokenizerFast, BertTokenizer, MarianTokenizer, \
-    M2M100Tokenizer
+from transformers import MBartConfig, MarianConfig, M2M100Config, AutoTokenizer, XLMRobertaTokenizer, XLMRobertaTokenizerFast, T5Config, \
+    MBart50Tokenizer, GPT2Tokenizer, GPT2TokenizerFast, BertTokenizerFast, BertTokenizer, MarianTokenizer, M2M100Tokenizer
 
 from .decoder_vocab import DecoderVocabulary
+from ..util import get_devices
 from .example import SequentialField, get_pad_feature
 
 from ..paraphrase.transformers_utils import SPIECE_UNDERLINE
+
+
+logger = logging.getLogger(__name__)
 
 # not all tokenizers respect whitespace in the input or honor do_basic_tokenize=False
 # for those, we need to use the slow tokenizers or we'll get messed up thingtalk output
@@ -420,7 +423,9 @@ class TransformerNumericalizer(object):
         
         if self._preprocess_special_tokens:
             if len(sentences) > MULTIPROCESSING_THRESHOLD:
-                with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
+                multiprocessing_factor = multiprocessing.cpu_count() // len(get_devices(self.args.devices))
+                logger.info('multiprocessing factor for special token preprocessing is %d', multiprocessing_factor)
+                with multiprocessing.Pool(multiprocessing_factor) as p:
                     sentences, index2expansions = list(zip(*p.map(functools.partial(self._apply_special_token_preprocessing, return_idx2exp=bool(len(features))), sentences)))
             else:
                 sentences, index2expansions = list(zip(*map(functools.partial(self._apply_special_token_preprocessing, return_idx2exp=bool(len(features))), sentences)))

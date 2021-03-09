@@ -173,6 +173,9 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
     # extract features for each token in input sentence from bootleg outputs
     all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(input_file_name[:-len('_bootleg.jsonl')])
     
+    all_token_type_ids = all_token_type_ids[:args.subsample]
+    all_tokens_type_probs = all_tokens_type_probs[:args.subsample]
+    
     # override examples features with bootleg features
     if mode != 'dump':
         assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)

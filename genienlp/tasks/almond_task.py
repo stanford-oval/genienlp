@@ -32,6 +32,7 @@ from collections import defaultdict
 import marisa_trie
 import torch
 import ujson
+import logging
 
 from ..data_utils.database_utils import DOMAIN_TYPE_MAPPING
 from ..data_utils.remote_database import RemoteElasticDatabase
@@ -47,7 +48,7 @@ from ..tasks.almond_utils import ISO_to_LANG, process_id, quoted_pattern_with_sp
     tokenize_cjk_chars, detokenize_cjk_chars, is_entity, is_entity_marker, is_device
 from ..paraphrase.data_utils import input_heuristics, output_heuristics
 
-
+logger = logging.getLogger(__name__)
 
 class BaseAlmondTask(BaseTask):
     """Base class for the Almond semantic parsing task
@@ -81,7 +82,8 @@ class BaseAlmondTask(BaseTask):
         if self.args.database_type == 'json':
             canonical2type = {}
             all_canonicals = marisa_trie.Trie()
-            if self.args.ned_retrieve_method != 'bootleg':
+            # canonical2type.json is a big file (>4G); load it only when necessary
+            if self.args.ned_retrieve_method not in ['bootleg', 'type-oracle']:
                 with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
                     canonical2type = ujson.load(fin)
                     all_canonicals = marisa_trie.Trie(canonical2type.keys())
@@ -227,7 +229,12 @@ class BaseAlmondTask(BaseTask):
         
         for ent, type in entity2type.items():
             ent_num_tokens = len(ent.split(' '))
-            idx = tokens_text.index(ent)
+            if ent in tokens_text:
+                idx = tokens_text.index(ent)
+            else:
+                logger.warning('Found a mismatch between sentence and annotation entities')
+                logger.info(f'sentence: {tokens_text}, entity2type: {entity2type}')
+                continue
             token_pos = len(tokens_text[:idx].split())
             
             type_id = self.db.type2id[type]

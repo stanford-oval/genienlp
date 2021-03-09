@@ -48,9 +48,10 @@ import torch
 from transformers import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer, BartTokenizer, MBart50Tokenizer,\
-    T5ForConditionalGeneration, MT5ForConditionalGeneration, BartForConditionalGeneration, MBartForConditionalGeneration,\
-    MarianMTModel
+from transformers import T5ForConditionalGeneration, MT5ForConditionalGeneration, BartForConditionalGeneration,\
+    MBartForConditionalGeneration, MarianMTModel
+from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer, BartTokenizer, MBart50Tokenizer
+
 from .transformers_utils import GenieMBartTokenizer
 
 

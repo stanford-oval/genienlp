@@ -1,3 +1,12 @@
+0.6.0a3
+=======
+
+* Loss dropping is now an optional dependency instead of a required one [#96].
+* Fixed running Bootleg models in Kubeflow.
+* Fixed combining Bootleg and calibration [#99].
+* Misc bug fixes [#97, #102].
+* Misc build system and test fixes [#101].
+
 0.6.0a2
 =======
 
