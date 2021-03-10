@@ -197,8 +197,14 @@ class TransformerLSTM(GenieModel):
                                      no_repeat_ngram_size=no_repeat_ngram_size,
                                      do_sample=do_sample,
                                      generation_dict={'max_output_length': max_output_length},
-                                     encoder_output=encoder_output
-                                    )
-        generated = torch.cat((generated[:, 0:1], generated[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)), dim=1) # map everything to full vocabulary except BOS which already is in full vocabulary
+                                     encoder_output=encoder_output,
+                                     output_scores=False,
+                                     output_attentions=False,
+                                     output_hidden_states=False,
+                                     return_dict_in_generate=True
+                                     )
+        output_ids = generated.sequences
+        mapped_output_ids = torch.cat((output_ids[:, 0:1], output_ids[:, 1:].cpu().apply_(self.decoder.map_to_full).to(batch.context.value.device)), dim=1) # map everything to full vocabulary except BOS which already is in full vocabulary
+        generated.sequences = mapped_output_ids
         
         return generated

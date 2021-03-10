@@ -173,6 +173,10 @@ class TransformerSeq2Seq(GenieModel):
                                         do_sample=do_sample,
                                         decoder_start_token_id=decoder_start_token_id,
                                         forced_bos_token_id=forced_bos_token_id,
+                                        output_scores=False,
+                                        output_attentions=True,
+                                        output_hidden_states=False,
+                                        return_dict_in_generate=True
                                         )
         
         return generated

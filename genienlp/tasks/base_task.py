@@ -68,7 +68,10 @@ class BaseTask:
         :return: a list of text.Dataset
         """
         return generic_dataset.JSON.splits(root=root, name=self.name, **kwargs)
-
+    
+    def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, **kwargs):
+        return batch_src_ids
+    
     def postprocess_prediction(self, example_id, prediction):
         return prediction
 

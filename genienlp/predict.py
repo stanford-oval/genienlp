@@ -342,6 +342,7 @@ def parse_argv(parser):
     
     #TODO Update other tasks to use this argument too; so we can use predict for pure text generation (i.e. without reporting accuracy metrics)
     parser.add_argument('--translate_no_answer', action='store_true', help='if true the provided dataset would not contain the answer (translated sentence)')
+    parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
 
             
 def set_default_values(args):

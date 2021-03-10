@@ -62,7 +62,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
     example_ids = []
     answers = []
     contexts = []
-
+    
     for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
@@ -82,30 +82,55 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
             answers += batch_answer
 
         for hyperparameter_idx in range(len(args.temperature)):
-            raw_partial_batch_prediction = model.generate(batch,
-                                                max_output_length=args.max_output_length,
-                                                num_outputs=args.num_outputs[hyperparameter_idx],
-                                                temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
-                                                repetition_penalty=args.repetition_penalty[hyperparameter_idx],
-                                                top_k=args.top_k[hyperparameter_idx],
-                                                top_p=args.top_p[hyperparameter_idx],
-                                                num_beams=args.num_beams[hyperparameter_idx],
-                                                num_beam_groups=args.num_beam_groups[hyperparameter_idx],
-                                                diversity_penalty=args.diversity_penalty[hyperparameter_idx],
-                                                no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
-                                                do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
-                                                )
+            generated = model.generate(batch,
+                                    max_output_length=args.max_output_length,
+                                    num_outputs=args.num_outputs[hyperparameter_idx],
+                                    temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
+                                    repetition_penalty=args.repetition_penalty[hyperparameter_idx],
+                                    top_k=args.top_k[hyperparameter_idx],
+                                    top_p=args.top_p[hyperparameter_idx],
+                                    num_beams=args.num_beams[hyperparameter_idx],
+                                    num_beam_groups=args.num_beam_groups[hyperparameter_idx],
+                                    diversity_penalty=args.diversity_penalty[hyperparameter_idx],
+                                    no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
+                                    do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
+                                    )
+            partial_batch_prediction_ids = generated.sequences
+            cross_attentions = getattr(generated, 'cross_attentions', None)
+
+            if cross_attentions is not None:
+                # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)
+                cross_attentions = torch.stack(([torch.stack(tuple) for tuple in cross_attentions]))
+    
+                # reshape to (num_layers, batch_size, num_heads, max_output_length, max_input_length)
+                cross_attentions = cross_attentions.squeeze(4)
+                cross_attentions = cross_attentions.permute(1, 2, 3, 0, 4).contiguous()
+
+                # choose only last layer attentions
+                # TODO: get penultimate layer of attention vectors instead
+                cross_attentions = cross_attentions[-1, ...]
+                
+                # postprocess prediction ids
+                kwargs = {'batch_tgt_ids': partial_batch_prediction_ids, 'numericalizer': numericalizer, 'cross_attentions': cross_attentions}
+                partial_batch_prediction_ids = task.batch_postprocess_prediction_ids(batch_example_ids, batch.context.value.data, **kwargs)
+
             if output_confidence_features or output_confidence_scores:
-                partial_batch_confidence_features = model.confidence_features(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout_num=args.mc_dropout_num)
-            partial_batch_prediction = numericalizer.reverse(raw_partial_batch_prediction, 'answer')
+                partial_batch_confidence_features = model.confidence_features(batch=batch, predictions=partial_batch_prediction_ids, mc_dropout_num=args.mc_dropout_num)
+
+            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')
+
+            def get_example_index(i):
+                return (i // args.num_outputs[hyperparameter_idx]) % batch_size
+
             # post-process predictions
             for i in range(len(partial_batch_prediction)):
-                partial_batch_prediction[i] = task.postprocess_prediction(batch_example_ids[(i//args.num_outputs[hyperparameter_idx]) % batch_size], partial_batch_prediction[i])
+                partial_batch_prediction[i] = task.postprocess_prediction(batch_example_ids[get_example_index(i)], partial_batch_prediction[i])
+                
             # put them into the right array
             for i in range(len(partial_batch_prediction)):
-                batch_prediction[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_prediction[i])
+                batch_prediction[get_example_index(i)].append(partial_batch_prediction[i])
                 if output_confidence_features or output_confidence_scores:
-                    batch_confidence_features[(i//args.num_outputs[hyperparameter_idx]) % batch_size].append(partial_batch_confidence_features[i])
+                    batch_confidence_features[get_example_index(i)].append(partial_batch_confidence_features[i])
         
         predictions += batch_prediction
         confidence_features += batch_confidence_features
