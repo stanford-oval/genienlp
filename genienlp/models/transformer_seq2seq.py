@@ -139,7 +139,9 @@ class TransformerSeq2Seq(GenieModel):
                  num_beam_groups,
                  diversity_penalty,
                  no_repeat_ngram_size,
-                 do_sample
+                 do_sample,
+                 error,
+                 top_token
                  ):
         
         decoder_start_token_id = None
@@ -148,30 +150,20 @@ class TransformerSeq2Seq(GenieModel):
 
         input_ids = batch.context.value
         # when attention_mask is not provided to generate(), it will default to masking pad tokens, which is the correct thing
-        generated = self.model.generate(input_ids=input_ids,
-                                        max_length=max_output_length,
-                                        min_length=2, # generate at least one token after BOS
-                                        bos_token_id=self.numericalizer.init_id,
-                                        pad_token_id=self.numericalizer.pad_id,
-                                        early_stopping=False,
-                                        num_return_sequences=num_outputs,
-                                        repetition_penalty=repetition_penalty,
-                                        temperature=temperature,
-                                        eos_token_id=self.numericalizer.eos_id,
-                                        top_k=top_k,
-                                        top_p=top_p,
-                                        num_beams=num_beams,
-                                        num_beam_groups=num_beam_groups,
-                                        diversity_penalty=diversity_penalty,
-                                        no_repeat_ngram_size=no_repeat_ngram_size,
-                                        do_sample=do_sample,
-                                        decoder_start_token_id=decoder_start_token_id,
-                                        )
-        
+        generated = self.mc_greedy(input_ids=input_ids,
+                                max_length=max_output_length,
+                                bos_token_id=self.numericalizer._tokenizer.bos_token_id,
+                                pad_token_id=self.numericalizer._tokenizer.pad_token_id,
+                                eos_token_id=self.numericalizer._tokenizer.eos_token_id,
+                                decoder_start_token_id=decoder_start_token_id,
+                                gold=batch.answer.value,
+                                error=error,
+                                top_token=top_token
+                            )
         return generated
 
 
-    def confidence_features(self, batch, predictions, mc_dropout_num=0) -> List[ConfidenceFeatures]:
+    def confidence_features(self, batch, predictions, mc_dropout_num=0, temperature=1) -> List[ConfidenceFeatures]:
         """
         predictions: Tensor of shape (batch_size, output_length)
         mc_droput_num: number of Monte Carlo samples used for the MC Dropout method. 0 disables MC dropout.
@@ -198,6 +190,7 @@ class TransformerSeq2Seq(GenieModel):
         # batch_nodrop_top2_idx = []
         outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
         nodrop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
+        nodrop_logits = nodrop_logits / temperature
         for i in range(batch_size):
             batch_nodrop_logits.append(nodrop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
             probs = torch.softmax(nodrop_logits[i], dim=1)
@@ -219,6 +212,7 @@ class TransformerSeq2Seq(GenieModel):
         for _ in range(mc_dropout_num):
             outputs = self.model(input_ids=input_ids, decoder_input_ids=predictions, attention_mask=attention_mask, return_dict=True, use_cache=False)
             drop_logits = outputs.logits[:, :-1, :] # remove the last probability distribution which is for the token after EOS
+            drop_logits = drop_logits / temperature
             for i in range(batch_size):
                 batch_drop_logits[i].append((drop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))[:prediction_lengths[i]])
                 softmax = torch.softmax(drop_logits[i], dim=1)
@@ -260,3 +254,76 @@ class TransformerSeq2Seq(GenieModel):
         first_eos_one_hot = (torch.cumsum((prediction == self.numericalizer.eos_id).long(), dim=1) == 1) & (prediction == self.numericalizer.eos_id)
         first_eos = first_eos_one_hot.nonzero(as_tuple=False)[:, 1] + 1 # +1 to account for the first token that we ignored
         return first_eos
+
+
+    def mc_greedy(self,
+        input_ids,
+        gold,
+        max_length,
+        bos_token_id,
+        pad_token_id,
+        eos_token_id,
+        decoder_start_token_id,
+        use_cache=None,
+        error=None,
+        top_token=1,
+        **model_kwargs):
+
+        if model_kwargs.get("attention_mask", None) is None:
+            # init `attention_mask` depending on `pad_token_id`
+            model_kwargs["attention_mask"] = self.model._prepare_attention_mask_for_generation(input_ids, pad_token_id, eos_token_id)
+
+        # special case if pad_token_id is not defined
+        if pad_token_id is None and eos_token_id is not None:
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            pad_token_id = eos_token_id
+
+        if self.model.config.is_encoder_decoder:
+            # add encoder_outputs to model_kwargs
+            model_kwargs = self.model._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
+
+            # set input_ids as decoder_input_ids
+            input_ids = self.model._prepare_decoder_input_ids_for_generation(input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id, **model_kwargs)
+
+        # set model_kwargs
+        model_kwargs["use_cache"] = use_cache
+
+        # init sequence length tensors
+        sequence_lengths, unfinished_sequences, cur_len = self.model._init_sequence_length_for_generation(input_ids, max_length)
+
+        while cur_len < max_length:
+            # prepare model inputs
+            model_inputs = self.model.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            # forward pass to get next token
+            outputs = self.model(**model_inputs, return_dict=True)
+            next_token_logits = outputs.logits[:, -1, :]
+            scores = next_token_logits
+
+            # argmax
+            next_tokens = torch.argmax(scores, dim=-1)
+            if error is not None:
+                for i in range(next_tokens.shape[0]):
+                    if cur_len in set(error[i]):
+                        next_tokens[i] = torch.topk(scores, k=top_token+1, dim=-1).indices[i, top_token]
+
+            # add code that transfomers next_tokens to tokens_to_add
+            next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
+
+            # add token and increase length by one
+            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+
+            # update sequence length
+            sequence_lengths, unfinished_sequences = self.model._update_seq_length_for_generation(sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id)
+
+            # update model kwargs
+            model_kwargs = self.model._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder=self.model.config.is_encoder_decoder)
+
+            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            if unfinished_sequences.max() == 0:
+                break
+
+            # increase cur_len
+            cur_len = cur_len + 1
+
+        return input_ids

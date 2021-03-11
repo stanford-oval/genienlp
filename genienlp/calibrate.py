@@ -143,6 +143,19 @@ def prob_first_mistake(i):
 
     return f
 
+def weakest_token(i):
+    """
+    probability that the weakest token is the first mistake
+    """
+    def f(x):
+        probs = mean_drop_prob(i)(x)
+        ret = torch.zeros_like(probs)
+        for j in range(len(probs)):
+            ret[j] = torch.prod(probs[:j])*(1-probs[j])
+        return max(ret)
+
+    return f
+
 def mean_drop_prob(i):
     return lambda x: torch.mean(x[i].drop_probs, dim=0).view(-1)
 
@@ -547,7 +560,8 @@ fast_feature_sets = [
 ]
 
 def main(args):
-
+    # detect_errors(args)
+    # exit()
     if args.threshold is not None:
         assert (args.precision is not None and args.recall is None) or (args.precision is None and args.recall is not None), \
             'When `--threshold` is specified, exactly one of `--precision` and `--recall` should be set.'
@@ -632,3 +646,79 @@ def main(args):
         pyplot.ylabel('Accuracy')
         pyplot.savefig(os.path.join(args.save, args.name_prefix + '_pass-accuracy.svg'))
     
+
+class PositionEstimator(TreeConfidenceEstimator):
+    @staticmethod
+    def convert_to_labels(confidences: Iterable[ConfidenceFeatures]):
+        labels = []
+        for c in confidences:
+            labels.append(c[0].first_mistake)
+        return labels
+
+    def train_and_validate():
+        # no training to be done
+        pass
+
+def string_in_grid(array):
+    s = ''
+    for a in array:
+        if isinstance(a, float):
+            a = '%.3f' % a
+        s += '%15s' % a
+    return s
+
+def detect_errors(args):
+    with open(args.confidence_path, 'rb') as f:
+        confidences = pickle.load(f)
+    from transformers import BartTokenizer
+    tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+    # train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
+    all_predictions = []
+    all_scores = []
+    for f, name in [
+                    ([neg_of(nodrop_prob(0))], 'prob'),
+                    ([neg_of(mean_drop_prob(0))], 'mean_prob'),
+                    ([prob_first_mistake(0)], 'prob_first_mistake'),
+                    ]:
+        # logger.info('name = %s', name)
+        labels = PositionEstimator.convert_to_labels(confidences)
+        position_estimator = PositionEstimator(name=name, featurizers=f, eval_metric=None, mc_dropout_num=0)
+        features = position_estimator.convert_to_features(confidences)
+        features[features==0] = -np.inf # do not select pad tokens
+        predictions = np.argsort(-features, axis=1)[:, 0:1] # take the max
+        all_scores.append(-np.sort(-features, axis=1)[:, 0:1])
+            
+        all_predictions.append((name, predictions))
+        count = 0
+        correct = 0
+        for i in range(len(labels)):
+            if labels[i] >= 0:
+                count += 1
+                for j in range(predictions.shape[1]):
+                    if predictions[i][j] == labels[i]:
+                        correct += 1
+                        break
+        print('name = ', name, 'accuracy = %.2f%%' % (correct / count * 100))
+
+    count = 0
+    correct = 0
+    for i in range(len(confidences)):
+        if labels[i] >= 0:
+            count += 1
+            print('context = ', tokenizer.decode(confidences[i][0].context))
+            print(' '*30 + string_in_grid(range(max(len(confidences[i][0].gold_answer), len(confidences[i][0].prediction)))))
+            print('mean_drop_prob:              ', string_in_grid(mean_drop_prob(0)(confidences[i]).tolist()))
+            print('prob_first_mistake:          ', string_in_grid(prob_first_mistake(0)(confidences[i]).tolist()))
+            print('%14s'%'prediction = ', string_in_grid([tokenizer.decode(a) for a in confidences[i][0].prediction]))
+            print('%14s'%'gold = ', string_in_grid([tokenizer.decode(a) for a in confidences[i][0].gold_answer]))
+            print('%16s'%'first mistake = ', labels[i])
+            best_prediction = False
+            for idx, (name, predictions) in enumerate(all_predictions):
+                print('%20s'%name, 'predicted mistake = ', predictions[i])
+                print('%20s'%name, 'scores = ', all_scores[idx][i])
+                if predictions[i][0] == labels[i]:
+                    best_prediction = True
+            if best_prediction:
+                correct += 1
+            print('-'*100)
+    print('best predictor accuracy = ', (correct/count))

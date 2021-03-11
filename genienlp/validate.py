@@ -42,7 +42,9 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
                         output_confidence_features=False,
                         original_order=None,
                         confidence_estimators=None,
-                        disable_progbar=True) -> GenerationOutput:
+                        disable_progbar=True,
+                        error=None,
+                        top_token=1) -> GenerationOutput:
     """
     Inputs:
         original_order: List of indices. If provided, we will sort the results according to this order
@@ -77,7 +79,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
             contexts += batch_context
         elif output_confidence_features:
             # need gold answer for confidence estimation
-            batch_answer = numericalizer.reverse(batch.answer.value.data, task=task, field_name='answer')
+            batch_answer = numericalizer.reverse(batch.answer.value.data)
             answers += batch_answer
 
         for hyperparameter_idx in range(len(args.temperature)):
@@ -93,6 +95,8 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
                                                 diversity_penalty=args.diversity_penalty[hyperparameter_idx],
                                                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                                                 do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
+                                                error=error,
+                                                top_token=top_token
                                                 )
             if output_confidence_features or output_confidence_scores:
                 partial_batch_confidence_features =  model.confidence_features(batch=batch, predictions=raw_partial_batch_prediction, mc_dropout_num=args.mc_dropout_num)
