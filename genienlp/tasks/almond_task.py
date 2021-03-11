@@ -265,8 +265,8 @@ class BaseAlmondTask(BaseTask):
         token_freqs = [[default_val] * default_size] * len(tokens)
         return token_freqs
 
-    def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, **kwargs):
-        return batch_src_ids
+    def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, batch_tgt_ids, **kwargs):
+        return batch_tgt_ids
 
     def postprocess_prediction(self, example_id, prediction):
         
@@ -566,9 +566,8 @@ class Translate(NaturalSeq2Seq):
     def postprocess_prediction(self, example_id, prediction):
         return super().postprocess_prediction(example_id, prediction)
     
-    def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, **kwargs):
+    def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, batch_tgt_ids, **kwargs):
     
-        batch_tgt_ids = kwargs.pop('batch_tgt_ids')
         numericalizer = kwargs.pop('numericalizer')
         cross_attentions = kwargs.pop('cross_attentions')
 

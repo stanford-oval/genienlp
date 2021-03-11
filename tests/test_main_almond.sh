@@ -6,13 +6,10 @@ i=0
 # test almond task
 for hparams in \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random" \
-      "--model TransformerSeq2Seq --pretrained_model sshleifer/tiny-mbart" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --preprocess_special_tokens --almond_detokenize_sentence" \
       "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50 --num_beams 4 --num_beam_groups 4 --num_outputs 4 --diversity_penalty 1.0" \
-      "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50" \
-      "--model TransformerLSTM --pretrained_model bert-base-multilingual-cased --trainable_decoder_embeddings=50 --override_question ." \
-      "--model TransformerLSTM --pretrained_model xlm-roberta-base --trainable_decoder_embeddings=50" \
-      "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50 --eval_set_name aux" ;
+      "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50  --override_question ." \
+      "--model TransformerLSTM --pretrained_model xlm-roberta-base --trainable_decoder_embeddings=50 --eval_set_name aux" ;
 do
 
     # train
@@ -35,7 +32,12 @@ do
       echo '{"id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | genienlp server --path $workdir/model_$i --stdin
     fi
 
-    rm -rf $workdir/model_$i $workdir/model_$i_exported
+    if [ $i == 2 ] ; then
+      # check if predictions matches expected_results
+      diff -u $SRCDIR/expected_results/almond/bert_base_cased_beam.tsv $workdir/model_$i/eval_results/test/almond.tsv
+    fi
+
+    rm -rf $workdir/model_$i $workdir/model_"$i"_exported
 
     i=$((i+1))
 done

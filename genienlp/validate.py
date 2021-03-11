@@ -111,8 +111,8 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
                 cross_attentions = cross_attentions[-1, ...]
                 
                 # postprocess prediction ids
-                kwargs = {'batch_tgt_ids': partial_batch_prediction_ids, 'numericalizer': numericalizer, 'cross_attentions': cross_attentions}
-                partial_batch_prediction_ids = task.batch_postprocess_prediction_ids(batch_example_ids, batch.context.value.data, **kwargs)
+                kwargs = {'numericalizer': numericalizer, 'cross_attentions': cross_attentions}
+                partial_batch_prediction_ids = task.batch_postprocess_prediction_ids(batch_example_ids, batch.context.value.data, partial_batch_prediction_ids, **kwargs)
 
             if output_confidence_features or output_confidence_scores:
                 partial_batch_confidence_features = model.confidence_features(batch=batch, predictions=partial_batch_prediction_ids, mc_dropout_num=args.mc_dropout_num)
