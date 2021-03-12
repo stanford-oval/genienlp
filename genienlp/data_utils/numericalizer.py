@@ -36,10 +36,10 @@ from pathos import multiprocessing
 from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
-from transformers import MBartConfig, MarianConfig, M2M100Config, T5Config,\
-    AutoTokenizer, BertTokenizer, BertTokenizerFast, XLMRobertaTokenizer, XLMRobertaTokenizerFast,\
-    GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer,  MarianTokenizer, M2M100Tokenizer,\
-    SPIECE_UNDERLINE
+from transformers import MBartConfig, MarianConfig, M2M100Config, T5Config, \
+    AutoTokenizer, BertTokenizer, BertTokenizerFast, XLMRobertaTokenizer, XLMRobertaTokenizerFast, \
+    GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer, MarianTokenizer, M2M100Tokenizer, \
+    SPIECE_UNDERLINE, ElectraConfig
 
 from .decoder_vocab import DecoderVocabulary
 from ..util import get_devices
@@ -126,7 +126,6 @@ class TransformerNumericalizer(object):
         return self._pretrained_name in ALLOWED_FAST_TOKENIZERS or \
                (self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING)
     
-    
     def get_tokenizer(self, save_dir, config, src_lang, tgt_lang):
         tokenizer_args = {'do_lower_case': False, 'do_basic_tokenize': False, 'cache_dir': self._cache,
                           'use_fast': self._use_fast(), 'src_lang': src_lang, 'tgt_lang': tgt_lang}
@@ -146,7 +145,11 @@ class TransformerNumericalizer(object):
         elif model_is_m2m100:
             self._tokenizer = M2M100Tokenizer.from_pretrained(**tokenizer_args)
         else:
-            # FIXME: for some unknown reason electra fast tokenizers won't load properly if using save_dir
+            # FIXME: there's a known issue with Bert-based fast tokenizers (e.g. Electra) addressed here https://github.com/huggingface/transformers/pull/10686
+            # till then set do_lower_case to True and don't load from save_dir for Electra models
+            if isinstance(config, ElectraConfig):
+                tokenizer_args['do_lower_case'] = True
+                tokenizer_args['pretrained_model_name_or_path'] = self._pretrained_name
             self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
 
         # some tokenizers like Mbart do not set src_lang and tgt_lan when initialized; take care of it here

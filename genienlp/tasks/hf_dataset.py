@@ -84,12 +84,12 @@ class HFDataset(CQA):
             test_path = test_data.cache_files[0]['filename']
             
         # Uncomment for testing
-        # if validation:
-        #     validation_data = load_dataset(name, split='train', cache_dir=root)
-        #     validation_path = validation_data.cache_files[0]['filename']
-        # if test:
-        #     test_data = load_dataset(name, split='train', cache_dir=root)
-        #     test_path = test_data.cache_files[0]['filename']
+        if validation:
+            validation_data = load_dataset(name, split='train', cache_dir=root)
+            validation_path = validation_data.cache_files[0]['filename']
+        if test:
+            test_data = load_dataset(name, split='train', cache_dir=root)
+            test_path = test_data.cache_files[0]['filename']
         
         train_data = None if train is None else cls(train_data, **kwargs)
         validation_data = None if validation is None else cls(validation_data, **kwargs)

@@ -1702,3 +1702,110 @@ class JSON(CQA):
                      eval=None if validation is None else validation_data,
                      test=None if test is None else test_data,
                      aux=None if do_curriculum is None else aux_data)
+
+
+class CrossNERDataset(CQA):
+    politics_labels = ['O', 'B-country', 'B-politician', 'I-politician', 'B-election', 'I-election', 'B-person',
+                       'I-person', 'B-organisation', 'I-organisation', 'B-location', 'B-misc', 'I-location',
+                       'I-country', 'I-misc', 'B-politicalparty', 'I-politicalparty', 'B-event', 'I-event']
+    science_labels = ['O', 'B-scientist', 'I-scientist', 'B-person', 'I-person', 'B-university', 'I-university',
+                      'B-organisation', 'I-organisation', 'B-country', 'I-country', 'B-location', 'I-location',
+                      'B-discipline', 'I-discipline', 'B-enzyme', 'I-enzyme', 'B-protein', 'I-protein',
+                      'B-chemicalelement', 'I-chemicalelement', 'B-chemicalcompound', 'I-chemicalcompound',
+                      'B-astronomicalobject', 'I-astronomicalobject', 'B-academicjournal', 'I-academicjournal',
+                      'B-event', 'I-event', 'B-theory', 'I-theory', 'B-award', 'I-award', 'B-misc', 'I-misc']
+    music_labels = ['O', 'B-musicgenre', 'I-musicgenre', 'B-song', 'I-song', 'B-band', 'I-band', 'B-album', 'I-album',
+                    'B-musicalartist', 'I-musicalartist', 'B-musicalinstrument', 'I-musicalinstrument', 'B-award',
+                    'I-award', 'B-event', 'I-event', 'B-country', 'I-country', 'B-location', 'I-location',
+                    'B-organisation', 'I-organisation', 'B-person', 'I-person', 'B-misc', 'I-misc']
+    literature_labels = ["O", "B-book", "I-book", "B-writer", "I-writer", "B-award", "I-award", "B-poem", "I-poem",
+                         "B-event", "I-event", "B-magazine", "I-magazine", "B-literarygenre", "I-literarygenre",
+                         'B-country', 'I-country', "B-person", "I-person", "B-location", "I-location", 'B-organisation',
+                         'I-organisation', 'B-misc', 'I-misc']
+    ai_labels = ["O", "B-field", "I-field", "B-task", "I-task", "B-product", "I-product", "B-algorithm", "I-algorithm",
+                 "B-researcher", "I-researcher", "B-metrics", "I-metrics", "B-programlang", "I-programlang",
+                 "B-conference", "I-conference", "B-university", "I-university", "B-country", "I-country", "B-person",
+                 "I-person", "B-organisation", "I-organisation", "B-location", "I-location", "B-misc", "I-misc"]
+    
+    domain2labels = {"politics": politics_labels, "science": science_labels, "music": music_labels,
+                     "literature": literature_labels, "ai": ai_labels}
+    
+    def __init__(self, data, *, make_example, **kwargs):
+        
+        subsample = kwargs.get('subsample')
+        skip_cache = kwargs.pop('kwargs', True)
+
+        tgt_dm = kwargs.pop('tgt_dm')
+        
+        cache_name = os.path.join(os.path.dirname(data.cache_files[0]['filename']), data.split._name, str(subsample))
+        examples = []
+        
+        if os.path.exists(cache_name) and not skip_cache:
+            logger.info(f'Loading cached data from {cache_name}')
+            examples = torch.load(cache_name)
+            inputs, labels = [], []
+            for i, line in enumerate(data):
+                token_list, label_list = [], []
+                line = line.strip()
+                if line == "":
+                    if len(token_list) > 0:
+                        assert len(token_list) == len(label_list)
+                        inputs.append(token_list)
+                        labels.append(label_list)
+            
+                    token_list, label_list = [], []
+                    continue
+        
+                splits = line.split("\t")
+                token = splits[0]
+                label = splits[1]
+        
+                token_list.append(token)
+                label_list.append(self.domain2labels[tgt_dm].index(label))
+    
+                if subsample is not None and len(inputs) >= subsample:
+                    break
+        
+        os.makedirs(os.path.dirname(cache_name), exist_ok=True)
+        logger.info(f'Caching data to {cache_name}')
+        torch.save(examples, cache_name)
+        
+        super().__init__(examples, **kwargs)
+    
+    @classmethod
+    def return_splits(cls, name, root='.data', train='train', validation='validation', test='test', **kwargs):
+    
+        tgt_dm = kwargs.pop('tgt_dm')
+        
+        # download datasets and cache them
+        train_data, validation_data, test_data = None, None, None
+        train_path, validation_path, test_path = None, None, None
+        if train:
+            train_path = os.path.join(root, tgt_dm, 'train.txt')
+            with open(train_path, "r") as fin:
+                train_data = fin.readlines()
+        if validation:
+            validation_path = os.path.join(root, tgt_dm, 'dev.txt')
+            with open(validation_path, "r") as fin:
+                validation_data = fin.readlines()
+        if test:
+            test_path = os.path.join(root, tgt_dm, 'test.txt')
+            with open(test_path, "r") as fin:
+                test_data = fin.readlines()
+        
+        # Uncomment for testing
+        # if validation:
+        #     validation_path = os.path.join(root, tgt_dm, 'train.txt')
+        #     with open(validation_path, "r") as fin:
+        #         validation_data = fin.readlines()
+        # if test:
+        #     test_path = os.path.join(root, tgt_dm, 'train.txt')
+        #     with open(test_path, "r") as fin:
+        #         test_data = fin.readlines()
+        
+        train_data = None if train is None else cls(train_data, **kwargs)
+        validation_data = None if validation is None else cls(validation_data, **kwargs)
+        test_data = None if test is None else cls(test_data, **kwargs)
+        
+        return Split(train=train_data, eval=validation_data, test=test_data), \
+               Split(train=train_path, eval=validation_path, test=test_path)
