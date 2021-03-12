@@ -64,7 +64,7 @@ setuptools.setup(
         'pathos==0.2.6',
         'marisa_trie_m==0.7.6',
         'kfserving>=0.5.0',
-        'bootleg @ git+https://github.com/Mehrad0711/bootleg@8f62c4fef7a8a4786672a0e2f71400dbf7ad80c9',
+        'bootleg @ git+https://github.com/Mehrad0711/bootleg@21b27ddbf672d00816948f038ecbe0853524dadb',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',
