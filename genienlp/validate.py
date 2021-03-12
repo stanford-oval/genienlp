@@ -207,7 +207,7 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
             batch_confidence_features = [[] for _ in range(batch_size)]
             batch_example_ids = batch.example_id
             
-            batch_context = numericalizer.reverse(batch.context.value.data)
+            batch_context = numericalizer.reverse(batch.context.value.data, 'context')
     
             example_ids += batch_example_ids
             

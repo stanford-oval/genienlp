@@ -44,6 +44,8 @@ from sacrebleu import corpus_bleu
 from .tasks.generic_dataset import Query
 from .util import requote_program
 
+from datasets import metric
+metric.logger.setLevel('WARNING')
 
 def to_lf(s, table):
     aggs = [y.lower() for y in Query.agg_ops]
@@ -209,7 +211,7 @@ def normalize_text(s):
 
 def ner_f1_score(prediction, ground_truth):
     metric = load_metric("seqeval")
-    results = metric.compute(predictions=prediction, references=ground_truth)
+    results = metric.compute(predictions=[prediction.split()], references=[ground_truth.split()])
     return results["overall_f1"]
 
 

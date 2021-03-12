@@ -28,18 +28,18 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
-from genienlp.models.base import GenieModel
 
-from transformers import AutoModelForTokenClassification, AutoConfig
+from transformers import AutoModelForTokenClassification, AutoConfig, MBartTokenizer, MBartTokenizerFast
 
+from ..models.base import GenieModel
+from ..util import adjust_language_code
 from . import TransformerSeq2Seq
 from ..data_utils.numericalizer import TransformerNumericalizer
-
 
 logger = logging.getLogger(__name__)
 
 
-class TransformerForTokenClassification(TransformerSeq2Seq):
+class TransformerForTokenClassification(TransformerSeq2Seq, GenieModel):
     def __init__(self, config=None, *inputs, args, tasks, vocab_sets, save_directory=None, **kwargs):
     
         num_labels = 0
@@ -52,15 +52,20 @@ class TransformerForTokenClassification(TransformerSeq2Seq):
                     num_labels = max(num_labels, task.num_labels)
         
         config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings, num_labels=num_labels, finetuning_task='ned')
-        super(GenieModel).__init__(config, *inputs, args, tasks, vocab_sets, save_directory, **kwargs)
+        GenieModel.__init__(self, config)
         self.args = args
         if hasattr(config, 'd_model'):
             args.dimension = config.d_model
         else:
             args.dimension = config.hidden_size
+        
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
         self._is_mbart = 'mbart' in self.args.pretrained_model
-        
+        self._is_mbart50 = self._is_mbart and '-50-' in self.args.pretrained_model
+
+        self.src_lang, self.tgt_lang = adjust_language_code(config, args.pretrained_model,
+                                                            kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en'))
+
         if save_directory is not None:
             self.model = AutoModelForTokenClassification.from_config(config)
         else:
@@ -84,8 +89,8 @@ class TransformerForTokenClassification(TransformerSeq2Seq):
             else:
                 self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.convert_tokens_to_ids(self.tgt_lang)
 
-        if self.model.config.decoder_start_token_id is None:
-            raise ValueError("Make sure that decoder_start_token_id for the model is defined")
+        # if self.model.config.decoder_start_token_id is None:
+        #     raise ValueError("Make sure that decoder_start_token_id for the model is defined")
 
 
     def forward(self, *input, **kwargs):
