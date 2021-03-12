@@ -92,6 +92,7 @@ class AmbigQA(HFTask):
 class CONLLNER(HFTask):
     num_labels = 9
     label_list = {0: 'O', 1: 'B-PER', 2: 'I-PER', 3: 'B-ORG', 4: 'I-ORG', 5: 'B-LOC', 6: 'I-LOC', 7: 'B-MISC', 8: 'I-MISC'}
+    tagging_scheme = 'IOB2'
     
     def __init__(self, name, args):
         super().__init__(name, args)

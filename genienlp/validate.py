@@ -162,12 +162,12 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
     return output
 
 
-def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, args):
+def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics):
     metrics = OrderedDict()
     for i in range(len(predictions[0])):
         partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute)
         for k, v in partial_metrics.items():
-            if args.reduce_metrics == 'max':
+            if reduce_metrics == 'max':
                 metrics[k] = max(metrics.get(k, 0), v)
             else:
                 raise ValueError('Invalid reduce_metrics argument')
@@ -243,7 +243,7 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
         output.answers = all_answers
         output.predictions = all_predictions
 
-        metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args)
+        metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args.reduce_metrics)
         results = [output.predictions, output.answers, output.contexts]
         print_results(names, results, num_print=num_print)
             

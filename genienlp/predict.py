@@ -245,7 +245,7 @@ def run(args, device):
                 metrics_to_compute = task.metrics
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
-                metrics = calculate_and_reduce_metrics(generation_output.predictions, generation_output.answers, metrics_to_compute, args)
+                metrics = calculate_and_reduce_metrics(generation_output.predictions, generation_output.answers, metrics_to_compute, args.reduce_metrics)
 
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')

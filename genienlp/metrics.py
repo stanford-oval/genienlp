@@ -37,15 +37,14 @@ from subprocess import Popen, PIPE
 from typing import Iterable
 
 import numpy as np
-from datasets import load_metric
+from seqeval import metrics
 from pyrouge import Rouge155
 from sacrebleu import corpus_bleu
+from seqeval.scheme import IOB2
 
 from .tasks.generic_dataset import Query
 from .util import requote_program
 
-from datasets import metric
-metric.logger.setLevel('WARNING')
 
 def to_lf(s, table):
     aggs = [y.lower() for y in Query.agg_ops]
@@ -210,9 +209,15 @@ def normalize_text(s):
 
 
 def ner_f1_score(prediction, ground_truth):
-    metric = load_metric("seqeval")
-    results = metric.compute(predictions=[prediction.split()], references=[ground_truth.split()])
-    return results["overall_f1"]
+    # convert IOB2 -> IOB1
+    # cur_label = None
+    # for n, label in enumerate(prediction):
+    #     if label.startswith("B") and label[2:] != cur_label:
+    #         prediction[n] = "I" + label[1:]
+    #     cur_label = label[2:]
+    
+    results = metrics.f1_score(y_pred=[prediction.split()], y_true=[ground_truth.split()], scheme=IOB2, mode='strict')
+    return results
 
 
 def f1_score(prediction, ground_truth):
