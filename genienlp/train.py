@@ -397,115 +397,127 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
         
     zero_loss = 0
     logger.info(f'Begin {log_prefix}')
-
-    while not all(task_done.values()):
-        # For some number of rounds, we 'jump start' some subset of the tasks
-        # by training them and not others
-        # once the specified number of rounds is completed,
-        # switch to normal round robin training
-        if rnd < args.jump_start:
-            train_iterations = [0] * len(train_iterations)
-            for j in range(args.n_jump_start):
-                train_iterations[j] = 1
-        else:
-            train_iterations = train_iter_deep
-
-        for task_idx, (task, train_iter) in enumerate(train_iters):
-            task_iterations = train_iterations[task_idx] if train_iterations is not None else None
-            if task_iterations == 0:
-                continue
-            if task_iterations is not None and task_iteration[task] > task_iterations:
-                task_done[task] = True
-                continue
-
-            # load batches even if (args.resume == True) and we are going to skip the iteration
-            # this makes runs that are resumed have the exact same behavior as runs that are
-            # finished in one pass (given that the random seed is the same).
-            batch = get_next_batch(train_iter, aux_iters, task=task, task_idx=task_idx,
-                                   task_fraction=task_fraction, use_curriculum=use_curriculum)
-
-            if iteration < start_iteration:
-                # skip this iteration (this is done to ensure iterators are at the same position when resuming)
+    
+    if any(train_iterations):
+        while not all(task_done.values()):
+            # For some number of rounds, we 'jump start' some subset of the tasks
+            # by training them and not others
+            # once the specified number of rounds is completed,
+            # switch to normal round robin training
+            if rnd < args.jump_start:
+                train_iterations = [0] * len(train_iterations)
+                for j in range(args.n_jump_start):
+                    train_iterations[j] = 1
+            else:
+                train_iterations = train_iter_deep
+    
+            for task_idx, (task, train_iter) in enumerate(train_iters):
+                task_iterations = train_iterations[task_idx] if train_iterations is not None else None
+                if task_iterations == 0:
+                    continue
+                if task_iterations is not None and task_iteration[task] > task_iterations:
+                    task_done[task] = True
+                    continue
+    
+                # load batches even if (args.resume == True) and we are going to skip the iteration
+                # this makes runs that are resumed have the exact same behavior as runs that are
+                # finished in one pass (given that the random seed is the same).
+                batch = get_next_batch(train_iter, aux_iters, task=task, task_idx=task_idx,
+                                       task_fraction=task_fraction, use_curriculum=use_curriculum)
+    
+                if iteration < start_iteration:
+                    # skip this iteration (this is done to ensure iterators are at the same position when resuming)
+                    task_iteration[task] += 1
+                    iteration += 1
+                    if (iteration+1) % args.gradient_accumulation_steps == 0:
+                        lr_scheduler.step() # update the learning rate
+                    continue
+    
+                task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
+                round_progress = f'round_{rnd}:' if rounds else ''
+    
+                # param update
+                loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
+                                             grad_clip=args.grad_clip,
+                                             gradient_accumulation_steps=args.gradient_accumulation_steps)
+                if loss is None:
+                    logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
+                    continue
+                if loss < 1e-6:
+                    zero_loss += 1
+                    if zero_loss >= 100:
+                        logger.info('Found loss less than 1e-6 for 100 steps, stopping.')
+                        return
+                else:
+                    zero_loss = 0
+    
+                # update curriculum fraction
+                if args.use_curriculum:
+                    task_fraction[task] = update_fraction(args, task_iteration[task])
+    
+                # train metrics
+                local_loss += loss
+    
+                # train logs
+                num_examples += batch.context.value.size(0)
+                len_contexts += batch.context.value.size(1)
+                len_answers += batch.answer.value.size(1)
+    
+                if should_log(iteration, log_every):
+                    local_loss /= log_every
+                    num_examples /= log_every
+                    len_contexts /= log_every
+                    len_answers /= log_every
+                    do_log_training_loss(iteration, local_loss,
+                                         lr_scheduler=lr_scheduler, grad_norm=grad_norm,
+                                         num_examples=num_examples, len_contexts=len_contexts, len_answers=len_answers,
+                                         logger=logger, writer=writer, train_task=task, round_progress=round_progress,
+                                         task_progress=task_progress, timestamp=args.timestamp, log_prefix=log_prefix)
+                    num_examples = 0
+                    len_contexts = 0
+                    len_answers = 0
+                    local_loss = 0
+    
+                # validate
+                if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
+                    if args.print_train_examples_too:
+                        names = ['answer', 'context']
+                        values = [numericalizer.reverse(batch.answer.value.data, 'answer'),
+                                  numericalizer.reverse(batch.context.value.data, 'context')]
+                        num_print = min(num_examples, args.num_print)
+                        print_results(names, values, num_print=num_print)
+                        
+                    deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
+                                             train_task=task, round_progress=round_progress,
+                                             task_progress=task_progress, writer=writer, logger=logger)
+    
+                    # saving
+                    if should_save(iteration, save_every):
+                        best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
+                                                    saver=saver, logger=logger, train_task=task,
+                                                    round_progress=round_progress, task_progress=task_progress,
+                                                    timestamp=args.timestamp, log_dir=args.log_dir, model_parallel=args.model_parallel)
+    
+                # book keeping
                 task_iteration[task] += 1
                 iteration += 1
-                if (iteration+1) % args.gradient_accumulation_steps == 0:
-                    lr_scheduler.step() # update the learning rate
-                continue
-
-            task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
-            round_progress = f'round_{rnd}:' if rounds else ''
-
-            # param update
-            loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
-                                         grad_clip=args.grad_clip,
-                                         gradient_accumulation_steps=args.gradient_accumulation_steps)
-            if loss is None:
-                logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
-                continue
-            if loss < 1e-6:
-                zero_loss += 1
-                if zero_loss >= 100:
-                    logger.info('Found loss less than 1e-6 for 100 steps, stopping.')
-                    return
-            else:
-                zero_loss = 0
-
-            # update curriculum fraction
-            if args.use_curriculum:
-                task_fraction[task] = update_fraction(args, task_iteration[task])
-
-            # train metrics
-            local_loss += loss
-
-            # train logs
-            num_examples += batch.context.value.size(0)
-            len_contexts += batch.context.value.size(1)
-            len_answers += batch.answer.value.size(1)
-
-            if should_log(iteration, log_every):
-                local_loss /= log_every
-                num_examples /= log_every
-                len_contexts /= log_every
-                len_answers /= log_every
-                do_log_training_loss(iteration, local_loss,
-                                     lr_scheduler=lr_scheduler, grad_norm=grad_norm,
-                                     num_examples=num_examples, len_contexts=len_contexts, len_answers=len_answers,
-                                     logger=logger, writer=writer, train_task=task, round_progress=round_progress,
-                                     task_progress=task_progress, timestamp=args.timestamp, log_prefix=log_prefix)
-                num_examples = 0
-                len_contexts = 0
-                len_answers = 0
-                local_loss = 0
-
-            # validate
-            if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
-                if args.print_train_examples_too:
-                    names = ['answer', 'context']
-                    values = [numericalizer.reverse(batch.answer.value.data, 'answer'),
-                              numericalizer.reverse(batch.context.value.data, 'context')]
-                    num_print = min(num_examples, args.num_print)
-                    print_results(names, values, num_print=num_print)
-                    
-                deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
-                                         train_task=task, round_progress=round_progress,
-                                         task_progress=task_progress, writer=writer, logger=logger)
-
-                # saving
-                if should_save(iteration, save_every):
-                    best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
-                                                saver=saver, logger=logger, train_task=task,
-                                                round_progress=round_progress, task_progress=task_progress,
-                                                timestamp=args.timestamp, log_dir=args.log_dir, model_parallel=args.model_parallel)
-
+    
             # book keeping
-            task_iteration[task] += 1
-            iteration += 1
+            per_task_iterations += 1
+            rnd += 1
 
-        # book keeping
-        per_task_iterations += 1
-        rnd += 1
+        logger.info(f'{log_prefix} is done after {per_task_iterations - 1} iterations')
 
-    logger.info(f'{log_prefix} is done after {per_task_iterations-1} iterations')
+    else:
+        # Save pretrained models as is without any finetuning
+        # Useful for doing prediction/ generation on those models with genienlp
+        for task, _ in train_iters:
+            maybe_save(0, model, opt, deca_score=0, best_decascore=-1,
+                       saver=saver, logger=logger, train_task=task,
+                       round_progress=0, task_progress=0,
+                       timestamp=args.timestamp, log_dir=args.log_dir, model_parallel=args.model_parallel)
+        
+        logger.info(f'{args.pretrained_model} model is saved to {args.save} without any fine-tuning')
 
 
 
