@@ -28,6 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+logging.getLogger("filelock").setLevel(logging.WARNING)
 
 from transformers import AutoModelForTokenClassification, AutoConfig, MBartTokenizer, MBartTokenizerFast
 
@@ -37,6 +38,7 @@ from . import TransformerSeq2Seq
 from ..data_utils.numericalizer import TransformerNumericalizer
 
 logger = logging.getLogger(__name__)
+
 
 
 class TransformerForTokenClassification(TransformerSeq2Seq, GenieModel):

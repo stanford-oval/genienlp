@@ -37,7 +37,7 @@ from ..tasks.generic_dataset import CQA
 from .base_dataset import Split
 
 import datasets
-datasets.logging.set_verbosity('WARNING')
+datasets.logging.set_verbosity('ERROR')
 
 logger = logging.getLogger(__name__)
 

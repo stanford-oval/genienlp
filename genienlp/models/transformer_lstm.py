@@ -30,6 +30,8 @@
 
 import torch
 import logging
+logging.getLogger("filelock").setLevel(logging.WARNING)
+
 from transformers import AutoModel, PretrainedConfig, AutoConfig
 from transformers import BertConfig, XLMRobertaConfig
 from ..paraphrase.transformers_utils import BertModelForNER, XLMRobertaModelForNER
