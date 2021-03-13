@@ -39,7 +39,7 @@ from torch.nn.utils.rnn import pad_sequence
 from transformers import MBartConfig, MarianConfig, M2M100Config, T5Config, \
     AutoTokenizer, BertTokenizer, BertTokenizerFast, XLMRobertaTokenizer, XLMRobertaTokenizerFast, \
     GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer, MarianTokenizer, M2M100Tokenizer, \
-    SPIECE_UNDERLINE, ElectraConfig
+    SPIECE_UNDERLINE, ElectraConfig, BertConfig
 
 from .decoder_vocab import DecoderVocabulary
 from ..util import get_devices
@@ -146,9 +146,9 @@ class TransformerNumericalizer(object):
             self._tokenizer = M2M100Tokenizer.from_pretrained(**tokenizer_args)
         else:
             # FIXME: there's a known issue with Bert-based fast tokenizers (e.g. Electra) addressed here https://github.com/huggingface/transformers/pull/10686
-            # till then set do_lower_case to True and don't load from save_dir for Electra models
-            if isinstance(config, ElectraConfig):
-                tokenizer_args['do_lower_case'] = True
+            # till then set do_lower_case to True and don't load from save_dir for bert-based models
+            if isinstance(config, ElectraConfig) or isinstance(config, BertConfig):
+                # tokenizer_args['do_lower_case'] = True
                 tokenizer_args['pretrained_model_name_or_path'] = self._pretrained_name
             self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
 

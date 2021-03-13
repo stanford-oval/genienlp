@@ -29,6 +29,7 @@
 
 import logging
 
+from .generic_dataset import CrossNERDataset
 from .hf_dataset import HFDataset
 from ..tasks.base_task import BaseTask
 from ..tasks.registry import register_task
@@ -53,7 +54,7 @@ class AmbigQA(HFTask):
         return ['em', 'bleu']
 
     def _make_example(self, ex, **kwargs):
-        example_id, question, used_queries, annotations, nq_answer =\
+        example_id, question, used_queries, annotations, nq_answer = \
             ex['id'], ex['question'], ex['used_queries'], ex['annotations'], ex['nq_answer']
     
         # assert len(nq_answer) == 1, print(example_id, nq_answer)
@@ -99,7 +100,7 @@ class CONLLNER(HFTask):
     
     @property
     def metrics(self):
-        return ['ner_f1', 'em', 'pem']
+        return ['ner_f1', 'f1', 'em', 'pem']
     
     def _make_example(self, ex, **kwargs):
         example_id = ex['id']
@@ -113,29 +114,3 @@ class CONLLNER(HFTask):
     def get_splits(self, root, **kwargs):
         return HFDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
 
-
-@register_task('crossner')
-class CONLLNER(HFTask):
-    num_labels = 9
-    label_list = {0: 'O', 1: 'B-PER', 2: 'I-PER', 3: 'B-ORG', 4: 'I-ORG', 5: 'B-LOC', 6: 'I-LOC', 7: 'B-MISC',
-                  8: 'I-MISC'}
-    tagging_scheme = 'IOB2'
-    
-    def __init__(self, name, args):
-        super().__init__(name, args)
-    
-    @property
-    def metrics(self):
-        return ['ner_f1', 'em', 'pem']
-    
-    def _make_example(self, ex, **kwargs):
-        example_id = ex['id']
-        question = ' '.join(ex['tokens'])
-        context = ''
-        answer = ' '.join(map(lambda item: str(item), ex['ner_tags']))
-        
-        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
-                                preprocess=self.preprocess_field, lower=False)
-    
-    def get_splits(self, root, **kwargs):
-        return HFDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)

@@ -37,10 +37,9 @@ from subprocess import Popen, PIPE
 from typing import Iterable
 
 import numpy as np
-from seqeval import metrics
+import seqeval
 from pyrouge import Rouge155
 from sacrebleu import corpus_bleu
-from seqeval.scheme import IOB2
 
 from .tasks.generic_dataset import Query
 from .util import requote_program
@@ -208,18 +207,6 @@ def normalize_text(s):
     return white_space_fix(remove_articles(remove_punc(lower(s))))
 
 
-def ner_f1_score(prediction, ground_truth):
-    # convert IOB2 -> IOB1
-    # cur_label = None
-    # for n, label in enumerate(prediction):
-    #     if label.startswith("B") and label[2:] != cur_label:
-    #         prediction[n] = "I" + label[1:]
-    #     cur_label = label[2:]
-    
-    results = metrics.f1_score(y_pred=[prediction.split()], y_true=[ground_truth.split()], scheme=IOB2, mode='strict')
-    return results
-
-
 def f1_score(prediction, ground_truth):
     prediction_tokens = prediction.split()
     ground_truth_tokens = ground_truth.split()
@@ -257,10 +244,6 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
 
 def computeF1(outputs, targets):
     outs = [metric_max_over_ground_truths(f1_score, o, t) for o, t in zip(outputs, targets)]
-    return sum(outs) / len(outputs) * 100
-
-def computeNER_F1(outputs, targets):
-    outs = [metric_max_over_ground_truths(ner_f1_score, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
 
 def computeEM(outputs, targets):
@@ -511,8 +494,33 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
         metric_keys.append('f1')
         metric_values.append(f1)
 
+    if 'ner_f1_IOB1' in requested_metrics:
+        greedy_processed = [pred.split() for pred in greedy]
+        answer_processed = [ans[0].split() for ans in answer]
+        from seqeval import metrics, scheme
+        
+        def convert_IOB2_to_IOB1(labels):
+            cur_category = None
+            for n, label in enumerate(labels):
+                if label[0] == "B" and label[2:] != cur_category:
+                    labels[n] = "I" + label[1:]
+                cur_category = label[2:]
+        
+        convert_IOB2_to_IOB1(greedy_processed)
+        convert_IOB2_to_IOB1(answer_processed)
+
+        f1 = metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed, mode='strict', scheme=scheme.IOB1) * 100
+        
+        metric_keys.append('ner_f1_IOB1')
+        metric_values.append(f1)
+
     if 'ner_f1' in requested_metrics:
-        f1 = computeNER_F1(greedy, answer)
+        greedy_processed = [pred.split() for pred in greedy]
+        answer_processed = [ans[0].split() for ans in answer]
+        from seqeval import metrics, scheme
+
+        f1 = metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed) * 100
+    
         metric_keys.append('ner_f1')
         metric_values.append(f1)
 

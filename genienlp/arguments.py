@@ -294,6 +294,7 @@ def parse_argv(parser):
     
     # token classification task args
     parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')
+    parser.add_argument('--ner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
 
 
 def check_and_update_generation_args(args):
