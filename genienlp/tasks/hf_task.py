@@ -100,7 +100,7 @@ class CONLLNER(HFTask):
     
     @property
     def metrics(self):
-        return ['ner_f1', 'f1', 'em', 'pem']
+        return ['ner_f1', 'em', 'f1', 'pem']
     
     def _make_example(self, ex, **kwargs):
         example_id = ex['id']
