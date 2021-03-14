@@ -146,7 +146,7 @@ class TransformerNumericalizer(object):
             self._tokenizer = M2M100Tokenizer.from_pretrained(**tokenizer_args)
         else:
             # FIXME: there's a known issue with Bert-based fast tokenizers (e.g. Electra) addressed here https://github.com/huggingface/transformers/pull/10686
-            # till then set do_lower_case to True and don't load from save_dir for bert-based models
+            # till then don't load from save_dir for bert-based models
             if isinstance(config, ElectraConfig) or isinstance(config, BertConfig):
                 # tokenizer_args['do_lower_case'] = True
                 tokenizer_args['pretrained_model_name_or_path'] = self._pretrained_name

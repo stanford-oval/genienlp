@@ -47,6 +47,7 @@ from . import arguments
 from . import models
 from .data_utils.bootleg import Bootleg
 from .run_bootleg import bootleg_process_splits
+from .tasks.hf_task import HFTask
 from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader, \
     log_model_size, get_devices, ned_dump_entity_type_pairs
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
@@ -156,6 +157,7 @@ def prepare_data(args, logger):
         kwargs['all_dirs'] = args.eval_src_languages
         kwargs['cached_path'] = os.path.join(args.cache, task.name)
         kwargs['ner_domains'] = args.ner_domains
+        kwargs['hf_test_overfit'] = args.hf_test_overfit
 
         logger.info(f'Adding {task.name} to validation datasets')
         splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
