@@ -227,8 +227,8 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
                 for p, l in zip(pred, label):
                     if l == -100:
                         continue
-                    preds.append(task.label_list[p])
-                    labels.append(task.label_list[l])
+                    preds.append(task.all_labels[p])
+                    labels.append(task.all_labels[l])
 
                 processed_preds.append([" ".join(preds)])
                 processed_labels.append(" ".join(labels))
@@ -243,13 +243,10 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
         output.answers = all_answers
         output.predictions = all_predictions
 
+        # output = generate_with_model(model, val_iter, numericalizer, task, args)
         metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args.reduce_metrics)
         results = [output.predictions, output.answers, output.contexts]
         print_results(names, results, num_print=num_print)
             
-        # output = generate_with_model(model, val_iter, numericalizer, task, args)
-        # metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args)
-        # results = [output.predictions, output.answers, output.contexts]
-        # print_results(names, results, num_print=num_print)
 
         return output, metrics
