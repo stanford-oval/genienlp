@@ -30,6 +30,7 @@
 from collections import OrderedDict
 
 from . import generic_dataset
+from .almond_task import BaseAlmondTask
 from .base_task import BaseTask
 from .generic_dataset import CrossNERDataset
 from .registry import register_task
@@ -192,7 +193,7 @@ class ZRE(BaseTask):
 
 
 @register_task('cross_ner')
-class CrossNERTask(BaseTask):
+class CrossNERTask(BaseAlmondTask):
     politics_labels = ['O', 'B-country', 'B-politician', 'I-politician', 'B-election', 'I-election', 'B-person',
                        'I-person', 'B-organisation', 'I-organisation', 'B-location', 'B-misc', 'I-location',
                        'I-country', 'I-misc', 'B-politicalparty', 'I-politicalparty', 'B-event', 'I-event']
@@ -240,6 +241,12 @@ class CrossNERTask(BaseTask):
     @property
     def metrics(self):
         return ['ner_f1', 'em', 'f1', 'pem']
+    
+    def _is_program_field(self, field_name):
+        return field_name == 'answer'
+    
+    def utterance_field(self):
+        return 'question'
     
     def _make_example(self, example_id, token_list, label_list, domain):
         question = ' '.join(token_list)

@@ -143,6 +143,11 @@ def parse_argv(parser):
                         help='path to auxiliary dataset (ignored if curriculum is not used)')
     parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'])
 
+    # token classification task args
+    parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')
+    parser.add_argument('--ner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
+    parser.add_argument('--hf_test_overfit', action='store_true', help='Debugging flag for hf datasets where validation will be performed on train set')
+
 
 def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
     config_overrides = bootleg.fixed_overrides
@@ -182,10 +187,11 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
         for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
             if task.utterance_field() == 'question':
                 for i in range(len(tokens_type_ids)):
+                    context_len = len(ex.context.split(' ')) if ex.context else 0
                     examples[n].question_feature[i].type_id = tokens_type_ids[i]
                     examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[i]
-                    examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = tokens_type_probs[i]
+                    examples[n].context_plus_question_feature[i + context_len].type_id = tokens_type_ids[i]
+                    examples[n].context_plus_question_feature[i + context_len].type_prob = tokens_type_probs[i]
             
             else:
                 for i in range(len(tokens_type_ids)):
@@ -230,6 +236,7 @@ def dump_bootleg_features(args, logger):
         kwargs.update(train_eval_shared_kwargs)
         kwargs['all_dirs'] = args.train_src_languages
         kwargs['cached_path'] = os.path.join(args.cache, train_task.name)
+        kwargs['ner_domains'] = args.ner_domains
         if args.use_curriculum:
             kwargs['curriculum'] = True
     
@@ -250,8 +257,9 @@ def dump_bootleg_features(args, logger):
         train_path = paths.train
         
         logger.info(f'{train_task.name} has {len(splits.train)} training examples')
-    
-        logger.info(f'train all_schema_types: {train_task.all_schema_types}')
+
+        if hasattr(train_task, 'all_schema_types'):
+            logger.info(f'train all_schema_types: {train_task.all_schema_types}')
     
         if train_task.name.startswith('almond'):
             if args.ned_features_default_val:
@@ -279,14 +287,17 @@ def dump_bootleg_features(args, logger):
         kwargs.update(train_eval_shared_kwargs)
         kwargs['all_dirs'] = args.eval_src_languages
         kwargs['cached_path'] = os.path.join(args.cache, val_task.name)
+        kwargs['ner_domains'] = args.ner_domains
+        kwargs['hf_test_overfit'] = args.hf_test_overfit
 
         logger.info(f'Adding {val_task.name} to validation datasets')
         splits, paths = val_task.get_splits(args.data, lower=args.lower, **kwargs)
 
         assert not splits.train and not splits.test and not splits.aux
         logger.info(f'{val_task.name} has {len(splits.eval)} validation examples')
-        
-        logger.info(f'eval all_schema_types: {val_task.all_schema_types}')
+
+        if hasattr(val_task, 'all_schema_types'):
+            logger.info(f'eval all_schema_types: {val_task.all_schema_types}')
         
         eval_dataset = splits.eval
         

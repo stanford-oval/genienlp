@@ -40,6 +40,9 @@ logger = logging.getLogger(__name__)
 class HFTask(BaseTask):
     def __init__(self, name, args):
         super().__init__(name, args)
+        
+    def utterance_field(self):
+        return 'question'
 
 
 @register_task('ambig_qa')

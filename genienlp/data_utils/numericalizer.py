@@ -416,9 +416,16 @@ class TransformerNumericalizer(object):
     
     def process_classification_labels(self, examples):
     
-        def tokenize_and_align_labels(all_sequences, all_labels, tokenizer, label_all_tokens=True):
-            tokenized_inputs = tokenizer.batch_encode_plus(
+        def tokenize_and_align_labels(all_sequences, all_sequences_with_types, all_labels, label_all_tokens=True):
+            tokenized_inputs = self._tokenizer.batch_encode_plus(
                 all_sequences,
+                padding=False,
+                truncation=True,
+                # We use this argument because the texts in our dataset are lists of words (with a label for each word).
+                is_split_into_words=True,
+            )
+            tokenized_inputs_with_types = self._tokenizer.batch_encode_plus(
+                all_sequences_with_types,
                 padding=False,
                 truncation=True,
                 # We use this argument because the texts in our dataset are lists of words (with a label for each word).
@@ -428,6 +435,11 @@ class TransformerNumericalizer(object):
             all_processed_labels = []
             for i, label in enumerate(all_labels):
                 word_ids = tokenized_inputs.word_ids(batch_index=i)
+                word_ids_with_types = tokenized_inputs_with_types.word_ids(batch_index=i)
+                
+                # find types size
+                size_diff = len(word_ids_with_types) - len(word_ids)
+                
                 previous_word_idx = None
                 label_ids = []
                 for word_id in word_ids:
@@ -441,9 +453,12 @@ class TransformerNumericalizer(object):
                     else:
                         label_ids.append(label[word_id] if label_all_tokens else self.answer_pad_id)
                     previous_word_idx = word_id
-            
+                    
+                # extend labels for types
+                label_ids.extend([self.answer_pad_id] * size_diff)
+                
                 all_processed_labels.append(label_ids)
-        
+            
             return all_processed_labels
     
         # align labels
@@ -452,8 +467,8 @@ class TransformerNumericalizer(object):
     
         tokenized_answers = tokenize_and_align_labels(
             [ex.context_plus_question.split(" ") for ex in examples],
-            [list(map(lambda token: int(token), ex.answer.split(" "))) for ex in examples],
-            self._tokenizer
+            [ex.context_plus_question_with_types.split(" ") for ex in examples],
+            [list(map(lambda token: int(token), ex.answer.split(" "))) for ex in examples]
         )
     
         batch_decoder_numerical = []

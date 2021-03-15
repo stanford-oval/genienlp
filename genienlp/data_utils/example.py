@@ -143,8 +143,10 @@ class NumericalizedExamples(NamedTuple):
                 field_name='context',
                 features=[ex.context_plus_question_feature for ex in examples if ex.context_plus_question_feature]
             )
-            
+        
+        #TODO remove double attempts at context tokenization
         if getattr(examples, 'is_classification', False):
+            assert add_types_to_text != 'insert'
             tokenized_answers = numericalizer.process_classification_labels(examples)
         else:
             tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
