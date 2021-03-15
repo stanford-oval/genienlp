@@ -189,8 +189,8 @@ def generate_with_classification_model(model, data_iterator, numericalizer, task
             for p, l in zip(pred, label):
                 if l == numericalizer.answer_pad_id:
                     continue
-                preds_list.append(task.all_labels[p])
-                labels_list.append(task.all_labels[l])
+                preds_list.append(task.id2label[p])
+                labels_list.append(task.id2label[l])
             
             processed_preds.append([" ".join(preds_list)])
             processed_labels.append(" ".join(labels_list))

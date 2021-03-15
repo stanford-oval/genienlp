@@ -92,11 +92,16 @@ class AmbigQA(HFTask):
 class CONLLNER(HFTask):
     tagging_scheme = 'IOB2'
     conll_labels = ['O', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG', 'B-LOC', 'I-LOC', 'B-MISC', 'I-MISC']
-    all_labels = tuple(conll_labels)
     domain2labels = {"conll": conll_labels}
     
     def __init__(self, name, args):
-        self.num_labels = len(self.all_labels)
+        self.all_labels = tuple(self.conll_labels)
+        self.label2id = {}
+        for label in self.all_labels:
+            if label not in self.label2id:
+                self.label2id[label] = len(self.label2id)
+        self.id2label = {v: k for k, v in self.label2id.items()}
+        self.num_labels = len(self.label2id)
         super().__init__(name, args)
     
     @property

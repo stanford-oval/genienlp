@@ -27,10 +27,12 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from collections import OrderedDict
+
+from . import generic_dataset
 from .base_task import BaseTask
 from .generic_dataset import CrossNERDataset
 from .registry import register_task
-from . import generic_dataset
 from ..data_utils.example import Example
 
 
@@ -219,13 +221,20 @@ class CrossNERTask(BaseTask):
     
     news_labels = ['O', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG', 'B-LOC', 'I-LOC', 'B-MISC', 'I-MISC']
     
-    all_labels = tuple(set(politics_labels + science_labels + music_labels + literature_labels + ai_labels + news_labels))
-
-    domain2labels = {'politics': politics_labels, 'science': science_labels, 'music': music_labels,
-                     'literature': literature_labels, 'ai': ai_labels, 'news': news_labels}
+    domain2labels = OrderedDict({'politics': politics_labels, 'science': science_labels, 'music': music_labels,
+                     'literature': literature_labels, 'ai': ai_labels, 'news': news_labels})
     
     def __init__(self, name, args):
-        self.num_labels = len(self.all_labels)
+        self.all_labels = []
+        # OrderedDict respect keys order
+        for domain, labels in self.domain2labels.items():
+            self.all_labels.extend(labels)
+        self.label2id = {}
+        for label in self.all_labels:
+            if label not in self.label2id:
+                self.label2id[label] = len(self.label2id)
+        self.id2label = {v: k for k, v in self.label2id.items()}
+        self.num_labels = len(self.label2id)
         super().__init__(name, args)
     
     @property
@@ -235,7 +244,7 @@ class CrossNERTask(BaseTask):
     def _make_example(self, example_id, token_list, label_list, domain):
         question = ' '.join(token_list)
         context = ''
-        answer = ' '.join([str(self.all_labels.index(label)) for label in label_list])
+        answer = ' '.join([str(self.label2id[label]) for label in label_list])
         
         return Example.from_raw(self.name + '/' + str(example_id), context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
