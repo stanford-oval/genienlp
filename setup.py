@@ -56,7 +56,7 @@ setuptools.setup(
         'requests~=2.22',
         'transformers @ git+https://github.com/huggingface/transformers@dfd16af8322788e6dd58e8396e0d6f2f5312bf99',
         'sentencepiece==0.1.*',
-        'sentence-transformers==0.4.0',
+        'sentence-transformers==0.4.1.2',
         'mosestokenizer~=1.1',
         'nltk~=3.4',
         'elasticsearch==7.11.0',
