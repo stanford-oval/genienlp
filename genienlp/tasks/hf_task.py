@@ -29,7 +29,6 @@
 
 import logging
 
-from .generic_dataset import CrossNERDataset
 from .hf_dataset import HFDataset
 from ..tasks.base_task import BaseTask
 from ..tasks.registry import register_task
@@ -114,5 +113,9 @@ class CONLLNER(HFTask):
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
-        return HFDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
+        splits, paths = HFDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
+        for split in splits:
+            if split:
+                split.is_classification = True
+        return splits, paths
 

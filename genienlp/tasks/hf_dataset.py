@@ -43,8 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 class HFDataset(CQA):
-    
-    def __init__(self, data, *, make_example, **kwargs):
+    def __init__(self, data, make_example, **kwargs):
         
         subsample = kwargs.get('subsample')
         skip_cache = kwargs.pop('kwargs', True)

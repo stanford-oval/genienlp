@@ -30,7 +30,7 @@
 import logging
 logging.getLogger("filelock").setLevel(logging.WARNING)
 
-from transformers import AutoModelForTokenClassification, AutoConfig, MBartTokenizer, MBartTokenizerFast
+from transformers import AutoModelForTokenClassification, AutoConfig
 
 from ..models.base import GenieModel
 from ..util import adjust_language_code
@@ -38,7 +38,6 @@ from . import TransformerSeq2Seq
 from ..data_utils.numericalizer import TransformerNumericalizer
 
 logger = logging.getLogger(__name__)
-
 
 
 class TransformerForTokenClassification(TransformerSeq2Seq, GenieModel):
@@ -60,10 +59,6 @@ class TransformerForTokenClassification(TransformerSeq2Seq, GenieModel):
             args.dimension = config.d_model
         else:
             args.dimension = config.hidden_size
-        
-        self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
-        self._is_mbart = 'mbart' in self.args.pretrained_model
-        self._is_mbart50 = self._is_mbart and '-50-' in self.args.pretrained_model
 
         self.src_lang, self.tgt_lang = adjust_language_code(config, args.pretrained_model,
                                                             kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en'))
@@ -78,21 +73,11 @@ class TransformerForTokenClassification(TransformerSeq2Seq, GenieModel):
         self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, args, max_generative_vocab=None)
 
         self.numericalizer.get_tokenizer(save_directory, config, self.src_lang, self.tgt_lang)
-
+        
         self.init_vocab_from_data(vocab_sets, tasks, save_directory)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
-
-        # set decoder_start_token_id
-        # recommended by huggingface
-        # TODO check if it's actually useful
-        if self.model.config.decoder_start_token_id is None and isinstance(self.numericalizer._tokenizer, (MBartTokenizer, MBartTokenizerFast)):
-            if isinstance(self.numericalizer._tokenizer, MBartTokenizer):
-                self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[self.tgt_lang]
-            else:
-                self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.convert_tokens_to_ids(self.tgt_lang)
-
-        # if self.model.config.decoder_start_token_id is None:
-        #     raise ValueError("Make sure that decoder_start_token_id for the model is defined")
+        
+        self.numericalizer.answer_pad_id = -100
 
 
     def forward(self, *input, **kwargs):

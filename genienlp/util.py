@@ -665,7 +665,7 @@ def load_config_json(args):
                     'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
                     'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types',
                     'att_pooling', 'plot_heatmaps', 'replace_qp', 'force_replace_qp',
-                    'num_labels'
+                    'num_labels', 'ner_domains', 'hf_test_overfit'
                     ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict

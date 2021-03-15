@@ -191,8 +191,6 @@ class ZRE(BaseTask):
 
 @register_task('cross_ner')
 class CrossNERTask(BaseTask):
-    # depends on ner_domains
-    
     politics_labels = ['O', 'B-country', 'B-politician', 'I-politician', 'B-election', 'I-election', 'B-person',
                        'I-person', 'B-organisation', 'I-organisation', 'B-location', 'B-misc', 'I-location',
                        'I-country', 'I-misc', 'B-politicalparty', 'I-politicalparty', 'B-event', 'I-event']

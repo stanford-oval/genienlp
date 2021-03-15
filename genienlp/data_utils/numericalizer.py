@@ -381,6 +381,10 @@ class TransformerNumericalizer(object):
         self.mask_id = self._tokenizer.mask_token_id
         self.cls_id = self._tokenizer.cls_token_id
         self.sep_id = self._tokenizer.sep_token_id
+        
+        # pad_id for answer tokens (different than context/ question pad_id for token classification tasks)
+        self.answer_pad_id = self.pad_id
+        
         if self.max_generative_vocab is not None:
             self.generative_vocab_size = len(self._decoder_words)
             
@@ -409,6 +413,63 @@ class TransformerNumericalizer(object):
         
         return num_prefix_special_tokens, num_suffix_special_tokens
     
+    
+    def process_classification_labels(self, examples):
+    
+        def tokenize_and_align_labels(all_sequences, all_labels, tokenizer, label_all_tokens=True):
+            tokenized_inputs = tokenizer.batch_encode_plus(
+                all_sequences,
+                padding=False,
+                truncation=True,
+                # We use this argument because the texts in our dataset are lists of words (with a label for each word).
+                is_split_into_words=True,
+            )
+        
+            all_processed_labels = []
+            for i, label in enumerate(all_labels):
+                word_ids = tokenized_inputs.word_ids(batch_index=i)
+                previous_word_idx = None
+                label_ids = []
+                for word_id in word_ids:
+                    # special tokens's word_id is None
+                    if word_id is None:
+                        label_ids.append(self.answer_pad_id)
+                    # set the label for the first subword of each word
+                    elif word_id != previous_word_idx:
+                        label_ids.append(label[word_id])
+                    # process next subwords
+                    else:
+                        label_ids.append(label[word_id] if label_all_tokens else self.answer_pad_id)
+                    previous_word_idx = word_id
+            
+                all_processed_labels.append(label_ids)
+        
+            return all_processed_labels
+    
+        # align labels
+        for ex in examples:
+            assert len(ex.answer.split(" ")) == len(ex.context_plus_question.split(" ")), print(ex.context_plus_question)
+    
+        tokenized_answers = tokenize_and_align_labels(
+            [ex.context_plus_question.split(" ") for ex in examples],
+            [list(map(lambda token: int(token), ex.answer.split(" "))) for ex in examples],
+            self._tokenizer
+        )
+    
+        batch_decoder_numerical = []
+        if self.decoder_vocab:
+            for i in range(len(tokenized_answers)):
+                batch_decoder_numerical.append(self.decoder_vocab.encode(tokenized_answers[i]))
+        else:
+            batch_decoder_numerical = [[]] * len(tokenized_answers)
+    
+        answer_sequential_fields = []
+        for i in range(len(tokenized_answers)):
+            answer_sequential_fields.append(
+                SequentialField(value=tokenized_answers[i], length=len(tokenized_answers[i]), limited=batch_decoder_numerical[i], feature=None))
+            
+        return answer_sequential_fields
+
     def encode_batch(self, sentences: List[str], field_name, features=None) -> List[SequentialField]:
         """
         Batched version of `encode_single()`. Uses multiprocessing on all CPU cores for preprocessing,

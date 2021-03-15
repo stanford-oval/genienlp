@@ -32,17 +32,18 @@ import sys
 import torch
 from collections import OrderedDict
 
+from .models import TransformerForTokenClassification
 from .util import GenerationOutput
 from .data_utils.progbar import progress_bar
 from .metrics import compute_metrics
 
 
-def generate_with_model(model, data_iterator, numericalizer, task, args,
-                        output_predictions_only=False,
-                        output_confidence_features=False,
-                        original_order=None,
-                        confidence_estimators=None,
-                        disable_progbar=True) -> GenerationOutput:
+def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
+                                output_predictions_only=False,
+                                output_confidence_features=False,
+                                original_order=None,
+                                confidence_estimators=None,
+                                disable_progbar=True) -> GenerationOutput:
     """
     Inputs:
         original_order: List of indices. If provided, we will sort the results according to this order
@@ -54,9 +55,6 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
         contexts
     """
     output_confidence_scores = confidence_estimators is not None
-    if isinstance(model, torch.nn.DataParallel):
-        # get rid of the DataParallel wrapper
-        model = model.module
     predictions = []
     confidence_features = []
     example_ids = []
@@ -162,6 +160,63 @@ def generate_with_model(model, data_iterator, numericalizer, task, args,
     return output
 
 
+def generate_with_classification_model(model, data_iterator, numericalizer, task, original_order=None, disable_progbar=True) -> GenerationOutput:
+    all_example_ids = []
+    all_answers = []
+    all_contexts = []
+    all_predictions = []
+    
+    for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
+        batch_example_ids = batch.example_id
+        
+        batch_context = numericalizer.reverse(batch.context.value.data, 'context')
+        
+        all_example_ids += batch_example_ids
+        
+        output = model(input_ids=batch.context.value, attention_mask=(batch.context.value != numericalizer.pad_id))
+        
+        labels = batch.answer.value.tolist()
+        
+        logits = output.logits
+        predictions = torch.argmax(logits, dim=2).tolist()
+        
+        # Remove ignored index (special tokens)
+        processed_preds = []
+        processed_labels = []
+        for pred, label in zip(predictions, labels):
+            preds_list = []
+            labels_list = []
+            for p, l in zip(pred, label):
+                if l == numericalizer.answer_pad_id:
+                    continue
+                preds_list.append(task.all_labels[p])
+                labels_list.append(task.all_labels[l])
+            
+            processed_preds.append([" ".join(preds_list)])
+            processed_labels.append(" ".join(labels_list))
+        
+        all_contexts += batch_context
+        all_answers += processed_labels
+        all_predictions += processed_preds
+
+    if original_order is not None:
+        # sort back to the original order
+        original_order, all_example_ids, all_predictions, all_answers, all_contexts = \
+            [list(a) for a in tuple(zip(*sorted(list(zip(original_order, all_example_ids, all_predictions, all_answers, all_contexts)))))]
+
+    # TODO calculate and return loss
+    loss = None
+    output = GenerationOutput(
+        loss=loss,
+        example_ids=all_example_ids,
+        contexts=all_contexts,
+        answers=all_answers,
+        predictions=all_predictions
+    )
+
+    return output
+
+
 def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics):
     metrics = OrderedDict()
     for i in range(len(predictions[0])):
@@ -188,65 +243,23 @@ def print_results(keys, values, num_print=1):
     sys.stdout.flush()
 
 
+
 def validate(task, val_iter, model, numericalizer, args, num_print=10):
     with torch.no_grad():
         model.eval()
-        names = ['beam search', 'answer', 'context']
-
         if isinstance(model, torch.nn.DataParallel):
             # get rid of the DataParallel wrapper
             model = model.module
-        example_ids = []
-        all_answers = []
-        all_contexts = []
-        all_predictions = []
-
-        for batch in progress_bar(val_iter, desc='Generating', disable=True):
-            batch_size = len(batch.example_id)
-            batch_prediction = [[] for _ in range(batch_size)]
-            batch_confidence_features = [[] for _ in range(batch_size)]
-            batch_example_ids = batch.example_id
-            
-            batch_context = numericalizer.reverse(batch.context.value.data, 'context')
-    
-            example_ids += batch_example_ids
-            
-            output = model(input_ids=batch.context.value, attention_mask=(batch.context.value != numericalizer.pad_id))
-            
-            labels = batch.answer.value.tolist()
-            
-            logits = output.logits
-            predictions = torch.argmax(logits, dim=2).tolist()
-
-            # Remove ignored index (special tokens)
-            processed_preds = []
-            processed_labels = []
-            for pred, label in zip(predictions, labels):
-                preds = []
-                labels = []
-                for p, l in zip(pred, label):
-                    if l == -100:
-                        continue
-                    preds.append(task.all_labels[p])
-                    labels.append(task.all_labels[l])
-
-                processed_preds.append([" ".join(preds)])
-                processed_labels.append(" ".join(labels))
-                
-            all_contexts += batch_context
-            all_answers += processed_labels
-            all_predictions += processed_preds
-            
         
-        output.example_ids = example_ids
-        output.contexts = all_contexts
-        output.answers = all_answers
-        output.predictions = all_predictions
-
-        # output = generate_with_model(model, val_iter, numericalizer, task, args)
+        names = ['beam search', 'answer', 'context']
+        
+        if isinstance(model, TransformerForTokenClassification):
+            output = generate_with_classification_model(model, val_iter, numericalizer, task)
+        else:
+            output = generate_with_seq2seq_model(model, val_iter, numericalizer, task, args)
+        
         metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args.reduce_metrics)
         results = [output.predictions, output.answers, output.contexts]
         print_results(names, results, num_print=num_print)
-            
-
+        
         return output, metrics

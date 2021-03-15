@@ -122,40 +122,6 @@ class Example(NamedTuple):
         return Example(*args)
 
 
-def tokenize_and_align_labels(all_sequences, all_labels, tokenizer, label_all_tokens=True):
-    tokenized_inputs = tokenizer.batch_encode_plus(
-        all_sequences,
-        padding=False,
-        truncation=True,
-        # We use this argument because the texts in our dataset are lists of words (with a label for each word).
-        is_split_into_words=True,
-    )
-    
-    all_processed_labels = []
-    for i, label in enumerate(all_labels):
-        word_ids = tokenized_inputs.word_ids(batch_index=i)
-        previous_word_idx = None
-        label_ids = []
-        for word_idx in word_ids:
-            # Special tokens have a word id that is None. We set the label to -100 so they are automatically
-            # ignored in the loss function.
-            if word_idx is None:
-                label_ids.append(-100)
-            # We set the label for the first token of each word.
-            elif word_idx != previous_word_idx:
-                label_ids.append(label[word_idx])
-            # For the other tokens in a word, we set the label to either the current label or -100, depending on
-            # the label_all_tokens flag.
-            else:
-                label_ids.append(label[word_idx] if label_all_tokens else -100)
-            previous_word_idx = word_idx
-
-        all_processed_labels.append(label_ids)
-
-        
-    return all_processed_labels
-
-
 class NumericalizedExamples(NamedTuple):
     example_id: List[str]
     context: SequentialField
@@ -177,36 +143,17 @@ class NumericalizedExamples(NamedTuple):
                 field_name='context',
                 features=[ex.context_plus_question_feature for ex in examples if ex.context_plus_question_feature]
             )
-
-        # align labels
-        for ex in examples:
-            assert len(ex.answer.split(" ")) == len(ex.context_plus_question.split(" ")), print(ex.context_plus_question)
-        
-        tokenized_answers = tokenize_and_align_labels(
-            [ex.context_plus_question.split(" ") for ex in examples],
-            [list(map(lambda token: int(token), ex.answer.split(" "))) for ex in examples],
-            numericalizer._tokenizer
-        )
-
-        batch_decoder_numerical = []
-        if numericalizer.decoder_vocab:
-            for i in range(len(tokenized_answers)):
-                batch_decoder_numerical.append(numericalizer.decoder_vocab.encode(tokenized_answers[i]))
+            
+        if getattr(examples, 'is_classification', False):
+            tokenized_answers = numericalizer.process_classification_labels(examples)
         else:
-            batch_decoder_numerical = [[]] * len(tokenized_answers)
-        
-        answer_sequential_fields = []
-        for i in range(len(tokenized_answers)):
-            answer_sequential_fields.append(
-                SequentialField(value=tokenized_answers[i], length=len(tokenized_answers[i]), limited=batch_decoder_numerical[i], feature=None))
-        
-        
-        # tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], [], 'answer')
+            tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
+
         
         for i in range(len(examples)):
             numericalized_examples.append(NumericalizedExamples([examples[i].example_id],
                                         tokenized_contexts[i],
-                                        answer_sequential_fields[i]))
+                                        tokenized_answers[i]))
         return numericalized_examples
 
     @staticmethod
@@ -235,8 +182,7 @@ class NumericalizedExamples(NamedTuple):
         if context_features:
             context_features = numericalizer.pad(context_features, pad_id=db_unk_id)
 
-        answer_values = numericalizer.pad(answer_values, pad_id=-100)
-        # answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
+        answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.answer_pad_id)
         answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)
         answer_lengths = torch.stack(answer_lengths, dim=0)
 
