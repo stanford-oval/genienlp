@@ -61,7 +61,7 @@ setuptools.setup(
         'nltk~=3.4',
         'elasticsearch==7.9.1',
         'ujson==4.0.2',
-        'pathos==0.2.6',
+        'pathos==0.2.7',
         'marisa_trie_m==0.7.6',
         'kfserving>=0.5.0',
         'bootleg @ git+https://github.com/Mehrad0711/bootleg@21b27ddbf672d00816948f038ecbe0853524dadb',
