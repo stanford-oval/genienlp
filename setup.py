@@ -48,7 +48,7 @@ setuptools.setup(
 
     install_requires=[
         'numpy>=1.14.5',
-        'torch~=1.7.1',
+        'torch~=1.8.0',
         'tqdm~=4.0',
         'tensorboardX==2.1.*',
         'pyrouge>=0.1.3',
@@ -64,7 +64,7 @@ setuptools.setup(
         'pathos==0.2.7',
         'marisa_trie_m==0.7.6',
         'kfserving>=0.5.0',
-        'bootleg @ git+https://github.com/Mehrad0711/bootleg@33511a7748505d60cd60c0444ab68535a4e43aa7',
+        'bootleg @ git+https://github.com/Mehrad0711/bootleg@c020a5c07c58ef224e4dcaf7473cdb649ebcb431',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',
