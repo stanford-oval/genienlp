@@ -31,7 +31,8 @@
 import argparse
 import os
 import torch
-torch.use_deterministic_algorithms(True)
+# torch.use_deterministic_algorithms(True)
+torch.backends.cudnn.benchmark = False
 
 from . import arguments, train, predict, server, kfserver, cache_embeddings, export, calibrate, run_bootleg
 from .paraphrase import run_lm_finetuning, run_generation
