@@ -29,11 +29,16 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import argparse
+import os
+import torch
+torch.use_deterministic_algorithms(True)
 
 from . import arguments, train, predict, server, kfserver, cache_embeddings, export, calibrate, run_bootleg
 from .paraphrase import run_lm_finetuning, run_generation
 from .paraphrase.scripts import split_dataset, dialog_to_tsv, clean_paraphrasing_dataset, transform_dataset
 from .sts import sts_calculate_scores, sts_filter
+
+os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
 
 subcommands = {
     # main commands
