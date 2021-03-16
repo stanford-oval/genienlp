@@ -8,7 +8,6 @@ MAINTAINER Thingpedia Admins <thingpedia-admins@lists.stanford.edu>
 
 USER root
 
-
 # copy source
 COPY . /opt/genienlp
 
@@ -27,14 +26,11 @@ RUN dnf -y install git gcc gcc-c++ make cmake && \
 	&& pip3 install kfserving \
         && pip3 install awscli \
 	&& pip3 install -e /opt/genienlp \
+	&& python3 -m spacy download en_core_web_sm \
 	&& rm -fr /root/.cache \
 	&& dnf -y remove gcc gcc-c++ make cmake \
 	&& rm -fr /var/cache/dnf
 
-RUN git clone https://github.com/Mehrad0711/bootleg.git /opt/bootleg/ ; \
-	cd /opt/bootleg/ ; \
-	git checkout ${BOOTLEG_VERSION} && pip3 install -r requirements.txt && pip3 install -e . ; \
-	python3 -m spacy download en_core_web_sm
 
 # add user genienlp
 RUN useradd -ms /bin/bash -r genienlp
