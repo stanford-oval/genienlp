@@ -277,9 +277,7 @@ def parse_argv(parser):
     parser.add_argument('--evaluate', type=str, required=True, choices=['train', 'valid', 'test'],
                         help='Which dataset to do predictions for (train, dev or test)')
     parser.add_argument('--pred_set_name', default='eval', type=str, help='Name of dataset to run prediction for; will be ignored if --evaluate is test')
-    parser.add_argument('--tasks',
-                        default=['almond', 'squad', 'iwslt.en.de', 'cnn_dailymail', 'multinli.in.out', 'sst', 'srl',
-                                 'zre', 'woz.en', 'wikisql', 'schema'], dest='task_names', nargs='+')
+    parser.add_argument('--tasks', dest='task_names', nargs='+', help='task names for prediction')
     parser.add_argument('--devices', default=None, nargs='+', type=int,
                         help='a list of devices that can be used for prediction. By default, all devices will be used.')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
