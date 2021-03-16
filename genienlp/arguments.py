@@ -318,6 +318,9 @@ def check_and_update_generation_args(args):
 
 def post_parse_general(args):
     
+    if args.no_fast_tokenizer and args.force_fast_tokenizer:
+        raise ValueError('Both no_fast_tokenizer and force_fast_tokenizer flags are on')
+    
     for feat in args.ned_features:
         if feat not in VALID_FEATURE_FIELDS:
             raise ValueError('Feature {} is not supported. Please provide valid features from {} list'.format(feat, VALID_FEATURE_FIELDS))
