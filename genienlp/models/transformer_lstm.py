@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 class TransformerLSTM(GenieModel):
+    
     def __init__(self, config=None, *inputs, args, vocab_sets, tasks, save_directory=None, **kwargs):
         """
         Relevant inputs should be provided using kwargs. This method is defined this way to match parent's and siblings' method signatures.
@@ -59,13 +60,12 @@ class TransformerLSTM(GenieModel):
         encoder_embeddings = args.pretrained_model
         config = AutoConfig.from_pretrained(encoder_embeddings, cache_dir=args.embeddings)
         args.dimension = config.hidden_size
-        self.numericalizer = TransformerNumericalizer(encoder_embeddings, args, max_generative_vocab=args.max_generative_vocab)
 
         self.src_lang, self.tgt_lang = adjust_language_code(config, args.pretrained_model,
                                                             kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en'))
 
-        self.numericalizer.get_tokenizer(save_directory, config, self.src_lang, self.tgt_lang)
-        self.init_vocab_from_data(vocab_sets, tasks, save_directory)
+        self.numericalizer = TransformerNumericalizer(encoder_embeddings, args, max_generative_vocab=args.max_generative_vocab,
+                                save_dir=save_directory, config=config, src_lang=self.src_lang, tgt_lang=self.tgt_lang, vocab_sets=vocab_sets, tasks=tasks)
 
         logger.info(f'Initializing encoder and decoder embeddings')
         

@@ -599,7 +599,7 @@ def main(args):
     ########## initialize model
     best_decascore = None
     if args.load is not None:
-        model, best_decascore = model_class.from_pretrained(args.save,
+        model, best_decascore = model_class.load(args.save,
                                                             args=args,
                                                             model_checkpoint_file=args.load,
                                                             vocab_sets=train_sets+val_sets,

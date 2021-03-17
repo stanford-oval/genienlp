@@ -55,7 +55,7 @@ def main(args):
 
     # load everything - this will ensure that we initialize the numericalizer correctly
     Model = getattr(models, args.model)
-    model, _ = Model.from_pretrained(args.path,
+    model, _ = Model.load(args.path,
                                      model_checkpoint_file=args.checkpoint_name,
                                      args=args,
                                      device=torch.device('cpu'),

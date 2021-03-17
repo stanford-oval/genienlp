@@ -165,7 +165,7 @@ def run(args, device):
     tgt_lang = args.pred_tgt_languages[0]
 
     Model = getattr(models, args.model)
-    model, _ = Model.from_pretrained(args.path,
+    model, _ = Model.load(args.path,
                                      model_checkpoint_file=args.checkpoint_name,
                                      args=args,
                                      device=device,
