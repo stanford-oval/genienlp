@@ -36,10 +36,9 @@ from pathos import multiprocessing
 from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
-from transformers import MBartConfig, MarianConfig, M2M100Config, T5Config,\
-    AutoTokenizer, BertTokenizer, BertTokenizerFast, XLMRobertaTokenizer, XLMRobertaTokenizerFast,\
-    GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer,  MarianTokenizer, M2M100Tokenizer,\
-    SPIECE_UNDERLINE
+from transformers import MarianConfig, T5Config, AutoTokenizer, BertTokenizer, BertTokenizerFast,\
+    XLMRobertaTokenizer, XLMRobertaTokenizerFast, GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer,\
+    MarianTokenizer, M2M100Tokenizer, SPIECE_UNDERLINE
 
 from .decoder_vocab import DecoderVocabulary
 from ..util import get_devices
@@ -131,19 +130,8 @@ class TransformerNumericalizer(object):
             tokenizer_args.update({'pretrained_model_name_or_path': save_dir, 'config': config})
         else:
             tokenizer_args.update({'pretrained_model_name_or_path': self._pretrained_name})
-        
-        model_is_marian = isinstance(config, MarianConfig)
-        model_is_mbart = isinstance(config, MBartConfig)
-        model_is_m2m100 = isinstance(config, M2M100Config)
-        model_is_t5 = isinstance(config, T5Config)
 
-        # hack until huggingface provides mbart50 config
-        if model_is_mbart and 'mbart-50' in config.name_or_path:
-            self._tokenizer = MBart50Tokenizer.from_pretrained(**tokenizer_args)
-        elif model_is_m2m100:
-            self._tokenizer = M2M100Tokenizer.from_pretrained(**tokenizer_args)
-        else:
-            self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
+        self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
 
         # some tokenizers like Mbart do not set src_lang and tgt_lan when initialized; take care of it here
         self._tokenizer.src_lang = src_lang
@@ -151,9 +139,9 @@ class TransformerNumericalizer(object):
 
         # define input prefix to add before every input text
         input_prefix = ''
-        if model_is_marian and tgt_lang:
+        if isinstance(config, MarianConfig) and tgt_lang:
             input_prefix = f'>>{tgt_lang}<< '
-        elif model_is_t5:
+        elif isinstance(config, T5Config):
             t5_task = f'translation_{src_lang}_to_{tgt_lang}'
             # TODO add support for summarization
             # t5_task = 'summarization'
@@ -164,7 +152,7 @@ class TransformerNumericalizer(object):
         # We only include the base tokenizers since `isinstance` checks for inheritance
         if isinstance(self._tokenizer, (BertTokenizer, BertTokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
-        elif isinstance(self._tokenizer, (XLMRobertaTokenizer, XLMRobertaTokenizerFast, MarianTokenizer, M2M100Tokenizer)):
+        elif isinstance(self._tokenizer, (XLMRobertaTokenizer, XLMRobertaTokenizerFast, MarianTokenizer, MBart50Tokenizer, M2M100Tokenizer)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
         elif isinstance(self._tokenizer, (GPT2Tokenizer, GPT2TokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')
