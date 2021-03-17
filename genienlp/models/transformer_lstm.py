@@ -44,15 +44,15 @@ logger = logging.getLogger(__name__)
 
 
 class TransformerLSTM(GenieModel):
-    
+
     def __init__(self, config=None, *inputs, args, vocab_sets, tasks, save_directory=None, **kwargs):
         """
         Relevant inputs should be provided using kwargs. This method is defined this way to match parent's and siblings' method signatures.
+        If `save_directory` is None, will initialize a new model and numericalizer, otherwise, will load them from `save_directory`
         Inputs:
             args
             vocab_sets
-            is_loading
-            save_directory: The directory where numericalizer can be loaded from. Should be provided whenever `is_loading` is True
+            save_directory: The directory where numericalizer can be loaded from.
         """
         super().__init__(PretrainedConfig()) # dummy PretrainedConfig
         self.args = args

@@ -111,10 +111,11 @@ class Example(NamedTuple):
             args.append(features)
 
         # create context_plus_question fields by concatenating context and question fields
-        # if question is empty, don't append space
-        args.append(args[1] + ' ' + args[3] if len(args[3]) else args[1])
+        # if question is empty, don't append anything
+        # add a placeholder token since we don't have access to the numericalizer and SEP token here
+        args.append(args[1] + ' <context_question_separator> ' + args[3] if len(args[3]) else args[1])
         args.append(args[2] + args[4])
-        args.append(context_plus_types + ' ' + question_plus_types)
+        args.append(context_plus_types + ' <context_question_separator> ' + question_plus_types)
         
         return Example(*args)
     
@@ -128,12 +129,14 @@ class NumericalizedExamples(NamedTuple):
     def from_examples(examples, numericalizer, add_types_to_text):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
+        sep_token = numericalizer.sep_token
         
+        # replace the placeholder separator token with the actual one from the numericalizer
         if add_types_to_text != 'no':
-            tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question_with_types for ex in examples], field_name='context')
+            tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question_with_types.replace('<context_question_separator>', sep_token) for ex in examples], field_name='context')
         else:
             tokenized_contexts = numericalizer.encode_batch(
-                    [ex.context_plus_question for ex in examples],
+                    [ex.context_plus_question.replace('<context_question_separator>', sep_token) for ex in examples],
                     field_name='context',
                     features=[ex.context_plus_question_feature for ex in examples if ex.context_plus_question_feature]
                 )
