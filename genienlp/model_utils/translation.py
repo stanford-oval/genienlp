@@ -18,18 +18,20 @@ def compute_attention(sample_layer_attention, att_pooling, dim=0):
     return sample_layer_attention_pooled
 
 
-def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, tgt_lang):
+def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled):
     # find positions of quotation marks in src and tgt
     src2tgt_mapping = {}
     src2tgt_mapping_index = {}
     
+    # ALL TODOS
+    # first replace double quotes with single quote "" --> "
+    # remove pad before priniting
+    # reduce logging per 5K example
+    # add space around quotation mark if not: "NUMBER_1 " --> " NUMBER_1 "
+    
     # Note: quotation marks are exclusively used to wrap parameters so just check if they are present in the target sentence
     src_quotation_symbols = ['"']
-    tgt_quotation_symbols = ['"']
-    if tgt_lang in ['ru', 'fa']:
-        tgt_quotation_symbols.extend(['«', '»'])
-    if tgt_lang == 'de':
-        tgt_quotation_symbols.extend(['„'])
+    tgt_quotation_symbols = ['"', '«', '»', '“', '„']
     
     src_spans_ind = [index for index, token in enumerate(src_tokens) if
                      any([symbol in token for symbol in src_quotation_symbols])]

@@ -616,7 +616,7 @@ class Translate(NaturalSeq2Seq):
                 tgt_tokens = tgt_tokens[:-1]
             
             if self.args.replace_qp:
-                text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att, tokenizer.tgt_lang)
+                text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att)
                 if not is_replaced and self.args.force_replace_qp:
                     text = force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att)
             else:

@@ -519,7 +519,7 @@ def run_single_process_generation(args, config):
                     
                     if args.replace_qp:
                         tgt_lang = args.tgt_lang if args.tgt_lang else args.model_name_or_path.rsplit('-', 1)[1]
-                        text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, tgt_lang)
+                        text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled)
                         if not is_replaced and args.force_replace_qp:
                             text = force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled)
                     else:
