@@ -26,7 +26,7 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     # Note: quotation marks are exclusively used to wrap parameters so just check if they are present in the target sentence
     src_quotation_symbols = ['"']
     tgt_quotation_symbols = ['"']
-    if tgt_lang == 'ru':
+    if tgt_lang in ['ru', 'fa']:
         tgt_quotation_symbols.extend(['«', '»'])
     if tgt_lang == 'de':
         tgt_quotation_symbols.extend(['„'])

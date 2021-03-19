@@ -890,7 +890,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
         all_dirs = kwargs['all_dirs'].split('+')
         
         for dir in all_dirs:
-            splits, paths = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
+            splits, paths = AlmondDataset.return_splits(path=os.path.join(root, 'almond/{}'.format(dir)),
                                                          make_example=self._make_example, **kwargs)
             all_datasets.append(splits)
             all_paths.append(paths)
