@@ -227,6 +227,11 @@ class TransformerNumericalizer(object):
         if self.args.add_types_to_text != 'no':
             self._tokenizer.add_tokens(['<e>', '</e>'])
         
+        existing_special_tokens = self._tokenizer.special_tokens_map
+        # add separator if it doesn't exist. It will be used to concatenate context and question
+        if 'sep_token' not in existing_special_tokens:
+            self._tokenizer.add_special_tokens({'sep_token': existing_special_tokens.get('sep_token', '</s>')})
+
         if self.max_generative_vocab is not None:
             # do a pass over all the data in the dataset
             # in this pass, we
@@ -239,7 +244,6 @@ class TransformerNumericalizer(object):
                     decoder_words.update(self._tokenizer.tokenize(example.question))
                     decoder_words.update(self._tokenizer.tokenize(example.answer))
             
-            existing_special_tokens = self._tokenizer.special_tokens_map
             # add the required special tokens, if not present already
             # note: if the tokens are not present, it means they are not used natively
             # by the model, so we can pick our favorite token

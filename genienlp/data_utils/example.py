@@ -114,7 +114,7 @@ class Example(NamedTuple):
         # if question is empty, don't append anything
         # add a placeholder token since we don't have access to the numericalizer and SEP token here
         args.append(args[1] + ' <context_question_separator> ' + args[3] if len(args[3]) else args[1])
-        args.append(args[2] + args[4])
+        args.append(args[2] + [None] + args[4])
         args.append(context_plus_types + ' <context_question_separator> ' + question_plus_types)
         
         return Example(*args)
