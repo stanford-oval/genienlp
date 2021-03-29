@@ -59,7 +59,7 @@ setuptools.setup(
         'sentence-transformers==1.0.3',
         'mosestokenizer~=1.1',
         'nltk~=3.4',
-        'elasticsearch==7.11.0',
+        'elasticsearch==7.12.0',
         'ujson==4.0.2',
         'pathos==0.2.7',
         'marisa_trie_m==0.7.6',
