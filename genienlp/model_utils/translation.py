@@ -27,17 +27,29 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     # find positions of quotation marks in src and tgt
     src2tgt_mapping = {}
     src2tgt_mapping_index = {}
-    
-    # ALL TODOS
-    # first replace double quotes with single quote "" --> "
-    # remove pad tokens before printing
-    # add space around quotation mark if not present already: "NUMBER_1 " --> " NUMBER_1 "
     global log_counter
 
     # Note: quotation marks are exclusively used to wrap parameters so just check if they are present in the target sentence
     src_quotation_symbols = ['"']
     tgt_quotation_symbols = ['"', '«', '»', '“', '„']
     
+    tokenizer._decode_use_source_tokenizer = False
+    
+    tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
+    orig_tgt_string = tgt_strings[:]
+    for symbol in tgt_quotation_symbols:
+        # 1) replace multiple quotes with single quote
+        tgt_strings = re.sub(rf"{symbol}+", rf"{symbol}", tgt_strings)
+        
+        # 2) add space around every symbol
+        tgt_strings = re.sub(rf"{symbol}", rf" {symbol} ", tgt_strings)
+        
+        # 3) remove any double spaces
+        tgt_strings = re.sub(r"\s\s", " ", tgt_strings)
+
+    with tokenizer.as_target_tokenizer():
+        tgt_tokens = tokenizer.tokenize(tgt_strings)
+        
     src_spans_ind = [index for index, token in enumerate(src_tokens) if
                      any([symbol in token for symbol in src_quotation_symbols])]
     tgt_spans_ind = [index for index, token in enumerate(tgt_tokens) if
@@ -127,9 +139,17 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
 def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled):
     # find positions of quotation marks in src
     src2tgt_mapping = {}
+
+    src_quotation_symbols = ['"']
+    tgt_quotation_symbols = ['"', '«', '»', '“', '„']
+    
     global log_counter
     
-    src_spans_ind = [index for index, token in enumerate(src_tokens) if '"' in token]
+    # replace double quotes with single quote
+    for symbol in tgt_quotation_symbols:
+        tgt_tokens = ' '.join(tgt_tokens).replace(f'{symbol}{symbol}', f'{symbol}').split(' ')
+    
+    src_spans_ind = [index for index, token in enumerate(src_tokens) if any([symbol in token for symbol in src_quotation_symbols])]
     if hasattr(tokenizer, 'is_piece_fn'):
         tgt_is_piece = [int(tokenizer.is_piece_fn(token)) for token in tgt_tokens]
     else:
