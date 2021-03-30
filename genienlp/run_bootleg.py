@@ -184,26 +184,25 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
                 for i in range(len(tokens_type_ids)):
                     examples[n].question_feature[i].type_id = tokens_type_ids[i]
                     examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_id = tokens_type_ids[i]
-                    examples[n].context_plus_question_feature[i + len(ex.context.split(' '))].type_prob = tokens_type_probs[i]
             
             else:
+                # context is the utterance field
                 for i in range(len(tokens_type_ids)):
                     examples[n].context_feature[i].type_id = tokens_type_ids[i]
                     examples[n].context_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].context_plus_question_feature[i].type_id = tokens_type_ids[i]
-                    examples[n].context_plus_question_feature[i].type_prob = tokens_type_probs[i]
             
-            context_plus_question_with_types = task.create_sentence_plus_types_tokens(ex.context_plus_question,
-                                                                                      ex.context_plus_question_feature,
-                                                                                      args.add_types_to_text)
-            examples[n] = ex._replace(context_plus_question_with_types=context_plus_question_with_types)
+            context_plus_types = task.insert_type_tokens(ex.context, ex.context_feature, args.add_types_to_text)
+            question_plus_types = task.insert_type_tokens(ex.question, ex.question_feature, args.add_types_to_text)
+            examples[n].question_plus_types = question_plus_types
+            examples[n].question_plus_types = context_plus_types
     
     if args.verbose:
         for ex in examples:
             print()
-            print(*[f'token: {token}\ttype: {token_type}' for token, token_type in
-                    zip(ex.context_plus_question.split(' '), ex.context_plus_question_feature)], sep='\n')
+            print(*[f'context token: {token}\ttype: {token_type}' for token, token_type in
+                    zip(ex.context.split(' '), ex.context_plus_feature)], sep='\n')
+            print(*[f'question token: {token}\ttype: {token_type}' for token, token_type in
+                    zip(ex.question.split(' '), ex.question_plus_feature)], sep='\n')
 
 
 def dump_bootleg_features(args, logger):

@@ -286,7 +286,7 @@ class BaseAlmondTask(BaseTask):
         new_prediction = ' '.join(new_tokens)
         return new_prediction
     
-    def create_sentence_plus_types_tokens(self, new_sentence, features, add_types_to_text):
+    def insert_type_tokens(self, new_sentence, features, add_types_to_text):
         new_sentence_tokens = new_sentence.split(' ')
         assert len(new_sentence_tokens) == len(features)
         sentence_plus_types_tokens = []
@@ -439,7 +439,7 @@ class BaseAlmondTask(BaseTask):
 
         sentence_plus_types = ''
         if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features):
-            sentence_plus_types = self.create_sentence_plus_types_tokens(new_sentence, features, self.args.add_types_to_text)
+            sentence_plus_types = self.insert_type_tokens(new_sentence, features, self.args.add_types_to_text)
 
         return new_sentence, features, sentence_plus_types
 

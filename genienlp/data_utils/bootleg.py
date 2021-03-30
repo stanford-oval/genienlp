@@ -88,7 +88,7 @@ def bootleg_process_examples(ex, bootleg_annotator, args, label, task):
             ex.context_plus_question_feature[i].type_id = tokens_type_ids[i]
             ex.context_plus_question_feature[i].type_prob = tokens_type_probs[i]
     
-    context_plus_question_with_types = task.create_sentence_plus_types_tokens(ex.context_plus_question,
+    context_plus_question_with_types = task.insert_type_tokens(ex.context_plus_question,
                                                                               ex.context_plus_question_feature,
                                                                               args.add_types_to_text)
     ex = ex._replace(context_plus_question_with_types=context_plus_question_with_types)
