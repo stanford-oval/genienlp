@@ -118,9 +118,6 @@ def prepare_data(args, logger):
         if bootleg:
             bootleg_process_splits(args, splits.train.examples, paths.train, task, bootleg)
 
-        if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
-            ned_dump_entity_type_pairs(splits.train, paths.train, 'train', task.utterance_field())
-
         train_sets.append(splits.train)
         logger.info(f'{task.name} has {len(splits.train)} training examples')
         
@@ -162,9 +159,6 @@ def prepare_data(args, logger):
 
         if bootleg:
             bootleg_process_splits(args, splits.eval.examples, paths.eval, task, bootleg)
-
-        if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
-            ned_dump_entity_type_pairs(splits.eval, paths.eval, 'eval', task.utterance_field())
 
         val_sets.append(splits.eval)
 
@@ -600,14 +594,14 @@ def main(args):
     best_decascore = None
     if args.load is not None:
         model, best_decascore = model_class.load(args.save,
-                                                            args=args,
-                                                            model_checkpoint_file=args.load,
-                                                            vocab_sets=train_sets+val_sets,
-                                                            tasks=tasks,
-                                                            device=devices[0],
-                                                            src_lang=src_lang,
-                                                            tgt_lang=tgt_lang
-                                                            )
+                                                args=args,
+                                                model_checkpoint_file=args.load,
+                                                vocab_sets=train_sets+val_sets,
+                                                tasks=tasks,
+                                                device=devices[0],
+                                                src_lang=src_lang,
+                                                tgt_lang=tgt_lang
+                                                )
         model.add_new_vocab_from_data(tasks=tasks, resize_decoder=True)
         if not args.resume:
             # we are fine-tuning, so reset the best score since the new fine-tune dataset usually has a different validation set from the original
@@ -615,6 +609,13 @@ def main(args):
     else:
         logger.info(f'Initializing a new {model_name}')
         model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks, src_lang=src_lang, tgt_lang=tgt_lang)
+        
+    # dump entities if required
+    if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
+        sep_token = ' ' if args.no_separator else model.numericalizer.sep_token
+        for task, train_set, val_set in zip(tasks, train_sets, val_sets):
+            ned_dump_entity_type_pairs(train_set, args.data, 'train', task.utterance_field(), sep_token)
+            ned_dump_entity_type_pairs(val_set, args.data, 'eval', task.utterance_field(), sep_token)
 
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)

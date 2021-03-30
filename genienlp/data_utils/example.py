@@ -109,9 +109,6 @@ class Example():
         args = [example_id]
         answer = unicodedata.normalize('NFD', answer)
         
-        question_plus_types = ''
-        context_plus_types = ''
-        
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
             arg = unicodedata.normalize('NFD', arg)
             sentence, features, sentence_plus_types = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)
@@ -165,7 +162,6 @@ class NumericalizedExamples(NamedTuple):
             context_plus_question_feature = ex.context_feature + [pad_feature] + ex.question_feature if len(ex.question_feature) + len(ex.context_feature) > 0 else []
             all_context_plus_question_features.append(context_plus_question_feature)
         
-        # replace the placeholder separator token with the actual one from the numericalizer
         if add_types_to_text != 'no':
             tokenized_contexts = numericalizer.encode_batch(all_context_plus_question_with_types, field_name='context')
         else:
