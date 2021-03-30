@@ -124,7 +124,6 @@ class Example():
             elif argname == 'question':
                 question_plus_types = sentence_plus_types
                 args.append(question_plus_types)
- 
         
         return Example(*args)
     

@@ -566,21 +566,16 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     else:
         return data_loader
 
-def ned_dump_entity_type_pairs(dataset, path, name, utterance_field, sep_token):
+def ned_dump_entity_type_pairs(dataset, path, name, utterance_field):
     
     with open(os.path.join(path, f'{name}_labels.jsonl'), 'w') as fout:
         for ex in dataset.examples:
-            text = ex.context_plus_types + sep_token + ex.question_plus_types if len(ex.question_plus_types) else ex.context_plus_types
-            entity_token_pairs = entity_regex.findall(text)
+            text = ex.question_plus_types if utterance_field == 'question' else ex.context_plus_types
             
-            if utterance_field == 'question':
-                entity_token_string = entity_token_pairs[1]
-                sentence = text[text.index('</e>') + 4: text.rindex('<e>')].strip()
-            else:
-                entity_token_string = entity_token_pairs[0]
-                sentence = text[:text.index('<e>')].strip()
-                
-            entity_token_string = entity_token_string[len('<e>'):-len('</e>')].strip('; ')
+            span_beg = text.index('<e>')
+            sentence = text[:span_beg].strip()
+            entity_span = text[span_beg:].strip()
+            entity_token_string = entity_span[len('<e>'):-len('</e>')].strip('; ')
             
             entities = []
             ent_types = []
