@@ -611,8 +611,8 @@ class Translate(NaturalSeq2Seq):
                 plt.savefig(os.path.join(os.path.dirname(self.args.save), f'heatmap_{batch_example_ids[i]}'))
                 plt.show()
     
-            # remove eos token if present
-            if tgt_tokens[-1] in tokenizer.all_special_tokens:
+            # remove eos and all pad tokens if present
+            while tgt_tokens[-1] in tokenizer.all_special_tokens:
                 tgt_tokens = tgt_tokens[:-1]
             
             if self.args.replace_qp:
