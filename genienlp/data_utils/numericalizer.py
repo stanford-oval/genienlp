@@ -606,12 +606,12 @@ class TransformerNumericalizer(object):
             sentence = regex.sub(replacement, sentence)
         return sentence
     
-    def reverse(self, batch, field_name):
+    def reverse(self, batch, field_name, skip_special_tokens=True):
         output = []
         use_source_tokenizer = True
         if field_name == 'answer':
             use_source_tokenizer = False
-        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True, clean_up_tokenization_spaces=False, use_source_tokenizer=use_source_tokenizer):
+        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=skip_special_tokens, clean_up_tokenization_spaces=False, use_source_tokenizer=use_source_tokenizer):
             if self._preprocess_special_tokens:
                 x = self._undo_special_token_preprocessing(x)
             output.append(x)

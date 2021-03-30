@@ -76,17 +76,33 @@ def get_pad_feature(feature_fields, ned_features_default_val, ned_features_size)
     return pad_feature
 
 
-class Example(NamedTuple):
-    example_id: str
-    context: str
-    context_feature: List[Feature]
-    question: str
-    question_feature: List[Feature]
-    answer: str
-    answer_feature: List[Feature]
-    context_plus_question: str
-    context_plus_question_feature: List[Feature]
-    context_plus_question_with_types: str
+class Example():
+    """
+    Contains all fields of a train/dev/test example in text form, alongside their NED features
+    both in text form (`*_plus_types` fields) and in embedding id form (`*_feature`)
+    """
+
+    def __init__(self,
+                 example_id: str,
+                 context: str,
+                 context_feature: List[Feature],
+                 context_plus_types: str,
+                 question: str,
+                 question_feature: List[Feature],
+                 question_plus_types: str,
+                 answer: str,
+                 answer_feature: List[Feature]):
+
+        self.example_id = example_id
+        self.context = context
+        self.context_feature = context_feature
+        self.context_plus_types = context_plus_types
+        self.question = question
+        self.question_feature = question_feature
+        self.question_plus_types = question_plus_types
+        self.answer = answer
+        self.answer_feature = answer_feature
+
 
     @staticmethod
     def from_raw(example_id: str, context: str, question: str, answer: str, preprocess=identity, lower=False):
@@ -100,22 +116,18 @@ class Example(NamedTuple):
             arg = unicodedata.normalize('NFD', arg)
             sentence, features, sentence_plus_types = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)
             
-            if argname == 'context':
-                context_plus_types = sentence_plus_types
-            elif argname == 'question':
-                question_plus_types = sentence_plus_types
-            
             if lower:
                 sentence = sentence.lower()
             args.append(sentence)
             args.append(features)
 
-        # create context_plus_question fields by concatenating context and question fields
-        # if question is empty, don't append anything
-        # add a placeholder token since we don't have access to the numericalizer and SEP token here
-        args.append(args[1] + ' <context_question_separator> ' + args[3] if len(args[3]) else args[1])
-        args.append(args[2] + [None] + args[4])
-        args.append(context_plus_types + ' <context_question_separator> ' + question_plus_types)
+            if argname == 'context':
+                context_plus_types = sentence_plus_types
+                args.append(context_plus_types)
+            elif argname == 'question':
+                question_plus_types = sentence_plus_types
+                args.append(question_plus_types)
+ 
         
         return Example(*args)
     
@@ -129,19 +141,40 @@ class NumericalizedExamples(NamedTuple):
     def from_examples(examples, numericalizer, add_types_to_text):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
-        sep_token = numericalizer.sep_token
+
+        if numericalizer.args.no_separator:
+            sep_token = ' '
+            pad_feature = []
+        else:
+            sep_token = numericalizer.sep_token
+            pad_feature = get_pad_feature(numericalizer.args.ned_features, numericalizer.args.ned_features_default_val, numericalizer.args.ned_features_size)
+
+        # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
+        all_context_plus_questions = []
+        all_context_plus_question_with_types = []
+        all_context_plus_question_features = []
+
+        for ex in examples:
+            # create context_plus_question fields by concatenating context and question fields
+            # if question is empty, don't append anything
+            context_plus_question = ex.context + sep_token + ex.question if len(ex.question) else ex.context
+            all_context_plus_questions.append(context_plus_question)
+            context_plus_question_with_types = ex.context_plus_types + sep_token + ex.question_plus_types if len(ex.question_plus_types) else ex.context_plus_types
+            all_context_plus_question_with_types.append(context_plus_question_with_types)
+            # concatenate question and context features with a separator, but no need for a separator if there are no features to begin with
+            context_plus_question_feature = ex.context_feature + [pad_feature] + ex.question_feature if len(ex.question_feature) + len(ex.context_feature) > 0 else []
+            all_context_plus_question_features.append(context_plus_question_feature)
         
         # replace the placeholder separator token with the actual one from the numericalizer
         if add_types_to_text != 'no':
-            tokenized_contexts = numericalizer.encode_batch([ex.context_plus_question_with_types.replace('<context_question_separator>', sep_token) for ex in examples], field_name='context')
+            tokenized_contexts = numericalizer.encode_batch(all_context_plus_question_with_types, field_name='context')
         else:
             tokenized_contexts = numericalizer.encode_batch(
-                    [ex.context_plus_question.replace('<context_question_separator>', sep_token) for ex in examples],
+                    all_context_plus_questions,
                     field_name='context',
-                    features=[ex.context_plus_question_feature for ex in examples if ex.context_plus_question_feature]
+                    features=[a for a in all_context_plus_question_features if a]
                 )
                 
-        
         tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
         
         for i in range(len(examples)):

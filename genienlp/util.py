@@ -664,7 +664,7 @@ def load_config_json(args):
                     'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
                     'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
                     'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types',
-                    'att_pooling', 'plot_heatmaps', 'replace_qp', 'force_replace_qp'
+                    'att_pooling', 'plot_heatmaps', 'replace_qp', 'force_replace_qp', 'no_separator'
                     ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
@@ -682,7 +682,7 @@ def load_config_json(args):
             # These are for backward compatibility with models that were trained before we added these arguments
             elif r in ('do_ned', 'use_encoder_loss',
                        'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version',
-                       'plot_heatmaps', 'replace_qp', 'force_replace_qp'
+                       'plot_heatmaps', 'replace_qp', 'force_replace_qp',
                        ):
                 setattr(args, r, False)
             elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
@@ -725,6 +725,8 @@ def load_config_json(args):
                 setattr(args, r, 10000)
             elif r == 'label_smoothing':
                 setattr(args, r, 0.0)
+            elif r == 'no_separator':
+                setattr(args, r, True) # old models don't use a separator
             else:
                 # use default value
                 setattr(args, r, None)
