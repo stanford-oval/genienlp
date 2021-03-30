@@ -143,8 +143,8 @@ class NumericalizedExamples(NamedTuple):
             sep_token = ' '
             pad_feature = []
         else:
-            sep_token = numericalizer.sep_token
-            pad_feature = get_pad_feature(numericalizer.args.ned_features, numericalizer.args.ned_features_default_val, numericalizer.args.ned_features_size)
+            sep_token = ' ' + numericalizer.sep_token + ' '
+            pad_feature = [get_pad_feature(numericalizer.args.ned_features, numericalizer.args.ned_features_default_val, numericalizer.args.ned_features_size)]
 
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []
@@ -159,11 +159,14 @@ class NumericalizedExamples(NamedTuple):
             context_plus_question_with_types = ex.context_plus_types + sep_token + ex.question_plus_types if len(ex.question_plus_types) else ex.context_plus_types
             all_context_plus_question_with_types.append(context_plus_question_with_types)
             # concatenate question and context features with a separator, but no need for a separator if there are no features to begin with
-            context_plus_question_feature = ex.context_feature + [pad_feature] + ex.question_feature if len(ex.question_feature) + len(ex.context_feature) > 0 else []
+            context_plus_question_feature = ex.context_feature + pad_feature + ex.question_feature if len(ex.question_feature) + len(ex.context_feature) > 0 else []
             all_context_plus_question_features.append(context_plus_question_feature)
         
         if add_types_to_text != 'no':
-            tokenized_contexts = numericalizer.encode_batch(all_context_plus_question_with_types, field_name='context')
+            tokenized_contexts = numericalizer.encode_batch(
+                all_context_plus_question_with_types,
+                field_name='context'
+            )
         else:
             tokenized_contexts = numericalizer.encode_batch(
                     all_context_plus_questions,

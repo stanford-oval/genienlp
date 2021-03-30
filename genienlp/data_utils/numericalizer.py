@@ -425,7 +425,10 @@ class TransformerNumericalizer(object):
         
         if features is None:
             features = []
-        extract_word_pieces = bool(len(features))
+            extract_word_pieces = False
+        else:
+            assert all([len(sentence.split()) == len(feature) for sentence, feature in zip(sentences, features)])
+            extract_word_pieces = True
         
         batch_size = len(sentences)
         
