@@ -79,6 +79,5 @@ def main():
     argv = parser.parse_args()
     subcommands[argv.subcommand][2](argv)
 
-
 if __name__ == '__main__':
     main()

@@ -67,6 +67,17 @@ for model in "sshleifer/bart-tiny-random" "sshleifer/tiny-mbart" ; do
     model_type="bart"
   fi
 
+  # new predict command
+  # TODO do we need --evaluate valid?
+  # --max_output_length is just a max length, but --length was the limit
+  # of output_length - len(input) for any given input. Closest approximation:
+  #     args.max_output_length = (args.max_input_length = 512) + (args.length = 15)
+
+  # TODO what happens to batch_size?
+  # TODO check path correct
+  # TODO gonna ignore the input and gold column stuff for now
+  genienlp predict --path $workdir/$model --tasks paraphrase  --pred_languages en --pred_tgt_languages en --max_output_length 527 --temperature 0 --repetition_penalty 1.0 --num_outputs 1 --overwrite --eval_dir $workdir/$model/eval_results/ --data $workdir/masked_paraphrasing/ --infill_text --num_text_spans 1
+
   # use a pre-trained model
   genienlp run-paraphrase --model_name_or_path $model --length 15 --temperature 0 --repetition_penalty 1.0 --num_samples 1 --batch_size 3 --input_file $workdir/masked_paraphrasing/dev.tsv --input_column 0 --gold_column 1 --output_file $workdir/generated_"$model_type".tsv  --skip_heuristics --task paraphrase --infill_text --num_text_spans 1 --src_lang en --tgt_lang en
 

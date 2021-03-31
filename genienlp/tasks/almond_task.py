@@ -46,7 +46,7 @@ from ..data_utils.example import Example, get_pad_feature, Feature
 from ..tasks.almond_dataset import AlmondDataset
 from ..tasks.almond_utils import ISO_to_LANG, process_id, quoted_pattern_with_space, \
     tokenize_cjk_chars, detokenize_cjk_chars, is_entity, is_entity_marker, is_device
-from ..paraphrase.data_utils import input_heuristics, output_heuristics
+from ..paraphrase.data_utils import input_heuristics, output_heuristics, text_infilling, token_masking, token_deletion, sentence_permutation, document_rotation
 
 logger = logging.getLogger(__name__)
 
@@ -537,6 +537,25 @@ class Paraphrase(NaturalSeq2Seq):
         example_id = self.name + '/' + example_id
 
         sentence, reverse_map = input_heuristics(sentence, thingtalk=thingtalk, is_cased=True)
+
+        # Adding this outside input_heuristics because it was outside in paraphrase.
+        # Maybe better design is to put it inside?
+        # should all these params be in kwargs or self.args?
+
+        # TODO we need to be able to access the tokenizer or the mask token via kwargs
+        # or a class field
+        masking_token = getattr(tokenizer, 'mask_token', '<mask>');
+        if mask_tokens:
+            sentence = token_masking(sentence, mask_token_prob, masking_token, thingtalk)
+        if delete_tokens:
+            sentence = token_deletion(sentence, delete_token_prob, masking_token, thingtalk)
+        if infill_text:
+            sentence = text_infilling(sentence, num_text_spans, infill_max_tries, masking_token, thingtalk)
+        if permute_sentences:
+            sentence = sentence_permutation(sentence)
+        if rotate_sentence:
+            sentence = document_rotation(sentence)
+
         # this task especially needs example ids to be unique
         while example_id in self.reverse_maps:
             example_id += '.'

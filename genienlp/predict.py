@@ -342,6 +342,22 @@ def parse_argv(parser):
     parser.add_argument('--translate_no_answer', action='store_true', help='if true the provided dataset would not contain the answer (translated sentence)')
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
 
+    ############################
+    #   Paraphrase Args        #
+    ############################
+    parser.add_argument('--mask_tokens', action='store_true', help='mask input tokens and infill them using denoising pretrained model')
+    parser.add_argument('--mask_token_prob', type=float, default=0.15, help='Probability of an input token being masked in the sentence')
+    parser.add_argument('--delete_tokens', action='store_true', help='delete input tokens and infill them using denoising pretrained model'
+                                                                     'In contrast to token masking, the model should decide which positions have missing inputs')
+    parser.add_argument('--delete_token_prob', type=float, default=0.15, help='Probability of an input token being deleted in the sentence')
+    parser.add_argument('--infill_text', action='store_true', help='mask consecutive tokens and infill them using denoising pretrained model')
+    parser.add_argument('--num_text_spans', type=int, default=3, help='number of text spans to sample for text infilling method')
+    parser.add_argument('--infill_max_tries', type=int, default=3, help='Maximum number of tries to find an appropriate span')
+    
+    parser.add_argument('--permute_sentences', action='store_true', help='divide document into sentences based on fill stops and'
+                                                                         'permutate them. Use this only if input has multiple sentences.')
+    parser.add_argument('--rotate_sentence', action='store_true', help='a pivot token is chosen randomly, and sentence is rotated so new sentence start with pivot token')
+
             
 def set_default_values(args):
     """

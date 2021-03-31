@@ -17,6 +17,7 @@ generated/*
 *.calib
 *.png
 *.svg
+*.sw*
 
 .DS_Store
 .idea/
