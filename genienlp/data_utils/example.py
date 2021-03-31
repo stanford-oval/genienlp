@@ -32,8 +32,6 @@ import unicodedata
 import torch
 from dataclasses import dataclass
 
-
-
 def identity(x, **kw):
     return x, [], x
 

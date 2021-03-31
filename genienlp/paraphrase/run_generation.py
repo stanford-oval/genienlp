@@ -180,6 +180,7 @@ def parse_argv(parser):
     parser.add_argument('--no_fast_tokenizer', action='store_true', help='Use slow version of huggingface tokenizer')
 
 
+# maps to predict
 def main(args):
     hyperparameters = ['num_samples', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams', 'no_repeat_ngram_size']
     max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])

@@ -58,6 +58,9 @@ from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup
 logger = logging.getLogger(__name__)
 
 
+# TODO this is --pretrained_model in arguments.py
+# Some of these don't correspond exactly to HuggingFace names, just models
+# check that this is okay
 MODEL_CLASSES = {
     'gpt2': (GPT2Config, GPT2LMHeadModel, GPT2Tokenizer),
     'openai-gpt': (OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
@@ -404,16 +407,21 @@ def evaluate(args, model, tokenizer, prefix="", aux=False):
 
 def parse_argv(parser):
     ## Required parameters
+    # --save
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
     
     ## Other parameters
     parser.add_argument("--tensorboard_dir", default=None, type=str,
                         help="The output directory where the tensorboard files will be written.")
+    # TODO assuming for now this is --data. Double check whether --data is a dir
+    # or a regular file.
     parser.add_argument("--train_data_file", default=None, type=str,
                         help="The input training data file.")
+    # TODO similarly, there is an --aux_dataset
     parser.add_argument("--aux_train_data_file", default=None, type=str,
                         help="An input training data file for the target domain.")
+    # added!
     parser.add_argument('--start_special_token', type=str, default='<paraphrase>',
                         help='The special token for the start of paraphrases.')
     parser.add_argument('--end_special_token', type=str, default='</paraphrase>',
@@ -430,8 +438,10 @@ def parse_argv(parser):
     parser.add_argument("--aux_eval_data_file", default=None, type=str,
                         help="An additional input evaluation data file to evaluate the perplexity on (a text file).")
 
+    # Corresponds to --pretrained_model in arguments.py
     parser.add_argument("--model_type", default="bert", type=str,
                         help="The model architecture to be fine-tuned.")
+    # Corresponds to --model in arguments.py
     parser.add_argument("--model_name_or_path", default="bert-base-cased", type=str,
                         help="The model checkpoint for weights initialization.")
 
@@ -446,6 +456,7 @@ def parse_argv(parser):
                         help="Optional pretrained config name or path if not the same as model_name_or_path")
     parser.add_argument("--tokenizer_name", default="", type=str,
                         help="Optional pretrained tokenizer name or path if not the same as model_name_or_path")
+    # Corresponds to --cache in arguments.py
     parser.add_argument("--cache_dir", default=".embeddings", type=str,
                         help="Optional directory to store the pre-trained models downloaded from s3 (instread of the default one)")
     parser.add_argument("--block_size", default=-1, type=int,
@@ -454,6 +465,8 @@ def parse_argv(parser):
                              "Default to the model max input length for single sentence inputs (take into account special tokens).")
     parser.add_argument('--sort_by_length', action='store_true',
                         help='Sorts the training set by example length (input length + output_length) to reduce padding and speed up training. Has no effect on accuracy.')
+
+    # TODO haven't ported args below this but i'm getting bored with this
     parser.add_argument("--do_train", action='store_true',
                         help="Whether to run training.")
     parser.add_argument("--do_eval", action='store_true',
@@ -510,8 +523,9 @@ def parse_argv(parser):
                              "See details at https://nvidia.github.io/apex/amp.html")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="For distributed training: local_rank")
-    
+    # has corresponding --train_languages and --eval_languages
     parser.add_argument('--src_lang', type=str, help='source language used for translation task')
+    # has corresponding --train_tgt_languages and --eval_tgt_languages
     parser.add_argument('--tgt_lang', type=str, help='target language used for translation task')
 
     parser.add_argument('--debug', action='store_true', help='print intermediate results for debugging')
@@ -533,7 +547,7 @@ def parse_argv(parser):
     parser.add_argument('--no_fast_tokenizer', action='store_true', help='Use slow version of huggingface tokenizer')
 
 
-
+# maps to train
 def main(args):
     if args.model_type == 'bert' and (args.pad_token != '[PAD]' or args.start_special_token != '[SEP]' or args.end_special_token != '[SEP]'):
         raise ValueError("BERT already has its own special tokens [PAD] and [SEP]. You should use them for better results.")

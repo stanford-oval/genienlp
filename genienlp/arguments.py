@@ -219,8 +219,10 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum')
     
-    # NED args
-
+    ####################################################
+    #           NED Arguments                          #
+    #                                                  #
+    ####################################################
     parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
     parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'],
                         help='database to interact with for NER')
@@ -286,12 +288,55 @@ def parse_argv(parser):
     parser.add_argument('--ned_features_default_val', nargs='+', type=float, default=[],
                         help='Default value used for each feature')
 
-    # translation args
+    ####################################################
+    #           Translation Arguments                  #
+    #                                                  #
+    ####################################################
     parser.add_argument('--att_pooling', type=str, default='max', help='pooling strategy to calculate cross-attention values across multiple heads')
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
     parser.add_argument('--replace_qp', action='store_true', help='whether to replace tokens between quotation marks after translation with source values')
     parser.add_argument('--force_replace_qp', action='store_true', help='if replace_qp is not successful, attempt again by leveraging cross-attention to find text spans')
-    
+
+    ####################################################
+    #           Paraphrase Arguments                   #
+    #                                                  #
+    ####################################################
+    parser.add_argument('--start_special_token', type=str, default='<paraphrase>',
+                        help='The special token for the start of paraphrases.')
+    parser.add_argument('--end_special_token', type=str, default='</paraphrase>',
+                        help='The special token for the end of paraphrases.')
+    parser.add_argument('--pad_token', type=str, default='<pad>',
+                        help='The special token for padding..')
+    parser.add_argument('--train_all_tokens', action='store_true',
+                        help='If True, the model will be trained on input and output sequences, as opposed to only tokens of the output sequence')
+    parser.add_argument("--reverse_position_ids", action='store_true',
+                        help='If we assume we know the length of the output sequence beforehand, we can do a better job at generation.')
+    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
+    parser.add_argument("--eval_data_file", default=None, type=str,
+                        help="An optional input evaluation data file to evaluate the perplexity on (a text file).")
+    parser.add_argument("--aux_eval_data_file", default=None, type=str,
+                        help="An additional input evaluation data file to evaluate the perplexity on (a text file).")
+    parser.add_argument("--mlm", action='store_true',
+                        help="Train with masked-language modeling loss instead of language modeling.")
+    parser.add_argument("--mlm_probability", type=float, default=0.15,
+                        help="Ratio of tokens to mask for masked language modeling loss")
+    parser.add_argument("--mlm_ignore_index", type=int, default=-100,
+                        help="Tokens with this label will be ignore when calculating masked language loss")
+
+    parser.add_argument("--block_size", default=-1, type=int,
+                        help="Optional input sequence length after tokenization."
+                             "The training examples that are longer than this size (input length + output_length) will not be used for training or evaluation."
+                             "Default to the model max input length for single sentence inputs (take into account special tokens).")
+    parser.add_argument('--sort_by_length', action='store_true',
+                        help='Sorts the training set by example length (input length + output_length) to reduce padding and speed up training. Has no effect on accuracy.')
+
+    # Honestly not convinced we need these, but they were in the old file.
+    parser.add_argument("--config_name", default="", type=str,
+                        help="Optional pretrained config name or path if not the same as model_name_or_path")
+    parser.add_argument("--tokenizer_name", default="", type=str,
+                        help="Optional pretrained tokenizer name or path if not the same as model_name_or_path")
+
+
 
 
 def check_and_update_generation_args(args):

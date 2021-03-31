@@ -43,6 +43,7 @@ subcommands = {
     'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.parse_argv, predict.main),
     'server': ('Export RPC interface to predict', server.parse_argv, server.main),
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
+    # TODO move these into main train/predict loop, add tests in paraphrase_tests.sh
     'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.parse_argv, run_lm_finetuning.main),
     'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main),
     
