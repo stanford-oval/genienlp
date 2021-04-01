@@ -36,7 +36,6 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     tokenizer._decode_use_source_tokenizer = False
     
     tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
-    orig_tgt_string = tgt_strings[:]
     for symbol in tgt_quotation_symbols:
         # 1) replace multiple quotes with single quote
         tgt_strings = re.sub(rf"{symbol}+", rf"{symbol}", tgt_strings)
@@ -67,8 +66,7 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
         return tgt_strings, False
     if len(tgt_spans_ind) % 2 != 0:
         if do_log(log_counter):
-            logging.error(f'Corrupted span in tgt string: [{tgt_strings}] with src string: [{src_strings}]\n'
-                          'outputting example without reverting the parameter')
+            logging.error(f'Corrupted span in tgt string: [{tgt_strings}] with src string: [{src_strings}]\n')
         log_counter += 1
         return tgt_strings, False
     
@@ -78,8 +76,7 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
     
     if len(src_spans) != len(tgt_spans):
         if do_log(log_counter):
-            logging.error(f'Numbers of spans in tgt and src strings do not match: [{tgt_strings}], [{src_strings}]\n'
-                          'outputting example without reverting the parameter')
+            logging.error(f'Numbers of spans in tgt and src strings do not match: [{tgt_strings}], [{src_strings}]\n')
         log_counter += 1
         return tgt_strings, False
     
@@ -200,8 +197,7 @@ def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_
                 len(tgt_tokens))
             )
         except:
-            raise ValueError(f'Corrupted span in tgt string: [{tgt_strings}] with src string: [{src_strings}]\n'
-                             'outputting example without reverting the parameter')
+            raise ValueError(f'Corrupted span in tgt string: [{tgt_strings}] with src string: [{src_strings}]\n')
     
     # move through words
     tgt_strings_words = tgt_strings.split(' ')
