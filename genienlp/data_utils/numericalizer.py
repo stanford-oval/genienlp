@@ -85,7 +85,11 @@ class TransformerNumericalizer(object):
     _special_tokens_to_word_regexes: List[Tuple[re.Pattern, str]]
     _special_tokens_to_token_regexes: List[Tuple[re.Pattern, str]]
     
-    def __init__(self, pretrained_tokenizer, args, max_generative_vocab):
+    def __init__(self, pretrained_tokenizer, args, max_generative_vocab, config, src_lang, tgt_lang, vocab_sets, tasks, save_dir=None):
+        """
+        If `save_dir` is None, initializes a new Numericalizer and optionally adds new words to its vocabulary, otherwise,
+        loads from `save_dir`
+        """
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
         self._cache = args.embeddings
@@ -101,6 +105,19 @@ class TransformerNumericalizer(object):
         self._special_tokens_to_token_regexes = []
         
         self.args = args
+
+        self._init_tokenizer(save_dir, config, src_lang, tgt_lang)
+        
+        if save_dir is not None:
+            logger.info(f'Loading the accompanying numericalizer from {save_dir}')
+            self.load_extras(save_dir)
+        else:
+            logger.info(f'Building vocabulary')
+            self.build_vocab(vocab_sets, tasks)
+
+        self._init_token_ids()
+        self._init_decoder_vocab()
+
         
     @property
     def vocab(self):
@@ -123,7 +140,10 @@ class TransformerNumericalizer(object):
                (self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING))
     
     
-    def get_tokenizer(self, save_dir, config, src_lang, tgt_lang):
+    def _init_tokenizer(self, save_dir, config, src_lang, tgt_lang):
+        """
+        Initializes the `self._tokenizer` object, but not the rest.
+        """
         tokenizer_args = {'do_lower_case': False, 'do_basic_tokenize': False, 'cache_dir': self._cache,
                           'use_fast': self._use_fast(), 'src_lang': src_lang, 'tgt_lang': tgt_lang}
         if save_dir is not None:
@@ -160,8 +180,7 @@ class TransformerNumericalizer(object):
         # make sure we assigned is_piece_fn
         assert self._tokenizer.is_piece_fn
 
-
-    def load(self, save_dir):
+    def load_extras(self, save_dir):
         if self.max_generative_vocab is not None:
             with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'r') as fp:
                 self._decoder_words = [(line.rstrip('\n'), self._tokenizer.convert_tokens_to_ids(line.rstrip('\n')))
@@ -173,7 +192,6 @@ class TransformerNumericalizer(object):
         except FileNotFoundError:
             pass
         
-        self._init()
     
     def pad(self, batch, pad_id):
         """
@@ -209,6 +227,11 @@ class TransformerNumericalizer(object):
         if self.args.add_types_to_text != 'no':
             self._tokenizer.add_tokens(['<e>', '</e>'])
         
+        existing_special_tokens = self._tokenizer.special_tokens_map
+        # add separator if it doesn't exist. It will be used to concatenate context and question
+        if 'sep_token' not in existing_special_tokens:
+            self._tokenizer.add_special_tokens({'sep_token': existing_special_tokens.get('sep_token', '</s>')})
+
         if self.max_generative_vocab is not None:
             # do a pass over all the data in the dataset
             # in this pass, we
@@ -221,7 +244,6 @@ class TransformerNumericalizer(object):
                     decoder_words.update(self._tokenizer.tokenize(example.question))
                     decoder_words.update(self._tokenizer.tokenize(example.answer))
             
-            existing_special_tokens = self._tokenizer.special_tokens_map
             # add the required special tokens, if not present already
             # note: if the tokens are not present, it means they are not used natively
             # by the model, so we can pick our favorite token
@@ -240,7 +262,6 @@ class TransformerNumericalizer(object):
                                   [(word, self._tokenizer.convert_tokens_to_ids(word)) for word, _freq
                                    in decoder_words.most_common(self.max_generative_vocab)]
         
-        self._init()
     
     def grow_vocab(self, tasks):
         if self._preprocess_special_tokens:
@@ -341,7 +362,7 @@ class TransformerNumericalizer(object):
             token_re = re.compile("(^|(?<= ))" + re.escape(token) + "(^|(?= ))")
             self._special_tokens_to_word_regexes.append((token_re, words))
     
-    def _init(self):
+    def _init_token_ids(self):
         self.pad_first = self._tokenizer.padding_side == 'left'
         
         self.init_token = self._tokenizer.bos_token
@@ -359,6 +380,8 @@ class TransformerNumericalizer(object):
         self.mask_id = self._tokenizer.mask_token_id
         self.cls_id = self._tokenizer.cls_token_id
         self.sep_id = self._tokenizer.sep_token_id
+
+    def _init_decoder_vocab(self):
         if self.max_generative_vocab is not None:
             self.generative_vocab_size = len(self._decoder_words)
             
@@ -402,7 +425,10 @@ class TransformerNumericalizer(object):
         
         if features is None:
             features = []
-        extract_word_pieces = bool(len(features))
+            extract_word_pieces = False
+        else:
+            assert all([len(sentence.split()) == len(feature) for sentence, feature in zip(sentences, features)])
+            extract_word_pieces = True
         
         batch_size = len(sentences)
         
@@ -583,12 +609,12 @@ class TransformerNumericalizer(object):
             sentence = regex.sub(replacement, sentence)
         return sentence
     
-    def reverse(self, batch, field_name):
+    def reverse(self, batch, field_name, skip_special_tokens=True):
         output = []
         use_source_tokenizer = True
         if field_name == 'answer':
             use_source_tokenizer = False
-        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True, clean_up_tokenization_spaces=False, use_source_tokenizer=use_source_tokenizer):
+        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=skip_special_tokens, clean_up_tokenization_spaces=False, use_source_tokenizer=use_source_tokenizer):
             if self._preprocess_special_tokens:
                 x = self._undo_special_token_preprocessing(x)
             output.append(x)

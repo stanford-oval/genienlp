@@ -286,7 +286,7 @@ class BaseAlmondTask(BaseTask):
         new_prediction = ' '.join(new_tokens)
         return new_prediction
     
-    def create_sentence_plus_types_tokens(self, new_sentence, features, add_types_to_text):
+    def add_type_tokens(self, new_sentence, features, add_types_to_text):
         new_sentence_tokens = new_sentence.split(' ')
         assert len(new_sentence_tokens) == len(features)
         sentence_plus_types_tokens = []
@@ -439,7 +439,7 @@ class BaseAlmondTask(BaseTask):
 
         sentence_plus_types = ''
         if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features):
-            sentence_plus_types = self.create_sentence_plus_types_tokens(new_sentence, features, self.args.add_types_to_text)
+            sentence_plus_types = self.add_type_tokens(new_sentence, features, self.args.add_types_to_text)
 
         return new_sentence, features, sentence_plus_types
 
@@ -801,10 +801,10 @@ class AlmondDialogueNLG(BaseAlmondTask):
     """
     
     def _is_program_field(self, field_name):
-        return field_name == 'context'
+        return field_name in ('context', 'question')
     
     def utterance_field(self):
-        return 'question'
+        return 'answer'
     
     @property
     def metrics(self):
@@ -813,14 +813,14 @@ class AlmondDialogueNLG(BaseAlmondTask):
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task
         example_id, context, sentence, target_code = parts
-        question = 'what should the agent say ?'
-        context = context + ' ' + target_code
+        context = context
+        question = target_code
         answer = sentence
         return Example.from_raw(self.name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example,
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/nlg'), make_example=self._make_example,
                                            **kwargs)
 
 

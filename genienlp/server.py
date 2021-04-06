@@ -209,7 +209,7 @@ def init(args):
     logger.info(f'Loading from {args.best_checkpoint}')
 
     Model = getattr(models, args.model)
-    model, _ = Model.from_pretrained(args.path,
+    model, _ = Model.load(args.path,
                                      model_checkpoint_file=args.checkpoint_name,
                                      args=args,
                                      device=device,

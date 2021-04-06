@@ -566,21 +566,16 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     else:
         return data_loader
 
-def ned_dump_entity_type_pairs(split, path, name, utterance_field):
-
-    with open(os.path.join(os.path.dirname(path), f'{name}_labels.jsonl'), 'w') as fout:
-        for ex in split:
-            text = ex.context_plus_question_with_types
-            entity_token_pairs = entity_regex.findall(text)
+def ned_dump_entity_type_pairs(dataset, path, name, utterance_field):
+    
+    with open(os.path.join(path, f'{name}_labels.jsonl'), 'w') as fout:
+        for ex in dataset.examples:
+            text = ex.question_plus_types if utterance_field == 'question' else ex.context_plus_types
             
-            if utterance_field == 'question':
-                entity_token_string = entity_token_pairs[1]
-                sentence = text[text.index('</e>') + 4: text.rindex('<e>')].strip()
-            else:
-                entity_token_string = entity_token_pairs[0]
-                sentence = text[:text.index('<e>')].strip()
-                
-            entity_token_string = entity_token_string[len('<e>'):-len('</e>')].strip('; ')
+            span_beg = text.index('<e>')
+            sentence = text[:span_beg].strip()
+            entity_span = text[span_beg:].strip()
+            entity_token_string = entity_span[len('<e>'):-len('</e>')].strip('; ')
             
             entities = []
             ent_types = []
@@ -664,7 +659,7 @@ def load_config_json(args):
                     'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
                     'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
                     'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types',
-                    'att_pooling', 'plot_heatmaps', 'replace_qp', 'force_replace_qp'
+                    'att_pooling', 'plot_heatmaps', 'replace_qp', 'force_replace_qp', 'no_separator'
                     ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
@@ -682,7 +677,7 @@ def load_config_json(args):
             # These are for backward compatibility with models that were trained before we added these arguments
             elif r in ('do_ned', 'use_encoder_loss',
                        'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version',
-                       'plot_heatmaps', 'replace_qp', 'force_replace_qp'
+                       'plot_heatmaps', 'replace_qp', 'force_replace_qp',
                        ):
                 setattr(args, r, False)
             elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
@@ -725,6 +720,8 @@ def load_config_json(args):
                 setattr(args, r, 10000)
             elif r == 'label_smoothing':
                 setattr(args, r, 0.0)
+            elif r == 'no_separator':
+                setattr(args, r, True) # old models don't use a separator
             else:
                 # use default value
                 setattr(args, r, None)

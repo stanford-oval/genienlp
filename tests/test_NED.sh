@@ -5,12 +5,12 @@
 i=0
 # test NED
 for hparams in \
-      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method bootleg --database_lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text append --bootleg_post_process_types" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method bootleg --database_lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text append --bootleg_post_process_types --ned_dump_entity_type_pairs" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method bootleg --database_lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text no --bootleg_post_process_types" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method naive --database_lookup_method ngrams --almond_domains books --add_types_to_text insert" \
-      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method entity-oracle --database_lookup_method ngrams --almond_domains books --add_types_to_text insert" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method entity-oracle --database_lookup_method ngrams --almond_domains books --add_types_to_text insert --ned_dump_entity_type_pairs" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method type-oracle --database_lookup_method ngrams --almond_domains books --add_types_to_text insert" \
-      "--model TransformerLSTM --pretrained_model bert-base-cased --ned_retrieve_method bootleg --database_lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text append --bootleg_post_process_types" \
+      "--model TransformerLSTM --pretrained_model bert-base-cased --ned_retrieve_method bootleg --database_lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text no --bootleg_post_process_types" \
       "--model TransformerLSTM --pretrained_model bert-base-cased --ned_retrieve_method bootleg --database_lookup_method ngrams --almond_domains books --bootleg_model bootleg_wiki_types --add_types_to_text append --bootleg_post_process_types --override_question ." ;
 do
 
@@ -28,7 +28,7 @@ do
 
     # test server for bootleg
     # due to travis memory limitations, uncomment and run this test locally
-    # echo '{"task": "almond", "id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | genienlp server --database_dir $SRCDIR/database/  --path $workdir/model_$i --stdin
+    # echo '{"task": "almond", "id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | genienlp server --database_dir $SRCDIR/../database/  --path $workdir/model_$i --stdin
 
     rm -rf $workdir/model_$i
     i=$((i+1))

@@ -41,8 +41,12 @@ class GenieModel(PreTrainedModel):
     numericalizer: TransformerNumericalizer
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        save_directory = pretrained_model_name_or_path
+    def load(cls, save_directory: str, *model_args, **kwargs):
+        """
+        Loads a GenieModel (in Genie format, not HuggingFace's transformers) and its
+        accompanying Numericalizer (not HuggingFace's tokenizers) from `save_directory`, which is a path
+        """
+        # TODO remove kwargs and take individual inputs instead
         model_checkpoint_file = kwargs.pop("model_checkpoint_file", None)
         args = kwargs.pop("args", None)
         device = kwargs.pop("device", None)
@@ -63,14 +67,6 @@ class GenieModel(PreTrainedModel):
         model.load_state_dict(save_dict['model_state_dict'], strict=True)
 
         return model, save_dict.get('best_decascore')
-
-    def init_vocab_from_data(self, vocab_sets, tasks, save_directory=None):
-        if save_directory is not None:
-            logger.info(f'Loading the accompanying numericalizer from {save_directory}')
-            self.numericalizer.load(save_directory)
-        else:
-            logger.info(f'Building vocabulary')
-            self.numericalizer.build_vocab(vocab_sets, tasks)
 
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         old_num_tokens = self.numericalizer.num_tokens
