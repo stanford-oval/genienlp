@@ -90,80 +90,80 @@ def prepare_data(args, logger):
                                 'almond_lang_as_question': args.almond_lang_as_question,
                                 'num_workers': args.num_workers,
                                 }
+
+    if any(args.train_iterations):
+        for task in args.train_tasks:
+            logger.info(f'Loading {task.name}')
+            kwargs = {'test': None, 'validation': None}
+            kwargs.update(train_eval_shared_kwargs)
+            kwargs['all_dirs'] = args.train_src_languages
+            kwargs['cached_path'] = os.path.join(args.cache, task.name)
+            if args.use_curriculum:
+                kwargs['curriculum'] = True
     
-
-    for task in args.train_tasks:
-        logger.info(f'Loading {task.name}')
-        kwargs = {'test': None, 'validation': None}
-        kwargs.update(train_eval_shared_kwargs)
-        kwargs['all_dirs'] = args.train_src_languages
-        kwargs['cached_path'] = os.path.join(args.cache, task.name)
-        if args.use_curriculum:
-            kwargs['curriculum'] = True
-
-        logger.info(f'Adding {task.name} to training datasets')
-        t0 = time.time()
-        splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
-
-        t1 = time.time()
-        logger.info('Data loading took {} sec'.format(t1-t0))
-        assert not splits.eval and not splits.test
-        if args.use_curriculum:
-            assert splits.aux
-            aux_sets.append(splits.aux)
-            logger.info(f'{task.name} has {len(splits.aux)} auxiliary examples')
-        else:
-            assert splits.train
-
-        if bootleg:
-            bootleg_process_splits(args, splits.train.examples, paths.train, task, bootleg)
-
-        train_sets.append(splits.train)
-        logger.info(f'{task.name} has {len(splits.train)} training examples')
-        
-        logger.info(f'train all_schema_types: {task.all_schema_types}')
+            logger.info(f'Adding {task.name} to training datasets')
+            t0 = time.time()
+            splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
+    
+            t1 = time.time()
+            logger.info('Data loading took {} sec'.format(t1-t0))
+            assert not splits.eval and not splits.test
+            if args.use_curriculum:
+                assert splits.aux
+                aux_sets.append(splits.aux)
+                logger.info(f'{task.name} has {len(splits.aux)} auxiliary examples')
+            else:
+                assert splits.train
+    
+            if bootleg:
+                bootleg_process_splits(args, splits.train.examples, paths.train, task, bootleg)
+    
+            train_sets.append(splits.train)
+            logger.info(f'{task.name} has {len(splits.train)} training examples')
             
-        if task.name.startswith('almond'):
-            if args.ned_features_default_val:
-                args.db_unk_id = int(args.ned_features_default_val[0])
+            logger.info(f'train all_schema_types: {task.all_schema_types}')
+            
+            if task.name.startswith('almond'):
+                if args.ned_features_default_val:
+                    args.db_unk_id = int(args.ned_features_default_val[0])
+                else:
+                    args.db_unk_id = 0
+                if args.do_ned:
+                    if bootleg:
+                        args.num_db_types = len(bootleg.type2id)
+                    elif getattr(task, 'db', None):
+                        args.num_db_types = len(task.db.type2id)
+                else:
+                    args.num_db_types = 0
             else:
                 args.db_unk_id = 0
-            if args.do_ned:
-                if bootleg:
-                    args.num_db_types = len(bootleg.type2id)
-                elif getattr(task, 'db', None):
-                    args.num_db_types = len(task.db.type2id)
-            else:
                 args.num_db_types = 0
-        else:
-            args.db_unk_id = 0
-            args.num_db_types = 0
-        save_args(args, force_overwrite=True)
-
-
-    for task in args.val_tasks:
-        logger.info(f'Loading {task.name}')
-        kwargs = {'train': None, 'test': None}
-        # choose best model based on this dev set
-        if args.eval_set_name is not None:
-            kwargs['validation'] = args.eval_set_name
-        kwargs.update(train_eval_shared_kwargs)
-        kwargs['all_dirs'] = args.eval_src_languages
-        kwargs['cached_path'] = os.path.join(args.cache, task.name)
-        
-        logger.info(f'Adding {task.name} to validation datasets')
-        splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
-        
-        assert not splits.train and not splits.test and not splits.aux
-        logger.info(f'{task.name} has {len(splits.eval)} validation examples')
-
-        if bootleg:
-            bootleg_process_splits(args, splits.eval.examples, paths.eval, task, bootleg)
-
-        val_sets.append(splits.eval)
-
-        logger.info(f'eval all_schema_types: {task.all_schema_types}')
-        
+            save_args(args, force_overwrite=True)
+    
+    
+        for task in args.val_tasks:
+            logger.info(f'Loading {task.name}')
+            kwargs = {'train': None, 'test': None}
+            # choose best model based on this dev set
+            if args.eval_set_name is not None:
+                kwargs['validation'] = args.eval_set_name
+            kwargs.update(train_eval_shared_kwargs)
+            kwargs['all_dirs'] = args.eval_src_languages
+            kwargs['cached_path'] = os.path.join(args.cache, task.name)
+            
+            logger.info(f'Adding {task.name} to validation datasets')
+            splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
+            
+            assert not splits.train and not splits.test and not splits.aux
+            logger.info(f'{task.name} has {len(splits.eval)} validation examples')
+    
+            if bootleg:
+                bootleg_process_splits(args, splits.eval.examples, paths.eval, task, bootleg)
+    
+            val_sets.append(splits.eval)
+    
+            logger.info(f'eval all_schema_types: {task.all_schema_types}')
+            
     return train_sets, val_sets, aux_sets
 
 
@@ -505,7 +505,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     else:
         # Save pretrained models as is without any finetuning
         # Useful for doing prediction/ generation on those models with genienlp
-        for task, _ in train_iters:
+        for task in args.train_tasks:
             maybe_save(0, model, opt, deca_score=0, best_decascore=-1,
                        saver=saver, logger=logger, train_task=task,
                        round_progress=0, task_progress=0,
