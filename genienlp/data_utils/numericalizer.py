@@ -37,8 +37,8 @@ from typing import List, Tuple
 from collections import defaultdict, Counter
 from torch.nn.utils.rnn import pad_sequence
 from transformers import MarianConfig, T5Config, AutoTokenizer, BertTokenizer, BertTokenizerFast,\
-    XLMRobertaTokenizer, XLMRobertaTokenizerFast, GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer,\
-    MarianTokenizer, M2M100Tokenizer, SPIECE_UNDERLINE
+    XLMRobertaTokenizer, XLMRobertaTokenizerFast, GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer, MBart50TokenizerFast,\
+    T5Tokenizer, T5TokenizerFast, MarianTokenizer, M2M100Tokenizer, SPIECE_UNDERLINE
 
 from .decoder_vocab import DecoderVocabulary
 from ..util import get_devices
@@ -172,7 +172,8 @@ class TransformerNumericalizer(object):
         # We only include the base tokenizers since `isinstance` checks for inheritance
         if isinstance(self._tokenizer, (BertTokenizer, BertTokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
-        elif isinstance(self._tokenizer, (XLMRobertaTokenizer, XLMRobertaTokenizerFast, MarianTokenizer, MBart50Tokenizer, M2M100Tokenizer)):
+        elif isinstance(self._tokenizer, (XLMRobertaTokenizer, XLMRobertaTokenizerFast, T5Tokenizer, T5TokenizerFast,
+                                          MBart50Tokenizer, MBart50TokenizerFast, MarianTokenizer, M2M100Tokenizer)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
         elif isinstance(self._tokenizer, (GPT2Tokenizer, GPT2TokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')

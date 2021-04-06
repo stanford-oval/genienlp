@@ -611,12 +611,12 @@ class Translate(NaturalSeq2Seq):
                 plt.savefig(os.path.join(os.path.dirname(self.args.save), f'heatmap_{batch_example_ids[i]}'))
                 plt.show()
     
-            # remove eos token if present
-            if tgt_tokens[-1] in tokenizer.all_special_tokens:
+            # remove eos and all pad tokens if present
+            while tgt_tokens[-1] in tokenizer.all_special_tokens:
                 tgt_tokens = tgt_tokens[:-1]
             
             if self.args.replace_qp:
-                text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att, tokenizer.tgt_lang)
+                text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att)
                 if not is_replaced and self.args.force_replace_qp:
                     text = force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att)
             else:
@@ -890,7 +890,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
         all_dirs = kwargs['all_dirs'].split('+')
         
         for dir in all_dirs:
-            splits, paths = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
+            splits, paths = AlmondDataset.return_splits(path=os.path.join(root, 'almond/{}'.format(dir)),
                                                          make_example=self._make_example, **kwargs)
             all_datasets.append(splits)
             all_paths.append(paths)

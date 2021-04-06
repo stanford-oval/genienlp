@@ -379,7 +379,7 @@ def main(args):
     devices = get_devices(args.devices)
 
     if len(devices) > 1:
-        # Independent multi-GPU generation
+        logger.info(f'Independent multi-GPU generation on following devices: {devices}')
         all_processes = []
         all_data_folders = split_folder_on_disk(args.data, len(devices))
         
@@ -400,5 +400,6 @@ def main(args):
         combine_folders_on_disk(args.eval_dir, len(devices), line_group_size=1, delete=True)
 
     else:
+        logger.info(f'Single device generation on: {devices[0]}')
         run(args, devices[0])
         
