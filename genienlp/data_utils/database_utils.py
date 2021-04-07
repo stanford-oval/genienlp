@@ -70,9 +70,9 @@ DOMAIN_TYPE_MAPPING['linkedin'] = {'Organization': 'Q43229',
                                    'award': 'Q618779'}   # Q2221906:geographic_location
 # linkedin alias
 DOMAIN_TYPE_MAPPING['people'] = {'Organization': 'Q43229',
-                                   'Person': 'Q5',
-                                   'addressLocality': 'Q2221906',
-                                   'award': 'Q618779'}   # Q2221906:geographic_location
+                                 'Person': 'Q5',
+                                 'addressLocality': 'Q2221906',
+                                 'award': 'Q618779'}   # Q2221906:geographic_location
 
 DOMAIN_TYPE_MAPPING['restaurants'] = {'Restaurant': 'Q571',
                                       'Person': 'Q5',
@@ -96,6 +96,29 @@ DOMAIN_TYPE_MAPPING['spotify'] = {'song': 'Q7366',
                                   'artists': 'Q5',
                                   'album': 'Q482994',
                                   'genres': 'Q188451'}   # Q188451:music genre
+
+
+DOMAIN_TYPE_MAPPING['mario'] = {'restaurant_cuisine': 'Q1778821',
+                                'author': 'Q482980',
+                                'timezone': 'Q12143',
+                                # 'title': 'Q482994',
+                                'song': 'Q7366',
+                                'iso_lang_code': 'Q315',
+                                 'genres': 'Q188451',
+                                 # 'text',
+                                 'artist': 'Q483501',
+                                 # 'app_id',
+                                 'playlist': 'Q1569406',
+                                 'restaurant': 'Q571',
+                                 'album': 'Q482994',
+                                 # 'show',
+                                 'Location': 'Q2221906',
+                                 'device': 'Q2858615',
+                                 # 'message',
+                                 # 'source',
+                                 # 'dog',
+                                 # 'playable'
+                                }
 
 
 BANNED_PHRASES = set(

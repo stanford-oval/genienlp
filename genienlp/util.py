@@ -657,7 +657,7 @@ def load_config_json(args):
                     'num_db_types', 'db_unk_id', 'ned_retrieve_method', 'database_lookup_method', 'almond_domains',
                     'ned_features', 'ned_features_size', 'ned_features_default_val',
                     'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
-                    'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
+                    'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
                     'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types',
                     'att_pooling', 'plot_heatmaps', 'replace_qp', 'force_replace_qp', 'no_separator'
                     ]

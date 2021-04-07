@@ -223,7 +223,6 @@ def parse_argv(parser):
     parser.add_argument('--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum')
     
     # NED args
-
     parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
     parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'],
                         help='database to interact with for NER')
@@ -242,8 +241,6 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp',
                         help='Path to folder where bootleg prepped files should be saved')
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
-    parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4,
-                        help='Number of kg encoder layers for BootlegBertEncoder model')
     parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_preds',
                         help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
     parser.add_argument('--bootleg_batch_size', type=int, default=16,
@@ -257,8 +254,6 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_extract_num_workers', type=int, default=4,
                         help='Number of workers for extracing mentions step of bootleg')
     parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
-    parser.add_argument('--bootleg_distributed_eval', action='store_true',
-                        help='Distributed prediction using several GPUs')
 
     parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], default='average',
                         help='Method used to aggregate several type embeddings for a single mention')
