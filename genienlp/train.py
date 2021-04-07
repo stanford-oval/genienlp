@@ -478,7 +478,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                         names = ['answer', 'context']
                         values = [numericalizer.reverse(batch.answer.value.data, 'answer'),
                                   numericalizer.reverse(batch.context.value.data, 'context')]
-                        num_print = min(num_examples, args.num_print)
+                        num_print = min(len(values[0]), args.num_print)
                         print_results(names, values, num_print=num_print)
                         
                     deca_score = do_validate(iteration, args, model, numericalizer, val_iters,

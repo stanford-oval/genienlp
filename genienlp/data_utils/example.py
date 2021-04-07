@@ -76,7 +76,7 @@ def get_pad_feature(feature_fields, ned_features_default_val, ned_features_size)
     return pad_feature
 
 
-class Example():
+class Example(object):
     """
     Contains all fields of a train/dev/test example in text form, alongside their NED features
     both in text form (`*_plus_types` fields) and in embedding id form (`*_feature`)
@@ -90,8 +90,7 @@ class Example():
                  question: str,
                  question_feature: List[Feature],
                  question_plus_types: str,
-                 answer: str,
-                 answer_feature: List[Feature]):
+                 answer: str):
 
         self.example_id = example_id
         self.context = context
@@ -101,7 +100,6 @@ class Example():
         self.question_feature = question_feature
         self.question_plus_types = question_plus_types
         self.answer = answer
-        self.answer_feature = answer_feature
 
 
     @staticmethod
@@ -116,7 +114,9 @@ class Example():
             if lower:
                 sentence = sentence.lower()
             args.append(sentence)
-            args.append(features)
+            
+            if argname != 'answer':
+                args.append(features)
 
             if argname == 'context':
                 context_plus_types = sentence_plus_types
@@ -161,32 +161,30 @@ class NumericalizedExamples(NamedTuple):
             context_plus_question_feature = ex.context_feature + pad_feature + ex.question_feature if len(ex.question_feature) + len(ex.context_feature) > 0 else []
             all_context_plus_question_features.append(context_plus_question_feature)
         
-        if add_types_to_text != 'no':
-            tokenized_contexts = numericalizer.encode_batch(
-                all_context_plus_question_with_types,
-                field_name='context'
-            )
-        else:
+        if add_types_to_text == 'no':
             tokenized_contexts = numericalizer.encode_batch(
                     all_context_plus_questions,
                     field_name='context',
                     features=[a for a in all_context_plus_question_features if a]
-                )
+            )
+        else:
+            tokenized_contexts = numericalizer.encode_batch(
+                all_context_plus_question_with_types,
+                field_name='context'
+            )
                 
         tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
         
         for i in range(len(examples)):
-            numericalized_examples.append(NumericalizedExamples([examples[i].example_id],
-                                        tokenized_contexts[i],
-                                        tokenized_answers[i]))
+            numericalized_examples.append(NumericalizedExamples([examples[i].example_id], tokenized_contexts[i], tokenized_answers[i]))
         return numericalized_examples
 
     @staticmethod
-    def collate_batches(batches : Iterable['NumericalizedExamples'], numericalizer, device, db_unk_id):
+    def collate_batches(batches: Iterable['NumericalizedExamples'], numericalizer, device, db_unk_id):
         example_id = []
 
         context_values, context_lengths, context_limiteds, context_features = [], [], [], []
-        answer_values, answer_lengths, answer_limiteds, answer_features = [], [], [], []
+        answer_values, answer_lengths, answer_limiteds = [], [], []
 
         for batch in batches:
             example_id.append(batch.example_id[0])
