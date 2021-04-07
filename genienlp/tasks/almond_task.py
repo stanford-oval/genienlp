@@ -469,12 +469,12 @@ class Almond(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
 
 
-@register_task('natural_seq2seq')
+@register_task('almond_natural_seq2seq')
 class NaturalSeq2Seq(BaseAlmondTask):
     """
     The Almond sequence to sequence task where both sequences are natural language.
-    Paraphrasing and translation are examples of this task.
-    In this task entities (see ENTITY_REGEX) are not preprocessed in contrast to paraphrasing and translation tasks
+    In this task entities (see ENTITY_REGEX) are not preprocessed in contrast to paraphrasing and translation tasks.
+    Paraphrasing and translation inherit from this class.
     """
     
     @property
@@ -509,7 +509,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
 
-@register_task('paraphrase')
+@register_task('almond_paraphrase')
 class Paraphrase(NaturalSeq2Seq):
     """The Almond paraphrasing task. Applies the necessary preprocessing for special tokens and case changes.
     Can be used at prediction and training time. Training is still experimental.
