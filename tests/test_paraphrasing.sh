@@ -4,18 +4,18 @@
 
 i=0
 
-# test natural_seq2seq and paraphrase tasks
+# test almond_natural_seq2seq and almond_paraphrase tasks
 for hparams in \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random"; do
 
     # train
-    genienlp train --train_tasks natural_seq2seq --train_batch_tokens 50 --val_batch_size 50 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $EMBEDDING_DIR --no_commit
+    genienlp train --train_tasks almond_natural_seq2seq --train_batch_tokens 50 --val_batch_size 50 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $EMBEDDING_DIR --no_commit
 
     # greedy prediction
-    genienlp predict --tasks paraphrase --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $EMBEDDING_DIR --skip_cache
+    genienlp predict --tasks almond_paraphrase --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $EMBEDDING_DIR --skip_cache
 
     # check if result file exists
-    if test ! -f $workdir/model_$i/eval_results/test/paraphrase.tsv || test ! -f $workdir/model_$i/eval_results/test/paraphrase.results.json; then
+    if test ! -f $workdir/model_$i/eval_results/test/almond_paraphrase.tsv || test ! -f $workdir/model_$i/eval_results/test/almond_paraphrase.results.json; then
         echo "File not found!"
         exit 1
     fi
