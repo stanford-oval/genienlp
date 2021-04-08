@@ -357,12 +357,7 @@ class Bootleg(object):
         self.cur_entity_embed_size = 0
         
         # Mapping between model directory and checkpoint name
-        model2checkpoint = {'bootleg_wiki': 'bootleg_model.pt',
-                            'bootleg_wiki_types': 'bootleg_types.pt',
-                            'bootleg_wiki_mini': 'bootleg_model_mini.pt',
-                            'bootleg_wiki_kg': 'bootleg_kg.pt',
-                            # v1.0.0
-                            'bootleg_uncased_mini': 'bootleg_wiki.pth',
+        model2checkpoint = {'bootleg_uncased_mini': 'bootleg_wiki.pth',
                             'bootleg_uncased_super_mini': 'bootleg_wiki.pth'}
         
         self.ckpt_name, extension = model2checkpoint[self.args.bootleg_model].split('.')

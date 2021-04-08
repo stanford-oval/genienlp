@@ -37,7 +37,7 @@ setuptools.setup(
     version='0.6.0a3',
     
     packages=setuptools.find_packages(exclude=['tests']),
-    entry_points= {
+    entry_points={
         'console_scripts': ['genienlp=genienlp.__main__:main'],
     },    
     license='BSD-3-Clause',
@@ -64,7 +64,7 @@ setuptools.setup(
         'pathos==0.2.7',
         'marisa_trie_m==0.7.6',
         'kfserving>=0.5.0',
-        'bootleg @ git+https://github.com/Mehrad0711/bootleg@7fc562d03682505bae28c63ba2a7e5414872c999',
+        'bootleg @ git+https://github.com/Mehrad0711/bootleg@0719e8c04c3bcc01f7ed9fd8a29022a771c614c7',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',
