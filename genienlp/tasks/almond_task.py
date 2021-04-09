@@ -437,8 +437,8 @@ class BaseAlmondTask(BaseTask):
         
         features = [Feature(*tup) for tup in zip(*zip_list)]
 
-        sentence_plus_types = ''
-        if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features):
+        sentence_plus_types = new_sentence
+        if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features) and field_name == self.utterance_field():
             sentence_plus_types = self.add_type_tokens(new_sentence, features, self.args.add_types_to_text)
 
         return new_sentence, features, sentence_plus_types

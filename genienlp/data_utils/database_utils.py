@@ -70,9 +70,9 @@ DOMAIN_TYPE_MAPPING['linkedin'] = {'Organization': 'Q43229',
                                    'award': 'Q618779'}   # Q2221906:geographic_location
 # linkedin alias
 DOMAIN_TYPE_MAPPING['people'] = {'Organization': 'Q43229',
-                                   'Person': 'Q5',
-                                   'addressLocality': 'Q2221906',
-                                   'award': 'Q618779'}   # Q2221906:geographic_location
+                                 'Person': 'Q5',
+                                 'addressLocality': 'Q2221906',
+                                 'award': 'Q618779'}   # Q2221906:geographic_location
 
 DOMAIN_TYPE_MAPPING['restaurants'] = {'Restaurant': 'Q571',
                                       'Person': 'Q5',
@@ -98,6 +98,29 @@ DOMAIN_TYPE_MAPPING['spotify'] = {'song': 'Q7366',
                                   'genres': 'Q188451'}   # Q188451:music genre
 
 
+DOMAIN_TYPE_MAPPING['mario'] = {'restaurant_cuisine': 'Q1778821',
+                                'person': 'Q215627',
+                                'timezone': 'Q12143',
+                                'song': 'Q7366',
+                                'iso_lang_code': 'Q315',
+                                'genres': 'Q188451',
+                                'artist': 'Q483501',
+                                'playlist': 'Q1569406',
+                                'restaurant': 'Q571',
+                                'album': 'Q482994',
+                                'Location': 'Q2221906',
+                                'device': 'Q2858615',
+                                'iot_name': 'Q1318740',
+                                'dog': 'Q144',
+                                # 'playable'
+                                # 'title',
+                                # 'message',
+                                # 'source',
+                                # 'app_id',
+                                # 'text',
+                                }
+
+
 BANNED_PHRASES = set(
     stopwords.words('english') + \
     ['music', 'musics', 'name', 'names', 'want', 'wants', 'album', 'albums', 'please', 'who', 'show me', 'tell me', 'find me', 'sing', 'sang',
@@ -113,7 +136,7 @@ BANNED_PHRASES = set(
      'greatest hits', 'good hits', 'content rating', 'how long', 'actor', 'pg', 'ratings', 'rating', 'rated pg', 'key', 'the nice',
      'keyword', 'keywords', 'subtitle', 'subtitles', 'i want that', 'shorter', 'duration', 'num', 'hope', 'rm', 'michelin', 'michelin star', 'michelin stars',
      'reservations', 'zip code', 'zipcode', 'smoke', 'smoking', 'luxury', 'bar', 'bars', 'kitchen', 'cafe', 'cafes', 'coffee', 'where i am',
-     'email']
+     'email', 'motion sensor', 'temperature sensor', 'publication date', 'home address', 'home assistant']
 )
 
 BANNED_REGEXES = [re.compile(r'\d (star|rating)'), re.compile(r'\dth'), re.compile(r'a \d'),
