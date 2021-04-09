@@ -335,6 +335,9 @@ def post_parse_general(args):
     
     if len(args.ned_features) != len(args.ned_features_size):
         raise ValueError('You should specify max feature size for each feature you provided')
+    
+    # if not args.do_ned and args.add_types_to_text != 'no':
+    #     raise ValueError('add_types_to_text flag should be used only when using NED')
 
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:

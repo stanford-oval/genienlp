@@ -79,7 +79,7 @@ def get_pad_feature(feature_fields, ned_features_default_val, ned_features_size)
 class Example(object):
     """
     Contains all fields of a train/dev/test example in text form, alongside their NED features
-    both in text form (`*_plus_types` fields) and in embedding id form (`*_feature`)
+    both in text form (`*_plus_types` fields) and in embedding_id form (`*_feature`)
     """
 
     def __init__(self,
@@ -109,12 +109,13 @@ class Example(object):
         
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
             arg = unicodedata.normalize('NFD', arg)
-            sentence, features, sentence_plus_types = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)
-            
             if lower:
-                sentence = sentence.lower()
+                arg = arg.lower()
+                
+            sentence, features, sentence_plus_types = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)
+
             args.append(sentence)
-            
+    
             if argname != 'answer':
                 args.append(features)
 
@@ -134,16 +135,17 @@ class NumericalizedExamples(NamedTuple):
     answer: SequentialField
     
     @staticmethod
-    def from_examples(examples, numericalizer, add_types_to_text):
+    def from_examples(examples, numericalizer):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
+        args = numericalizer.args
 
-        if numericalizer.args.no_separator:
+        if args.no_separator:
             sep_token = ' '
             pad_feature = []
         else:
             sep_token = ' ' + numericalizer.sep_token + ' '
-            pad_feature = [get_pad_feature(numericalizer.args.ned_features, numericalizer.args.ned_features_default_val, numericalizer.args.ned_features_size)]
+            pad_feature = [get_pad_feature(args.ned_features, args.ned_features_default_val, args.ned_features_size)]
 
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []
@@ -161,7 +163,7 @@ class NumericalizedExamples(NamedTuple):
             context_plus_question_feature = ex.context_feature + pad_feature + ex.question_feature if len(ex.question_feature) + len(ex.context_feature) > 0 else []
             all_context_plus_question_features.append(context_plus_question_feature)
         
-        if add_types_to_text == 'no':
+        if args.add_types_to_text == 'no':
             tokenized_contexts = numericalizer.encode_batch(
                     all_context_plus_questions,
                     field_name='context',
@@ -172,7 +174,7 @@ class NumericalizedExamples(NamedTuple):
                 all_context_plus_question_with_types,
                 field_name='context'
             )
-                
+        
         tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
         
         for i in range(len(examples)):
@@ -180,7 +182,7 @@ class NumericalizedExamples(NamedTuple):
         return numericalized_examples
 
     @staticmethod
-    def collate_batches(batches: Iterable['NumericalizedExamples'], numericalizer, device, db_unk_id):
+    def collate_batches(batches: Iterable['NumericalizedExamples'], numericalizer, device):
         example_id = []
 
         context_values, context_lengths, context_limiteds, context_features = [], [], [], []
@@ -203,7 +205,7 @@ class NumericalizedExamples(NamedTuple):
         context_lengths = torch.stack(context_lengths, dim=0)
         
         if context_features:
-            context_features = numericalizer.pad(context_features, pad_id=db_unk_id)
+            context_features = numericalizer.pad(context_features, pad_id=numericalizer.args.db_unk_id)
         
         answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
         answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)

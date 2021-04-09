@@ -185,18 +185,17 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
                 for i in range(len(tokens_type_ids)):
                     examples[n].question_feature[i].type_id = tokens_type_ids[i]
                     examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-            
+                question_plus_types = task.add_type_tokens(ex.question, ex.question_feature, args.add_types_to_text)
+                examples[n].question_plus_types = question_plus_types
+
             else:
                 # context is the utterance field
                 for i in range(len(tokens_type_ids)):
                     examples[n].context_feature[i].type_id = tokens_type_ids[i]
                     examples[n].context_feature[i].type_prob = tokens_type_probs[i]
-            
-            context_plus_types = task.add_type_tokens(ex.context, ex.context_feature, args.add_types_to_text)
-            question_plus_types = task.add_type_tokens(ex.question, ex.question_feature, args.add_types_to_text)
-            examples[n].context_plus_types = context_plus_types
-            examples[n].question_plus_types = question_plus_types
-    
+                context_plus_types = task.add_type_tokens(ex.context, ex.context_feature, args.add_types_to_text)
+                examples[n].context_plus_types = context_plus_types
+
     if args.verbose:
         for ex in examples:
             print()

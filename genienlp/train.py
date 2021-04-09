@@ -364,8 +364,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     main_device = devices[0]
 
     t0 = time.time()
-    train_iters = [(task, make_data_loader(dataset, numericalizer, tok, main_device,
-                                           train=True, add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id))
+    train_iters = [(task, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
                    for task, dataset, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     t1 = time.time()
     logger.info('Preparing iterators took {} sec'.format(t1 - t0))
@@ -374,16 +373,14 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     # save memory
     del train_sets
 
-    val_iters = [(task, make_data_loader(dataset, numericalizer, bs, main_device,
-                                         train=False, add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id))
+    val_iters = [(task, make_data_loader(dataset, numericalizer, bs, main_device, train=False))
                  for task, dataset, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
     # save memory
     del val_sets
 
     aux_iters = []
     if use_curriculum:
-        aux_iters = [(name, make_data_loader(dataset, numericalizer, tok, main_device,
-                                             train=True, add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id))
+        aux_iters = [(name, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
                      for name, dataset, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         # save memory
