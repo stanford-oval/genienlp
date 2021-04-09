@@ -210,12 +210,12 @@ def init(args):
 
     Model = getattr(models, args.model)
     model, _ = Model.load(args.path,
-                                     model_checkpoint_file=args.checkpoint_name,
-                                     args=args,
-                                     device=device,
-                                     src_lang=args.src_locale,
-                                     tgt_lang=args.tgt_locale
-                                     )
+                          model_checkpoint_file=args.checkpoint_name,
+                          args=args,
+                          device=device,
+                          src_lang=args.src_locale,
+                          tgt_lang=args.tgt_locale
+                          )
 
     model.to(device)
     model.eval()
