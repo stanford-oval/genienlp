@@ -646,8 +646,7 @@ def load_config_json(args):
         config = json.load(config_file)
 
         retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
-                    'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
-                    'override_context', 'override_question',
+                    'max_generative_vocab', 'lower', 'trainable_decoder_embeddings', 'override_context', 'override_question',
                     'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version',
                     'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count', 'label_smoothing',
                     'use_encoder_loss', 'num_workers', 'no_fast_tokenizer',
@@ -656,9 +655,7 @@ def load_config_json(args):
                     'entity_type_agg_method', 'entity_word_embeds_dropout',
                     'num_db_types', 'db_unk_id', 'ned_retrieve_method', 'database_lookup_method', 'almond_domains',
                     'ned_features', 'ned_features_size', 'ned_features_default_val',
-                    'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
-                    'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
-                    'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types',
+                    'bootleg_output_dir', 'bootleg_model', 'bootleg_prob_threshold', 'bootleg_post_process_types',
                     'att_pooling', 'plot_heatmaps', 'replace_qp', 'force_replace_qp', 'no_separator'
                     ]
 

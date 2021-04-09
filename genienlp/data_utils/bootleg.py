@@ -393,6 +393,7 @@ class Bootleg(object):
         self.ckpt_name, extension = model2checkpoint[self.args.bootleg_model].split('.')
         self.model_ckpt_path = os.path.join(self.model_dir, self.ckpt_name + '.' + extension)
         
+        
         self.fixed_overrides = [
             # emmental configs
             "--emmental.dataparallel", 'False',
@@ -401,9 +402,9 @@ class Bootleg(object):
             "--emmental.model_path", self.model_ckpt_path,
             
             # run configs
-            "--run_config.dataset_threads", str(self.args.bootleg_dataset_threads),
-            "--run_config.dataloader_threads", str(self.args.bootleg_dataloader_threads),
-            "--run_config.eval_batch_size", str(self.args.bootleg_batch_size),
+            "--run_config.dataset_threads", str(getattr(self.args, 'bootleg_dataset_threads', 1)),
+            "--run_config.dataloader_threads", str(getattr(self.args, 'bootleg_dataset_threads', 1)),
+            "--run_config.eval_batch_size", str(getattr(self.args, 'bootleg_dataset_threads', 32)),
             "--run_config.log_level", 'DEBUG',
             
             # data configs
@@ -433,7 +434,7 @@ class Bootleg(object):
         logger.info('Extracting mentions...')
         extract_mentions(in_filepath=jsonl_input_path, out_filepath=jsonl_output_path, cand_map_file=self.cand_map,
                          min_alias_len=self.args.min_entity_len,  max_alias_len=self.args.max_entity_len,
-                         num_workers=self.args.bootleg_extract_num_workers, verbose=False)
+                         num_workers=getattr(self.args, 'bootleg_extract_num_workers', 32), verbose=False)
 
     def pad_values(self, tokens, max_size, pad_id):
         if len(tokens) > max_size:
