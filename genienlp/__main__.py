@@ -64,7 +64,7 @@ subcommands = {
     
     # kf commands
     'kfserver': ('Export KFServing interface to predict', server.parse_argv, kfserver.main),
-    'write_kf_metrics': ('Write KF evaluation metrics', write_kf_metrics.parse_argv, write_kf_metrics.main)
+    'write-kf-metrics': ('Write KF evaluation metrics', write_kf_metrics.parse_argv, write_kf_metrics.main)
 }
 
 

@@ -160,6 +160,9 @@ def parse_argv(parser):
 
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
+    # TODO for backward compatibility only. Remove after no old model (including paraphraser) is in use.
+    parser.add_argument('--no_separator', action='store_true',
+                        help='By default, we add a model-specific separator token between question and context when concatenating them. This argument disables that.')
     parser.add_argument("--almond_has_single_program", action='store_false', dest='almond_has_multiple_programs', help='Indicate if almond dataset has multiple programs for each sentence')
     parser.add_argument('--almond_lang_as_question', action='store_true',
                         help='if true will use "Translate from ${language} to ThingTalk" for question')
@@ -239,23 +242,9 @@ def parse_argv(parser):
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp',
                         help='Path to folder where bootleg prepped files should be saved')
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
-    parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4,
-                        help='Number of kg encoder layers for BootlegBertEncoder model')
-    parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_preds',
-                        help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
-    parser.add_argument('--bootleg_batch_size', type=int, default=16,
-                        help='Batch size used for inference using bootleg')
-    parser.add_argument('--bootleg_prob_threshold', type=float, default=0.5,
+    parser.add_argument('--bootleg_prob_threshold', type=float, default=0.3,
                         help='Probability threshold for accepting a candidate for a mention')
-    parser.add_argument('--bootleg_dataset_threads', type=int, default=2,
-                        help='Number of threads for parallel processing of dataset in bootleg')
-    parser.add_argument('--bootleg_dataloader_threads', type=int, default=4,
-                        help='Number of threads for parallel loading of datasets in bootleg')
-    parser.add_argument('--bootleg_extract_num_workers', type=int, default=4,
-                        help='Number of workers for extracing mentions step of bootleg')
     parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
-    parser.add_argument('--bootleg_distributed_eval', action='store_true',
-                        help='Distributed prediction using several GPUs')
 
     parser.add_argument('--entity_type_agg_method', choices=['average', 'weighted'], default='average',
                         help='Method used to aggregate several type embeddings for a single mention')
@@ -265,7 +254,6 @@ def parse_argv(parser):
     parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'],
                         help='Method for adding types to input text in text-based NER approach')
     parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
-
     parser.add_argument('--ned_retrieve_method', default='naive',
                         choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
                         help='how to retrieve types for entities')
@@ -344,6 +332,9 @@ def post_parse_general(args):
     
     if len(args.ned_features) != len(args.ned_features_size):
         raise ValueError('You should specify max feature size for each feature you provided')
+    
+    # if not args.do_ned and args.add_types_to_text != 'no':
+    #     raise ValueError('add_types_to_text flag should be used only when using NED')
 
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:

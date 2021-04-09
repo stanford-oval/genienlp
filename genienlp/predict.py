@@ -145,14 +145,12 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
             assert len(task_languages) == len(val_set)
             for index, set_ in enumerate(val_set):
                 loader, original_order = make_data_loader(set_, numericalizer, bs, device,
-                                                          train=False, return_original_order=True,
-                                                          add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id)
+                                                          train=False, return_original_order=True)
                 task_iter.append((task, task_languages[index], loader, original_order))
         # single language task or no separate eval
         else:
            loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device,
-                                                     train=False, return_original_order=True,
-                                                     add_types_to_text=args.add_types_to_text, db_unk_id=args.db_unk_id)
+                                                     train=False, return_original_order=True)
            task_iter.append((task, task_languages, loader, original_order))
 
         iters.extend(task_iter)
@@ -168,7 +166,7 @@ def run(args, device):
     tgt_lang = args.pred_tgt_languages[0]
 
     Model = getattr(models, args.model)
-    model, _ = Model.from_pretrained(args.path,
+    model, _ = Model.load(args.path,
                                      model_checkpoint_file=args.checkpoint_name,
                                      args=args,
                                      device=device,
@@ -389,7 +387,7 @@ def main(args):
     devices = get_devices(args.devices)
 
     if len(devices) > 1:
-        # Independent multi-GPU generation
+        logger.info(f'Independent multi-GPU generation on following devices: {devices}')
         all_processes = []
         all_data_folders = split_folder_on_disk(args.data, len(devices))
         
@@ -410,5 +408,6 @@ def main(args):
         combine_folders_on_disk(args.eval_dir, len(devices), line_group_size=1, delete=True)
 
     else:
+        logger.info(f'Single device generation on: {devices[0]}')
         run(args, devices[0])
         

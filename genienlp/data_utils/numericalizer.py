@@ -27,24 +27,25 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import functools
+import json
+import logging
 import os
 import re
-import json
-import functools
-import logging
-from pathos import multiprocessing
-from typing import List, Tuple
 from collections import defaultdict, Counter
+from typing import List, Tuple
+
+from pathos import multiprocessing
 from torch.nn.utils.rnn import pad_sequence
-from transformers import MBartConfig, MarianConfig, M2M100Config, T5Config, \
-    AutoTokenizer, BertTokenizer, BertTokenizerFast, XLMRobertaTokenizer, XLMRobertaTokenizerFast, \
-    GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer, MarianTokenizer, M2M100Tokenizer, \
-    SPIECE_UNDERLINE, ElectraConfig, BertConfig
+from transformers import ElectraConfig, BertConfig
+from transformers import MarianConfig, T5Config, AutoTokenizer, BertTokenizer, BertTokenizerFast, \
+    XLMRobertaTokenizer, XLMRobertaTokenizerFast, GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer, \
+    MBart50TokenizerFast, \
+    T5Tokenizer, T5TokenizerFast, MarianTokenizer, M2M100Tokenizer, SPIECE_UNDERLINE
 
 from .decoder_vocab import DecoderVocabulary
-from ..util import get_devices
 from .example import SequentialField, get_pad_feature
-
+from ..util import get_devices
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,11 @@ class TransformerNumericalizer(object):
     _special_tokens_to_word_regexes: List[Tuple[re.Pattern, str]]
     _special_tokens_to_token_regexes: List[Tuple[re.Pattern, str]]
     
-    def __init__(self, pretrained_tokenizer, args, max_generative_vocab):
+    def __init__(self, pretrained_tokenizer, args, max_generative_vocab, config, src_lang, tgt_lang, vocab_sets, tasks, save_dir=None):
+        """
+        If `save_dir` is None, initializes a new Numericalizer and optionally adds new words to its vocabulary, otherwise,
+        loads from `save_dir`
+        """
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
         self._cache = args.embeddings
@@ -102,7 +107,20 @@ class TransformerNumericalizer(object):
         self._special_tokens_to_token_regexes = []
         
         self.args = args
-    
+
+        self._init_tokenizer(save_dir, config, src_lang, tgt_lang)
+        
+        if save_dir is not None:
+            logger.info(f'Loading the accompanying numericalizer from {save_dir}')
+            self.load_extras(save_dir)
+        else:
+            logger.info(f'Building vocabulary')
+            self.build_vocab(vocab_sets, tasks)
+
+        self._init_token_ids()
+        self._init_decoder_vocab()
+
+        
     @property
     def vocab(self):
         return self._tokenizer
@@ -126,31 +144,25 @@ class TransformerNumericalizer(object):
         return self._pretrained_name in ALLOWED_FAST_TOKENIZERS or \
                (self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING)
     
-    def get_tokenizer(self, save_dir, config, src_lang, tgt_lang):
+    def _init_tokenizer(self, save_dir, config, src_lang, tgt_lang):
+        """
+        Initializes the `self._tokenizer` object, but not the rest.
+        """
         tokenizer_args = {'do_lower_case': False, 'do_basic_tokenize': False, 'cache_dir': self._cache,
                           'use_fast': self._use_fast(), 'src_lang': src_lang, 'tgt_lang': tgt_lang}
         if save_dir is not None:
             tokenizer_args.update({'pretrained_model_name_or_path': save_dir, 'config': config})
         else:
             tokenizer_args.update({'pretrained_model_name_or_path': self._pretrained_name})
-        
-        model_is_marian = isinstance(config, MarianConfig)
-        model_is_mbart = isinstance(config, MBartConfig)
-        model_is_m2m100 = isinstance(config, M2M100Config)
-        model_is_t5 = isinstance(config, T5Config)
 
-        # hack until huggingface provides mbart50 config
-        if model_is_mbart and 'mbart-50' in config.name_or_path:
-            self._tokenizer = MBart50Tokenizer.from_pretrained(**tokenizer_args)
-        elif model_is_m2m100:
-            self._tokenizer = M2M100Tokenizer.from_pretrained(**tokenizer_args)
-        else:
-            # FIXME: there's a known issue with Bert-based fast tokenizers (e.g. Electra) addressed here https://github.com/huggingface/transformers/pull/10686
-            # till then don't load from save_dir for bert-based models
-            if isinstance(config, ElectraConfig) or isinstance(config, BertConfig):
-                # tokenizer_args['do_lower_case'] = True
-                tokenizer_args['pretrained_model_name_or_path'] = self._pretrained_name
-            self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
+
+        # FIXME: there's a known issue with Bert-based fast tokenizers (e.g. Electra) addressed here https://github.com/huggingface/transformers/pull/10686
+        # till then don't load from save_dir for bert-based models
+        if isinstance(config, ElectraConfig) or isinstance(config, BertConfig):
+            # tokenizer_args['do_lower_case'] = True
+            tokenizer_args['pretrained_model_name_or_path'] = self._pretrained_name
+        
+        self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
 
         # some tokenizers like Mbart do not set src_lang and tgt_lan when initialized; take care of it here
         self._tokenizer.src_lang = src_lang
@@ -158,9 +170,9 @@ class TransformerNumericalizer(object):
 
         # define input prefix to add before every input text
         input_prefix = ''
-        if model_is_marian and tgt_lang:
+        if isinstance(config, MarianConfig) and tgt_lang:
             input_prefix = f'>>{tgt_lang}<< '
-        elif model_is_t5:
+        elif isinstance(config, T5Config):
             t5_task = f'translation_{src_lang}_to_{tgt_lang}'
             # TODO add support for summarization
             # t5_task = 'summarization'
@@ -171,7 +183,8 @@ class TransformerNumericalizer(object):
         # We only include the base tokenizers since `isinstance` checks for inheritance
         if isinstance(self._tokenizer, (BertTokenizer, BertTokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
-        elif isinstance(self._tokenizer, (XLMRobertaTokenizer, XLMRobertaTokenizerFast, MarianTokenizer, M2M100Tokenizer)):
+        elif isinstance(self._tokenizer, (XLMRobertaTokenizer, XLMRobertaTokenizerFast, T5Tokenizer, T5TokenizerFast,
+                                          MBart50Tokenizer, MBart50TokenizerFast, MarianTokenizer, M2M100Tokenizer)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
         elif isinstance(self._tokenizer, (GPT2Tokenizer, GPT2TokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')
@@ -179,7 +192,7 @@ class TransformerNumericalizer(object):
         # make sure we assigned is_piece_fn
         assert self._tokenizer.is_piece_fn
 
-    def load(self, save_dir):
+    def load_extras(self, save_dir):
         if self.max_generative_vocab is not None:
             with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'r') as fp:
                 self._decoder_words = [(line.rstrip('\n'), self._tokenizer.convert_tokens_to_ids(line.rstrip('\n')))
@@ -191,7 +204,6 @@ class TransformerNumericalizer(object):
         except FileNotFoundError:
             pass
         
-        self._init()
     
     def pad(self, batch, pad_id):
         """
@@ -231,6 +243,11 @@ class TransformerNumericalizer(object):
         if self.args.train_task_names == 'ambig_qa':
             self._tokenizer.add_tokens(['<q>', '<p>', '<u>'])
         
+        existing_special_tokens = self._tokenizer.special_tokens_map
+        # add separator if it doesn't exist. It will be used to concatenate context and question
+        if 'sep_token' not in existing_special_tokens:
+            self._tokenizer.add_special_tokens({'sep_token': existing_special_tokens.get('sep_token', '</s>')})
+
         if self.max_generative_vocab is not None:
             # do a pass over all the data in the dataset
             # in this pass, we
@@ -243,7 +260,6 @@ class TransformerNumericalizer(object):
                     decoder_words.update(self._tokenizer.tokenize(example.question))
                     decoder_words.update(self._tokenizer.tokenize(example.answer))
             
-            existing_special_tokens = self._tokenizer.special_tokens_map
             # add the required special tokens, if not present already
             # note: if the tokens are not present, it means they are not used natively
             # by the model, so we can pick our favorite token
@@ -262,7 +278,6 @@ class TransformerNumericalizer(object):
                                   [(word, self._tokenizer.convert_tokens_to_ids(word)) for word, _freq
                                    in decoder_words.most_common(self.max_generative_vocab)]
         
-        self._init()
     
     def grow_vocab(self, tasks):
         if self._preprocess_special_tokens:
@@ -363,7 +378,7 @@ class TransformerNumericalizer(object):
             token_re = re.compile("(^|(?<= ))" + re.escape(token) + "(^|(?= ))")
             self._special_tokens_to_word_regexes.append((token_re, words))
     
-    def _init(self):
+    def _init_token_ids(self):
         self.pad_first = self._tokenizer.padding_side == 'left'
         
         self.init_token = self._tokenizer.bos_token
@@ -385,6 +400,8 @@ class TransformerNumericalizer(object):
         # pad_id for answer tokens (different than context/ question pad_id for token classification tasks)
         self.answer_pad_id = self.pad_id
         
+
+    def _init_decoder_vocab(self):
         if self.max_generative_vocab is not None:
             self.generative_vocab_size = len(self._decoder_words)
             
@@ -499,7 +516,10 @@ class TransformerNumericalizer(object):
         
         if features is None:
             features = []
-        extract_word_pieces = bool(len(features))
+            extract_word_pieces = False
+        else:
+            assert all([len(sentence.split()) == len(feature) for sentence, feature in zip(sentences, features)])
+            extract_word_pieces = True
         
         batch_size = len(sentences)
         
@@ -682,12 +702,12 @@ class TransformerNumericalizer(object):
             sentence = regex.sub(replacement, sentence)
         return sentence
     
-    def reverse(self, batch, field_name):
+    def reverse(self, batch, field_name, skip_special_tokens=True):
         output = []
         use_source_tokenizer = True
         if field_name == 'answer':
             use_source_tokenizer = False
-        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=True, clean_up_tokenization_spaces=False, use_source_tokenizer=use_source_tokenizer):
+        for x in self._tokenizer.batch_decode(batch, skip_special_tokens=skip_special_tokens, clean_up_tokenization_spaces=False, use_source_tokenizer=use_source_tokenizer):
             if self._preprocess_special_tokens:
                 x = self._undo_special_token_preprocessing(x)
             output.append(x)

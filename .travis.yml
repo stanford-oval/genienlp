@@ -5,6 +5,7 @@ branches:
 language: python
 
 python: 3.8
+cache: pip
 
 install:
 - pip install flake8

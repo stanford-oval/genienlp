@@ -544,8 +544,8 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False, add_types_to_text=False, db_unk_id=0):
-    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer, add_types_to_text=add_types_to_text)
+def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
@@ -558,7 +558,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     # get the sorted data_source
     all_f = sampler.data_source
     data_loader = torch.utils.data.DataLoader(all_f, batch_sampler=sampler,
-                                              collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer, device, db_unk_id),
+                                              collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer, device),
                                               num_workers=0)
     
     if return_original_order:
@@ -566,21 +566,16 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     else:
         return data_loader
 
-def ned_dump_entity_type_pairs(split, path, name, utterance_field):
-
-    with open(os.path.join(os.path.dirname(path), f'{name}_labels.jsonl'), 'w') as fout:
-        for ex in split:
-            text = ex.context_plus_question_with_types
-            entity_token_pairs = entity_regex.findall(text)
+def ned_dump_entity_type_pairs(dataset, path, name, utterance_field):
+    
+    with open(os.path.join(path, f'{name}_labels.jsonl'), 'w') as fout:
+        for ex in dataset.examples:
+            text = ex.question_plus_types if utterance_field == 'question' else ex.context_plus_types
             
-            if utterance_field == 'question':
-                entity_token_string = entity_token_pairs[1]
-                sentence = text[text.index('</e>') + 4: text.rindex('<e>')].strip()
-            else:
-                entity_token_string = entity_token_pairs[0]
-                sentence = text[:text.index('<e>')].strip()
-                
-            entity_token_string = entity_token_string[len('<e>'):-len('</e>')].strip('; ')
+            span_beg = text.index('<e>')
+            sentence = text[:span_beg].strip()
+            entity_span = text[span_beg:].strip()
+            entity_token_string = entity_span[len('<e>'):-len('</e>')].strip('; ')
             
             entities = []
             ent_types = []
@@ -651,8 +646,7 @@ def load_config_json(args):
         config = json.load(config_file)
 
         retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
-                    'max_generative_vocab', 'lower', 'trainable_decoder_embeddings',
-                    'override_context', 'override_question',
+                    'max_generative_vocab', 'lower', 'trainable_decoder_embeddings', 'override_context', 'override_question',
                     'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version',
                     'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count', 'label_smoothing',
                     'use_encoder_loss', 'num_workers', 'no_fast_tokenizer', 'force_fast_tokenizer',
@@ -661,10 +655,8 @@ def load_config_json(args):
                     'entity_type_agg_method', 'entity_word_embeds_dropout',
                     'num_db_types', 'db_unk_id', 'ned_retrieve_method', 'database_lookup_method', 'almond_domains',
                     'ned_features', 'ned_features_size', 'ned_features_default_val',
-                    'bootleg_output_dir', 'bootleg_model', 'bootleg_batch_size',
-                    'bootleg_kg_encoder_layer', 'bootleg_dataset_threads', 'bootleg_dataloader_threads', 'bootleg_extract_num_workers',
-                    'bootleg_dump_mode', 'bootleg_prob_threshold', 'bootleg_post_process_types',
-                    'att_pooling', 'plot_heatmaps', 'replace_qp', 'force_replace_qp',
+                    'bootleg_output_dir', 'bootleg_model', 'bootleg_prob_threshold', 'bootleg_post_process_types',
+                    'att_pooling', 'plot_heatmaps', 'replace_qp', 'force_replace_qp', 'no_separator',
                     'num_labels', 'ner_domains', 'hf_test_overfit'
                     ]
 
@@ -727,6 +719,8 @@ def load_config_json(args):
                 setattr(args, r, 10000)
             elif r == 'label_smoothing':
                 setattr(args, r, 0.0)
+            elif r == 'no_separator':
+                setattr(args, r, True) # old models don't use a separator
             else:
                 # use default value
                 setattr(args, r, None)

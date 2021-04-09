@@ -45,7 +45,11 @@ logger = logging.getLogger(__name__)
 
 
 class TransformerSeq2Seq(GenieModel):
+    
     def __init__(self, config=None, *inputs, args, tasks, vocab_sets, save_directory=None, **kwargs):
+        """
+        If `save_directory` is None, will initialize a new model and numericalizer, otherwise, will load them from `save_directory`
+        """
         config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
         super().__init__(config)
         self.args = args
@@ -62,11 +66,9 @@ class TransformerSeq2Seq(GenieModel):
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model, cache_dir=self.args.embeddings)
 
-        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, args, max_generative_vocab=None)
+        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, args, max_generative_vocab=None,
+                                save_dir=save_directory, config=config, src_lang=self.src_lang, tgt_lang=self.tgt_lang, vocab_sets=vocab_sets, tasks=tasks)
 
-        self.numericalizer.get_tokenizer(save_directory, config, self.src_lang, self.tgt_lang)
-
-        self.init_vocab_from_data(vocab_sets, tasks, save_directory)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
         # set decoder_start_token_id

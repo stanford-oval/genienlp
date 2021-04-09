@@ -286,7 +286,7 @@ class BaseAlmondTask(BaseTask):
         new_prediction = ' '.join(new_tokens)
         return new_prediction
     
-    def create_sentence_plus_types_tokens(self, new_sentence, features, add_types_to_text):
+    def add_type_tokens(self, new_sentence, features, add_types_to_text):
         new_sentence_tokens = new_sentence.split(' ')
         assert len(new_sentence_tokens) == len(features)
         sentence_plus_types_tokens = []
@@ -437,9 +437,9 @@ class BaseAlmondTask(BaseTask):
         
         features = [Feature(*tup) for tup in zip(*zip_list)]
 
-        sentence_plus_types = ''
-        if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features):
-            sentence_plus_types = self.create_sentence_plus_types_tokens(new_sentence, features, self.args.add_types_to_text)
+        sentence_plus_types = new_sentence
+        if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features) and field_name == self.utterance_field():
+            sentence_plus_types = self.add_type_tokens(new_sentence, features, self.args.add_types_to_text)
 
         return new_sentence, features, sentence_plus_types
 
@@ -469,12 +469,12 @@ class Almond(BaseAlmondTask):
                                 preprocess=self.preprocess_field, lower=False)
 
 
-@register_task('natural_seq2seq')
+@register_task('almond_natural_seq2seq')
 class NaturalSeq2Seq(BaseAlmondTask):
     """
     The Almond sequence to sequence task where both sequences are natural language.
-    Paraphrasing and translation are examples of this task.
-    In this task entities (see ENTITY_REGEX) are not preprocessed in contrast to paraphrasing and translation tasks
+    In this task entities (see ENTITY_REGEX) are not preprocessed in contrast to paraphrasing and translation tasks.
+    Paraphrasing and translation inherit from this class.
     """
     
     @property
@@ -509,7 +509,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
 
-@register_task('paraphrase')
+@register_task('almond_paraphrase')
 class Paraphrase(NaturalSeq2Seq):
     """The Almond paraphrasing task. Applies the necessary preprocessing for special tokens and case changes.
     Can be used at prediction and training time. Training is still experimental.
@@ -611,12 +611,12 @@ class Translate(NaturalSeq2Seq):
                 plt.savefig(os.path.join(os.path.dirname(self.args.save), f'heatmap_{batch_example_ids[i]}'))
                 plt.show()
     
-            # remove eos token if present
-            if tgt_tokens[-1] in tokenizer.all_special_tokens:
+            # remove eos and all pad tokens if present
+            while tgt_tokens[-1] in tokenizer.all_special_tokens:
                 tgt_tokens = tgt_tokens[:-1]
             
             if self.args.replace_qp:
-                text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att, tokenizer.tgt_lang)
+                text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att)
                 if not is_replaced and self.args.force_replace_qp:
                     text = force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att)
             else:
@@ -801,10 +801,10 @@ class AlmondDialogueNLG(BaseAlmondTask):
     """
     
     def _is_program_field(self, field_name):
-        return field_name == 'context'
+        return field_name in ('context', 'question')
     
     def utterance_field(self):
-        return 'question'
+        return 'answer'
     
     @property
     def metrics(self):
@@ -813,14 +813,14 @@ class AlmondDialogueNLG(BaseAlmondTask):
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task
         example_id, context, sentence, target_code = parts
-        question = 'what should the agent say ?'
-        context = context + ' ' + target_code
+        context = context
+        question = target_code
         answer = sentence
         return Example.from_raw(self.name + '/' + example_id, context, question, answer,
                                 preprocess=self.preprocess_field, lower=False)
     
     def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example,
+        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/nlg'), make_example=self._make_example,
                                            **kwargs)
 
 
@@ -890,7 +890,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
         all_dirs = kwargs['all_dirs'].split('+')
         
         for dir in all_dirs:
-            splits, paths = AlmondDataset.return_splits(path=os.path.join(root, 'almond/multilingual/{}'.format(dir)),
+            splits, paths = AlmondDataset.return_splits(path=os.path.join(root, 'almond/{}'.format(dir)),
                                                          make_example=self._make_example, **kwargs)
             all_datasets.append(splits)
             all_paths.append(paths)

@@ -34,6 +34,8 @@ import time
 from pprint import pformat
 import shutil
 
+import ujson
+
 from .arguments import save_args, post_parse_general
 from .data_utils.bootleg import Bootleg
 from .util import set_seed
@@ -46,6 +48,7 @@ def parse_argv(parser):
     parser.add_argument('--root', default='.', type=str,
                         help='root directory for data, results, embeddings, code, etc.')
     parser.add_argument('--save', required=True, type=str, help='where to save results.')
+    parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
 
@@ -97,16 +100,14 @@ def parse_argv(parser):
     
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
-    parser.add_argument('--bootleg_kg_encoder_layer', type=str, default=4, help='Number of kg encoder layers for BootlegBertEncoder model')
     parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_preds',
                         help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
-    parser.add_argument('--bootleg_batch_size', type=int, default=30, help='Batch size used for inference using bootleg')
-    parser.add_argument('--bootleg_prob_threshold', type=float, default=0.5, help='Probability threshold for accepting a candidate for a mention')
-    parser.add_argument('--bootleg_dataset_threads', type=int, default=2, help='Number of threads for parallel processing of dataset in bootleg')
-    parser.add_argument('--bootleg_dataloader_threads', type=int, default=4, help='Number of threads for parallel loading of datasets in bootleg')
-    parser.add_argument('--bootleg_extract_num_workers', type=int, default=8, help='Number of workers for extracing mentions step of bootleg')
+    parser.add_argument('--bootleg_batch_size', type=int, default=32, help='Batch size used for inference using bootleg')
+    parser.add_argument('--bootleg_prob_threshold', type=float, default=0.3, help='Probability threshold for accepting a candidate for a mention')
+    parser.add_argument('--bootleg_dataset_threads', type=int, default=1, help='Number of threads for parallel processing of dataset in bootleg')
+    parser.add_argument('--bootleg_dataloader_threads', type=int, default=1, help='Number of threads for parallel loading of datasets in bootleg')
+    parser.add_argument('--bootleg_extract_num_workers', type=int, default=32, help='Number of workers for extracing mentions step of bootleg')
     parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
-    parser.add_argument('--bootleg_distributed_eval', action='store_true', help='Distributed prediction using several GPUs')
 
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', default=[],
@@ -176,7 +177,7 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
         bootleg.disambiguate_mentions(config_args)
         
     # extract features for each token in input sentence from bootleg outputs
-    all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(input_file_name[:-len('_bootleg.jsonl')])
+    all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(input_file_name[:-len('_bootleg.jsonl')], args.subsample)
     
     all_token_type_ids = all_token_type_ids[:args.subsample]
     all_tokens_type_probs = all_tokens_type_probs[:args.subsample]
@@ -190,26 +191,24 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
                     context_len = len(ex.context.split(' ')) if ex.context else 0
                     examples[n].question_feature[i].type_id = tokens_type_ids[i]
                     examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].context_plus_question_feature[i + context_len].type_id = tokens_type_ids[i]
-                    examples[n].context_plus_question_feature[i + context_len].type_prob = tokens_type_probs[i]
-            
+                question_plus_types = task.add_type_tokens(ex.question, ex.question_feature, args.add_types_to_text)
+                examples[n].question_plus_types = question_plus_types
+
             else:
+                # context is the utterance field
                 for i in range(len(tokens_type_ids)):
                     examples[n].context_feature[i].type_id = tokens_type_ids[i]
                     examples[n].context_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].context_plus_question_feature[i].type_id = tokens_type_ids[i]
-                    examples[n].context_plus_question_feature[i].type_prob = tokens_type_probs[i]
-            
-            context_plus_question_with_types = task.create_sentence_plus_types_tokens(ex.context_plus_question,
-                                                                                      ex.context_plus_question_feature,
-                                                                                      args.add_types_to_text)
-            examples[n] = ex._replace(context_plus_question_with_types=context_plus_question_with_types)
-    
+                context_plus_types = task.add_type_tokens(ex.context, ex.context_feature, args.add_types_to_text)
+                examples[n].context_plus_types = context_plus_types
+
     if args.verbose:
         for ex in examples:
             print()
-            print(*[f'token: {token}\ttype: {token_type}' for token, token_type in
-                    zip(ex.context_plus_question.split(' '), ex.context_plus_question_feature)], sep='\n')
+            print(*[f'context token: {token}\ttype: {token_type}' for token, token_type in
+                    zip(ex.context.split(' '), ex.context_plus_feature)], sep='\n')
+            print(*[f'question token: {token}\ttype: {token_type}' for token, token_type in
+                    zip(ex.question.split(' '), ex.question_plus_feature)], sep='\n')
 
 
 def dump_bootleg_features(args, logger):
@@ -312,8 +311,8 @@ def dump_bootleg_features(args, logger):
         
         eval_file_name = args.eval_set_name if args.eval_set_name is not None else 'eval'
 
-        train_output_path = f'{args.bootleg_output_dir}/train_bootleg/eval/{bootleg.ckpt_name}'
-        eval_output_path = f'{args.bootleg_output_dir}/{eval_file_name}_bootleg/eval/{bootleg.ckpt_name}'
+        train_output_path = f'{args.bootleg_output_dir}/train_bootleg/{bootleg.ckpt_name}'
+        eval_output_path = f'{args.bootleg_output_dir}/{eval_file_name}_bootleg/{bootleg.ckpt_name}'
         os.makedirs(train_output_path, exist_ok=True)
         os.makedirs(eval_output_path, exist_ok=True)
         train_output_file = open(os.path.join(train_output_path, 'bootleg_labels.jsonl'), 'w')
@@ -323,9 +322,15 @@ def dump_bootleg_features(args, logger):
         eval_size = len(eval_dataset.examples)
         
         # unmerge bootleg dumped labels
-        with open(f'{args.bootleg_output_dir}/combined_bootleg/eval/{bootleg.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
+        with open(f'{args.bootleg_output_dir}/combined_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
+            
+            # sort output lines first to align with input (required for bootleg >=1.0.0)
+            all_lines = fin.readlines()
+            all_sent_ids = [ujson.loads(line)['sent_idx_unq'] for line in all_lines]
+            all_lines = list(zip(*sorted(zip(all_sent_ids, all_lines), key=lambda item: item[0])))[1]
+            
             i = 0
-            for line in fin:
+            for line in all_lines:
                 if i < train_size:
                     train_output_file.write(line)
                 else:

@@ -26,6 +26,7 @@ src/
 workdir/
 *save*/
 eval_dir/*
+genieNLP-tests*
 
 lightning_logs/
 pytorch_model.bin
@@ -124,6 +125,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+Pipfile
 
 # Spyder project settings
 .spyderproject
