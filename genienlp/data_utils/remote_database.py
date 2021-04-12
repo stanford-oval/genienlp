@@ -53,9 +53,9 @@ class XPackClientMPCompatible(XPackClient):
 
 class RemoteElasticDatabase(object):
     
-    def __init__(self, config, type2id, ned_features_default_val, ned_features_size):
-        self.type2id = type2id
-        self.id2type = {v: k for k, v in self.type2id.items()}
+    def __init__(self, config, typeqid2id, ned_features_default_val, ned_features_size):
+        self.typeqid2id = typeqid2id
+        self.id2type = {v: k for k, v in self.typeqid2id.items()}
         self.unk_id = ned_features_default_val[0]
         self.unk_type = self.id2type[self.unk_id]
         
@@ -106,7 +106,7 @@ class RemoteElasticDatabase(object):
             canonical = match['_source']['canonical']
             type = match['_source']['type']
             if not is_banned(canonical) and canonical == ent:
-                type = self.type2id.get(type, self.unk_id)
+                type = self.typeqid2id.get(type, self.unk_id)
             
                 ent_num_tokens = len(ent.split(' '))
                 idx = tokens_text.index(ent)
@@ -157,7 +157,7 @@ class RemoteElasticDatabase(object):
         import nltk
         nltk.download('averaged_perceptron_tagger', quiet=True)
     
-        tokens_type_ids = [[self.type2id['unk']] * self.ned_features_size[0]] * len(tokens)
+        tokens_type_ids = [[self.typeqid2id['unk']] * self.ned_features_size[0]] * len(tokens)
     
         max_entity_len = min(max_entity_len, len(tokens))
         min_entity_len = min(min_entity_len, len(tokens))
@@ -194,7 +194,7 @@ class RemoteElasticDatabase(object):
                 canonical = match['_source']['canonical']
                 type = match['_source']['type']
                 if not is_banned(canonical) and canonical == gram_attempts[i]:
-                    used_aliases.append([self.type2id.get(type, self.unk_id), start, end])
+                    used_aliases.append([self.typeqid2id.get(type, self.unk_id), start, end])
     
         for type_id, beg, end in used_aliases:
             tokens_type_ids[beg:end] = [[type_id] * self.ned_features_size[0]] * (end - beg)
@@ -231,7 +231,7 @@ class RemoteElasticDatabase(object):
                 canonical = match['_source']['canonical']
                 type = match['_source']['type']
                 if not is_banned(canonical) and canonical == batch_to_lookup[i]:
-                    all_tokens_type_ids[i].extend([self.type2id[type] for _ in range(all_currs[i], all_ends[i])])
+                    all_tokens_type_ids[i].extend([self.typeqid2id[type] for _ in range(all_currs[i], all_ends[i])])
                     all_currs[i] = all_ends[i]
                 else:
                     all_ends[i] -= 1
@@ -239,7 +239,7 @@ class RemoteElasticDatabase(object):
             for j in range(length):
                 # no matches were found for the span starting from current index
                 if all_currs[j] == all_ends[j] and not all_currs[j] >= all_lengths[j]:
-                    all_tokens_type_ids[j].append(self.type2id['unk'])
+                    all_tokens_type_ids[j].append(self.typeqid2id['unk'])
                     all_currs[j] += 1
                     all_ends[j] = all_lengths[j]
         
@@ -253,14 +253,14 @@ class RemoteElasticDatabase(object):
     
     def es_dump(self, mode):
         
-        assert mode in ['canonical2type', 'type2id'], 'Mode not supported; use either canonical2type or type2id'
+        assert mode in ['canonical2type', 'typeqid2id'], 'Mode not supported; use either canonical2type or typeqid2id'
     
         if mode == 'canonical2type':
             return_dict = defaultdict(list)
             dump_file_name = 'canonical2type'
-        elif mode == 'type2id':
+        elif mode == 'typeqid2id':
             return_dict = defaultdict(int)
-            dump_file_name = 'type2id'
+            dump_file_name = 'typeqid2id'
 
     
         begin = time.time()
@@ -279,9 +279,9 @@ class RemoteElasticDatabase(object):
             for match in result["hits"]["hits"]:
                 if mode == 'canonical2type':
                     return_dict[match['_source']['canonical']].append(match['_source']['type'][len('org.wikidata:'):])
-                elif mode == 'type2id':
+                elif mode == 'typeqid2id':
                     if match['_source']['type'] not in return_dict:
-                        return_dict[match['_source']['type']] = len(self.type2id)
+                        return_dict[match['_source']['type']] = len(self.typeqid2id)
 
             scroll_id = result['_scroll_id']
             print('processed: {}, time elapsed: {}'.format(i, time.time() - begin))

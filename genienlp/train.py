@@ -130,9 +130,9 @@ def prepare_data(args, logger):
                     args.db_unk_id = 0
                 if args.do_ned:
                     if bootleg:
-                        args.num_db_types = len(bootleg.type2id)
+                        args.num_db_types = len(bootleg.typeqid2id)
                     elif getattr(task, 'db', None):
-                        args.num_db_types = len(task.db.type2id)
+                        args.num_db_types = len(task.db.typeqid2id)
                 else:
                     args.num_db_types = 0
             else:
