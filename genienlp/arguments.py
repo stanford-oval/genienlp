@@ -66,7 +66,7 @@ def parse_argv(parser):
                         help='root directory for data, results, embeddings, code, etc.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument('--save', required=True, type=str, help='where to save results.')
-    parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to save embeddings.')
     parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
 
     parser.add_argument('--train_languages', type=str, default='en', dest='train_src_languages',
@@ -227,7 +227,7 @@ def parse_argv(parser):
     parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
     parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'],
                         help='database to interact with for NER')
-    parser.add_argument('--database_dump_type2id', action='store_true',
+    parser.add_argument('--database_dump_typeqid2id', action='store_true',
                         help='This will create the "type to id" mapping for all entities available in ES database')
     parser.add_argument('--database_dump_canonical2type', action='store_true',
                         help='This will create the "canonical to type" mapping for all entities available in ES database')
@@ -236,7 +236,7 @@ def parse_argv(parser):
                         help='Minimum length for entities when ngrams database_lookup_method is used ')
     parser.add_argument('--max_entity_len', type=int, default=6,
                         help='Maximum length for entities when ngrams database_lookup_method is used ')
-    parser.add_argument('--database_dir', type=str,
+    parser.add_argument('--database_dir', type=str, default='database/',
                         help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
 
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp',
@@ -254,7 +254,7 @@ def parse_argv(parser):
     parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'],
                         help='Method for adding types to input text in text-based NER approach')
     parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
-    parser.add_argument('--ned_retrieve_method', default='naive',
+    parser.add_argument('--ned_retrieve_method', default='bootleg',
                         choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'], type=str,
                         help='how to retrieve types for entities')
 
@@ -332,9 +332,6 @@ def post_parse_general(args):
     
     if len(args.ned_features) != len(args.ned_features_size):
         raise ValueError('You should specify max feature size for each feature you provided')
-    
-    # if not args.do_ned and args.add_types_to_text != 'no':
-    #     raise ValueError('add_types_to_text flag should be used only when using NED')
 
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:

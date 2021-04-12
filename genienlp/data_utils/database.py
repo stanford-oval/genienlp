@@ -38,10 +38,10 @@ logger = logging.getLogger(__name__)
 
 
 class Database(object):
-    def __init__(self, canonical2type, type2id, all_canonicals, ned_features_default_val, ned_features_size):
+    def __init__(self, canonical2type, typeqid2id, all_canonicals, ned_features_default_val, ned_features_size):
         self.canonical2type = canonical2type
-        self.type2id = type2id
-        self.id2type = {v: k for k, v in self.type2id.items()}
+        self.typeqid2id = typeqid2id
+        self.id2type = {v: k for k, v in self.typeqid2id.items()}
         self.all_canonicals = all_canonicals
 
         self.unk_id = ned_features_default_val[0]
@@ -77,7 +77,7 @@ class Database(object):
                     if has_overlap(start, end, used_aliases):
                         continue
                 
-                    used_aliases.append([self.type2id.get(self.canonical2type[gram_text], self.unk_id), start, end])
+                    used_aliases.append([self.typeqid2id.get(self.canonical2type[gram_text], self.unk_id), start, end])
     
         for type_id, beg, end in used_aliases:
             tokens_type_ids[beg:end] = [[type_id] * self.ned_features_size[0]] * (end - beg)
@@ -110,7 +110,7 @@ class Database(object):
                     
                     # match found
                     found = True
-                    tokens_type_ids.extend([[self.type2id[type] * self.ned_features_size[0]] for _ in range(i, cur)])
+                    tokens_type_ids.extend([[self.typeqid2id[type] * self.ned_features_size[0]] for _ in range(i, cur)])
                     
                     # move i to current unprocessed position
                     i = cur
@@ -135,7 +135,7 @@ class Database(object):
                 if tokens_str in self.all_canonicals:
                     # match found
                     found = True
-                    tokens_type_ids.extend([[self.type2id[self.canonical2type[tokens_str]] * self.ned_features_size[0]] for _ in range(i, end)])
+                    tokens_type_ids.extend([[self.typeqid2id[self.canonical2type[tokens_str]] * self.ned_features_size[0]] for _ in range(i, end)])
                     # move i to current unprocessed position
                     i = end
                     break
@@ -160,7 +160,7 @@ class Database(object):
             idx = tokens_text.index(ent)
             token_pos = len(tokens_text[:idx].strip().split(' '))
             
-            type = self.type2id.get(self.canonical2type[ent], self.unk_id)
+            type = self.typeqid2id.get(self.canonical2type[ent], self.unk_id)
             
             tokens_type_ids[token_pos: token_pos+ent_num_tokens] = [[type] * self.ned_features_size[0]] * ent_num_tokens
         

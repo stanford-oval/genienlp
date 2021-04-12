@@ -48,7 +48,7 @@ def parse_argv(parser):
     parser.add_argument('--root', default='.', type=str,
                         help='root directory for data, results, embeddings, code, etc.')
     parser.add_argument('--save', required=True, type=str, help='where to save results.')
-    parser.add_argument('--embeddings', default='.embeddings', type=str, help='where to save embeddings.')
+    parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to save embeddings.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
 
@@ -92,11 +92,11 @@ def parse_argv(parser):
     
     parser.add_argument('--database_type', default='json', choices=['json', 'remote-elastic'], help='database to interact with for NER')
     
-    parser.add_argument('--min_entity_len', type=int, default=2,
+    parser.add_argument('--min_entity_len', type=int, default=1,
                         help='Minimum length for entities when ngrams database_lookup_method is used ')
-    parser.add_argument('--max_entity_len', type=int, default=4,
+    parser.add_argument('--max_entity_len', type=int, default=6,
                         help='Maximum length for entities when ngrams database_lookup_method is used ')
-    parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
+    parser.add_argument('--database_dir', type=str, default='database/', help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
     
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
     parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
@@ -112,7 +112,7 @@ def parse_argv(parser):
     parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument('--almond_domains', nargs='+', default=[],
                         help='Domains used for almond dataset; e.g. music, books, ...')
-    parser.add_argument('--ned_features', nargs='+', type=str, default=['type', 'freq'],
+    parser.add_argument('--ned_features', nargs='+', type=str, default=['type_id', 'type_prob'],
                         help='Features that will be extracted for each entity: "type" and "freq" are supported.'
                              ' Order is important')
     parser.add_argument('--ned_features_size', nargs='+', type=int, default=[1, 1],
@@ -177,7 +177,9 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
         bootleg.disambiguate_mentions(config_args)
         
     # extract features for each token in input sentence from bootleg outputs
-    all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(input_file_name[:-len('_bootleg.jsonl')], args.subsample)
+    all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(input_file_name[:-len('_bootleg.jsonl')],
+                                                                         args.subsample,
+                                                                         getattr(task, 'TTtype2qid', None))
     
     all_token_type_ids = all_token_type_ids[:args.subsample]
     all_tokens_type_probs = all_tokens_type_probs[:args.subsample]
@@ -267,9 +269,9 @@ def dump_bootleg_features(args, logger):
                 args.db_unk_id = 0
             if args.do_ned:
                 if bootleg:
-                    args.num_db_types = len(bootleg.type2id)
+                    args.num_db_types = len(bootleg.typeqid2id)
                 elif getattr(train_task, 'db', None):
-                    args.num_db_types = len(train_task.db.type2id)
+                    args.num_db_types = len(train_task.db.typeqid2id)
             else:
                 args.num_db_types = 0
         else:

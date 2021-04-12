@@ -179,7 +179,6 @@ class NumericalizedExamples(NamedTuple):
             tokenized_answers = numericalizer.process_classification_labels(examples)
         else:
             tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
-
         
         for i in range(len(examples)):
             numericalized_examples.append(NumericalizedExamples([examples[i].example_id], tokenized_contexts[i], tokenized_answers[i]))

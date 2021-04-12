@@ -49,7 +49,7 @@ setuptools.setup(
     install_requires=[
         'numpy>=1.14.5',
         'torch~=1.7.1',
-        'tqdm>=4.27',
+        'tqdm==4.49.0',
         'tensorboardX>=2.1,<2.3',
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
@@ -66,7 +66,7 @@ setuptools.setup(
         # for kf
         'kfserving>=0.5.0',
         # for NED
-        'bootleg @ git+https://github.com/Mehrad0711/bootleg@b5d1383093177400db905e48c6fba44a9fdf17d7',
+        'bootleg==1.0.1',
         'marisa_trie_m==0.7.6',
         'elasticsearch==7.12.0',
         # for calibration:
