@@ -54,7 +54,7 @@ setuptools.setup(
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
         'requests~=2.22',
-        'transformers==4.4.0',
+        'transformers==4.5.0',
         'sentencepiece==0.1.*',
         'sentence-transformers==1.0.4',
         'mosestokenizer~=1.1',
