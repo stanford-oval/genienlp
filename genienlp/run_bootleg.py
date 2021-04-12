@@ -172,7 +172,9 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
         bootleg.disambiguate_mentions(config_args)
         
     # extract features for each token in input sentence from bootleg outputs
-    all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(input_file_name[:-len('_bootleg.jsonl')], args.subsample)
+    all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(input_file_name[:-len('_bootleg.jsonl')],
+                                                                         args.subsample,
+                                                                         getattr(task, 'TTtype2qid', None))
     
     all_token_type_ids = all_token_type_ids[:args.subsample]
     all_tokens_type_probs = all_tokens_type_probs[:args.subsample]
@@ -259,9 +261,9 @@ def dump_bootleg_features(args, logger):
                 args.db_unk_id = 0
             if args.do_ned:
                 if bootleg:
-                    args.num_db_types = len(bootleg.type2id)
+                    args.num_db_types = len(bootleg.typeqid2id)
                 elif getattr(train_task, 'db', None):
-                    args.num_db_types = len(train_task.db.type2id)
+                    args.num_db_types = len(train_task.db.typeqid2id)
             else:
                 args.num_db_types = 0
         else:
