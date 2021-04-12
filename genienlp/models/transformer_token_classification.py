@@ -70,11 +70,9 @@ class TransformerForTokenClassification(TransformerSeq2Seq, GenieModel):
                                                                          cache_dir=self.args.embeddings,
                                                                          config=config)
 
-        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, args, max_generative_vocab=None)
-
-        self.numericalizer.get_tokenizer(save_directory, config, self.src_lang, self.tgt_lang)
+        self.numericalizer = TransformerNumericalizer(self.args.pretrained_model, args, max_generative_vocab=None,
+                                save_dir=save_directory, config=config, src_lang=self.src_lang, tgt_lang=self.tgt_lang, vocab_sets=vocab_sets, tasks=tasks)
         
-        self.init_vocab_from_data(vocab_sets, tasks, save_directory)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
         
         self.numericalizer.answer_pad_id = -100

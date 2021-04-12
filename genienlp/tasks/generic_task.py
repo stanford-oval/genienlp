@@ -246,11 +246,11 @@ class CrossNERTask(BaseAlmondTask):
         return field_name == 'answer'
     
     def utterance_field(self):
-        return 'question'
+        return 'context'
     
     def _make_example(self, example_id, token_list, label_list, domain):
-        question = ' '.join(token_list)
-        context = ''
+        context = ' '.join(token_list)
+        question = ''
         answer = ' '.join([str(self.label2id[label]) for label in label_list])
         
         return Example.from_raw(self.name + '/' + str(example_id), context, question, answer,

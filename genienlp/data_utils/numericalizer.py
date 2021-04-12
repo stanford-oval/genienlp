@@ -163,7 +163,7 @@ class TransformerNumericalizer(object):
             tokenizer_args['pretrained_model_name_or_path'] = self._pretrained_name
         
         self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
-
+        
         # some tokenizers like Mbart do not set src_lang and tgt_lan when initialized; take care of it here
         self._tokenizer.src_lang = src_lang
         self._tokenizer.tgt_lang = tgt_lang
@@ -431,7 +431,7 @@ class TransformerNumericalizer(object):
         return num_prefix_special_tokens, num_suffix_special_tokens
     
     
-    def process_classification_labels(self, examples):
+    def process_classification_labels(self, all_context_plus_questions, all_context_plus_question_with_types, all_answers):
     
         def tokenize_and_align_labels(all_sequences, all_sequences_with_types, all_labels, label_all_tokens=True):
             tokenized_inputs = self._tokenizer.batch_encode_plus(
@@ -479,13 +479,13 @@ class TransformerNumericalizer(object):
             return all_processed_labels
     
         # align labels
-        for ex in examples:
-            assert len(ex.answer.split(" ")) == len(ex.context_plus_question.split(" ")), print(ex.context_plus_question)
+        for context_plus_question, answer in zip(all_context_plus_questions, all_answers):
+            assert len(answer.split(" ")) == len(context_plus_question.split(" ")), print(answer, context_plus_question)
     
         tokenized_answers = tokenize_and_align_labels(
-            [ex.context_plus_question.split(" ") for ex in examples],
-            [ex.context_plus_question_with_types.split(" ") for ex in examples],
-            [list(map(lambda token: int(token), ex.answer.split(" "))) for ex in examples]
+            [cpq.split(" ") for cpq in all_context_plus_questions],
+            [cpqt.split(" ") for cpqt in all_context_plus_question_with_types],
+            [list(map(lambda token: int(token), ans.split(" "))) for ans in all_answers]
         )
     
         batch_decoder_numerical = []
