@@ -233,7 +233,7 @@ def parse_argv(parser):
 
     parser.add_argument('--min_entity_len', type=int, default=1,
                         help='Minimum length for entities when ngrams database_lookup_method is used ')
-    parser.add_argument('--max_entity_len', type=int, default=6,
+    parser.add_argument('--max_entity_len', type=int, default=4,
                         help='Maximum length for entities when ngrams database_lookup_method is used ')
     parser.add_argument('--database_dir', type=str, default='database/',
                         help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
