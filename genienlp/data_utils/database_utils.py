@@ -36,68 +36,6 @@ nltk.download('stopwords', quiet=True)
 from nltk.corpus import stopwords
 
 
-DOMAIN_TYPE_MAPPING = dict()
-
-## SQA
-
-
-DOMAIN_TYPE_MAPPING['music'] = {'MusicRecording': 'Q7366',
-                                'MusicAlbum': 'Q482994',
-                                'Person': 'Q5',
-                                'iso_lang_code': 'Q315',
-                                'genres': 'Q188451'}  # Q188451:music genre, Q5:human, Q7366:song, Q482994:album
-
-
-# TODO actor and director should be handled differently
-DOMAIN_TYPE_MAPPING['movies'] = {'Movie': 'Q11424',
-                                 'creator': 'Q2500638',
-                                 'director': 'Q3455803',
-                                 'actor': 'Q33999',
-                                 'genre': 'Q201658',
-                                 'iso_lang_code': 'Q315'}  # Q11424:film, Q201658:film genre
-
-# isbn is ignored for books because (1.bootleg doesn't detect them. 2.they are easy to recognize by semantic parser)
-DOMAIN_TYPE_MAPPING['books'] = {'Book': 'Q571',
-                                'Person': 'Q5',
-                                'inLanguage': 'Q315',
-                                'iso_lang_code': 'Q315',
-                                'award': 'Q618779',
-                                'bookEdition': 'Q57933693'}  # Q571:book, Q315:language, Q618779:award
-
-DOMAIN_TYPE_MAPPING['linkedin'] = {'Organization': 'Q43229',
-                                   'Person': 'Q5',
-                                   'addressLocality': 'Q2221906',
-                                   'award': 'Q618779'}   # Q2221906:geographic_location
-# linkedin alias
-DOMAIN_TYPE_MAPPING['people'] = {'Organization': 'Q43229',
-                                   'Person': 'Q5',
-                                   'addressLocality': 'Q2221906',
-                                   'award': 'Q618779'}   # Q2221906:geographic_location
-
-DOMAIN_TYPE_MAPPING['restaurants'] = {'Restaurant': 'Q571',
-                                      'Person': 'Q5',
-                                      'servesCuisine': 'Q1778821',
-                                      'Location': 'Q2221906',
-                                      'postalCode': 'Q37447',
-                                      'ratingValue': 'Q2283373',
-                                      'reviewCount': 'Q265158'}   # Q2283373:restaurant_rating, Q265158:review, Q1778821:cuisine
-
-DOMAIN_TYPE_MAPPING['hotels'] = {'Hotel': 'Q571',
-                                 'LocationFeatureSpecification': 'Q5912147',
-                                 'Location': 'Q2221906',
-                                 'CheckinTime': 'Q1068755',
-                                 'CheckoutTime': 'Q56353377',
-                                 'ratingValue': 'Q2976556'}   # Q5912147:hotel_amenity, Q2976556:hotel_rating
-
-
-## Dialogues
-DOMAIN_TYPE_MAPPING['spotify'] = {'song': 'Q7366',
-                                  'artist': 'Q5',
-                                  'artists': 'Q5',
-                                  'album': 'Q482994',
-                                  'genres': 'Q188451'}   # Q188451:music genre
-
-
 BANNED_PHRASES = set(
     stopwords.words('english') + \
     ['music', 'musics', 'name', 'names', 'want', 'wants', 'album', 'albums', 'please', 'who', 'show me', 'tell me', 'find me', 'sing', 'sang',
@@ -113,7 +51,7 @@ BANNED_PHRASES = set(
      'greatest hits', 'good hits', 'content rating', 'how long', 'actor', 'pg', 'ratings', 'rating', 'rated pg', 'key', 'the nice',
      'keyword', 'keywords', 'subtitle', 'subtitles', 'i want that', 'shorter', 'duration', 'num', 'hope', 'rm', 'michelin', 'michelin star', 'michelin stars',
      'reservations', 'zip code', 'zipcode', 'smoke', 'smoking', 'luxury', 'bar', 'bars', 'kitchen', 'cafe', 'cafes', 'coffee', 'where i am',
-     'email']
+     'email', 'motion sensor', 'temperature sensor', 'publication date', 'home address', 'home assistant']
 )
 
 BANNED_REGEXES = [re.compile(r'\d (star|rating)'), re.compile(r'\dth'), re.compile(r'a \d'),

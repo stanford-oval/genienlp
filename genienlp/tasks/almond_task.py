@@ -34,7 +34,6 @@ import torch
 import ujson
 import logging
 
-from ..data_utils.database_utils import DOMAIN_TYPE_MAPPING
 from ..data_utils.remote_database import RemoteElasticDatabase
 from ..model_utils.translation import compute_attention, replace_quoted_params, force_replace_quoted_params
 from ..tasks.base_dataset import Split
@@ -72,10 +71,12 @@ class BaseAlmondTask(BaseTask):
 
         if args.do_ned:
             self.unk_id = args.ned_features_default_val[0]
-            self.thingtalkType2dbType = dict()
+            self.TTtype2qid = dict()
+            with open(os.path.join(self.args.database_dir, 'es_material/almond_type2qid.json'), 'r') as fin:
+                almond_type2qid = ujson.load(fin)
             for domain in self.almond_domains:
-                self.thingtalkType2dbType.update(DOMAIN_TYPE_MAPPING[domain])
-            self.dbType2thingtalkType = {v: k for k, v in self.thingtalkType2dbType.items()}
+                self.TTtype2qid.update(almond_type2qid[domain])
+            self.qid2TTtype = {v: k for k, v in self.TTtype2qid.items()}
             self._init_db()
 
     def _init_db(self):
@@ -87,18 +88,18 @@ class BaseAlmondTask(BaseTask):
                 with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
                     canonical2type = ujson.load(fin)
                     all_canonicals = marisa_trie.Trie(canonical2type.keys())
-            with open(os.path.join(self.args.database_dir, 'es_material/type2id.json'), 'r') as fin:
-                type2id = ujson.load(fin)
+            with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
+                typeqid2id = ujson.load(fin)
             
-            self.db = Database(canonical2type, type2id, all_canonicals,
+            self.db = Database(canonical2type, typeqid2id, all_canonicals,
                                self.args.ned_features_default_val, self.args.ned_features_size)
         
         elif self.args.database_type == 'remote-elastic':
             with open(os.path.join(self.args.database_dir, 'es_material/elastic_config.json'), 'r') as fin:
                 es_config = ujson.load(fin)
-            with open(os.path.join(self.args.database_dir, 'es_material/type2id.json'), 'r') as fin:
-                type2id = ujson.load(fin)
-            self.db = RemoteElasticDatabase(es_config, type2id, self.args.ned_features_default_val, self.args.ned_features_size)
+            with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
+                typeqid2id = ujson.load(fin)
+            self.db = RemoteElasticDatabase(es_config, typeqid2id, self.args.ned_features_default_val, self.args.ned_features_size)
 
     @property
     def utterance_field(self):
@@ -152,10 +153,10 @@ class BaseAlmondTask(BaseTask):
                     if schema_entity_type:
                         schema_entity_type = schema_entity_type.strip('()').rsplit(':', 1)[1]
     
-                if schema_entity_type is None or schema_entity_type not in self.thingtalkType2dbType.keys():
+                if schema_entity_type is None or schema_entity_type not in self.TTtype2qid.keys():
                     schema_type = self.db.unk_type
                 else:
-                    schema_type = self.thingtalkType2dbType[schema_entity_type]
+                    schema_type = self.TTtype2qid[schema_entity_type]
     
                 entity2type[ent] = schema_type
 
@@ -205,10 +206,10 @@ class BaseAlmondTask(BaseTask):
                     if schema_entity_type == 'Person' and tokens_before_entity[-3] == 'null' and tokens_before_entity[-5] in ['director', 'creator', 'actor']:
                         schema_entity_type = 'Person.' + tokens_before_entity[-5]
                 
-                if schema_entity_type is None or schema_entity_type not in self.thingtalkType2dbType.keys():
+                if schema_entity_type is None or schema_entity_type not in self.TTtype2qid.keys():
                     schema_type = self.db.unk_type
                 else:
-                    schema_type = self.thingtalkType2dbType[schema_entity_type]
+                    schema_type = self.TTtype2qid[schema_entity_type]
                 
                 entity2type[ent] = schema_type
                 
@@ -237,7 +238,7 @@ class BaseAlmondTask(BaseTask):
                 continue
             token_pos = len(tokens_text[:idx].split())
             
-            type_id = self.db.type2id[type]
+            type_id = self.db.typeqid2id[type]
             type_id = self.pad_features([type_id], self.args.ned_features_size[0], self.args.ned_features_default_val[0])
             
             tokens_type_ids[token_pos: token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
@@ -298,7 +299,7 @@ class BaseAlmondTask(BaseTask):
                 # token is an entity
                 if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
                     final_token = '<e> '
-                    all_types = ' | '.join(set([self.dbType2thingtalkType[self.db.id2type[id]] for id in feat.type_id if self.db.id2type[id] in self.dbType2thingtalkType]))
+                    all_types = ' | '.join(set([self.qid2TTtype[self.db.id2type[id]] for id in feat.type_id if self.db.id2type[id] in self.qid2TTtype]))
                     final_token += '( ' + all_types + ' ) ' + token
                     # append all entities with same type
                     i += 1
@@ -319,7 +320,7 @@ class BaseAlmondTask(BaseTask):
                 feat = features[i]
                 # token is an entity
                 if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
-                    all_types = ' | '.join(set([self.dbType2thingtalkType[self.db.id2type[id]] for id in feat.type_id if self.db.id2type[id] in self.dbType2thingtalkType]))
+                    all_types = ' | '.join(set([self.qid2TTtype[self.db.id2type[id]] for id in feat.type_id if self.db.id2type[id] in self.qid2TTtype]))
                     all_tokens = []
                     # append all entities with same type
                     while i < len(new_sentence_tokens) and features[i] == feat:
@@ -437,8 +438,8 @@ class BaseAlmondTask(BaseTask):
         
         features = [Feature(*tup) for tup in zip(*zip_list)]
 
-        sentence_plus_types = ''
-        if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features):
+        sentence_plus_types = new_sentence
+        if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features) and field_name == self.utterance_field():
             sentence_plus_types = self.add_type_tokens(new_sentence, features, self.args.add_types_to_text)
 
         return new_sentence, features, sentence_plus_types

@@ -49,7 +49,7 @@ setuptools.setup(
     install_requires=[
         'numpy>=1.14.5',
         'torch~=1.7.1',
-        'tqdm~=4.0',
+        'tqdm==4.49.0',
         'tensorboardX>=2.1,<2.3',
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
@@ -59,12 +59,14 @@ setuptools.setup(
         'sentence-transformers==1.0.4',
         'mosestokenizer~=1.1',
         'nltk~=3.4',
-        'elasticsearch==7.12.0',
         'ujson==4.0.2',
         'pathos==0.2.7',
-        'marisa_trie_m==0.7.6',
+        # for kf
         'kfserving>=0.5.0',
-        'bootleg @ git+https://github.com/Mehrad0711/bootleg@33511a7748505d60cd60c0444ab68535a4e43aa7',
+        # for NED
+        'bootleg==1.0.1',
+        'marisa_trie_m==0.7.6',
+        'elasticsearch==7.12.0',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',

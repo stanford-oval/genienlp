@@ -64,9 +64,9 @@ class Server(object):
 
     def numericalize_examples(self, ex):
 
-        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer, self.args.add_types_to_text)
+        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer)
         # make a single batch with all examples
-        return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device, db_unk_id=self.args.db_unk_id)
+        return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
     
 
     def handle_request(self, request):
@@ -210,12 +210,12 @@ def init(args):
 
     Model = getattr(models, args.model)
     model, _ = Model.load(args.path,
-                                     model_checkpoint_file=args.checkpoint_name,
-                                     args=args,
-                                     device=device,
-                                     src_lang=args.src_locale,
-                                     tgt_lang=args.tgt_locale
-                                     )
+                          model_checkpoint_file=args.checkpoint_name,
+                          args=args,
+                          device=device,
+                          src_lang=args.src_locale,
+                          tgt_lang=args.tgt_locale
+                          )
 
     model.to(device)
     model.eval()
