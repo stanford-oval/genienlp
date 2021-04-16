@@ -2,7 +2,7 @@ import argparse
 import os
 import ujson
 import jsonlines
-from genienlp.data_utils.database_utils import BANNED_PHRASES, BANNED_REGEXES, DOMAIN_TYPE_MAPPING
+from genienlp.data_utils.database_utils import is_banned
 from termcolor import colored
 from collections import Counter
 
@@ -10,118 +10,108 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--input_file', type=str)
 parser.add_argument('--output_file', type=str)
-parser.add_argument('--bootleg_input_dir', type=str)
-parser.add_argument('--threshold', type=int, default=0.5)
+parser.add_argument('--database_dir', type=str)
+parser.add_argument('--threshold', type=int, default=0.1)
 
 args = parser.parse_args()
 
+if __name__ == '__main__':
 
-wikitype2almondtype = {}
-
-with open(os.path.join(args.bootleg_input_dir, 'emb_data/entityQID_to_wikidataTypeQID.json'), 'r') as fin:
-    qid2type = ujson.load(fin)
-
-# with open(os.path.join(args.bootleg_input_dir, 'emb_data/es_qid2type.json'), 'r') as fin:
-#     qid2type = ujson.load(fin)
+    with open(f'{args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json', 'r') as fin:
+        qid2typenames = ujson.load(fin)
+    with open(f'{args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json', 'r') as fin:
+        type_vocab_to_wikidataqid = ujson.load(fin)
+        wikidataqid_to_type_vocab = {v: k for k, v in type_vocab_to_wikidataqid.items()}
+    with open(f'{args.database_dir}/es_material/typeqid2id.json', 'r') as fin:
+        typeqid2id = ujson.load(fin)
     
-with open(os.path.join(args.bootleg_input_dir, 'emb_data/wikidatatitle_to_typeid_0905.json'), 'r') as fin:
-    title2typeid = ujson.load(fin)
-    typeid2title = {v: k for k, v in title2typeid.items()}
+    all_types = []
+    all_aliases = []
+    all_qids = []
+    all_probs = []
+    unknown_qids = set()
     
-# with open(os.path.join(args.bootleg_input_dir, 'emb_data/wikidataqid_to_bootlegtypeid.json'), 'r') as fin:
-#     type2id = ujson.load(fin)
+    lines = jsonlines.open(args.input_file, 'r')
     
-all_types = []
-all_aliases = []
-all_qids = []
-all_probs = []
-unknown_qids = set()
-
-lines = jsonlines.open(args.input_file, 'r')
-
-for line in lines:
-    qids = line['qids']
-    aliases = line['aliases']
-    probs = line['probs']
-    for alias, qid, prob in zip(aliases, qids, probs):
-        if prob < args.threshold or alias in BANNED_PHRASES or any([regex.match(alias) for regex in BANNED_REGEXES]):
-            continue
-        
-        if qid in qid2type:
-            if isinstance(qid2type[qid], list):
-                if len(qid2type[qid]):
-                    all_types.append(qid2type[qid])
+    for line in lines:
+        qids = line['qids']
+        aliases = line['aliases']
+        probs = line['probs']
+        for alias, qid, prob in zip(aliases, qids, probs):
+            if prob < args.threshold or is_banned(alias):
+                continue
+            
+            types = []
+            if qid in qid2typenames and qid2typenames[qid]:
+                # map entity qid to its type titles on wikidata ; then map titles to their wikidata qids
+                for typename in qid2typenames[qid]:
+                    if typename in type_vocab_to_wikidataqid:
+                        types.append(type_vocab_to_wikidataqid[typename])
+            
+            all_aliases.append(alias)
+            all_qids.append(qid)
+            all_types.append(types)
+            all_probs.append(prob)
+    
+    assert len(all_qids) == len(all_aliases) == len(all_types) == len(all_probs)
+    
+    all_titles = Counter()
+    all_new_types = Counter()
+    for qid, alias, types, prob in zip(all_qids, all_aliases, all_types, all_probs):
+        # assert type in type2id
+        for typeqid in types:
+            if typeqid in wikidataqid_to_type_vocab:
+                title = wikidataqid_to_type_vocab[typeqid]
+                all_titles[title] += 1
+                
+                print(f'{alias}, {prob}, {qid}, {typeqid}: {title}')
+                
+                ######
+                ## copy this code block to database_utils.post_process_bootleg_types when done with your analysis
+                ######
+                ########################################################################
+                ########################################################################
+                
+                
+                if title in ['sovereign state', 'capital_Q5119', 'republic', 'sport cyclist', 'athletics competitor', 'bobsledder',
+                             'tennis player', 'cricketer']:
+                    typeqid = ('Q2302426', 'Q2221906')
+                
+                elif title in ['politician', 'association football player', 'association football manager']:
+                    typeqid = 'Q215627'
+                elif 'organization' in title or title in ['business', 'association football club', 'national association football team']:
+                    typeqid = 'Q43229'
+                elif 'state' in title or 'city' in title or 'country' in title or title in ['countries bordering the Baltic Sea']:
+                    typeqid = 'Q2221906'
+                elif title in []:
+                    typeqid = 'Q2302426'
                 else:
-                    all_types.append('unk')
-                    unknown_qids.add(qid)
+                    typeqid = typeqid
+                    
+                
+                ########################################################################
+                ########################################################################
+                
+                all_new_types[typeqid] += 1
+                
+                print(f'{alias}, {prob}, {qid}, {typeqid}: {title}')
+            
             else:
-                all_types.append(qid2type[qid])
+                print(f'{alias}, {prob}, {qid}, {typeqid}: ?')
+    
+    DOMAIN = 'cross_ner/news'
+    
+    with open(os.path.join(args.database_dir, 'es_material/almond_type2qid.json'), 'r') as fin:
+        almond_type2qid = ujson.load(fin)
+    
+    print(f'all_titles: {all_titles.most_common()}')
+    main_types = []
+    extra_types = []
+    
+    for tup in all_new_types.most_common():
+        if tup[0] in almond_type2qid[DOMAIN].values():
+            main_types.append(tup)
         else:
-            all_types.append('unk')
-            unknown_qids.add(qid)
-            
-        all_aliases.append(alias)
-        all_qids.append(qid)
-        all_probs.append(prob)
-        
-assert len(all_qids) == len(all_aliases) == len(all_types)
-
-all_titles = Counter()
-all_new_types = Counter()
-for qid, alias, types, prob in zip(all_qids, all_aliases, all_types, all_probs):
-    # assert type in type2id
-    for type in types:
-        if type in typeid2title:
-            title = typeid2title[type]
-            all_titles[title] += 1
+            extra_types.append(tup)
     
-            print(f'{alias}, {prob}, {qid}, {type}: {title}')
-            
-            ######
-            ## copy this code block to database_utils.post_process_bootleg_types when done with your analysis
-            ######
-            ########################################################################
-            ########################################################################
-
-            # rap, rap music
-            if qid in ['Q6010', 'Q11401']:
-                type = 'Q188451'
-
-            if title in ['song', 'single', 'musical composition', 'ballad', 'extended play', 'literary work',
-                         'television series', 'film', 'play']:
-                type = 'Q7366'
-            elif 'album' in title or title in []:
-                type = 'Q482994'
-            elif 'genre' in title or title in ['country', 'music by country or region', 'music term', 'republic',
-                                               'ethnic group', 'music scene']:
-                type = 'Q188451'
-            elif 'person' in title or 'musician' in title or \
-                    title in ['singer', 'actor', 'musician', 'songwriter',
-                              'composer', 'singer-songwriter', 'musical group', 'drummer',
-                              'writer', 'poet', 'guitarist', 'rapper', 'painter',
-                              'film director', 'rock band', 'university teacher', 'journalist',
-                              'television presenter', 'saxophonist', 'music pedagogue',
-                              'association football player', 'disc jockey', 'record producer', 'engineer',
-                              'human biblical figure', 'big band', 'musical duo', 'girl group',
-                              'boy band', 'musical ensemble', 'artist', 'vocal group', 'heavy metal band',
-                              'literary character', 'lawyer', 'lyricist', 'baseball player']:
-                type = 'Q5'
-
-            elif title in ['video game', 'disease', 'city of the United States', 'taxon',
-                           'Wikimedia disambiguation page', 'Wikimedia list article']:
-                type = 'unk'
-            
-            ########################################################################
-            ########################################################################
-    
-            all_new_types[type] += 1
-            
-            # print(f'{alias}, {prob}, {qid}, {type}: {title}')
-    
-            
-        else:
-            print(f'{alias}, {prob}, {qid}, {type}: ?')
-        
-
-print(f'all_titles: {all_titles.most_common()}')
-print('all_new_types:', *[colored(tup, "red") if tup[0] in DOMAIN_TYPE_MAPPING['restaurants'].values() else tup for tup in all_new_types.most_common()])
+    print('all_new_types:', *[colored(tup, "red") for tup in main_types], *[extra_types])
