@@ -37,7 +37,6 @@ from typing import List, Tuple
 
 from pathos import multiprocessing
 from torch.nn.utils.rnn import pad_sequence
-from transformers import ElectraConfig, BertConfig
 from transformers import MarianConfig, T5Config, AutoTokenizer, BertTokenizer, BertTokenizerFast, \
     XLMRobertaTokenizer, XLMRobertaTokenizerFast, GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer, \
     MBart50TokenizerFast, \
@@ -154,13 +153,6 @@ class TransformerNumericalizer(object):
             tokenizer_args.update({'pretrained_model_name_or_path': save_dir, 'config': config})
         else:
             tokenizer_args.update({'pretrained_model_name_or_path': self._pretrained_name})
-
-
-        # FIXME: there's a known issue with Bert-based fast tokenizers (e.g. Electra) addressed here https://github.com/huggingface/transformers/pull/10686
-        # till then don't load from save_dir for bert-based models
-        if isinstance(config, ElectraConfig) or isinstance(config, BertConfig):
-            # tokenizer_args['do_lower_case'] = True
-            tokenizer_args['pretrained_model_name_or_path'] = self._pretrained_name
         
         self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
         

@@ -76,7 +76,10 @@ class TransformerForTokenClassification(TransformerSeq2Seq, GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
         
         self.numericalizer.answer_pad_id = -100
-
+        
+    def add_new_vocab_from_data(self, tasks, resize_decoder=False):
+        super().add_new_vocab_from_data(tasks, resize_decoder)
+        self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
     def forward(self, *input, **kwargs):
         if self.training:
