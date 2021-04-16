@@ -241,7 +241,7 @@ def parse_argv(parser):
 
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp',
                         help='Path to folder where bootleg prepped files should be saved')
-    parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
+    parser.add_argument('--bootleg_model', type=str, default='bootleg_uncased_mini', help='Bootleg model to use')
     parser.add_argument('--bootleg_prob_threshold', type=float, default=0.3,
                         help='Probability threshold for accepting a candidate for a mention')
     parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')

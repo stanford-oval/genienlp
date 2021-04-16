@@ -99,7 +99,7 @@ def parse_argv(parser):
     parser.add_argument('--database_dir', type=str, default='database/', help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)')
     
     parser.add_argument('--bootleg_output_dir', type=str, default='results_temp', help='Path to folder where bootleg prepped files should be saved')
-    parser.add_argument('--bootleg_model', type=str, help='Bootleg model to use')
+    parser.add_argument('--bootleg_model', type=str, default='bootleg_uncased_mini', help='Bootleg model to use')
     parser.add_argument('--bootleg_dump_mode', choices=['dump_preds', 'dump_embs'], default='dump_preds',
                         help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings')
     parser.add_argument('--bootleg_batch_size', type=int, default=32, help='Batch size used for inference using bootleg')
