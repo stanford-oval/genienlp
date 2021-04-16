@@ -51,7 +51,7 @@ BANNED_PHRASES = set(
      'greatest hits', 'good hits', 'content rating', 'how long', 'actor', 'pg', 'ratings', 'rating', 'rated pg', 'key', 'the nice',
      'keyword', 'keywords', 'subtitle', 'subtitles', 'i want that', 'shorter', 'duration', 'num', 'hope', 'rm', 'michelin', 'michelin star', 'michelin stars',
      'reservations', 'zip code', 'zipcode', 'smoke', 'smoking', 'luxury', 'bar', 'bars', 'kitchen', 'cafe', 'cafes', 'coffee', 'where i am',
-     'email', 'motion sensor', 'temperature sensor', 'publication date', 'home address', 'home assistant']
+     'email', 'motion sensor', 'temperature sensor', 'publication date', 'home address', 'home assistant', 'price']
 )
 
 BANNED_REGEXES = [re.compile(r'\d (star|rating)'), re.compile(r'\dth'), re.compile(r'a \d'),
