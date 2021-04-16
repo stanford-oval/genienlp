@@ -1733,7 +1733,7 @@ class CrossNERDataset(CQA):
         super().__init__(examples, **kwargs)
     
     @classmethod
-    def return_splits(cls, name, path='.data', train='train', validation='validation', test='test', **kwargs):
+    def return_splits(cls, name, path='.data', train='train', validation='dev', test='test', **kwargs):
     
         ner_domains = kwargs.pop('ner_domains')
         
@@ -1749,7 +1749,7 @@ class CrossNERDataset(CQA):
                 with open(train_path, "r") as fin:
                     train_data = fin.readlines()
             if validation:
-                validation_path = os.path.join(path, domain, 'dev.txt')
+                validation_path = os.path.join(path, domain, f'{validation}.txt')
                 with open(validation_path, "r") as fin:
                     validation_data = fin.readlines()
             if test:
