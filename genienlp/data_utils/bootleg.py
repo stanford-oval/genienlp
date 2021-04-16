@@ -176,8 +176,8 @@ class Bootleg(object):
             
             # run configs
             "--run_config.dataset_threads", str(getattr(self.args, 'bootleg_dataset_threads', 1)),
-            "--run_config.dataloader_threads", str(getattr(self.args, 'bootleg_dataset_threads', 1)),
-            "--run_config.eval_batch_size", str(getattr(self.args, 'bootleg_dataset_threads', 32)),
+            "--run_config.dataloader_threads", str(getattr(self.args, 'bootleg_dataloader_threads', 1)),
+            "--run_config.eval_batch_size", str(getattr(self.args, 'bootleg_batch_size', 32)),
             "--run_config.log_level", 'DEBUG',
             
             # data configs
@@ -297,7 +297,7 @@ class Bootleg(object):
                 tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
 
         return tokens_type_ids, tokens_type_probs
-        
+
     def collect_features(self, file_name, subsample, TTtype2qid):
         
         all_tokens_type_ids = []
