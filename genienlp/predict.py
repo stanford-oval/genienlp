@@ -130,7 +130,6 @@ def prepare_data(args, device):
     return datasets
 
 
-
 def prepare_data_iterators(args, val_sets, numericalizer, device):
     logger.info(f'Preparing data iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:

@@ -111,10 +111,13 @@ class CONLLNER(HFTask):
     def metrics(self):
         return ['ner_f1', 'em', 'f1', 'pem']
     
+    def utterance_field(self):
+        return 'context'
+    
     def _make_example(self, ex, **kwargs):
         example_id = ex['id']
-        question = ' '.join(ex['tokens'])
-        context = ''
+        context = ' '.join(ex['tokens'])
+        question = ''
         answer = ' '.join(map(lambda item: str(item), ex['ner_tags']))
         
         return Example.from_raw(self.name + '/' + example_id, context, question, answer,
