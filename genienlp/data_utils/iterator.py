@@ -72,6 +72,8 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         self.last_batch_start_index = self._get_next_batch_start_index()
         
         if not self.shuffle_and_repeat:
+            # do not allow skipping examples during validation/ prediction
+            self.no_skip = True
             # quickly iterate over self to calculate length
             self.length = 0
             for _ in self:
@@ -80,9 +82,10 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             self.last_batch_start_index = 0
             self.last_batch_start_index = self._get_next_batch_start_index()
         else:
+            self.no_skip = False
             self.length = len(self.data_source)
             
-
+            
     def __len__(self):
         return self.length
 
@@ -107,6 +110,8 @@ class LengthSortedIterator(torch.utils.data.Sampler):
                 longest_example = new_example # this is the first element in batch, and therefore the longest
             examples_size = self.batch_size_fn(longest_example)
             if examples_size > self.batch_size:
+                if self.no_skip:
+                    raise ValueError('Have to skip examples in validation/ prediction splits. Increase the validation batch size')
                 global _warned_for_batch_size
                 if not _warned_for_batch_size:
                     logger.warning('Skipping an example larger than batch size. Consider increasing the batch size to avoid this warning')
