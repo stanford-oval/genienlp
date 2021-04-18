@@ -190,7 +190,6 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
         for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
             if task.utterance_field() == 'question':
                 for i in range(len(tokens_type_ids)):
-                    context_len = len(ex.context.split(' ')) if ex.context else 0
                     examples[n].question_feature[i].type_id = tokens_type_ids[i]
                     examples[n].question_feature[i].type_prob = tokens_type_probs[i]
                 question_plus_types = task.add_type_tokens(ex.question, ex.question_feature, args.add_types_to_text)

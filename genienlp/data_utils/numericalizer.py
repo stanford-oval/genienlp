@@ -471,8 +471,7 @@ class TransformerNumericalizer(object):
             return all_processed_labels
     
         # align labels
-        for context_plus_question, answer in zip(all_context_plus_questions, all_answers):
-            assert len(answer.split(" ")) == len(context_plus_question.split(" ")), print(context_plus_question, answer)
+        assert all([len(cpq.split(" ")) == len(answer.split(" ")) for cpq, answer in zip(all_context_plus_questions, all_answers)])
     
         tokenized_answers = tokenize_and_align_labels(
             [cpq.split(" ") for cpq in all_context_plus_questions],

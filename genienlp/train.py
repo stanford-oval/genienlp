@@ -47,7 +47,6 @@ from . import arguments
 from . import models
 from .data_utils.bootleg import Bootleg
 from .run_bootleg import bootleg_process_splits
-from .tasks.hf_task import HFTask
 from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader, \
     log_model_size, get_devices, ned_dump_entity_type_pairs
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel

@@ -37,9 +37,10 @@ from subprocess import Popen, PIPE
 from typing import Iterable
 
 import numpy as np
-import seqeval
 from pyrouge import Rouge155
 from sacrebleu import corpus_bleu
+from seqeval import metrics as seq_metrics
+from seqeval import scheme as seq_scheme
 
 from .tasks.generic_dataset import Query
 from .util import requote_program
@@ -497,7 +498,6 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
     if 'ner_f1_IOB1' in requested_metrics:
         greedy_processed = [pred.split() for pred in greedy]
         answer_processed = [ans[0].split() for ans in answer]
-        from seqeval import metrics, scheme
         
         def convert_IOB2_to_IOB1(labels):
             cur_category = None
@@ -508,8 +508,7 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
         
         convert_IOB2_to_IOB1(greedy_processed)
         convert_IOB2_to_IOB1(answer_processed)
-
-        f1 = metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed, mode='strict', scheme=scheme.IOB1) * 100
+        f1 = seq_metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed, mode='strict', scheme=seq_scheme.IOB1) * 100
         
         metric_keys.append('ner_f1_IOB1')
         metric_values.append(f1)
@@ -517,9 +516,8 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
     if 'ner_f1' in requested_metrics:
         greedy_processed = [pred.split() for pred in greedy]
         answer_processed = [ans[0].split() for ans in answer]
-        from seqeval import metrics, scheme
 
-        f1 = metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed) * 100
+        f1 = seq_metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed) * 100
     
         metric_keys.append('ner_f1')
         metric_values.append(f1)
