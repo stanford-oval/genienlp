@@ -106,7 +106,7 @@ def prepare_data(args, logger):
             splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
     
             t1 = time.time()
-            logger.info('Data loading took {} sec'.format(t1-t0))
+            logger.info('Data loading took {:.2f} seconds'.format(t1-t0))
             assert not splits.eval and not splits.test
             if args.use_curriculum:
                 assert splits.aux
@@ -367,7 +367,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     train_iters = [(task, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
                    for task, dataset, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     t1 = time.time()
-    logger.info('Preparing iterators took {} sec'.format(t1 - t0))
+    logger.info('Preparing iterators took {:.2f} seconds'.format(t1 - t0))
     
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
     # save memory
