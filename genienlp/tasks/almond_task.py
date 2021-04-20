@@ -38,7 +38,7 @@ from ..data_utils.remote_database import RemoteElasticDatabase
 from ..model_utils.translation import compute_attention, replace_quoted_params, force_replace_quoted_params
 from ..tasks.base_dataset import Split
 from ..tasks.base_task import BaseTask
-from ..tasks.generic_dataset import input_then_output_len, input_tokens_fn, CQA, default_batch_fn
+from ..tasks.generic_dataset import input_then_output_len, all_tokens_fn, CQA, default_batch_fn
 from ..tasks.registry import register_task
 from ..data_utils.database import Database
 from ..data_utils.example import Example, get_pad_feature, Feature
@@ -915,7 +915,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
         else:
             # use default values for `sort_key_fn` and `batch_size_fn`
             sort_key_fn = input_then_output_len
-            batch_size_fn = input_tokens_fn
+            batch_size_fn = all_tokens_fn
         
         groups = len(all_datasets) if kwargs.get('sentence_batching') else None
         

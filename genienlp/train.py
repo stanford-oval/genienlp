@@ -106,7 +106,7 @@ def prepare_data(args, logger):
             splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
     
             t1 = time.time()
-            logger.info('Data loading took {} sec'.format(t1-t0))
+            logger.info('Data loading took {:.2f} seconds'.format(t1-t0))
             assert not splits.eval and not splits.test
             if args.use_curriculum:
                 assert splits.aux
@@ -305,11 +305,11 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
 def do_log_training_loss(iteration, loss, *,
                          lr_scheduler, grad_norm,
                          num_examples, len_contexts, len_answers,
-                         logger, train_task, round_progress, task_progress,
+                         logger, train_task, round_progress, epochs, task_progress,
                          timestamp, writer, log_prefix):
     avg_batch_size = f'avbatch_{num_examples:.0f}_{len_contexts:.0f}_{len_answers:.0f}:'
     logger.info(
-        f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}{avg_batch_size}{log_prefix}/loss_{loss:.4f}')
+        f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:epoch_{epochs:.2f}:{round_progress}train_{train_task.name}:{task_progress}{avg_batch_size}{log_prefix}/loss_{loss:.4f}')
 
     if writer is not None:
         writer.add_scalar(f'{log_prefix}/loss/{train_task.name}', loss, iteration)
@@ -351,11 +351,15 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     task_iteration = dict()
     task_done = dict()
     task_fraction = dict()
+    task_total_num_examples = dict()
+    task_train_size = dict() # number of examples in each task
 
-    for task in args.train_tasks:
+    for task, train_set in zip(args.train_tasks, train_sets):
         task_iteration[task] = 1
         task_done[task] = False
         task_fraction[task] = 0.0
+        task_total_num_examples[task] = 0.0
+        task_train_size[task] = len(train_set)
 
     saver = Saver(args.log_dir, args.max_to_keep)
     per_task_iterations = 0
@@ -367,7 +371,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     train_iters = [(task, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
                    for task, dataset, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
     t1 = time.time()
-    logger.info('Preparing iterators took {} sec'.format(t1 - t0))
+    logger.info('Preparing iterators took {:.2f} seconds'.format(t1 - t0))
     
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
     # save memory
@@ -432,7 +436,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                                              grad_clip=args.grad_clip,
                                              gradient_accumulation_steps=args.gradient_accumulation_steps)
                 if loss is None:
-                    logger.info('Encountered NAN loss during training... Continue training ignoring the current batch')
+                    logger.info('Encountered NAN loss during training. Continue training ignoring the current batch')
                     continue
                 if loss < 1e-6:
                     zero_loss += 1
@@ -453,17 +457,25 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 num_examples += batch.context.value.size(0)
                 len_contexts += batch.context.value.size(1)
                 len_answers += batch.answer.value.size(1)
+                
+                task_total_num_examples[task] += batch.context.value.size(0)
     
                 if should_log(iteration, log_every):
                     local_loss /= log_every
                     num_examples /= log_every
                     len_contexts /= log_every
                     len_answers /= log_every
-                    do_log_training_loss(iteration, local_loss,
-                                         lr_scheduler=lr_scheduler, grad_norm=grad_norm,
+                    do_log_training_loss(iteration, 
+                                         local_loss,
+                                         lr_scheduler=lr_scheduler,
+                                         grad_norm=grad_norm,
                                          num_examples=num_examples, len_contexts=len_contexts, len_answers=len_answers,
-                                         logger=logger, writer=writer, train_task=task, round_progress=round_progress,
-                                         task_progress=task_progress, timestamp=args.timestamp, log_prefix=log_prefix)
+                                         logger=logger, writer=writer, train_task=task,
+                                         round_progress=round_progress,
+                                         epochs=task_total_num_examples[task]/task_train_size[task],
+                                         task_progress=task_progress,
+                                         timestamp=args.timestamp,
+                                         log_prefix=log_prefix)
                     num_examples = 0
                     len_contexts = 0
                     len_answers = 0
