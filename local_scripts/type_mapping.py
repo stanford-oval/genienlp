@@ -6,10 +6,7 @@ import ujson
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--input_file', type=str)
-parser.add_argument('--output_file', type=str)
 parser.add_argument('--bootleg_input_dir', type=str)
-parser.add_argument('--threshold', type=int, default=0.5)
 
 args = parser.parse_args()
 
@@ -32,15 +29,37 @@ def run_mapping():
                                      'boy band', 'musical ensemble', 'artist', 'vocal group', 'heavy metal band',
                                      'literary character', 'lawyer', 'lyricist', 'baseball player']}
     
-    MAPPING['restaurants'] = {'Restaurant': ['@restaurant chain@', 'restaurant', 'food manufacturer'],
-                              'Person': ['@writer@'],
+    MAPPING['restaurants'] = {'Restaurant': ['@restaurant chain@',
+                                             'restaurant', 'food manufacturer', 'business', 'enterprise', 'pizzeria chain'],
+                              'Person': ['@writer@',
+                                         'journalist', 'author', 'politician', 'novelist',
+                                         'university teacher', 'Esperantist', 'philosopher', 'actor',
+                                         'composer', 'film actor',
+                                         'painter', 'historian', 'lawyer', 'poet', 'singer', 'singer',
+                                         'musician', 'songwriter', 'composer', 'producer',
+                                         'singer-songwriter', 'musical group', 'drummer',
+                                         'writer', 'philanthropist', 'public figure',
+                                         'poet', 'guitarist', 'rapper', 'painter',
+                                         'film director', 'dancer', 'screenwriter',
+                                         'television presenter', 'film producer',
+                                         'saxophonist', 'music pedagogue',
+                                         'association football player', 'film score composer',
+                                         'disc jockey', 'record producer', 'engineer', 'entrepreneur',
+                                         'boy band', 'musical ensemble', 'artist',
+                                         'vocal group', 'heavy metal band',
+                                         'literary character', 'lawyer', 'lyricist',
+                                         'baseball player', 'pianist', 'recording artist',
+                                         'autobiographer', 'fashion designer'
+                                         ],
                               'servesCuisine': ['@cuisine@', '@pasta@', '@culture of@',
                                                 'food', 'type of food or dish', 'dish', 'convenience food', 'rice dish',
                                                 'dish', 'food ingredient', 'stuffed pasta', 'raw fish dish',
                                                 'soup', 'country', 'sovereign state', 'noodle',
                                                 'intangible cultural heritage'],
                               'Location': ['city of the United States', 'big city', 'city with millions of inhabitants',
-                                           'commune of France']}
+                                           'commune of France', 'city', 'human settlement'],
+                              'postalCode': ['@postal code@', 'administrative territorial entity identifier',
+                                                         'nominal number', 'unique identifier']}
     
     MAPPING['movies'] = {
         'Movie': ['@film@', 'song', 'single', 'media franchise', 'literary work', 'television series', 'written work'],
@@ -134,10 +153,18 @@ def run_mapping():
         'device': ['@device@'],
         
         'iot_name': ['@room@'],
-        'dog': ['dog breed'],
-        
+        'dog': ['dog breed']}
+
+    MAPPING['cross_ner/news'] = {
+        ('MISC', 'LOC'): ['sovereign state', 'capital_Q5119', 'republic', 'sport cyclist', 'athletics competitor', 'bobsledder',
+                             'tennis player', 'cricketer'],
+                        'PER': ['politician', 'association football player', 'association football manager'],
+                        'ORG': ['@organization@',
+                            'business', 'association football club', 'national association football team'],
+                        'LOC': ['@state@', '@city@', '@country@', 'countries bordering the Baltic Sea'],
+                        'MISC': []
     }
-    
+
     pprint(MAPPING)
     with open(os.path.join(args.bootleg_input_dir, f'es_material/almond_type_mapping.json'), 'w') as fout:
         ujson.dump(MAPPING, fout)
@@ -180,7 +207,7 @@ def run_mapping_2():
                        "iso_lang_code": "Q315", "genres": "Q188451", "artist": "Q483501", "playlist": "Q1569406",
                        "restaurant": "Q11707", "album": "Q482994", "Location": "Q2221906", "device": "Q2858615",
                        "iot_name": "Q1318740", "dog": "Q144"},
-        "cross_ner/news": {"PER": "Q215627", "ORG":"Q43229", "LOC":"Q2221906", "MISC":"Q2302426"}
+        "cross_ner/news": {"PER": "Q215627", "ORG": "Q43229", "LOC": "Q2221906", "MISC": "Q2302426"}
     }
     
     with open(os.path.join(args.bootleg_input_dir, f'es_material/almond_type2qid.json'), 'w') as fout:
@@ -188,5 +215,5 @@ def run_mapping_2():
 
 
 if __name__ == '__main__':
-    # run_mapping()
+    run_mapping()
     run_mapping_2()

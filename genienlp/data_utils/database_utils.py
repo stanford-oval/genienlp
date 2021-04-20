@@ -51,11 +51,11 @@ BANNED_PHRASES = set(
      'greatest hits', 'good hits', 'content rating', 'how long', 'actor', 'pg', 'ratings', 'rating', 'rated pg', 'key', 'the nice',
      'keyword', 'keywords', 'subtitle', 'subtitles', 'i want that', 'shorter', 'duration', 'num', 'hope', 'rm', 'michelin', 'michelin star', 'michelin stars',
      'reservations', 'zip code', 'zipcode', 'smoke', 'smoking', 'luxury', 'bar', 'bars', 'kitchen', 'cafe', 'cafes', 'coffee', 'where i am',
-     'email', 'motion sensor', 'temperature sensor', 'publication date', 'home address', 'home assistant', 'price']
+     'email', 'motion sensor', 'temperature sensor', 'publication date', 'home address', 'home assistant', 'price', 'opening hours']
 )
 
 BANNED_REGEXES = [re.compile(r'\d (star|rating)'), re.compile(r'\dth'), re.compile(r'a \d'),
-                re.compile(r'\d (hour|min|sec|minute|second|day|month|year)s?'), re.compile(r'this (hour|min|sec|minute|second|day|month|year)s?')]
+                re.compile(r'(\d|zero|one|two|three|four|five|six|seven|nine) (hour|min|sec|minute|second|day|month|year)s?'), re.compile(r'this (hour|min|sec|minute|second|day|month|year)s?')]
 
 def is_banned(word):
     return word in BANNED_PHRASES or any([regex.match(word) for regex in BANNED_REGEXES])

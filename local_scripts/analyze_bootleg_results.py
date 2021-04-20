@@ -1,10 +1,12 @@
 import argparse
 import os
-import ujson
-import jsonlines
-from genienlp.data_utils.database_utils import is_banned
-from termcolor import colored
 from collections import Counter
+
+import jsonlines
+import ujson
+from termcolor import colored
+
+from genienlp.data_utils.database_utils import is_banned
 
 parser = argparse.ArgumentParser()
 
@@ -12,11 +14,12 @@ parser.add_argument('--input_file', type=str)
 parser.add_argument('--output_file', type=str)
 parser.add_argument('--database_dir', type=str)
 parser.add_argument('--threshold', type=int, default=0.1)
+parser.add_argument('--domain', type=str)
 
 args = parser.parse_args()
 
 if __name__ == '__main__':
-
+    
     with open(f'{args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json', 'r') as fin:
         qid2typenames = ujson.load(fin)
     with open(f'{args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json', 'r') as fin:
@@ -72,22 +75,51 @@ if __name__ == '__main__':
                 ########################################################################
                 ########################################################################
                 
+                # # pizzeria
+                # if qid == 'Q177':
+                #     type = 'Q571'
+                #
+                # # ramen
+                # if qid == 'Q1051265':
+                #     type = 'Q1778821'
                 
-                if title in ['sovereign state', 'capital_Q5119', 'republic', 'sport cyclist', 'athletics competitor', 'bobsledder',
-                             'tennis player', 'cricketer']:
-                    typeqid = ('Q2302426', 'Q2221906')
+                if 'cuisine' in title or 'pasta' in title or 'culture of ' in title or \
+                        title in ['food', 'type of food or dish', 'dish', 'convenience food', 'rice dish',
+                                  'dish', 'food ingredient', 'stuffed pasta', 'raw fish dish', 'seafood dish',
+                                  'soup', 'country', 'sovereign state', 'noodle', 'intangible cultural heritage']:
+                    typeqid = 'Q1778821'
                 
-                elif title in ['politician', 'association football player', 'association football manager']:
-                    typeqid = 'Q215627'
-                elif 'organization' in title or title in ['business', 'association football club', 'national association football team']:
-                    typeqid = 'Q43229'
-                elif 'state' in title or 'city' in title or 'country' in title or title in ['countries bordering the Baltic Sea']:
+                elif title in ['city of the United States', 'big city', 'city with millions of inhabitants',
+                               'commune of France', 'city', 'human settlement']:
                     typeqid = 'Q2221906'
-                elif title in []:
-                    typeqid = 'Q2302426'
-                else:
-                    typeqid = typeqid
-                    
+                
+                elif 'restaurant chain' in title or title in ['restaurant', 'food manufacturer', 'business',
+                                                              'enterprise', 'pizzeria chain']:
+                    typeqid = 'Q11707'
+                
+                elif 'writer' in title or title in ['journalist', 'author', 'politician', 'novelist',
+                                                    'university teacher', 'Esperantist', 'philosopher', 'actor',
+                                                    'composer', 'film actor',
+                                                    'painter', 'historian', 'lawyer', 'poet', 'singer', 'singer',
+                                                    'musician', 'songwriter', 'composer', 'producer',
+                                                    'singer-songwriter', 'musical group', 'drummer',
+                                                    'writer', 'philanthropist', 'public figure',
+                                                    'poet', 'guitarist', 'rapper', 'painter',
+                                                    'film director', 'dancer', 'screenwriter',
+                                                    'television presenter', 'film producer',
+                                                    'saxophonist', 'music pedagogue',
+                                                    'association football player', 'film score composer',
+                                                    'disc jockey', 'record producer', 'engineer', 'entrepreneur',
+                                                    'boy band', 'musical ensemble', 'artist',
+                                                    'vocal group', 'heavy metal band',
+                                                    'literary character', 'lawyer', 'lyricist',
+                                                    'baseball player', 'pianist', 'recording artist',
+                                                    'autobiographer', 'fashion designer']:
+                    typeqid = 'Q5'
+                
+                elif 'postal code' in title or title in ['administrative territorial entity identifier',
+                                                         'nominal number', 'unique identifier']:
+                    typeqid = 'Q37447'
                 
                 ########################################################################
                 ########################################################################
@@ -99,8 +131,6 @@ if __name__ == '__main__':
             else:
                 print(f'{alias}, {prob}, {qid}, {typeqid}: ?')
     
-    DOMAIN = 'cross_ner/news'
-    
     with open(os.path.join(args.database_dir, 'es_material/almond_type2qid.json'), 'r') as fin:
         almond_type2qid = ujson.load(fin)
     
@@ -108,8 +138,10 @@ if __name__ == '__main__':
     main_types = []
     extra_types = []
     
+    values = almond_type2qid[args.domain].values()
+    
     for tup in all_new_types.most_common():
-        if tup[0] in almond_type2qid[DOMAIN].values():
+        if tup[0] in values:
             main_types.append(tup)
         else:
             extra_types.append(tup)
