@@ -228,6 +228,8 @@ BANNED_PHRASES = set(
         'publication date',
         'home address',
         'home assistant',
+        'price',
+        'opening hours'
     ]
 )
 
@@ -235,8 +237,7 @@ BANNED_REGEXES = [
     re.compile(r'\d (star|rating)'),
     re.compile(r'\dth'),
     re.compile(r'a \d'),
-    re.compile(r'\d (hour|min|sec|minute|second|day|month|year)s?'),
-    re.compile(r'this (hour|min|sec|minute|second|day|month|year)s?'),
+    re.compile(r'(\d|zero|one|two|three|four|five|six|seven|nine|this) (hour|min|sec|minute|second|day|month|year)s?'),
 ]
 
 
