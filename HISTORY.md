@@ -1,3 +1,14 @@
+0.6.0a4
+=======
+
+* Translation code is now migrated to the main genienlp codebase under `almond_translate` task [#98, #105].
+* Changed data batching code to account for sequence output lengths too [#130]
+* Pipenv is removed [#104].
+* Bumped Bootleg version to 1.0.1 [#124].
+* Bumped Transformers version to 4.5.1 [#114, #127].
+* Misc code upgrades and bug fixes [#115, #102, #123].
+
+
 0.6.0a3
 =======
 
