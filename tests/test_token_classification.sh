@@ -29,14 +29,13 @@ do
     i=$((i+1))
 done
 
-i=2
 # test conll2003 task
 for hparams in \
       "" ;
 do
 
     # train
-    genienlp train --train_tasks conll2003 --ner_domain music --model TransformerForTokenClassification --pretrained_model bert-base-cased --force_fast_tokenizer --subsample 5 --train_batch_tokens 50 --val_batch_size 50 --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/cross_ner/ --embeddings $EMBEDDING_DIR $hparams --exist_ok --skip_cache --no_commit
+    genienlp train --train_tasks conll2003 --ner_domain music --model TransformerForTokenClassification --pretrained_model bert-base-cased --force_fast_tokenizer --subsample 5 --train_batch_tokens 100 --val_batch_size 100 --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/cross_ner/ --embeddings $EMBEDDING_DIR $hparams --exist_ok --skip_cache --no_commit
 
     # greedy prediction
     genienlp predict --tasks conll2003 --evaluate valid --pred_set_name validation --subsample 5 --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/cross_ner/ --embeddings $EMBEDDING_DIR --skip_cache --val_batch_size 2000
@@ -48,7 +47,7 @@ do
     fi
 
     # check if predictions matches expected_results
-    diff -u $SRCDIR/expected_results/token_classification/conll2003_2.tsv $workdir/model_$i/eval_results/valid/conll2003.tsv
+    diff -u $SRCDIR/expected_results/token_classification/conll2003_$i.tsv $workdir/model_$i/eval_results/valid/conll2003.tsv
 
     rm -rf $workdir/model_$i
 
