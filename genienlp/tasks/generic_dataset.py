@@ -30,6 +30,7 @@
 
 import os
 import re
+from typing import Iterable
 import torch
 import io
 import csv
@@ -41,7 +42,7 @@ import logging
 import xml.etree.ElementTree as ET
 
 from .base_dataset import Dataset, interleave_keys, Split
-from ..data_utils.example import Example
+from ..data_utils.example import Example, NumericalizedExamples
 
 logger = logging.getLogger(__name__)
 
@@ -50,19 +51,19 @@ def make_example_id(dataset, example_id):
     return dataset.name + '/' + str(example_id)
 
 # sort_key funcs
-def context_answer_len(ex):
+def context_answer_len(ex: NumericalizedExamples):
     return interleave_keys(ex.context.length, ex.answer.length)
 
-def context_question_len(ex):
+def context_question_len(ex: NumericalizedExamples):
     return ex.context.length # question is already appended to context
 
-def input_then_output_len(ex):
+def input_then_output_len(ex: NumericalizedExamples):
     """
     sort by input length, break ties by output length
     """
     return (context_question_len(ex), answer_len(ex))
 
-def answer_len(ex):
+def answer_len(ex: NumericalizedExamples):
     return ex.answer.length
 
 def id_value(ex):
@@ -70,21 +71,22 @@ def id_value(ex):
     id_ = id_[0] if len(id_) == 1 else id_[1]
     return id_
 
-# batch_size funcs
-def input_tokens_fn(new):
-    return context_question_len(new)
 
-def all_tokens_fn(new):
-    return context_question_len(new) + answer_len(new)
+# batch_size functions; batch size is calculated after pad tokens are added
+def input_tokens_fn(batch: Iterable[NumericalizedExamples]):
+    return max([context_question_len(e) for e in batch]) * len(batch)
 
-def default_batch_fn(new):
-    return 1
+def all_tokens_fn(batch: Iterable[NumericalizedExamples]):
+    return (max([context_question_len(e) for e in batch]) + max([answer_len(e) for e in batch])) * len(batch)
+
+def default_batch_fn(batch: Iterable[NumericalizedExamples]):
+    return len(batch)
 
 
 
 class CQA(Dataset):
     
-    def __init__(self, examples, sort_key_fn=input_then_output_len, batch_size_fn=input_tokens_fn, groups=None, **kwargs):
+    def __init__(self, examples, sort_key_fn=input_then_output_len, batch_size_fn=all_tokens_fn, groups=None, **kwargs):
         self.sort_key_fn = sort_key_fn
         self.batch_size_fn = batch_size_fn
         self.groups = groups

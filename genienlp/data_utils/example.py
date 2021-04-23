@@ -128,12 +128,15 @@ class Example(object):
 
 
 class NumericalizedExamples(NamedTuple):
+    """
+    Conatains a batch of numericalized (i.e. tokenized and converted to token ids) examples, potentially of size 1
+    """
     example_id: List[str]
     context: SequentialField
     answer: SequentialField
     
     @staticmethod
-    def from_examples(examples, numericalizer):
+    def from_examples(examples: Iterable[Example], numericalizer):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
         args = numericalizer.args

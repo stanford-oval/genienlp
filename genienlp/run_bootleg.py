@@ -244,7 +244,7 @@ def dump_bootleg_features(args, logger):
         t0 = time.time()
         splits, paths = train_task.get_splits(args.data, lower=args.lower, **kwargs)
         t1 = time.time()
-        logger.info('Data loading took {} sec'.format(t1 - t0))
+        logger.info('Data loading took {:.2f} seconds'.format(t1 - t0))
         assert not splits.eval and not splits.test
         if args.use_curriculum:
             assert splits.aux

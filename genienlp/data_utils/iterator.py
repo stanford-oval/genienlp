@@ -97,43 +97,38 @@ class LengthSortedIterator(torch.utils.data.Sampler):
     def __next__(self):
         batch_of_indices = []
         current_batch_size = 0
-        i = self._get_next_batch_start_index()
-        if i >= len(self.data_source):
+        candidate_index = self._get_next_batch_start_index()
+        if candidate_index >= len(self.data_source):
             # This is the end of the iterator
             assert not self.shuffle_and_repeat
             raise StopIteration
         while current_batch_size < self.batch_size:
-            new_example = self.data_source[i]
-            if len(batch_of_indices) > 0:
-                longest_example = self.data_source[batch_of_indices[0]] # we sorted in descending order of length, so the first one is the longest
-            else:
-                longest_example = new_example # this is the first element in batch, and therefore the longest
-            examples_size = self.batch_size_fn(longest_example)
-            if examples_size > self.batch_size:
+            candidate_example = self.data_source[candidate_index]
+            if self.batch_size_fn([candidate_example]) > self.batch_size:
+                global _warned_for_batch_size
                 if self.no_skip:
                     raise ValueError('Have to skip examples in validation/ prediction splits. Increase the validation batch size')
-                global _warned_for_batch_size
                 if not _warned_for_batch_size:
                     logger.warning('Skipping an example larger than batch size. Consider increasing the batch size to avoid this warning')
                     _warned_for_batch_size = True
                 self.last_batch_start_index += 1
-                i += 1
-                if i >= len(self.data_source):
+                candidate_index += 1
+                if candidate_index >= len(self.data_source):
                     # This is the end of the iterator
                     assert not self.shuffle_and_repeat
                     raise StopIteration
                 continue
-                
-            new_batch_size = current_batch_size + self.batch_size_fn(longest_example)
-            if new_batch_size > self.batch_size:
+
+            candidate_batch_size = self.batch_size_fn([self.data_source[i] for i in batch_of_indices] + [candidate_example]) # the new batch size if we added this example to the batch
+            if candidate_batch_size > self.batch_size:
                 # the new example would put us over the batch size limit
                 break
 
-            batch_of_indices.append(i)
-            current_batch_size = new_batch_size
-            i += 1
+            batch_of_indices.append(candidate_index)
+            current_batch_size = candidate_batch_size
+            candidate_index += 1
 
-            if i == len(self.data_source):
+            if candidate_index == len(self.data_source):
                 break # don't start from i=0; there is a large difference between the length of the first and last element
 
         self.last_batch_start_index += len(batch_of_indices)
