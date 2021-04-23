@@ -770,6 +770,7 @@ def load_config_json(args):
             'no_fast_tokenizer',
             'force_fast_tokenizer',
             'add_types_to_text',
+            'add_qids_to_text',
             'do_ned',
             'database_type',
             'min_entity_len',
@@ -849,7 +850,7 @@ def load_config_json(args):
                 setattr(args, r, [0])
             elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val', 'override_valid_metrics']:
                 setattr(args, r, [])
-            elif r == 'add_types_to_text':
+            elif r in ['add_types_to_text', 'add_qids_to_text']:
                 setattr(args, r, 'no')
             elif r == 'database_type':
                 setattr(args, r, 'json')

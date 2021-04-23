@@ -51,6 +51,7 @@ class SequentialField(NamedTuple):
 class Feature:
     type_id: List[int] = None
     type_prob: List[float] = None
+    qid: List[int] = None
 
     def __mul__(self, n):
         return [self for _ in range(n)]
@@ -180,7 +181,7 @@ class NumericalizedExamples(NamedTuple):
             )
             all_context_plus_question_features.append(context_plus_question_feature)
 
-        if args.add_types_to_text == 'no':
+        if args.add_types_to_text == 'no' and args.add_qids_to_text == 'no':
             features = [a for a in all_context_plus_question_features if a]
             if len(features) == 0:
                 features = None

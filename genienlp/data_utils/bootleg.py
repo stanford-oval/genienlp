@@ -133,8 +133,9 @@ def init_bootleg_annotator(args, device, bootleg=None):
 
 class Bootleg(object):
     def __init__(self, args):
-        self.args = args
+        logger.info('Initializing Bootleg class')
 
+        self.args = args
         self.model_dir = f'{self.args.database_dir}/{self.args.bootleg_model}'
         self.config_path = f'{self.model_dir}/bootleg_config.yaml'
         self.cand_map = f'{self.args.database_dir}/wiki_entity_data/entity_mappings/alias2qids.json'
@@ -273,6 +274,7 @@ class Bootleg(object):
         tokens_type_probs = [
             [self.args.ned_features_default_val[1]] * self.args.ned_features_size[1] for _ in range(len(tokenized))
         ]
+        tokens_qids = [[self.args.ned_features_default_val[2]] * self.args.ned_features_size[2] for _ in range(len(tokenized))]
 
         for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
             # filter qids with probability lower than a threshold
@@ -282,6 +284,7 @@ class Bootleg(object):
 
             type_ids = []
             type_probs = []
+            qids = []
 
             if not is_banned(alias):
                 for qid, prob in zip(all_qids, all_probs):
@@ -294,7 +297,6 @@ class Bootleg(object):
                                 all_types.append(self.type_vocab_to_wikidataqid[typename])
 
                     if len(all_types):
-                        # update
                         # go through all types
                         for typeqid in all_types:
                             if typeqid in self.typeqid2id:
@@ -315,22 +317,28 @@ class Bootleg(object):
                                     type_ids.append(type_id)
                                     type_probs.append(prob)
 
+                                # to map qids to unique ids we just need to remove the Q character as qids are distinct
+                                qids.append(qid[1:])
+
                 padded_type_ids = self.pad_values(
                     type_ids, self.args.ned_features_size[0], self.args.ned_features_default_val[0]
                 )
                 padded_type_probs = self.pad_values(
                     type_probs, self.args.ned_features_size[1], self.args.ned_features_default_val[1]
                 )
+                padded_qids = self.pad_values(qids, self.args.ned_features_size[2], self.args.ned_features_default_val[2])
 
                 tokens_type_ids[span[0] : span[1]] = [padded_type_ids] * (span[1] - span[0])
                 tokens_type_probs[span[0] : span[1]] = [padded_type_probs] * (span[1] - span[0])
+                tokens_qids[span[0] : span[1]] = [padded_qids] * (span[1] - span[0])
 
-        return tokens_type_ids, tokens_type_probs
+        return tokens_type_ids, tokens_type_probs, tokens_qids
 
     def collect_features(self, file_name, subsample, TTtype2qid):
 
         all_tokens_type_ids = []
         all_tokens_type_probs = []
+        all_tokens_qids = []
 
         threshold = self.args.bootleg_prob_threshold
 
@@ -339,16 +347,17 @@ class Bootleg(object):
                 if i >= subsample:
                     break
                 line = ujson.loads(line)
-                tokens_type_ids, tokens_type_probs = self.collect_features_per_line(line, threshold, TTtype2qid)
+                tokens_type_ids, tokens_type_probs, tokens_qids = self.collect_features_per_line(line, threshold, TTtype2qid)
                 all_tokens_type_ids.append(tokens_type_ids)
                 all_tokens_type_probs.append(tokens_type_probs)
+                all_tokens_qids.append(tokens_qids)
 
         if os.path.exists(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/{self.ckpt_name}/bootleg_embs.npy'):
             with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/{self.ckpt_name}/bootleg_embs.npy', 'rb') as fin:
                 emb_data = np.load(fin)
                 self.cur_entity_embed_size += emb_data.shape[0]
 
-        return all_tokens_type_ids, all_tokens_type_probs
+        return all_tokens_type_ids, all_tokens_type_probs, all_tokens_qids
 
     def merge_embeds(self, file_list):
         all_emb_data = []

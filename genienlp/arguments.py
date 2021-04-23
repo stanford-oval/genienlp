@@ -454,6 +454,14 @@ def parse_argv(parser):
         choices=['no', 'insert', 'append'],
         help='Method for adding types to input text in text-based NER approach',
     )
+
+    parser.add_argument(
+        "--add_qids_to_text",
+        default='no',
+        choices=['no', 'insert', 'append'],
+        help='Method for adding qids to input text in text-based NER approach',
+    )
+
     parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
     parser.add_argument(
         '--ned_retrieve_method',

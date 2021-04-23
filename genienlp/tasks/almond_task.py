@@ -310,28 +310,37 @@ class BaseAlmondTask(BaseTask):
         new_prediction = ' '.join(new_tokens)
         return new_prediction
 
-    def add_type_tokens(self, new_sentence, features, add_types_to_text):
+    def add_type_tokens(self, new_sentence, features, add_types_to_text, add_qids_to_text):
+        # TODO  move this to arguments
+        if add_types_to_text != 'no' and add_qids_to_text != 'no' and add_types_to_text != add_qids_to_text:
+            raise ValueError('Method for adding types and qids should be the same')
+
         new_sentence_tokens = new_sentence.split(' ')
         assert len(new_sentence_tokens) == len(features)
         sentence_plus_types_tokens = []
         i = 0
-        if add_types_to_text == 'insert':
+        if add_types_to_text == 'insert' or add_qids_to_text == 'insert':
             while i < len(new_sentence_tokens):
                 token = new_sentence_tokens[i]
                 feat = features[i]
                 # token is an entity
                 if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
                     final_token = '<e> '
-                    all_types = ' | '.join(
-                        set(
-                            [
+                    final_types = ''
+                    if add_types_to_text != 'no':
+                        all_types = ' | '.join(
+                            set(
                                 self.qid2TTtype[self.db.id2type[id]]
                                 for id in feat.type_id
                                 if self.db.id2type[id] in self.qid2TTtype
-                            ]
+                            )
                         )
-                    )
-                    final_token += '( ' + all_types + ' ) ' + token
+                        final_types = '( ' + all_types + ' ) '
+                    final_qids = ''
+                    if add_qids_to_text != 'no':
+                        all_qids = ' | '.join(set('Q' + str(id) for id in feat.qid))
+                        final_qids = '[' + all_qids + ']'
+                    final_token += final_types + final_qids + token
                     # append all entities with same type
                     i += 1
                     while i < len(new_sentence_tokens) and features[i] == feat:
@@ -343,28 +352,33 @@ class BaseAlmondTask(BaseTask):
                     sentence_plus_types_tokens.append(token)
                     i += 1
 
-        elif add_types_to_text == 'append':
+        elif add_types_to_text == 'append' or add_qids_to_text == 'append':
             sentence_plus_types_tokens.extend(new_sentence_tokens)
             sentence_plus_types_tokens.append('<e>')
             while i < len(new_sentence_tokens):
                 feat = features[i]
                 # token is an entity
                 if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
-                    all_types = ' | '.join(
-                        set(
-                            [
+                    final_types = ''
+                    if add_types_to_text != 'no':
+                        all_types = ' | '.join(
+                            set(
                                 self.qid2TTtype[self.db.id2type[id]]
                                 for id in feat.type_id
                                 if self.db.id2type[id] in self.qid2TTtype
-                            ]
+                            )
                         )
-                    )
+                        final_types = ['( ', all_types, ' ) ']
+                    final_qids = ''
+                    if add_qids_to_text != 'no':
+                        all_qids = ' | '.join(set('Q' + str(id) for id in feat.qid))
+                        final_qids = ['[', all_qids, ']']
                     all_tokens = []
                     # append all entities with same type
                     while i < len(new_sentence_tokens) and features[i] == feat:
                         all_tokens.append(new_sentence_tokens[i])
                         i += 1
-                    final_token = ' '.join([*all_tokens, '(', all_types, ')', ';'])
+                    final_token = ' '.join([*all_tokens, *final_types, *final_qids, ';'])
                     sentence_plus_types_tokens.append(final_token)
                 else:
                     i += 1
@@ -492,8 +506,15 @@ class BaseAlmondTask(BaseTask):
         features = [Feature(*tup) for tup in zip(*zip_list)]
 
         sentence_plus_types = new_sentence
-        if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features) and field_name == self.utterance_field:
-            sentence_plus_types = self.add_type_tokens(new_sentence, features, self.args.add_types_to_text)
+        if (
+            self.args.do_ned
+            and (self.args.add_types_to_text != 'no' or self.args.add_qids_to_text != 'no')
+            and len(features)
+            and field_name == self.utterance_field
+        ):
+            sentence_plus_types = self.add_type_tokens(
+                new_sentence, features, self.args.add_types_to_text, self.args.add_qids_to_text
+            )
 
         return new_sentence, features, sentence_plus_types
 

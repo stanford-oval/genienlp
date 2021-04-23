@@ -200,21 +200,21 @@ def parse_argv(parser):
         '--ned_features',
         nargs='+',
         type=str,
-        default=['type_id', 'type_prob'],
-        help='Features that will be extracted for each entity: "type" and "freq" are supported.' ' Order is important',
+        default=['type_id', 'type_prob', 'qid'],
+        help='Features that will be extracted for each entity: "type" and "qid" are supported. Order is important',
     )
     parser.add_argument(
         '--ned_features_size',
         nargs='+',
         type=int,
-        default=[1, 1],
+        default=[1, 1, 1],
         help='Max length of each feature vector. All features are padded up to this length',
     )
     parser.add_argument(
         '--ned_features_default_val',
         nargs='+',
         type=float,
-        default=[0, 1.0],
+        default=[0, 1.0, 0],
         help='Max length of each feature vector. All features are padded up to this length',
     )
 
@@ -245,9 +245,7 @@ def parse_argv(parser):
         '--exist_ok', action='store_true', help='Ok if the save directory already exists, i.e. overwrite is ok'
     )
 
-    parser.add_argument(
-        '--skip_cache', action='store_true', help='whether to use exisiting cached splits or generate new ones'
-    )
+    parser.add_argument('--skip_cache', action='store_true', help='whether to use existing cached splits or generate new ones')
     parser.add_argument(
         '--cache_input_data', action='store_true', help='Cache examples from input data for faster subsequent trainings'
     )
@@ -256,7 +254,18 @@ def parse_argv(parser):
     parser.add_argument(
         '--aux_dataset', default='', type=str, help='path to auxiliary dataset (ignored if curriculum is not used)'
     )
-    parser.add_argument("--add_types_to_text", default='no', choices=['no', 'insert', 'append'])
+    parser.add_argument(
+        "--add_types_to_text",
+        default='no',
+        choices=['no', 'insert', 'append'],
+        help='Method for adding types to input text in text-based NER approach',
+    )
+    parser.add_argument(
+        "--add_qids_to_text",
+        default='no',
+        choices=['no', 'insert', 'append'],
+        help='Method for adding qids to input text in text-based NER approach',
+    )
 
     # token classification task args
     parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')
@@ -292,22 +301,28 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
         bootleg.disambiguate_mentions(config_args)
 
     # extract features for each token in input sentence from bootleg outputs
-    all_token_type_ids, all_tokens_type_probs = bootleg.collect_features(
+    all_token_type_ids, all_tokens_type_probs, all_tokens_qids = bootleg.collect_features(
         input_file_name[: -len('_bootleg.jsonl')], args.subsample, getattr(task, 'TTtype2qid', None)
     )
 
     all_token_type_ids = all_token_type_ids[: args.subsample]
     all_tokens_type_probs = all_tokens_type_probs[: args.subsample]
+    all_tokens_qids = all_tokens_qids[: args.subsample]
 
     # override examples features with bootleg features
     if mode != 'dump':
-        assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
-        for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
+        assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs) == len(all_tokens_qids)
+        for n, (ex, tokens_type_ids, tokens_type_probs, tokens_qids) in enumerate(
+            zip(examples, all_token_type_ids, all_tokens_type_probs, all_tokens_qids)
+        ):
             if task.utterance_field == 'question':
                 for i in range(len(tokens_type_ids)):
                     examples[n].question_feature[i].type_id = tokens_type_ids[i]
                     examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-                question_plus_types = task.add_type_tokens(ex.question, ex.question_feature, args.add_types_to_text)
+                    examples[n].question_feature[i].qid = tokens_qids[i]
+                question_plus_types = task.add_type_tokens(
+                    ex.question, ex.question_feature, args.add_types_to_text, args.add_qids_to_text
+                )
                 examples[n].question_plus_types = question_plus_types
 
             else:
@@ -315,7 +330,10 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
                 for i in range(len(tokens_type_ids)):
                     examples[n].context_feature[i].type_id = tokens_type_ids[i]
                     examples[n].context_feature[i].type_prob = tokens_type_probs[i]
-                context_plus_types = task.add_type_tokens(ex.context, ex.context_feature, args.add_types_to_text)
+                    examples[n].context_feature[i].qid = tokens_qids[i]
+                context_plus_types = task.add_type_tokens(
+                    ex.context, ex.context_feature, args.add_types_to_text, args.add_qids_to_text
+                )
                 examples[n].context_plus_types = context_plus_types
 
     if args.verbose:
