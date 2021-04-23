@@ -28,7 +28,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
-logging.getLogger("filelock").setLevel(logging.WARNING)
 
 from typing import List
 import torch

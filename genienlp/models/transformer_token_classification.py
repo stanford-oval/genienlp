@@ -28,19 +28,17 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
-logging.getLogger("filelock").setLevel(logging.WARNING)
 
 from transformers import AutoModelForTokenClassification, AutoConfig
 
 from ..models.base import GenieModel
 from ..util import adjust_language_code
-from . import TransformerSeq2Seq
 from ..data_utils.numericalizer import TransformerNumericalizer
 
 logger = logging.getLogger(__name__)
 
 
-class TransformerForTokenClassification(TransformerSeq2Seq, GenieModel):
+class TransformerForTokenClassification(GenieModel):
     def __init__(self, config=None, *inputs, args, tasks, vocab_sets, save_directory=None, **kwargs):
     
         num_labels = 0

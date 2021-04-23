@@ -37,6 +37,21 @@ from .util import GenerationOutput
 from .data_utils.progbar import progress_bar
 from .metrics import compute_metrics
 
+def generate_with_model(model, data_iterator, numericalizer, task, args, output_predictions_only=False,
+                                output_confidence_features=False, original_order=None, confidence_estimators=None,
+                                disable_progbar=True):
+    
+    if isinstance(model, TransformerForTokenClassification):
+        return generate_with_classification_model(model, data_iterator, numericalizer, task,
+                                           original_order=original_order, disable_progbar=disable_progbar)
+    else:
+        return generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
+                                output_predictions_only=output_predictions_only,
+                                output_confidence_features=output_confidence_features,
+                                original_order=original_order,
+                                confidence_estimators=confidence_estimators,
+                                disable_progbar=disable_progbar)
+
 
 def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
                                 output_predictions_only=False,
@@ -252,11 +267,8 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
             model = model.module
         
         names = ['beam search', 'answer', 'context']
-        
-        if isinstance(model, TransformerForTokenClassification):
-            output = generate_with_classification_model(model, val_iter, numericalizer, task)
-        else:
-            output = generate_with_seq2seq_model(model, val_iter, numericalizer, task, args)
+
+        output = generate_with_model(model, val_iter, numericalizer, task, args)
         
         metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args.reduce_metrics)
         results = [output.predictions, output.answers, output.contexts]

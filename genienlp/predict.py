@@ -54,7 +54,7 @@ from . import models
 from .tasks.registry import get_tasks
 from .util import set_seed, load_config_json, make_data_loader, log_model_size, get_devices, \
     combine_folders_on_disk, split_folder_on_disk, get_part_path
-from .validate import calculate_and_reduce_metrics, generate_with_seq2seq_model, generate_with_classification_model
+from .validate import calculate_and_reduce_metrics, generate_with_model
 from .calibrate import ConfidenceEstimator
 from .arguments import check_and_update_generation_args
 
@@ -220,19 +220,12 @@ def run(args, device):
             else:
                 confidence_estimators = None
             with torch.cuda.amp.autocast(enabled=args.mixed_precision):
-                if isinstance(model, TransformerForTokenClassification):
-                    generation_output = generate_with_classification_model(model, it, model.numericalizer, task,
-                                                                           original_order=original_order,
-                                                                           disable_progbar=False
-                                                                           )
-                else:
-                    generation_output = generate_with_seq2seq_model(model, it, model.numericalizer, task, args,
+                generation_output = generate_with_model(model, it, model.numericalizer, task, args,
                                                                      original_order=original_order,
                                                                      output_confidence_features=args.save_confidence_features,
                                                                      confidence_estimators=confidence_estimators,
-                                                                     disable_progbar=False
-                                                                    )
-            
+                                                                     disable_progbar=False)
+
             if args.save_confidence_features:
                 torch.save(generation_output.confidence_features, args.confidence_feature_path)
 
