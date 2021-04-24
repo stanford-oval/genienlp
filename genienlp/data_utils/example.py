@@ -158,7 +158,7 @@ class NumericalizedExamples(NamedTuple):
         all_context_plus_questions = []
         all_context_plus_question_with_types = []
         all_context_plus_question_features = []
-
+        
         for ex in examples:
             # create context_plus_question fields by concatenating context and question fields
             # if question is empty, don't append anything
@@ -209,7 +209,19 @@ class NumericalizedExamples(NamedTuple):
 
         for batch in batches:
             example_id.append(batch.example_id[0])
-            context_values.append(torch.tensor(batch.context.value, device=device))
+            
+            # apply subword dropout on context
+            if numericalizer.args.csp_dropout > 0.0 and numericalizer.semi_colon_id in batch.context.value:
+                #TODOS mask complete words instead of subwords
+                value = batch.context.value
+                semi_colon_idx = value.index(numericalizer.semi_colon_id)
+                bernoulli = torch.bernoulli(torch.ones([1, semi_colon_idx]) * (1 - numericalizer.args.csp_dropout))
+                bernoulli = torch.cat([bernoulli, torch.ones([1, len(value)-semi_colon_idx])], dim=1)
+                new_value = torch.where(bernoulli==0, numericalizer.mask_id, torch.tensor(value)).tolist()[0]
+                context_values.append(torch.tensor(new_value, device=device))
+                    
+            else:
+                context_values.append(torch.tensor(batch.context.value, device=device))
             context_lengths.append(torch.tensor(batch.context.length, device=device))
             context_limiteds.append(torch.tensor(batch.context.limited, device=device))
             if batch.context.feature:

@@ -429,7 +429,9 @@ class TransformerNumericalizer(object):
 
         # pad_id for answer tokens (different than context/ question pad_id for token classification tasks)
         self.answer_pad_id = self.pad_id
-
+        
+        self.semi_colon_id = self._tokenizer.encode(' ;')[1]
+        
     def _init_decoder_vocab(self):
         if self.max_generative_vocab is not None:
             self.generative_vocab_size = len(self._decoder_words)
