@@ -726,6 +726,7 @@ def load_config_json(args):
                 setattr(args, r, None)
                 
         args.dropout_ratio = 0.0
+        args.csp_dropout = 0.0
         args.verbose = False
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
