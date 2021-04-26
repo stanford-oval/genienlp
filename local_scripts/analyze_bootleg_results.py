@@ -75,51 +75,12 @@ if __name__ == '__main__':
                 ########################################################################
                 ########################################################################
                 
-                # # pizzeria
-                # if qid == 'Q177':
-                #     type = 'Q571'
-                #
-                # # ramen
-                # if qid == 'Q1051265':
-                #     type = 'Q1778821'
+                if 'country' in title or 'countries' in title or 'city' in title or 'town' in title or \
+                        title in ['sovereign state', 'republic', 'federal state', 'social state', 'unitary state',
+                                  'constitutional republic', 'democratic republic', 'island nation', 'Commonwealth realm',
+                                  'secular state', 'geographic region']:
+                    typeqid = 'Q6256'
                 
-                if 'cuisine' in title or 'pasta' in title or 'culture of ' in title or \
-                        title in ['food', 'type of food or dish', 'dish', 'convenience food', 'rice dish',
-                                  'dish', 'food ingredient', 'stuffed pasta', 'raw fish dish', 'seafood dish',
-                                  'soup', 'country', 'sovereign state', 'noodle', 'intangible cultural heritage']:
-                    typeqid = 'Q1778821'
-                
-                elif title in ['city of the United States', 'big city', 'city with millions of inhabitants',
-                               'commune of France', 'city', 'human settlement']:
-                    typeqid = 'Q2221906'
-                
-                elif 'restaurant chain' in title or title in ['restaurant', 'food manufacturer', 'business',
-                                                              'enterprise', 'pizzeria chain']:
-                    typeqid = 'Q11707'
-                
-                elif 'writer' in title or title in ['journalist', 'author', 'politician', 'novelist',
-                                                    'university teacher', 'Esperantist', 'philosopher', 'actor',
-                                                    'composer', 'film actor',
-                                                    'painter', 'historian', 'lawyer', 'poet', 'singer', 'singer',
-                                                    'musician', 'songwriter', 'composer', 'producer',
-                                                    'singer-songwriter', 'musical group', 'drummer',
-                                                    'writer', 'philanthropist', 'public figure',
-                                                    'poet', 'guitarist', 'rapper', 'painter',
-                                                    'film director', 'dancer', 'screenwriter',
-                                                    'television presenter', 'film producer',
-                                                    'saxophonist', 'music pedagogue',
-                                                    'association football player', 'film score composer',
-                                                    'disc jockey', 'record producer', 'engineer', 'entrepreneur',
-                                                    'boy band', 'musical ensemble', 'artist',
-                                                    'vocal group', 'heavy metal band',
-                                                    'literary character', 'lawyer', 'lyricist',
-                                                    'baseball player', 'pianist', 'recording artist',
-                                                    'autobiographer', 'fashion designer']:
-                    typeqid = 'Q5'
-                
-                elif 'postal code' in title or title in ['administrative territorial entity identifier',
-                                                         'nominal number', 'unique identifier']:
-                    typeqid = 'Q37447'
                 
                 ########################################################################
                 ########################################################################
