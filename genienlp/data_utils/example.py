@@ -201,7 +201,7 @@ class NumericalizedExamples(NamedTuple):
         return numericalized_examples
 
     @staticmethod
-    def collate_batches(batches: Iterable['NumericalizedExamples'], numericalizer, device):
+    def collate_batches(batches: Iterable['NumericalizedExamples'], numericalizer, device, train):
         example_id = []
 
         context_values, context_lengths, context_limiteds, context_features = [], [], [], []
@@ -211,7 +211,7 @@ class NumericalizedExamples(NamedTuple):
             example_id.append(batch.example_id[0])
             
             # apply subword dropout on context
-            if numericalizer.args.csp_dropout > 0.0 and numericalizer.semi_colon_id in batch.context.value:
+            if numericalizer.args.csp_dropout > 0.0 and numericalizer.semi_colon_id in batch.context.value and train:
                 #TODOS mask complete words instead of subwords
                 value = batch.context.value
                 semi_colon_idx = value.index(numericalizer.semi_colon_id)
