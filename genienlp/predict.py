@@ -115,11 +115,11 @@ def prepare_data(args, device):
                 data = split.test
                 path = path.test
             if bootleg:
-                if split.train or split.eval:
+                # if prepped bootleg features are available use them
+                if os.path.exists(os.path.basename(path.rsplit('.', 1)[0] + '_bootleg.jsonl')):
                     bootleg_process_splits(args, data.examples, path, task, bootleg)
                 else:
-                    # no prepped bootleg features are available
-                    # extract features on-the-fly using bootleg annotator
+                    # otherwise extract features on-the-fly using bootleg annotator
                     bootleg_annotator = init_bootleg_annotator(args, device)
                     extract_features_with_annotator(data.examples, bootleg_annotator, args, task)
             task_data_processed.append(data)
