@@ -102,8 +102,8 @@ class Server(object):
         with torch.no_grad():
             if self.args.calibrator_paths is not None:
                 output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                output_predictions_only=True,
-                                                confidence_estimators=self.confidence_estimators)
+                                                        output_predictions_only=True,
+                                                        confidence_estimators=self.confidence_estimators)
                 response = []
                 for idx, p in enumerate(output.predictions):
                     instance = {'answer': p[0], 'score': {}}
@@ -111,7 +111,8 @@ class Server(object):
                         instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
                     response.append(instance)
             else:
-                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True)
+                output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
+                                                        output_predictions_only=True)
                 response = [{'answer': p[0]} for p in output.predictions]
             
         return response

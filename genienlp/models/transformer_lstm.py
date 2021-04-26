@@ -30,6 +30,7 @@
 
 import torch
 import logging
+
 from transformers import AutoModel, PretrainedConfig, AutoConfig
 from transformers import BertConfig, XLMRobertaConfig
 from ..paraphrase.transformers_utils import BertModelForNER, XLMRobertaModelForNER
@@ -103,6 +104,7 @@ class TransformerLSTM(GenieModel):
         if resize_decoder:
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
     
+    # return_dict, output_scores, output_attentions, output_hidden_states are unused but needed since the base class (PreTrainedModel) passes them
     def forward(self, batch, current_token_id=None, past_key_values=None,
                 expansion_factor=1, generation_dict=None, encoder_output=None, return_dict=False,
                 output_scores=False, output_attentions=False, output_hidden_states=False):

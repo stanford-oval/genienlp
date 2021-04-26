@@ -39,6 +39,8 @@ from typing import Iterable
 import numpy as np
 from pyrouge import Rouge155
 from sacrebleu import corpus_bleu
+from seqeval import metrics as seq_metrics
+from seqeval import scheme as seq_scheme
 
 from .tasks.generic_dataset import Query
 from .util import requote_program
@@ -222,6 +224,14 @@ def f1_score(prediction, ground_truth):
 def exact_match(prediction, ground_truth):
     return prediction == ground_truth
 
+def partial_exact_match(prediction, ground_truth):
+    prediction = prediction.split()
+    ground_truth = ground_truth.split()
+    is_correct_token = [p==g for p, g in zip(prediction, ground_truth)]
+    partial_score = sum(is_correct_token) / len(is_correct_token)
+    return partial_score
+    
+
 def structure_match(prediction, ground_truth):
     return requote_program(prediction) == requote_program(ground_truth)
 
@@ -234,11 +244,15 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
 
 
 def computeF1(outputs, targets):
-    return sum([metric_max_over_ground_truths(f1_score, o, t) for o, t in zip(outputs, targets)]) / len(outputs) * 100
-
+    outs = [metric_max_over_ground_truths(f1_score, o, t) for o, t in zip(outputs, targets)]
+    return sum(outs) / len(outputs) * 100
 
 def computeEM(outputs, targets):
     outs = [metric_max_over_ground_truths(exact_match, o, t) for o, t in zip(outputs, targets)]
+    return sum(outs) / len(outputs) * 100
+
+def computePartialEM(outputs, targets):
+    outs = [metric_max_over_ground_truths(partial_exact_match, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
 
 def computeSM(outputs, targets):
@@ -459,6 +473,10 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
     em = computeEM(greedy, answer)
     metric_keys += ['em']
     metric_values += [em]
+    if 'pem' in requested_metrics:
+        pem = computePartialEM(greedy, answer)
+        metric_keys.append('pem')
+        metric_values.append(pem)
     if 'sm' in requested_metrics:
         sm = computeSM(greedy, answer)
         metric_keys.append('sm')
@@ -475,6 +493,33 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
     if 'f1' in requested_metrics:
         f1 = computeF1(greedy, answer)
         metric_keys.append('f1')
+        metric_values.append(f1)
+
+    if 'ner_f1_IOB1' in requested_metrics:
+        greedy_processed = [pred.split() for pred in greedy]
+        answer_processed = [ans[0].split() for ans in answer]
+        
+        def convert_IOB2_to_IOB1(labels):
+            cur_category = None
+            for n, label in enumerate(labels):
+                if label[0] == "B" and label[2:] != cur_category:
+                    labels[n] = "I" + label[1:]
+                cur_category = label[2:]
+        
+        convert_IOB2_to_IOB1(greedy_processed)
+        convert_IOB2_to_IOB1(answer_processed)
+        f1 = seq_metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed, mode='strict', scheme=seq_scheme.IOB1) * 100
+        
+        metric_keys.append('ner_f1_IOB1')
+        metric_values.append(f1)
+
+    if 'ner_f1' in requested_metrics:
+        greedy_processed = [pred.split() for pred in greedy]
+        answer_processed = [ans[0].split() for ans in answer]
+
+        f1 = seq_metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed) * 100
+    
+        metric_keys.append('ner_f1')
         metric_values.append(f1)
 
     norm_greedy = [normalize_text(g) for g in greedy]

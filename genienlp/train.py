@@ -98,6 +98,7 @@ def prepare_data(args, logger):
             kwargs.update(train_eval_shared_kwargs)
             kwargs['all_dirs'] = args.train_src_languages
             kwargs['cached_path'] = os.path.join(args.cache, task.name)
+            kwargs['ner_domains'] = args.ner_domains
             if args.use_curriculum:
                 kwargs['curriculum'] = True
     
@@ -121,7 +122,7 @@ def prepare_data(args, logger):
             train_sets.append(splits.train)
             logger.info(f'{task.name} has {len(splits.train)} training examples')
             
-            logger.info(f'train all_schema_types: {task.all_schema_types}')
+            logger.info(f"train all_schema_types: {getattr(task, 'all_schema_types', None)}")
             
             if task.name.startswith('almond'):
                 if args.ned_features_default_val:
@@ -150,6 +151,8 @@ def prepare_data(args, logger):
             kwargs.update(train_eval_shared_kwargs)
             kwargs['all_dirs'] = args.eval_src_languages
             kwargs['cached_path'] = os.path.join(args.cache, task.name)
+            kwargs['ner_domains'] = args.ner_domains
+            kwargs['hf_test_overfit'] = args.hf_test_overfit
             
             logger.info(f'Adding {task.name} to validation datasets')
             splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
@@ -162,7 +165,7 @@ def prepare_data(args, logger):
     
             val_sets.append(splits.eval)
     
-            logger.info(f'eval all_schema_types: {task.all_schema_types}')
+            logger.info(f"validation all_schema_types: {getattr(task, 'all_schema_types', None)}")
             
     return train_sets, val_sets, aux_sets
 
@@ -236,7 +239,8 @@ def do_validate(iteration, args, model, numericalizer, val_iters, *,
                 train_task, round_progress, task_progress, writer, logger):
     deca_score = 0
     for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-        val_loss, metric_dict = validate(val_task, val_iter, model, numericalizer, args, num_print=args.num_print)
+        output, metric_dict = validate(val_task, val_iter, model, numericalizer, args, num_print=args.num_print)
+        val_loss = output.loss
         if val_loss is not None:
             log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss{val_loss.item():.4f}:'
             writer.add_scalar(f'loss/{val_task.name}/val', val_loss.item(), iteration)

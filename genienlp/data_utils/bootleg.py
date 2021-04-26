@@ -297,7 +297,7 @@ class Bootleg(object):
                 tokens_type_probs[span[0]:span[1]] = [padded_type_probs] * (span[1] - span[0])
 
         return tokens_type_ids, tokens_type_probs
-            
+
     def collect_features(self, file_name, subsample, TTtype2qid):
         
         all_tokens_type_ids = []

@@ -28,6 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+
 from typing import List
 import torch
 
@@ -89,7 +90,7 @@ class TransformerSeq2Seq(GenieModel):
             self.dropper = None
 
         self.criterion = LabelSmoothingCrossEntropy(args.label_smoothing)
-        
+ 
 
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)

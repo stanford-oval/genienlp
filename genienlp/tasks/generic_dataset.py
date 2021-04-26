@@ -1704,3 +1704,90 @@ class JSON(CQA):
                      eval=None if validation is None else validation_data,
                      test=None if test is None else test_data,
                      aux=None if do_curriculum is None else aux_data)
+
+
+class CrossNERDataset(CQA):
+    is_classification = True
+    
+    def __init__(self, data, *, make_example, **kwargs):
+        
+        subsample = kwargs.pop('subsample')
+        domain = kwargs.pop('domain')
+        examples = []
+        
+        example_id, tokens, labels = 0, [], []
+        for i, line in enumerate(data):
+            line = line.strip()
+            if line == "":
+                # reached end of this example
+                if len(tokens):
+                    examples.append(make_example(example_id, tokens, labels, domain))
+                tokens, labels = [], []
+                example_id += 1
+            else:
+                splits = line.split("\t")
+                tokens.append(splits[0])
+                labels.append(splits[1])
+    
+            if subsample is not None and len(examples) >= subsample:
+                break
+
+        super().__init__(examples, **kwargs)
+    
+    @classmethod
+    def return_splits(cls, name, path='.data', train='train', validation='dev', test='test', **kwargs):
+    
+        ner_domains = kwargs.pop('ner_domains')
+        
+        all_train_data = []
+        all_validation_data = []
+        all_test_data = []
+        for domain in ner_domains:
+            # download datasets and cache them
+            train_data, validation_data, test_data = None, None, None
+            train_path, validation_path, test_path = None, None, None
+            if train:
+                train_path = os.path.join(path, domain, 'train.txt')
+                with open(train_path, "r") as fin:
+                    train_data = fin.readlines()
+            if validation:
+                validation_path = os.path.join(path, domain, f'{validation}.txt')
+                with open(validation_path, "r") as fin:
+                    validation_data = fin.readlines()
+            if test:
+                test_path = os.path.join(path, domain, 'test.txt')
+                with open(test_path, "r") as fin:
+                    test_data = fin.readlines()
+            
+            # Uncomment for testing
+            if kwargs.pop("hf_test_overfit", False):
+                if validation:
+                    validation_path = os.path.join(path, domain, 'train.txt')
+                    with open(validation_path, "r") as fin:
+                        validation_data = fin.readlines()
+                if test:
+                    test_path = os.path.join(path, domain, 'train.txt')
+                    with open(test_path, "r") as fin:
+                        test_data = fin.readlines()
+            
+            kwargs['domain'] = domain
+            
+            train_data = None if train is None else cls(train_data, **kwargs)
+            validation_data = None if validation is None else cls(validation_data, **kwargs)
+            test_data = None if test is None else cls(test_data, **kwargs)
+        
+            if not all_train_data:
+                all_train_data = train_data
+            elif train_data:
+                all_train_data.examples = all_train_data.examples + train_data.examples
+            if not all_validation_data:
+                all_validation_data = validation_data
+            elif validation_data:
+                all_validation_data.examples = all_validation_data.examples + validation_data.examples
+            if not all_test_data:
+                all_test_data = test_data
+            elif test_data:
+                all_test_data.examples = all_test_data.examples + test_data.examples
+
+        return Split(train=all_train_data, eval=all_validation_data, test=all_test_data), \
+               Split(train=train_path, eval=validation_path, test=test_path)

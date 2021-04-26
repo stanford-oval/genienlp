@@ -31,7 +31,7 @@
 from . import generic_dataset
 
 
-class BaseTask:
+class BaseTask(object):
     """
     Base class for all tasks.
 

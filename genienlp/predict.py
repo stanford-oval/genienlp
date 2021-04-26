@@ -40,6 +40,7 @@ import shutil
 from torch.multiprocessing import Process, set_start_method
 
 from .data_utils.bootleg import Bootleg, init_bootleg_annotator, extract_features_with_annotator
+from .models import TransformerForTokenClassification
 from .run_bootleg import bootleg_process_splits
 
 try:
@@ -53,7 +54,7 @@ from . import models
 from .tasks.registry import get_tasks
 from .util import set_seed, load_config_json, make_data_loader, log_model_size, get_devices, \
     combine_folders_on_disk, split_folder_on_disk, get_part_path
-from .validate import generate_with_model, calculate_and_reduce_metrics
+from .validate import calculate_and_reduce_metrics, generate_with_model
 from .calibrate import ConfidenceEstimator
 from .arguments import check_and_update_generation_args
 
@@ -91,7 +92,9 @@ def prepare_data(args, device):
                        'almond_lang_as_question': args.almond_lang_as_question,
                        'num_workers': args.num_workers,
                        'separate_eval': args.separate_eval,
-                       'translate_no_answer': args.translate_no_answer
+                       'translate_no_answer': args.translate_no_answer,
+                       'ner_domains': args.ner_domains,
+                       'hf_test_overfit': args.hf_test_overfit
                        })
         
         task_splits, task_paths = task.get_splits(root=args.data, lower=args.lower, **kwargs)
@@ -125,7 +128,6 @@ def prepare_data(args, device):
         paths.append(task_path_processed)
 
     return datasets
-
 
 
 def prepare_data_iterators(args, val_sets, numericalizer, device):
@@ -219,11 +221,11 @@ def run(args, device):
                 confidence_estimators = None
             with torch.cuda.amp.autocast(enabled=args.mixed_precision):
                 generation_output = generate_with_model(model, it, model.numericalizer, task, args,
-                                                     original_order=original_order,
-                                                     output_confidence_features=args.save_confidence_features,
-                                                     confidence_estimators=confidence_estimators,
-                                                     disable_progbar=False)
-            
+                                                                     original_order=original_order,
+                                                                     output_confidence_features=args.save_confidence_features,
+                                                                     confidence_estimators=confidence_estimators,
+                                                                     disable_progbar=False)
+
             if args.save_confidence_features:
                 torch.save(generation_output.confidence_features, args.confidence_feature_path)
 
@@ -241,7 +243,7 @@ def run(args, device):
                 metrics_to_compute = task.metrics
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
-                metrics = calculate_and_reduce_metrics(generation_output.predictions, generation_output.answers, metrics_to_compute, args)
+                metrics = calculate_and_reduce_metrics(generation_output.predictions, generation_output.answers, metrics_to_compute, args.reduce_metrics)
 
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                     results_file.write(json.dumps(metrics) + '\n')

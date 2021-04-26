@@ -32,8 +32,6 @@ import unicodedata
 import torch
 from dataclasses import dataclass
 
-
-
 def identity(x, **kw):
     return x, [], x
 
@@ -127,7 +125,7 @@ class Example(object):
                 args.append(question_plus_types)
         
         return Example(*args)
-    
+
 
 class NumericalizedExamples(NamedTuple):
     """
@@ -178,7 +176,12 @@ class NumericalizedExamples(NamedTuple):
                 field_name='context'
             )
         
-        tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
+        #TODO remove double attempts at context tokenization
+        if getattr(examples, 'is_classification', False):
+            assert args.add_types_to_text != 'insert'
+            tokenized_answers = numericalizer.process_classification_labels(all_context_plus_questions, all_context_plus_question_with_types, [ex.answer for ex in examples])
+        else:
+            tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
         
         for i in range(len(examples)):
             numericalized_examples.append(NumericalizedExamples([examples[i].example_id], tokenized_contexts[i], tokenized_answers[i]))

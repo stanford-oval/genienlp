@@ -40,6 +40,10 @@ jobs:
       script:
         - bash ./tests/test_NED.sh
     -
+      name: "Token Classification tests"
+      script:
+        - bash ./tests/test_token_classification.sh
+    -
       name: "Calibration tests"
       script:
         - bash ./tests/test_calibration.sh

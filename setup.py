@@ -37,7 +37,7 @@ setuptools.setup(
     version='0.6.0a4',
     
     packages=setuptools.find_packages(exclude=['tests']),
-    entry_points= {
+    entry_points={
         'console_scripts': ['genienlp=genienlp.__main__:main'],
     },    
     license='BSD-3-Clause',
@@ -54,6 +54,8 @@ setuptools.setup(
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
         'requests~=2.22',
+        'datasets==1.5.0',
+        'seqeval==1.2.2',
         'transformers==4.5.1',
         'sentencepiece==0.1.*',
         'sentence-transformers==1.0.4',
