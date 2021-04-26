@@ -164,6 +164,13 @@ def run_mapping():
                         'LOC': ['@state@', '@city@', '@country@', 'countries bordering the Baltic Sea'],
                         'MISC': []
     }
+    
+    MAPPING['wikidata'] = {
+        'country': ['@country@', '@countries@', '@city@', '@town@',
+                    'sovereign state', 'republic', 'federal state', 'social state', 'unitary state',
+                    'constitutional republic', 'democratic republic', 'island nation', 'Commonwealth realm',
+                    'secular state', 'geographic region'],
+    }
 
     pprint(MAPPING)
     with open(os.path.join(args.bootleg_input_dir, f'es_material/almond_type_mapping.json'), 'w') as fout:
@@ -187,7 +194,7 @@ def run_mapping():
         ujson.dump(NEW_MAPPING_match, fout)
     with open(os.path.join(args.bootleg_input_dir, f'es_material/almond_type_mapping_inclusion.json'), 'w') as fout:
         ujson.dump(NEW_MAPPING_include, fout)
-    
+
 def run_mapping_2():
     almond_type2qid = {
         "music": {"MusicRecording": "Q7366", "MusicAlbum": "Q482994", "Person": "Q5", "iso_lang_code": "Q315",
@@ -207,7 +214,9 @@ def run_mapping_2():
                        "iso_lang_code": "Q315", "genres": "Q188451", "artist": "Q483501", "playlist": "Q1569406",
                        "restaurant": "Q11707", "album": "Q482994", "Location": "Q2221906", "device": "Q2858615",
                        "iot_name": "Q1318740", "dog": "Q144"},
-        "cross_ner/news": {"PER": "Q215627", "ORG": "Q43229", "LOC": "Q2221906", "MISC": "Q2302426"}
+        "cross_ner/news": {"PER": "Q215627", "ORG": "Q43229", "LOC": "Q2221906", "MISC": "Q2302426"},
+        "wikidata": {"country": "Q6256"}
+    
     }
     
     with open(os.path.join(args.bootleg_input_dir, f'es_material/almond_type2qid.json'), 'w') as fout:
