@@ -56,7 +56,7 @@ setuptools.setup(
         'requests~=2.22',
         'transformers==4.5.1',
         'sentencepiece==0.1.*',
-        'sentence-transformers==1.0.4',
+        'sentence-transformers==1.1.0',
         'mosestokenizer~=1.1',
         'nltk~=3.4',
         'ujson==4.0.2',
