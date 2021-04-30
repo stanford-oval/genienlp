@@ -66,7 +66,7 @@ setuptools.setup(
         # for kf
         'kfserving>=0.5.0',
         # for NED
-        'bootleg==1.0.1',
+        'bootleg==1.0.2',
         'marisa_trie_m==0.7.6',
         'elasticsearch==7.12.1',
         # for calibration:

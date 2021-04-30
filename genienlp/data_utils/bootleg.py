@@ -116,6 +116,7 @@ def init_bootleg_annotator(args, device):
     bootleg_annotator = BootlegAnnotator(
                                 config=bootleg_config,
                                 device='cpu' if device.type == 'cpu' else 'cuda',
+                                min_alias_len=args.min_entity_len,
                                 max_alias_len=args.max_entity_len,
                                 cand_map=bootleg.cand_map,
                                 threshold=args.bootleg_prob_threshold,
@@ -205,7 +206,10 @@ class Bootleg(object):
         jsonl_input_path = input_path.rsplit('.', 1)[0] + '.jsonl'
         jsonl_output_path = input_path.rsplit('.', 1)[0] + '_bootleg.jsonl'
         logger.info('Extracting mentions...')
-        extract_mentions(in_filepath=jsonl_input_path, out_filepath=jsonl_output_path, cand_map_file=self.cand_map,
+        extract_mentions(in_filepath=jsonl_input_path,
+                         out_filepath=jsonl_output_path,
+                         cand_map_file=self.cand_map,
+                         min_alias_len=self.args.min_entity_len,
                          max_alias_len=self.args.max_entity_len,
                          num_workers=getattr(self.args, 'bootleg_extract_num_workers', 32), verbose=False)
 
