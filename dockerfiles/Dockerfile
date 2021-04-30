@@ -19,13 +19,9 @@ RUN dnf -y install git gcc gcc-c++ make cmake && \
         python38-devel \
         python38-pip \
         python38-wheel \
-	&& curl -sL https://files.pythonhosted.org/packages/1d/a9/f349273a0327fdf20a73188c9c3aa7dbce68f86fad422eadd366fd2ed7a0/torch-1.7.1-cp38-cp38-manylinux1_x86_64.whl \
-	   -o torch-1.7.1-cp38-cp38-manylinux1_x86_64.whl \
-	&& pip3 install torch-1.7.1-cp38-cp38-manylinux1_x86_64.whl \
-	&& rm -fr torch-1.7.1-cp38-cp38-manylinux1_x86_64.whl \
-	&& pip3 install kfserving \
-        && pip3 install awscli \
-	&& pip3 install -e /opt/genienlp \
+        && pip3 install --upgrade pip \
+        && pip3 install --use-feature=2020-resolver awscli \
+	&& pip3 install --use-feature=2020-resolver -e /opt/genienlp \
 	&& python3 -m spacy download en_core_web_sm \
 	&& rm -fr /root/.cache \
 	&& dnf -y remove gcc gcc-c++ make cmake \
