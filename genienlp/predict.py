@@ -40,6 +40,7 @@ from pprint import pformat
 from torch.multiprocessing import Process, set_start_method
 
 from .data_utils.bootleg import Bootleg, extract_features_with_annotator, init_bootleg_annotator
+from .data_utils.iterator import DialogueIterator
 from .run_bootleg import bootleg_process_splits
 
 try:
@@ -158,9 +159,15 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
                 task_iter.append((task, task_languages[index], loader, original_order))
         # single language task or no separate eval
         else:
-            loader, original_order = make_data_loader(
-                val_set[0], numericalizer, bs, device, train=False, return_original_order=True
-            )
+            if args.csp_feed_pred:
+                # batch size of 1 meaning one full dialogue
+                loader, original_order = make_data_loader(val_set[0], numericalizer, batch_size=1, device=device, sort=False,
+                                                          train=False, return_original_order=True, iterator=DialogueIterator)
+            else:
+                loader, original_order = make_data_loader(
+                    val_set[0], numericalizer, batch_size=bs, device=device, train=False, return_original_order=True
+                )
+            
             task_iter.append((task, task_languages, loader, original_order))
 
         iters.extend(task_iter)
@@ -242,6 +249,7 @@ def run(args, device):
                     output_confidence_features=args.save_confidence_features,
                     confidence_estimators=confidence_estimators,
                     disable_progbar=False,
+                    device=device
                 )
 
             if args.save_confidence_features:
@@ -445,7 +453,8 @@ def parse_argv(parser):
         help='if true the provided dataset would not contain the answer (translated sentence)',
     )
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
-
+    
+    parser.add_argument('--csp_feed_pred', action='store_true', help='whether to feed csp preds as context for next round')
 
 def set_default_values(args):
     """

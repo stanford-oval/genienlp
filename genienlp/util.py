@@ -568,7 +568,7 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
+def make_data_loader(dataset, numericalizer, batch_size, sort=True, device=None, train=False, return_original_order=False, iterator=LengthSortedIterator):
     all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer)
 
     context_lengths = [ex.context.length for ex in all_features]
@@ -581,15 +581,16 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
         f'answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}'
     )
 
-    sampler = LengthSortedIterator(
+    sampler = iterator(
         all_features,
         batch_size=batch_size,
-        sort=True,
+        sort=sort,
         shuffle_and_repeat=train,
         sort_key_fn=dataset.sort_key_fn,
         batch_size_fn=dataset.batch_size_fn,
         groups=dataset.groups,
     )
+
     # get the sorted data_source
     all_f = sampler.data_source
     data_loader = torch.utils.data.DataLoader(

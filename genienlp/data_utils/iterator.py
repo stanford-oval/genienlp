@@ -32,6 +32,8 @@ import logging
 import random
 
 import torch
+from genienlp.data_utils.almond_utils import process_id
+from genienlp.tasks.generic_dataset import default_batch_fn
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +55,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         assert batch_size % groups == 0
         assert len(data_source) % groups == 0
 
-        self.sort_key = sort_key_fn
+        self.sort_key_fn = sort_key_fn
         self.batch_size_fn = batch_size_fn
         self.groups = groups
 
@@ -64,7 +66,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             )  # list of tuples of the form (data_source[i], i)
             # sort based on data_source
             sorted_data_with_original_order = sorted(
-                data_with_original_order, key=lambda x: self.sort_key(x[0]), reverse=True
+                data_with_original_order, key=lambda x: self.sort_key_fn(x[0]), reverse=True
             )  # sort from long to short
             # separate the two parts of each tuple
             self.data_source, self.original_order = tuple(zip(*sorted_data_with_original_order))
@@ -149,3 +151,67 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             return random.randrange(0, len(self.data_source) / self.groups) * self.groups
         else:
             return self.last_batch_start_index
+
+
+class DialogueIterator(torch.utils.data.Sampler):
+    def __init__(self, data_source, batch_size, shuffle_and_repeat, groups=1):
+        if groups is None:
+            groups = 1
+        assert batch_size % groups == 0
+        assert len(data_source) % groups == 0
+        
+        self.sort_key_fn = process_id
+        self.batch_size_fn = default_batch_fn
+        self.groups = 1
+        
+        self.data_source, self.original_order = data_source, list(range(len(data_source)))
+        self.batch_size = batch_size  # number of examples or number of tokens
+        self.shuffle_and_repeat = shuffle_and_repeat
+        self.last_batch_start_index = 0
+        self.last_batch_start_index = self._get_next_batch_start_index()
+        
+        # do not allow skipping examples during validation/ prediction
+        self.no_skip = True
+        # quickly iterate over self to calculate length and beginning of batches
+        self.length = 0
+        for _ in self:
+            self.length += 1
+        # reset state
+        self.last_batch_start_index = 0
+        self.last_batch_start_index = self._get_next_batch_start_index()
+        
+    def __len__(self):
+        return self.length
+
+    def __iter__(self):
+        self.last_batch_start_index = 0
+        self.last_batch_start_index = self._get_next_batch_start_index()
+        return self
+    
+    def __next__(self):
+        batch_of_indices = []
+        candidate_index = self._get_next_batch_start_index()
+        cur_id = None
+        if candidate_index >= len(self.data_source):
+            # This is the end of the iterator
+            assert not self.shuffle_and_repeat
+            raise StopIteration
+        candidate_example = self.data_source[candidate_index]
+        id_processed = process_id(candidate_example, dialogue=True)
+        if cur_id is None:
+            cur_id = id_processed
+        while cur_id == id_processed:
+            batch_of_indices.append(candidate_index)
+            candidate_index += 1
+            if candidate_index == len(self.data_source):
+                break
+
+            candidate_example = self.data_source[candidate_index]
+            id_processed = process_id(candidate_example, dialogue=True)
+
+        self.last_batch_start_index += len(batch_of_indices)
+        return batch_of_indices
+
+    
+    def _get_next_batch_start_index(self):
+        return self.last_batch_start_index

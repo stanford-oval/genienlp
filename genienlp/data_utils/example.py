@@ -134,7 +134,7 @@ class Example(object):
 
 class NumericalizedExamples(NamedTuple):
     """
-    Conatains a batch of numericalized (i.e. tokenized and converted to token ids) examples, potentially of size 1
+    Contains a batch of numericalized (i.e. tokenized and converted to token ids) examples, potentially of size 1
     """
 
     example_id: List[str]
