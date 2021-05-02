@@ -29,9 +29,11 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys
+
 import torch
 from collections import OrderedDict
 
+from .data_utils.example import SequentialField, NumericalizedExamples
 from .models import TransformerForTokenClassification
 from .util import GenerationOutput
 from .data_utils.progbar import progress_bar
@@ -39,7 +41,13 @@ from .metrics import compute_metrics
 
 def generate_with_model(model, data_iterator, numericalizer, task, args, output_predictions_only=False,
                                 output_confidence_features=False, original_order=None, confidence_estimators=None,
-                                disable_progbar=True):
+                                disable_progbar=True, device=None, csp_feed_pred=False):
+    if csp_feed_pred:
+        return generate_with_seq2seq_model_for_dialogue(model, data_iterator, numericalizer, task, args,
+                                output_predictions_only=output_predictions_only,
+                                original_order=original_order,
+                                disable_progbar=disable_progbar,
+                                device=device)
     
     if isinstance(model, TransformerForTokenClassification):
         return generate_with_classification_model(model, data_iterator, numericalizer, task,
@@ -51,6 +59,121 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, output_
                                            original_order=original_order,
                                            confidence_estimators=confidence_estimators,
                                            disable_progbar=disable_progbar)
+
+
+
+def generate_with_seq2seq_model_for_dialogue(model, data_iterator, numericalizer, task, args,
+                                output_predictions_only=False,
+                                original_order=None,
+                                disable_progbar=True,
+                                device=None) -> GenerationOutput:
+    """
+    Inputs:
+        original_order: List of indices. If provided, we will sort the results according to this order
+        confidence_estimator: if provided, will use it to calculate and output confidence scores
+    Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
+        loss
+        predictions: a List of Lists of strings
+        answers
+        contexts
+    """
+    predictions = []
+    example_ids = []
+    answers = []
+    contexts = []
+    
+    for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
+        batch_size = len(batch.example_id)
+        batch_prediction = []
+        batch_example_ids = batch.example_id
+        
+        example_ids += batch_example_ids
+        special_tokens = numericalizer._tokenizer.all_special_tokens
+        batch_context_old = numericalizer.convert_ids_to_tokens(batch.context.value.data, skip_special_tokens=False)
+        batch_context = []
+        for text in batch_context_old:
+            i = 0
+            while text[i] in special_tokens:
+                i += 1
+            j = len(text)-1
+            while text[j] in special_tokens:
+                j -= 1
+            text = text[i:j+1]
+
+            batch_context.append(numericalizer._tokenizer.convert_tokens_to_string(text))
+            
+        contexts += batch_context
+
+        if not output_predictions_only:
+            batch_answer = numericalizer.reverse(batch.answer.value.data, 'answer')
+            batch_answer = [task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))]
+            answers += batch_answer
+
+        # iterate through turns
+        hyperparameter_idx = 0
+        for k in range(batch_size):
+            if k == 0:
+                turn = NumericalizedExamples(example_id=[batch.example_id[0]],
+                                         context=SequentialField(value=batch.context.value[[0]], length=batch.context.length[[0]], limited=batch.context.limited[[0]], feature=None),
+                                         answer=SequentialField(value=batch.answer.value[[0]], length=batch.answer.value[[0]], limited=batch.answer.value[[0]], feature=None))
+            else:
+                semi_colon_idx = batch_context[k].index(';')
+                context = batch_prediction[k-1][0].strip() + ' ' + batch_context[k][semi_colon_idx:].strip()
+                if context.startswith('$dialogue '):
+                    context = context[len('$dialogue '):]
+                # context = unicodedata.normalize('NFD', context)
+                tokenized_contexts = numericalizer.encode_batch([context], field_name='context', features=None)[0]
+                
+                value = torch.tensor([tokenized_contexts.value], device=device)
+                length = torch.tensor([tokenized_contexts.length], device=device)
+                limited = torch.tensor([tokenized_contexts.limited], device=device)
+                turn = NumericalizedExamples(example_id=[batch.example_id[k]],
+                                         context=SequentialField(value=value, length=length, limited=limited, feature=None),
+                                         answer=SequentialField(value=batch.answer.value[[k]], length=batch.answer.value[[k]], limited=batch.answer.value[[k]], feature=None))
+
+            with open('results_feedy', 'a') as fout:
+                fout.write(str(turn) + '\n')
+            generated = model.generate(turn,
+                                       max_output_length=args.max_output_length,
+                                       num_outputs=args.num_outputs[hyperparameter_idx],
+                                       temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
+                                       repetition_penalty=args.repetition_penalty[hyperparameter_idx],
+                                       top_k=args.top_k[hyperparameter_idx],
+                                       top_p=args.top_p[hyperparameter_idx],
+                                       num_beams=args.num_beams[hyperparameter_idx],
+                                       num_beam_groups=args.num_beam_groups[hyperparameter_idx],
+                                       diversity_penalty=args.diversity_penalty[hyperparameter_idx],
+                                       no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
+                                       do_sample=args.temperature[hyperparameter_idx] != 0,
+                                       # if temperature==0, we do not sample
+                                       )
+            partial_batch_prediction_ids = generated.sequences
+
+            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
+            
+            # post-process predictions
+            partial_batch_prediction = task.postprocess_prediction(batch_example_ids[k], partial_batch_prediction)
+        
+            # put them into the right array
+            batch_prediction.append([partial_batch_prediction])
+            
+        predictions += batch_prediction
+    
+    if original_order is not None:
+        # sort back to the original order
+        original_order, example_ids, predictions, answers, contexts = [list(a) for a in tuple(
+            zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))]
+    
+    # TODO calculate and return loss
+    loss = None
+    output = GenerationOutput(loss=loss)
+    
+    if output_predictions_only:
+        output.predictions = predictions
+    else:
+        output.example_ids, output.predictions, output.answers, output.contexts = example_ids, predictions, answers, contexts
+
+    return output
 
 
 def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
@@ -95,6 +218,8 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
             answers += batch_answer
 
         for hyperparameter_idx in range(len(args.temperature)):
+            with open('results_nonfeedy', 'a') as fout:
+                fout.write(str(batch) + '\n')
             generated = model.generate(batch,
                                     max_output_length=args.max_output_length,
                                     num_outputs=args.num_outputs[hyperparameter_idx],

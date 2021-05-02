@@ -286,6 +286,8 @@ def parse_argv(parser):
     parser.add_argument('--ner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
     parser.add_argument('--hf_test_overfit', action='store_true', help='Debugging flag for hf datasets where validation will be performed on train set')
 
+    parser.add_argument('--csp_feed_pred', action='store_true', help='whether to feed csp preds as context for next round (only during validation)')
+
 
 def check_and_update_generation_args(args):
     """

@@ -40,7 +40,7 @@ import shutil
 from torch.multiprocessing import Process, set_start_method
 
 from .data_utils.bootleg import Bootleg, init_bootleg_annotator, extract_features_with_annotator
-from .models import TransformerForTokenClassification
+from .data_utils.iterator import DialogueIterator
 from .run_bootleg import bootleg_process_splits
 
 try:
@@ -143,14 +143,18 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
             task_languages = task_languages.split('+')
             assert len(task_languages) == len(val_set)
             for index, set_ in enumerate(val_set):
-                loader, original_order = make_data_loader(set_, numericalizer, bs, device,
+                loader, original_order = make_data_loader(set_, numericalizer, bs, device=device,
                                                           train=False, return_original_order=True)
                 task_iter.append((task, task_languages[index], loader, original_order))
         # single language task or no separate eval
         else:
-           loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device,
-                                                     train=False, return_original_order=True)
-           task_iter.append((task, task_languages, loader, original_order))
+            if args.csp_feed_pred:
+                loader, original_order = make_data_loader(val_set[0], numericalizer, batch_size=1, device=device, sort=False,
+                                                          train=False, return_original_order=True, iterator=DialogueIterator)
+            else:
+                loader, original_order = make_data_loader(val_set[0], numericalizer, bs, device=device,
+                                                          train=False, return_original_order=True)
+            task_iter.append((task, task_languages, loader, original_order))
 
         iters.extend(task_iter)
         task_index += 1
@@ -224,7 +228,9 @@ def run(args, device):
                                                                      original_order=original_order,
                                                                      output_confidence_features=args.save_confidence_features,
                                                                      confidence_estimators=confidence_estimators,
-                                                                     disable_progbar=False)
+                                                                     disable_progbar=False,
+                                                                     device=device,
+                                                                     csp_feed_pred=args.csp_feed_pred)
 
             if args.save_confidence_features:
                 torch.save(generation_output.confidence_features, args.confidence_feature_path)
@@ -341,8 +347,10 @@ def parse_argv(parser):
     #TODO Update other tasks to use this argument too; so we can use predict for pure text generation (i.e. without reporting accuracy metrics)
     parser.add_argument('--translate_no_answer', action='store_true', help='if true the provided dataset would not contain the answer (translated sentence)')
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
+    
+    parser.add_argument('--csp_feed_pred', action='store_true', help='whether to feed csp preds as context for next round')
 
-            
+    
 def set_default_values(args):
     """
     sets default values that depend on other input arguments

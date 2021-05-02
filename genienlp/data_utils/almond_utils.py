@@ -81,7 +81,7 @@ def is_entity_marker(token):
     return token.startswith('^^')
 
 
-def process_id(ex):
+def process_id(ex, dialogue=False):
     # Example instance
     if isinstance(ex.example_id, str):
         id_ = ex.example_id.rsplit('/', 1)
@@ -90,7 +90,10 @@ def process_id(ex):
         assert isinstance(ex.example_id, list)
         assert len(ex.example_id) == 1
         id_ = ex.example_id[0].rsplit('/', 1)
-    id_ = id_[0] if len(id_) == 1 else id_[1]
+    if dialogue:
+        id_ = id_[0]
+    else:
+        id_ = id_[0] if len(id_) == 1 else id_[1]
     # translated
     if id_[0] == 'T':
         id_ = id_[1:]

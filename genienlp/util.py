@@ -544,7 +544,7 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
+def make_data_loader(dataset, numericalizer, batch_size, device=None, sort=True, train=False, return_original_order=False, iterator=LengthSortedIterator):
     all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer)
 
     context_lengths = [ex.context.length for ex in all_features]
@@ -553,7 +553,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     logger.info(f'context lengths (min, mean, max): {np.min(context_lengths)}, {int(np.mean(context_lengths))}, {np.max(context_lengths)}')
     logger.info(f'answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}')
     
-    sampler = LengthSortedIterator(all_features, batch_size=batch_size, sort=True, shuffle_and_repeat=train,
+    sampler = iterator(all_features, batch_size=batch_size, sort=sort, shuffle_and_repeat=train,
                                    sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
     # get the sorted data_source
     all_f = sampler.data_source
@@ -665,6 +665,11 @@ def load_config_json(args):
                      'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty',
                      'temperature', 'max_output_length', 'reduce_metrics',
                      'database_dir']
+        
+        # if validated using csp_feed_pred, should do the same during prediction
+        if 'csp_feed_pred' in config and config['csp_feed_pred']:
+            args.csp_feed_pred = True
+        
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)

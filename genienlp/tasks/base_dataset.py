@@ -42,11 +42,11 @@ class Dataset(torch.utils.data.Dataset):
     """Defines a dataset composed of Examples along with its Fields.
 
     Attributes:
-        sort_key (callable): A key to use for sorting dataset examples for batching
+        sort_key_fn (callable): A key to use for sorting dataset examples for batching
             together examples with similar lengths to minimize padding.
         examples (list(Example)): The examples in this dataset.
     """
-    sort_key = None
+    sort_key_fn = None
 
     def __init__(self, examples, filter_pred=None, **kwargs):
         """Create a dataset from a list of Examples and Fields.
