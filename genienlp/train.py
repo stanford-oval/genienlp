@@ -51,6 +51,7 @@ from transformers import (
 from . import arguments, models
 from .arguments import save_args
 from .data_utils.bootleg import Bootleg
+from .data_utils.iterator import DialogueIterator
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
 from .run_bootleg import bootleg_process_splits
@@ -433,7 +434,7 @@ def train(
 
     t0 = time.time()
     train_iters = [
-        (task, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
+        (task, make_data_loader(dataset, numericalizer, tok, device=main_device, train=True))
         for task, dataset, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)
     ]
     t1 = time.time()
@@ -443,17 +444,34 @@ def train(
     # save memory
     del train_sets
 
-    val_iters = [
-        (task, make_data_loader(dataset, numericalizer, bs, main_device, train=False))
-        for task, dataset, bs in zip(args.val_tasks, val_sets, args.val_batch_size)
-    ]
+    if args.csp_feed_pred:
+        val_iters = [
+            (
+                task,
+                make_data_loader(
+                    dataset,
+                    numericalizer,
+                    batch_size=1,
+                    device=main_device,
+                    sort=False,
+                    train=False,
+                    iterator=DialogueIterator,
+                ),
+            )
+            for task, dataset, bs in zip(args.val_tasks, val_sets, args.val_batch_size)
+        ]
+    else:
+        val_iters = [
+            (name, make_data_loader(dataset, numericalizer, tok, main_device, train=False))
+            for name, dataset, tok in zip(args.val_tasks, val_sets, args.val_batch_size)
+        ]
     # save memory
     del val_sets
 
     aux_iters = []
     if use_curriculum:
         aux_iters = [
-            (name, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
+            (name, make_data_loader(dataset, numericalizer, tok, device=main_device, train=True))
             for name, dataset, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)
         ]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]

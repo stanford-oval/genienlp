@@ -46,6 +46,7 @@ class Dataset(torch.utils.data.Dataset):
             together examples with similar lengths to minimize padding.
         examples (list(Example)): The examples in this dataset.
     """
+
     sort_key_fn = None
 
     def __init__(self, examples, filter_pred=None, **kwargs):

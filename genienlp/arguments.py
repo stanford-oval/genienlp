@@ -237,7 +237,12 @@ def parse_argv(parser):
         '--trainable_decoder_embeddings', default=50, type=int, help='size of decoder embedding (for TransformerLSTM)'
     )
     parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model (for TransformerLSTM)')
-    parser.add_argument('--csp_dropout', default=0.0, type=float, help='Apply subword-dropout on portion of the context before ";" character (used for multiwoz csp)')
+    parser.add_argument(
+        '--csp_dropout',
+        default=0.0,
+        type=float,
+        help='Apply subword-dropout on portion of the context before ";" character (used for multiwoz csp)',
+    )
 
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
@@ -512,6 +517,12 @@ def parse_argv(parser):
         '--hf_test_overfit',
         action='store_true',
         help='Debugging flag for hf datasets where validation will be performed on train set',
+    )
+
+    parser.add_argument(
+        '--csp_feed_pred',
+        action='store_true',
+        help='whether to feed csp preds as context for next round (only during validation)',
     )
 
 

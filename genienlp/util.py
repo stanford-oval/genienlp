@@ -568,7 +568,16 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, sort=True, device=None, train=False, return_original_order=False, iterator=LengthSortedIterator):
+def make_data_loader(
+    dataset,
+    numericalizer,
+    batch_size,
+    device=None,
+    sort=True,
+    train=False,
+    return_original_order=False,
+    iterator=LengthSortedIterator,
+):
     all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer)
 
     context_lengths = [ex.context.length for ex in all_features]
@@ -760,6 +769,11 @@ def load_config_json(args):
             'reduce_metrics',
             'database_dir',
         ]
+
+        # if validated using csp_feed_pred, should do the same during prediction
+        if 'csp_feed_pred' in config and config['csp_feed_pred']:
+            args.csp_feed_pred = True
+
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)

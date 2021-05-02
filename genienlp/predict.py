@@ -154,20 +154,27 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
             assert len(task_languages) == len(val_set)
             for index, set_ in enumerate(val_set):
                 loader, original_order = make_data_loader(
-                    set_, numericalizer, bs, device, train=False, return_original_order=True
+                    set_, numericalizer, bs, device=device, train=False, return_original_order=True
                 )
+
                 task_iter.append((task, task_languages[index], loader, original_order))
         # single language task or no separate eval
         else:
             if args.csp_feed_pred:
-                # batch size of 1 meaning one full dialogue
-                loader, original_order = make_data_loader(val_set[0], numericalizer, batch_size=1, device=device, sort=False,
-                                                          train=False, return_original_order=True, iterator=DialogueIterator)
+                loader, original_order = make_data_loader(
+                    val_set[0],
+                    numericalizer,
+                    batch_size=1,
+                    device=device,
+                    sort=False,
+                    train=False,
+                    return_original_order=True,
+                    iterator=DialogueIterator,
+                )
             else:
                 loader, original_order = make_data_loader(
-                    val_set[0], numericalizer, batch_size=bs, device=device, train=False, return_original_order=True
+                    val_set[0], numericalizer, bs, device=device, train=False, return_original_order=True
                 )
-            
             task_iter.append((task, task_languages, loader, original_order))
 
         iters.extend(task_iter)
@@ -249,7 +256,8 @@ def run(args, device):
                     output_confidence_features=args.save_confidence_features,
                     confidence_estimators=confidence_estimators,
                     disable_progbar=False,
-                    device=device
+                    device=device,
+                    csp_feed_pred=args.csp_feed_pred,
                 )
 
             if args.save_confidence_features:
@@ -453,8 +461,9 @@ def parse_argv(parser):
         help='if true the provided dataset would not contain the answer (translated sentence)',
     )
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
-    
+
     parser.add_argument('--csp_feed_pred', action='store_true', help='whether to feed csp preds as context for next round')
+
 
 def set_default_values(args):
     """

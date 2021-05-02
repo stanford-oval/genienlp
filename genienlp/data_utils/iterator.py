@@ -32,6 +32,7 @@ import logging
 import random
 
 import torch
+
 from genienlp.data_utils.almond_utils import process_id
 from genienlp.tasks.generic_dataset import default_batch_fn
 
@@ -154,24 +155,17 @@ class LengthSortedIterator(torch.utils.data.Sampler):
 
 
 class DialogueIterator(torch.utils.data.Sampler):
-    def __init__(self, data_source, batch_size, shuffle_and_repeat, groups=1):
-        if groups is None:
-            groups = 1
-        assert batch_size % groups == 0
-        assert len(data_source) % groups == 0
-        
+    def __init__(self, data_source, shuffle_and_repeat, **kwargs):
+
         self.sort_key_fn = process_id
         self.batch_size_fn = default_batch_fn
         self.groups = 1
-        
+
         self.data_source, self.original_order = data_source, list(range(len(data_source)))
-        self.batch_size = batch_size  # number of examples or number of tokens
         self.shuffle_and_repeat = shuffle_and_repeat
         self.last_batch_start_index = 0
         self.last_batch_start_index = self._get_next_batch_start_index()
-        
-        # do not allow skipping examples during validation/ prediction
-        self.no_skip = True
+
         # quickly iterate over self to calculate length and beginning of batches
         self.length = 0
         for _ in self:
@@ -179,7 +173,7 @@ class DialogueIterator(torch.utils.data.Sampler):
         # reset state
         self.last_batch_start_index = 0
         self.last_batch_start_index = self._get_next_batch_start_index()
-        
+
     def __len__(self):
         return self.length
 
@@ -187,7 +181,7 @@ class DialogueIterator(torch.utils.data.Sampler):
         self.last_batch_start_index = 0
         self.last_batch_start_index = self._get_next_batch_start_index()
         return self
-    
+
     def __next__(self):
         batch_of_indices = []
         candidate_index = self._get_next_batch_start_index()
@@ -212,6 +206,5 @@ class DialogueIterator(torch.utils.data.Sampler):
         self.last_batch_start_index += len(batch_of_indices)
         return batch_of_indices
 
-    
     def _get_next_batch_start_index(self):
         return self.last_batch_start_index
