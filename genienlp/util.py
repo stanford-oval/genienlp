@@ -222,7 +222,8 @@ class GenerationOutput():
                  answers: Optional[List] = None,
                  contexts: Optional[List] = None,
                  confidence_features: Optional[List] = None,
-                 confidence_scores: Optional[List] = None):
+                 confidence_scores: Optional[List] = None,
+                 seq_probs: Optional[float] = None):
         self.loss = loss
         self.example_ids = example_ids
         self.predictions = predictions
@@ -230,6 +231,7 @@ class GenerationOutput():
         self.contexts = contexts
         self.confidence_features = confidence_features
         self.confidence_scores = confidence_scores
+        self.seq_probs = seq_probs
 
 
 def remove_thingtalk_quotes(thingtalk):

@@ -223,8 +223,10 @@ def run(args, device):
                 generation_output = generate_with_model(model, it, model.numericalizer, task, args,
                                                                      original_order=original_order,
                                                                      output_confidence_features=args.save_confidence_features,
+                                                                     output_seq_probs=args.output_seq_probs,
                                                                      confidence_estimators=confidence_estimators,
-                                                                     disable_progbar=False)
+                                                                     disable_progbar=False,
+                                                                     )
 
             if args.save_confidence_features:
                 torch.save(generation_output.confidence_features, args.confidence_feature_path)
@@ -234,6 +236,8 @@ def run(args, device):
             with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
                 for i in range(len(generation_output.example_ids)):
                     line = generation_output.example_ids[i] + '\t' + '\t'.join(generation_output.predictions[i]) # all outputs separated by '\t'
+                    if args.output_sequence_probabilities:
+                        line += '\t' + '\t'.join([str(p) for p in generation_output.seq_probs[i]])
                     if args.calibrator_paths is not None:
                         for score in generation_output.confidence_scores:
                             line += '\t' + str(score[i])
@@ -256,6 +260,11 @@ def run(args, device):
                             for score in generation_output.confidence_scores:
                                 log_string += f'{score[i]:.3f}, '
                             log_string += '\n'
+                        if args.output_seq_probs:
+                            log_string += f'Probabilities {i+1} : ['
+                            for p in generation_output.seq_probs[i]:
+                                log_string += f'{p:.3f}, '
+                            log_string += ']\n'
                         logger.info(log_string)
                     logger.info(metrics)
                     
@@ -332,6 +341,7 @@ def parse_argv(parser):
     parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo (MC) dropout. 0 disables MC dropout.')
     parser.add_argument("--override_confidence_labels", type=str, default=None,
                         help='If provided, examples with this gold answer are marked as 1, and others as 0. Useful for out-of-domain detection.')
+    parser.add_argument('--output_seq_probs', action='store_true', help='If provided, will output sequence probability for each prediction.')
 
     parser.add_argument('--database_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models for bootleg)')
 

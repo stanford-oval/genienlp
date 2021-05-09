@@ -38,6 +38,7 @@ from .data_utils.progbar import progress_bar
 from .metrics import compute_metrics
 
 def generate_with_model(model, data_iterator, numericalizer, task, args, output_predictions_only=False,
+                                output_seq_probs=False,
                                 output_confidence_features=False, original_order=None, confidence_estimators=None,
                                 disable_progbar=True):
     
@@ -48,6 +49,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, output_
         return generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
                                 output_predictions_only=output_predictions_only,
                                 output_confidence_features=output_confidence_features,
+                                output_seq_probs=output_seq_probs,
                                 original_order=original_order,
                                 confidence_estimators=confidence_estimators,
                                 disable_progbar=disable_progbar)
@@ -56,6 +58,7 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, output_
 def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
                                 output_predictions_only=False,
                                 output_confidence_features=False,
+                                output_seq_probs=False,
                                 original_order=None,
                                 confidence_estimators=None,
                                 disable_progbar=True) -> GenerationOutput:
@@ -72,6 +75,7 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
     output_confidence_scores = confidence_estimators is not None
     predictions = []
     confidence_features = []
+    seq_probs = []
     example_ids = []
     answers = []
     contexts = []
@@ -80,6 +84,7 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
         batch_confidence_features = [[] for _ in range(batch_size)]
+        batch_seq_probs = [[] for _ in range(batch_size)]
         batch_example_ids = batch.example_id
 
         example_ids += batch_example_ids
@@ -107,9 +112,13 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
                                     diversity_penalty=args.diversity_penalty[hyperparameter_idx],
                                     no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                                     do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
+                                    output_scores=output_seq_probs
                                     )
             partial_batch_prediction_ids = generated.sequences
             cross_attentions = getattr(generated, 'cross_attentions', None)
+
+            if output_seq_probs:
+                partial_batch_seq_probs = model.get_seq_probability(generated.scores, generated.sequences)
 
             if cross_attentions is not None:
                 # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)
@@ -144,13 +153,17 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
                 batch_prediction[get_example_index(i)].append(partial_batch_prediction[i])
                 if output_confidence_features or output_confidence_scores:
                     batch_confidence_features[get_example_index(i)].append(partial_batch_confidence_features[i])
+            if output_seq_probs:
+                for i in range(len(partial_batch_seq_probs)):
+                    batch_seq_probs[get_example_index(i)].append(partial_batch_seq_probs[i])
         
         predictions += batch_prediction
         confidence_features += batch_confidence_features
+        seq_probs += batch_seq_probs
     
     if original_order is not None:
         # sort back to the original order
-        original_order, example_ids, predictions, answers, contexts, confidence_features = [list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidence_features)))))]
+        original_order, example_ids, predictions, answers, contexts, confidence_features, seq_probs = [list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidence_features, seq_probs)))))]
     
     # TODO calculate and return loss
     loss = None
@@ -171,6 +184,8 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
         for estimator in confidence_estimators:
             confidence_scores = estimator.estimate(confidence_features)
             output.confidence_scores.append(confidence_scores)
+    if output_seq_probs:
+        output.seq_probs = seq_probs
 
     return output
 

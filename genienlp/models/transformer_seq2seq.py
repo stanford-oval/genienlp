@@ -31,6 +31,7 @@ import logging
 
 from typing import List
 import torch
+import torch.nn.functional as F
 
 from torch.tensor import Tensor
 from transformers import AutoModelForSeq2SeqLM, AutoConfig, MBartTokenizer, MBartTokenizerFast
@@ -146,7 +147,8 @@ class TransformerSeq2Seq(GenieModel):
                  num_beam_groups,
                  diversity_penalty,
                  no_repeat_ngram_size,
-                 do_sample
+                 do_sample,
+                 output_scores
                  ):
         
         decoder_start_token_id, forced_bos_token_id = None, None
@@ -176,7 +178,7 @@ class TransformerSeq2Seq(GenieModel):
                                         do_sample=do_sample,
                                         decoder_start_token_id=decoder_start_token_id,
                                         forced_bos_token_id=forced_bos_token_id,
-                                        output_scores=False,
+                                        output_scores=output_scores,
                                         output_attentions=True,
                                         output_hidden_states=False,
                                         return_dict_in_generate=True
@@ -184,6 +186,14 @@ class TransformerSeq2Seq(GenieModel):
         
         return generated
 
+    def get_seq_probability(self, scores, sequences):
+        lengths = self.get_length(sequences)
+        probs = F.softmax(torch.stack(scores, dim=1), dim=-1)
+        all_seq_probs = []
+        for i in range(sequences.shape[0]):
+            seq_prob = torch.prod(probs[i, :, :].gather(dim=1, index=sequences[i, 1:].view(-1, 1)).view(-1)[:lengths[i]], dim=0).item()
+            all_seq_probs.append(seq_prob)
+        return all_seq_probs
 
     def confidence_features(self, batch, predictions, mc_dropout_num=0) -> List[ConfidenceFeatures]:
         """
