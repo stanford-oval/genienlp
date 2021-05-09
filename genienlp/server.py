@@ -102,18 +102,36 @@ class Server(object):
         with torch.no_grad():
             if self.args.calibrator_paths is not None:
                 output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                        output_predictions_only=True,
-                                                        confidence_estimators=self.confidence_estimators)
+                                             output_predictions_only=True,
+                                             confidence_estimators=self.confidence_estimators)
                 response = []
-                for idx, p in enumerate(output.predictions):
-                    instance = {'answer': p[0], 'score': {}}
-                    for e_idx, estimator_scores in enumerate(output.confidence_scores):
-                        instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
-                    response.append(instance)
+                if sum(self.args.num_outputs) > 1:
+                    for idx, predictions in enumerate(output.predictions):
+                        candidates = []
+                        for cand in predictions:
+                            candidate = {'answer': cand, 'score': {}}
+                            for e_idx, estimator_scores in enumerate(output.confidence_scores):
+                                candidate['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
+                            candidates.append(candidate)
+                        response.append({'candidates': candidates})
+                else:
+                    for idx, p in enumerate(output.predictions):
+                        instance = {'answer': p[0], 'score': {}}
+                        for e_idx, estimator_scores in enumerate(output.confidence_scores):
+                            instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
+                        response.append(instance)
             else:
                 output = generate_with_model(self.model, [batch], self.numericalizer, task, self.args,
-                                                        output_predictions_only=True)
-                response = [{'answer': p[0]} for p in output.predictions]
+                                             output_predictions_only=True)
+                if sum(self.args.num_outputs) > 1:
+                    response = []
+                    for idx, predictions in enumerate(output.predictions):
+                        candidates = []
+                        for cand in predictions:
+                            candidates.append({'answer': cand})
+                        response.append({'candidates': candidates})
+                else:
+                    response = [{'answer': p[0]} for p in output.predictions]
             
         return response
 
@@ -190,6 +208,23 @@ def parse_argv(parser):
     parser.add_argument('--src_locale', default='en', help='locale tag of the input language to parse')
     parser.add_argument('--tgt_locale', default='en', help='locale tag of the target language to generate')
     parser.add_argument('--inference_name', default='nlp', help='name used by kfserving inference service, alphanumeric only')
+
+    # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
+    parser.add_argument("--num_outputs", type=int, nargs='+', default=[1],
+                        help='number of sequences to output per input')
+    parser.add_argument("--temperature", type=float, nargs='+', default=[0.0],
+                        help="temperature of 0 implies greedy sampling")
+    parser.add_argument("--repetition_penalty", type=float, nargs='+', default=[1.0],
+                        help="primarily useful for CTRL model; in that case, use 1.2")
+    parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
+    parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
+    parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
+    parser.add_argument("--num_beam_groups", type=int, nargs='+', default=[1], help='1 disables diverse beam seach')
+    parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0],
+                        help='0 disables diverse beam seach')
+    parser.add_argument("--no_repeat_ngram_size", type=int, nargs='+', default=[0],
+                        help='ngrams of this size cannot be repeated in the output. 0 disables it.')
+    parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
 
     # for confidence estimation:
     parser.add_argument('--calibrator_paths', type=str, nargs='+', default=None,
