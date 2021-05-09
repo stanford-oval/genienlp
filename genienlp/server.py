@@ -45,6 +45,7 @@ from .tasks.registry import get_tasks
 from .util import set_seed, get_devices, load_config_json, log_model_size
 from .validate import generate_with_model
 from .calibrate import ConfidenceEstimator
+from .arguments import check_and_update_generation_args
 
 
 logger = logging.getLogger(__name__)
@@ -232,6 +233,7 @@ def parse_argv(parser):
 
 def init(args):
     load_config_json(args)
+    check_and_update_generation_args(args)
     set_seed(args)
     
     devices = get_devices()
