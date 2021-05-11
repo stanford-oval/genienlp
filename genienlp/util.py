@@ -47,7 +47,7 @@ from torch.functional import Tensor
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
 from .paraphrase.transformers_utils import MARIAN_GROUP_MEMBERS
-from .tasks.almond_utils import token_type_regex
+from .data_utils.almond_utils import token_type_regex
 
 logger = logging.getLogger(__name__)
 

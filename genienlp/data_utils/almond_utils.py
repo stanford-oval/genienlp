@@ -28,7 +28,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import re
-from ..data_utils.progbar import progress_bar
+
+from .progbar import progress_bar
 
 quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
 quoted_pattern_with_space = re.compile(r'\"\s([^"]*?)\s\"')
@@ -111,6 +112,7 @@ def tokenize_cjk_chars(sentence):
     output = output.replace('  ', ' ')
     
     return output
+
 
 def detokenize_cjk_chars(sentence):
     output = []

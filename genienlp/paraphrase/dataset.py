@@ -9,7 +9,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from ..util import get_number_of_lines
 from ..data_utils.progbar import progress_bar
-from ..tasks.almond_utils import detokenize_cjk_chars
+from ..data_utils.almond_utils import detokenize_cjk_chars
 
 logger = logging.getLogger(__name__)
 

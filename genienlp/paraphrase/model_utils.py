@@ -9,8 +9,8 @@ import shutil
 from .transformers_utils import MARIAN_GROUP_MEMBERS
 from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 
-from genienlp.metrics import computeBLEU
-from genienlp.util import get_mbart_lang
+from ..metrics import computeBLEU
+from ..util import get_mbart_lang
 
 logger = logging.getLogger(__name__)
 

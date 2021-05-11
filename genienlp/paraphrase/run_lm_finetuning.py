@@ -32,7 +32,6 @@ from torch.utils.data.distributed import DistributedSampler
 
 from tensorboardX import SummaryWriter
 
-from ..data_utils.progbar import progress_bar, prange
 import shutil
 
 from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
@@ -48,10 +47,11 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
 
 from .transformers_utils import GenieMBartTokenizer
 
-from genienlp.util import set_seed, split_file_on_disk
-from genienlp.paraphrase.data_utils import mask_tokens, add_special_tokens
-from genienlp.paraphrase.dataset import LengthSortedSampler, TextDataset
-from genienlp.paraphrase.model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints,\
+from ..data_utils.progbar import progress_bar, prange
+from ..util import set_seed, split_file_on_disk
+from .data_utils import mask_tokens, add_special_tokens
+from .dataset import LengthSortedSampler, TextDataset
+from .model_utils import get_transformer_schedule_with_warmup, _rotate_checkpoints,\
     check_args, freeze_embeds, freeze_params, shift_tokens_right
 
 
