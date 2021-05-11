@@ -19,6 +19,7 @@
 This script in used for text generation using library models.
 It currently supports paraphrasing and translation tasks.
 """
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
@@ -32,11 +33,11 @@ import numpy as np
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
-from genienlp.paraphrase.data_utils import create_features_from_tsv_file, output_heuristics
-from genienlp.paraphrase.model_utils import compute_metrics
+from .data_utils import create_features_from_tsv_file, output_heuristics
+from .model_utils import compute_metrics
 from ..model_utils.translation import compute_attention, replace_quoted_params, force_replace_quoted_params
 from ..data_utils.progbar import prange
-from ..tasks.almond_utils import tokenize_cjk_chars
+from ..data_utils.almond_utils import tokenize_cjk_chars
 
 try:
     set_start_method('spawn')

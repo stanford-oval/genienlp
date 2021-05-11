@@ -36,16 +36,16 @@ import logging
 
 from ..data_utils.remote_database import RemoteElasticDatabase
 from ..model_utils.translation import compute_attention, replace_quoted_params, force_replace_quoted_params
-from ..tasks.base_dataset import Split
-from ..tasks.base_task import BaseTask
-from ..tasks.generic_dataset import input_then_output_len, all_tokens_fn, CQA, default_batch_fn
-from ..tasks.registry import register_task
 from ..data_utils.database import Database
 from ..data_utils.example import Example, get_pad_feature, Feature
-from ..tasks.almond_dataset import AlmondDataset
-from ..tasks.almond_utils import ISO_to_LANG, process_id, quoted_pattern_with_space, \
+from ..data_utils.almond_utils import ISO_to_LANG, process_id, quoted_pattern_with_space, \
     tokenize_cjk_chars, detokenize_cjk_chars, is_entity, is_entity_marker, is_device
 from ..paraphrase.data_utils import input_heuristics, output_heuristics
+from .base_dataset import Split
+from .base_task import BaseTask
+from .generic_dataset import input_then_output_len, all_tokens_fn, CQA, default_batch_fn
+from .registry import register_task
+from .almond_dataset import AlmondDataset
 
 logger = logging.getLogger(__name__)
 

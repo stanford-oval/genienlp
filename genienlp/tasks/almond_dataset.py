@@ -34,7 +34,7 @@ import math
 import multiprocessing as mp
 
 from .generic_dataset import CQA
-from .almond_utils import create_examples_from_file, chunk_file
+from genienlp.data_utils.almond_utils import create_examples_from_file, chunk_file
 
 from .base_dataset import Split
 
