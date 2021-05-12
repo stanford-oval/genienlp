@@ -46,11 +46,11 @@ def generate_with_model(model, data_iterator, numericalizer, task, args, output_
                                            original_order=original_order, disable_progbar=disable_progbar)
     else:
         return generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
-                                output_predictions_only=output_predictions_only,
-                                output_confidence_features=output_confidence_features,
-                                original_order=original_order,
-                                confidence_estimators=confidence_estimators,
-                                disable_progbar=disable_progbar)
+                                           output_predictions_only=output_predictions_only,
+                                           output_confidence_features=output_confidence_features,
+                                           original_order=original_order,
+                                           confidence_estimators=confidence_estimators,
+                                           disable_progbar=disable_progbar)
 
 
 def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
@@ -150,7 +150,9 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
     
     if original_order is not None:
         # sort back to the original order
-        original_order, example_ids, predictions, answers, contexts, confidence_features = [list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidence_features)))))]
+        original_order, example_ids, predictions, answers, contexts, confidence_features = [
+            list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidence_features)))))
+        ]
     
     # TODO calculate and return loss
     loss = None
