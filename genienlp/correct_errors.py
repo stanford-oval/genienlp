@@ -3,6 +3,7 @@ from .util import ConfidenceFeatures
 from .calibrate import TreeConfidenceEstimator, mean_drop_prob, neg_of, nodrop_prob, prob_first_mistake
 import numpy as np
 import pickle
+import math
 
 class PositionEstimator(TreeConfidenceEstimator):
     @staticmethod
@@ -109,8 +110,7 @@ def parse_argv(parser):
     parser.add_argument('--top_tokens', type=int, required=True, help='Number of tokens to consider')
     parser.add_argument('--top_mistakes', type=int, required=True, help='Number of mistakes to consider')
     parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo (MC) dropout. 0 disables MC dropout.')
-    # parser.add_argument('--val_batch_size', nargs='+', default=None, type=int,
-                        # help='Batch size for validation corresponding to tasks in val tasks')
+    parser.add_argument('--batch_size', default=1, type=int, help='Batch size')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
 
 def main(args):
@@ -133,65 +133,73 @@ def main(args):
 
     task = list(get_tasks(['almond_dialogue_nlu'], args).values())[0]
 
+    all_examples = []
+    all_answers = []
     with open(args.input_file) as file:
-        all_ems = []
         for line in file:
             example_id, context, question, answer = tuple([a.strip() for a in line.split('\t')])
             ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=args.lower)
-
-            with torch.no_grad():
-                all_features = NumericalizedExamples.from_examples([ex], model.numericalizer)
-                batch = NumericalizedExamples.collate_batches(all_features, model.numericalizer, device=device)
-                position_estimator = PositionEstimator(name='prob_first_mistake', featurizers=[prob_first_mistake(0)], eval_metric=None, mc_dropout_num=0) # mc_dropout_num is not used
-                ems = []
-                print('example_id = ', example_id)
-                output = generate_with_seq2seq_model(model, [batch], model.numericalizer, task, args, output_predictions_only=True, output_confidence_features=True, error=None)
-                prediction =  output.predictions[0][0]
-                ems.append(prediction==answer)
-                print('initial parse = ', prediction)
-                print('correct = ', prediction==answer)
-                print('first_mistake = ', output.confidence_features[0][0].first_mistake)
-                print('mean_drop_seq_prob = ', mean_drop_seq_prob(0)(output.confidence_features[0]))
-                print('weakest_token = ', weakest_token(0)(output.confidence_features[0]))
-                confidences = output.confidence_features
-                features = position_estimator.convert_to_features(confidences)
-                features[features==0] = -np.inf # do not select pad tokens
-                detected_error = np.argsort(-features, axis=1)[:, 0:args.top_mistakes] # take the max
-                for idx in range(args.top_mistakes):
-                    de = detected_error[0][idx]
-                    print('detected_error = ', de)
-                    print('error prob = ', features[0][de])
-                    for token_id in range(1, args.top_tokens+1):
-                        print('token_id = ', token_id)
-                        output = generate_with_seq2seq_model(model, [batch], model.numericalizer, task, args, output_predictions_only=True, output_confidence_features=True,
-                                                    error=[[de+1]], top_token=token_id)
-                        prediction =  output.predictions[0][0]
-                        print('reparse = ', prediction)
-                        print('mean_drop_seq_prob = ', mean_drop_seq_prob(0)(output.confidence_features[0]))
-                        print('weakest_token = ', weakest_token(0)(output.confidence_features[0]))
-
-                        print('correct = ', prediction==answer)
-                        ems.append(prediction==answer)
-                print('-'*20)
-                all_ems.append(ems)
-
-        np.set_printoptions(suppress=True)
-        np.set_printoptions(threshold=1000000)
+            all_examples.append(ex)
+            all_answers.append(answer)
+    
+    all_features = NumericalizedExamples.from_examples(all_examples, model.numericalizer)
+    all_ems = []
+    detection_accuracy = 0
         
-        all_ems = np.array(all_ems).astype(np.int)
-        num_examples = all_ems.shape[0]
+    with torch.no_grad():
+        for batch_idx in range(math.ceil(len(all_examples)/args.batch_size)):
+            batch_features = all_features[batch_idx*args.batch_size : min((batch_idx+1)*args.batch_size, len(all_features))]
+            batch_answers = all_answers[batch_idx*args.batch_size : min((batch_idx+1)*args.batch_size, len(all_features))]
+            batch_size = len(batch_answers)
+            batch = NumericalizedExamples.collate_batches(batch_features, model.numericalizer, device=device)
+            position_estimator = PositionEstimator(name='prob_first_mistake', featurizers=[prob_first_mistake(0)], eval_metric=None, mc_dropout_num=0) # mc_dropout_num is not used
+            batch_ems = [[] for _ in range(batch_size)]
+            output = generate_with_seq2seq_model(model, [batch], model.numericalizer, task, args, output_predictions_only=True, output_confidence_features=True, error=None)
+            prediction = [p[0] for p in output.predictions]
+            is_correct = [prediction[i]==batch_answers[i] for i in range(batch_size)]
+            for i in range(batch_size):
+                batch_ems[i].append(is_correct[i])
+            print('initial parse = ', prediction)
+            print('is_correct = ', is_correct)
+            first_mistake = [output.confidence_features[i][0].first_mistake for i in range(batch_size)]
+            confidences = output.confidence_features
+            features = position_estimator.convert_to_features(confidences)
+            features[features==0] = -np.inf # do not select pad tokens
+            detected_error = np.argsort(-features, axis=1)[:, 0:args.top_mistakes] # take the max
+            detection_accuracy += sum([first_mistake[i]==detected_error[i][0] for i in range(batch_size)])
+            print('detected_error = ', detected_error)
+            for idx in range(args.top_mistakes):
+                de = [[detected_error[i][idx]+1] for i in range(batch_size)]
+                for token_id in range(1, args.top_tokens+1):
+                    output = generate_with_seq2seq_model(model, [batch], model.numericalizer, task, args, output_predictions_only=True, output_confidence_features=True,
+                                                error=de, top_token=token_id)
+                    prediction =  [p[0] for p in output.predictions]
+                    print('reparse = ', prediction)
+                    is_correct = [prediction[i]==batch_answers[i] for i in range(batch_size)]
+                    print('is_correct = ', is_correct)
+                    for i in range(batch_size):
+                        batch_ems[i].append(is_correct[i])
+            print('-'*20)
+            all_ems.extend(batch_ems)
 
-        # remove duplicate correct answers
-        for i in range(all_ems.shape[0]):
-            seen_correct = False
-            for j in range(all_ems.shape[1]):
-                if not seen_correct and all_ems[i, j] == 1:
-                    seen_correct = True
-                    continue
-                if seen_correct:
-                    all_ems[i, j] = 0
-        acc = np.sum(all_ems, axis=0) / num_examples
-        print('parse accuracy = ', acc)
-        print('top-k parse accuracy = ', np.cumsum(acc))
-        print('all_ems = ', all_ems)
+    np.set_printoptions(suppress=True)
+    np.set_printoptions(threshold=1000000)
+    
+    all_ems = np.array(all_ems).astype(np.int)
+    num_examples = all_ems.shape[0]
+    print('all_ems = ', all_ems)
+
+    # remove duplicate correct answers
+    for i in range(all_ems.shape[0]):
+        seen_correct = False
+        for j in range(all_ems.shape[1]):
+            if not seen_correct and all_ems[i, j] == 1:
+                seen_correct = True
+                continue
+            if seen_correct:
+                all_ems[i, j] = 0
+    acc = np.sum(all_ems, axis=0) / num_examples
+    print('parse accuracy = ', acc)
+    print('top-k parse accuracy = ', np.cumsum(acc))
+    print('detection_accuracy = ', detection_accuracy/num_examples)
     
