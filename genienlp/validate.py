@@ -58,7 +58,9 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
                                 output_confidence_features=False,
                                 original_order=None,
                                 confidence_estimators=None,
-                                disable_progbar=True) -> GenerationOutput:
+                                disable_progbar=True,
+                                error=None,
+                                top_token=1,) -> GenerationOutput:
     """
     Inputs:
         original_order: List of indices. If provided, we will sort the results according to this order
@@ -107,6 +109,8 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
                                     diversity_penalty=args.diversity_penalty[hyperparameter_idx],
                                     no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                                     do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
+                                    error=error,
+                                    top_token=top_token,
                                     )
             partial_batch_prediction_ids = generated.sequences
             cross_attentions = getattr(generated, 'cross_attentions', None)

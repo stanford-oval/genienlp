@@ -30,7 +30,7 @@
 
 import argparse
 
-from . import arguments, train, predict, server, kfserver, cache_embeddings, export, calibrate, run_bootleg, \
+from . import arguments, train, predict, server, kfserver, cache_embeddings, export, calibrate, correct_errors, run_bootleg, \
     write_kf_metrics
 from .paraphrase import run_lm_finetuning, run_generation
 from .paraphrase.scripts import split_dataset, dialog_to_tsv, clean_paraphrasing_dataset, transform_dataset
@@ -48,6 +48,7 @@ subcommands = {
     
     # calibration commands
     'calibrate': ('Train a confidence calibration model', calibrate.parse_argv, calibrate.main),
+    'correct-errors': ('Correct errors using binary (correct/incorrect) feedback', correct_errors.parse_argv, correct_errors.main),
 
     # commands that work with datasets
     'transform-dataset': ('Apply transformations to a tab-separated dataset', transform_dataset.parse_argv, transform_dataset.main),

@@ -39,6 +39,7 @@ from ..data_utils.numericalizer import TransformerNumericalizer
 from .base import GenieModel
 from ..util import ConfidenceFeatures, adjust_language_code
 from .common import LabelSmoothingCrossEntropy
+from transformers.generation_utils import GreedySearchDecoderOnlyOutput
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +147,9 @@ class TransformerSeq2Seq(GenieModel):
                  num_beam_groups,
                  diversity_penalty,
                  no_repeat_ngram_size,
-                 do_sample
+                 do_sample,
+                 error=None,
+                 top_token=1,
                  ):
         
         decoder_start_token_id, forced_bos_token_id = None, None
@@ -157,33 +160,123 @@ class TransformerSeq2Seq(GenieModel):
 
         input_ids = batch.context.value
         # when attention_mask is not provided to generate(), it will default to masking pad tokens, which is the correct thing
-        generated = self.model.generate(input_ids=input_ids,
-                                        max_length=max_output_length,
-                                        min_length=3, # generate at least one token after BOS and language code
-                                        bos_token_id=self.numericalizer.init_id,
-                                        pad_token_id=self.numericalizer.pad_id,
-                                        early_stopping=False,
-                                        num_return_sequences=num_outputs,
-                                        repetition_penalty=repetition_penalty,
-                                        temperature=temperature,
-                                        eos_token_id=self.numericalizer.eos_id,
-                                        top_k=top_k,
-                                        top_p=top_p,
-                                        num_beams=num_beams,
-                                        num_beam_groups=num_beam_groups,
-                                        diversity_penalty=diversity_penalty,
-                                        no_repeat_ngram_size=no_repeat_ngram_size,
-                                        do_sample=do_sample,
-                                        decoder_start_token_id=decoder_start_token_id,
-                                        forced_bos_token_id=forced_bos_token_id,
-                                        output_scores=False,
-                                        output_attentions=True,
-                                        output_hidden_states=False,
-                                        return_dict_in_generate=True
-                                        )
+        if error is None:
+            generated = self.model.generate(input_ids=input_ids,
+                                            max_length=max_output_length,
+                                            min_length=3, # generate at least one token after BOS and language code
+                                            bos_token_id=self.numericalizer.init_id,
+                                            pad_token_id=self.numericalizer.pad_id,
+                                            early_stopping=False,
+                                            num_return_sequences=num_outputs,
+                                            repetition_penalty=repetition_penalty,
+                                            temperature=temperature,
+                                            eos_token_id=self.numericalizer.eos_id,
+                                            top_k=top_k,
+                                            top_p=top_p,
+                                            num_beams=num_beams,
+                                            num_beam_groups=num_beam_groups,
+                                            diversity_penalty=diversity_penalty,
+                                            no_repeat_ngram_size=no_repeat_ngram_size,
+                                            do_sample=do_sample,
+                                            decoder_start_token_id=decoder_start_token_id,
+                                            forced_bos_token_id=forced_bos_token_id,
+                                            output_scores=False,
+                                            output_attentions=True,
+                                            output_hidden_states=False,
+                                            return_dict_in_generate=True,
+                                            )
+
+        else:
+            generated = self.mc_greedy(input_ids=input_ids,
+                                max_length=max_output_length,
+                                bos_token_id=self.numericalizer._tokenizer.bos_token_id,
+                                pad_token_id=self.numericalizer._tokenizer.pad_token_id,
+                                eos_token_id=self.numericalizer._tokenizer.eos_token_id,
+                                decoder_start_token_id=None,
+                                gold=batch.answer.value,
+                                error=error,
+                                top_token=top_token
+                            )
         
         return generated
 
+
+    def mc_greedy(self,
+        input_ids,
+        gold,
+        max_length,
+        bos_token_id,
+        pad_token_id,
+        eos_token_id,
+        decoder_start_token_id,
+        use_cache=None,
+        error=None,
+        top_token=1,
+        **model_kwargs):
+
+        if model_kwargs.get("attention_mask", None) is None:
+            # init `attention_mask` depending on `pad_token_id`
+            model_kwargs["attention_mask"] = self.model._prepare_attention_mask_for_generation(input_ids, pad_token_id, eos_token_id)
+
+        # special case if pad_token_id is not defined
+        if pad_token_id is None and eos_token_id is not None:
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            pad_token_id = eos_token_id
+
+        if self.model.config.is_encoder_decoder:
+            # add encoder_outputs to model_kwargs
+            model_kwargs = self.model._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
+
+            # set input_ids as decoder_input_ids
+            input_ids = self.model._prepare_decoder_input_ids_for_generation(input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id)
+
+        # set model_kwargs
+        model_kwargs["use_cache"] = use_cache
+
+        # init sequence length tensors
+        sequence_lengths, unfinished_sequences, cur_len = self.model._init_sequence_length_for_generation(input_ids, max_length)
+
+        while cur_len < max_length:
+            # prepare model inputs
+            model_inputs = self.model.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            # forward pass to get next token
+            outputs = self.model(**model_inputs, return_dict=True)
+            next_token_logits = outputs.logits[:, -1, :]
+            scores = next_token_logits
+
+            # argmax
+            next_tokens = torch.argmax(scores, dim=-1)
+            if error is not None:
+                for i in range(next_tokens.shape[0]):
+                    if cur_len in set(error[i]):
+                        next_tokens[i] = torch.topk(scores, k=top_token+1, dim=-1).indices[i, top_token]
+
+            # add code that transfomers next_tokens to tokens_to_add
+            next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
+
+            # add token and increase length by one
+            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+
+            # update sequence length
+            sequence_lengths, unfinished_sequences = self.model._update_seq_length_for_generation(sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id)
+
+            # update model kwargs
+            model_kwargs = self.model._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder=self.model.config.is_encoder_decoder)
+
+            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            if unfinished_sequences.max() == 0:
+                break
+
+            # increase cur_len
+            cur_len = cur_len + 1
+
+        return GreedySearchDecoderOnlyOutput(
+                    sequences=input_ids,
+                    scores=scores,
+                    attentions=None,
+                    hidden_states=None,
+                )
 
     def confidence_features(self, batch, predictions, mc_dropout_num=0) -> List[ConfidenceFeatures]:
         """
