@@ -357,7 +357,7 @@ def check_args(args):
         raise ValueError('You have to define prediction languages for each task'
                          'Use None for single language tasks. Also provide languages in the same order you provided the tasks.')
 
-    if getattr(args, 'ned_retrieve_method', None) == 'bootleg':
+    if getattr(args, 'do_ned', False) and getattr(args, 'ned_retrieve_method', None) == 'bootleg':
         with open(os.path.join(args.path, 'config.json')) as config_file:
             config = json.load(config_file)
         if args.subsample > config['subsample']:
