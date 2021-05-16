@@ -107,6 +107,7 @@ from .calibrate import prob_first_mistake, mean_drop_seq_prob, neg_of
 def parse_argv(parser):
     parser.add_argument('--path', type=str, required=True, help='Folder to load the model from')
     parser.add_argument('--input_file', type=str, required=True, help='Input file to read from')
+    parser.add_argument('--output_file', type=str, required=True, help='Output file')
     parser.add_argument('--top_tokens', type=int, required=True, help='Number of tokens to consider')
     parser.add_argument('--top_mistakes', type=int, required=True, help='Number of mistakes to consider')
     parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo (MC) dropout. 0 disables MC dropout.')
@@ -145,6 +146,7 @@ def main(args):
     all_features = NumericalizedExamples.from_examples(all_examples, model.numericalizer)
     all_ems = []
     detection_accuracy = 0
+    all_second_predictions = []
         
     with torch.no_grad():
         for batch_idx in range(math.ceil(len(all_examples)/args.batch_size)):
@@ -159,8 +161,8 @@ def main(args):
             is_correct = [prediction[i]==batch_answers[i] for i in range(batch_size)]
             for i in range(batch_size):
                 batch_ems[i].append(is_correct[i])
-            print('initial parse = ', prediction)
-            print('is_correct = ', is_correct)
+            # print('initial parse = ', prediction)
+            # print('is_correct = ', is_correct)
             first_mistake = [output.confidence_features[i][0].first_mistake for i in range(batch_size)]
             confidences = output.confidence_features
             features = position_estimator.convert_to_features(confidences)
@@ -174,12 +176,13 @@ def main(args):
                     output = generate_with_seq2seq_model(model, [batch], model.numericalizer, task, args, output_predictions_only=True, output_confidence_features=True,
                                                 error=de, top_token=token_id)
                     prediction =  [p[0] for p in output.predictions]
-                    print('reparse = ', prediction)
+                    # print('reparse = ', prediction)
                     is_correct = [prediction[i]==batch_answers[i] for i in range(batch_size)]
-                    print('is_correct = ', is_correct)
+                    # print('is_correct = ', is_correct)
                     for i in range(batch_size):
                         batch_ems[i].append(is_correct[i])
-            print('-'*20)
+                    all_second_predictions.extend(prediction)
+            # print('-'*20)
             all_ems.extend(batch_ems)
 
     np.set_printoptions(suppress=True)
@@ -188,6 +191,9 @@ def main(args):
     all_ems = np.array(all_ems).astype(np.int)
     num_examples = all_ems.shape[0]
     print('all_ems = ', all_ems)
+    with open(args.output_file, 'w') as output:
+        for idx, p in enumerate(all_second_predictions):
+            output.write(all_features[idx].example_id[0]+'\t'+p+'\n')
 
     # remove duplicate correct answers
     for i in range(all_ems.shape[0]):
