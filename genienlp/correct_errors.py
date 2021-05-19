@@ -169,7 +169,7 @@ def main(args):
             features[features==0] = -np.inf # do not select pad tokens
             detected_error = np.argsort(-features, axis=1)[:, 0:args.top_mistakes] # take the max
             detection_accuracy += sum([first_mistake[i]==detected_error[i][0] for i in range(batch_size)])
-            print('detected_error = ', detected_error)
+            print('detected_error = ', [i[0] for i in detected_error])
             for idx in range(args.top_mistakes):
                 de = [[detected_error[i][idx]+1] for i in range(batch_size)]
                 for token_id in range(1, args.top_tokens+1):
