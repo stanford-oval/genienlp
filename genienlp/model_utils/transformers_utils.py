@@ -1,9 +1,11 @@
-import logging
 import random
 
 import torch
 import torch.nn as nn
-from transformers import XLMRobertaConfig
+import logging
+
+from transformers import XLMRobertaConfig, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast, M2M100Tokenizer
+
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 from transformers.models.bert.modeling_bert import BertEmbeddings, BertModel
 from transformers.models.gpt2 import tokenization_gpt2
@@ -21,40 +23,12 @@ from transformers.models.t5 import tokenization_t5
 logger = logging.getLogger(__name__)
 
 
-BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # official models
-    "facebook/bart-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-base/config.json",
-    "facebook/bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json",
-    "facebook/bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",
-    "facebook/bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
-    "facebook/bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
-    # community models; see https://huggingface.co/models?filter=bart for more
-    "sshleifer/bart-tiny-random": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/bart-tiny-random/config.json",
-}
-
-MBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # official models
-    "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
-    "facebook/mbart-large-cc25": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-cc25/config.json",
-    # community models; see https://huggingface.co/models?filter=mbart for more
-    "sshleifer/tiny-mbart": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/tiny-mbart/config.json",
-}
-
 MT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     'google/mt5-{}'.format(v): "https://s3.amazonaws.com/models.huggingface.co/bert/google/mt5-{}/config.json".format(v)
     for v in ['small', 'base', 'large', 'xl', 'xxl']
 }
 
-
-BART_MODEL_LIST = list(BART_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
-MBART_MODEL_LIST = list(MBART_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
-MT5_MODEL_LIST = list(MT5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
-
-
-# all MarianMT models use the same config
-MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Helsinki-NLP/opus-mt-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/config.json",
-}
+MULTILINGUAL_TOKENIZERS = (MBartTokenizer, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast, M2M100Tokenizer)
 
 
 MARIAN_GROUPS = {item[1]: set(item[0].split('+')) for item in GROUPS}
@@ -71,11 +45,9 @@ MODEL_PARALLEL_SUPPORTED_MODELS = (
 
 ###############
 
-
-# TODO try fixing this upstream
 class GenieMBartTokenizer(MBartTokenizer):
     '''
-    MBartTokenizer with the temporary fix for off-by-one error during generation: https://github.com/huggingface/transformers/issues/5755
+    MBartTokenizer with the fix for off-by-one error during generation: https://github.com/huggingface/transformers/issues/5755
     '''
 
     def __init__(self, *args, tokenizer_file=None, **kwargs):
@@ -84,7 +56,7 @@ class GenieMBartTokenizer(MBartTokenizer):
     def set_src_lang_special_tokens(self, src_lang) -> None:
         """Reset the special tokens to the source lang setting. Prefix [bos_token_id], suffix =[eos_token_id]."""
         self.cur_lang_code = self.lang_code_to_id[src_lang]
-        self.prefix_tokens = [self.bos_token_id]
+        self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
