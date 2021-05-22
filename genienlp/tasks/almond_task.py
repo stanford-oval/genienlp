@@ -621,6 +621,7 @@ class Translate(NaturalSeq2Seq):
 
         numericalizer = kwargs.pop('numericalizer')
         cross_attentions = kwargs.pop('cross_attentions')
+        num_outputs = len(batch_tgt_ids) // len(batch_src_ids)
 
         # TODO _tokenizer should not be private
         tokenizer = numericalizer._tokenizer
@@ -637,8 +638,10 @@ class Translate(NaturalSeq2Seq):
 
         all_text_outputs = []
         # post-process predictions ids
-        for i, (src_tokens, tgt_tokens, cross_att) in enumerate(zip(all_src_tokens, all_tgt_tokens, cross_attention_pooled)):
-
+        for i, (tgt_tokens, cross_att) in enumerate(zip(all_tgt_tokens, cross_attention_pooled)):
+            
+            src_tokens = all_src_tokens[i // num_outputs]
+            
             # shift target tokens left to match the attention positions
             if tgt_tokens[0] in tokenizer.all_special_tokens:
                 tgt_tokens = tgt_tokens[1:]
