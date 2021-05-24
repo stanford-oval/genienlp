@@ -29,10 +29,10 @@
 
 import logging
 
-from .hf_dataset import HFDataset
+from ..data_utils.example import Example
 from ..tasks.base_task import BaseTask
 from ..tasks.registry import register_task
-from ..data_utils.example import Example
+from .hf_dataset import HFDataset
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +40,13 @@ logger = logging.getLogger(__name__)
 class HFTask(BaseTask):
     def __init__(self, name, args):
         super().__init__(name, args)
-        
+
     def utterance_field(self):
         return 'question'
 
 
 @register_task('ambig_qa')
 class AmbigQA(HFTask):
-
     def __init__(self, name, args):
         super().__init__(name, args)
 
@@ -56,14 +55,19 @@ class AmbigQA(HFTask):
         return ['em', 'bleu']
 
     def _make_example(self, ex, **kwargs):
-        example_id, question, used_queries, annotations, nq_answer = \
-            ex['id'], ex['question'], ex['used_queries'], ex['annotations'], ex['nq_answer']
-    
+        example_id, question, used_queries, annotations, nq_answer = (
+            ex['id'],
+            ex['question'],
+            ex['used_queries'],
+            ex['annotations'],
+            ex['nq_answer'],
+        )
+
         # assert len(nq_answer) == 1, print(example_id, nq_answer)
 
         # TODO choosing only first answer for now
         answer = nq_answer[0]
-    
+
         # process used_queries
         # assert len(used_queries['results']) == 1, print(example_id, used_queries)
         # TODO choosing only first used_query for now
@@ -71,7 +75,7 @@ class AmbigQA(HFTask):
         context_tokens = context.split(' ')[:180]
         context_tokens += ['<u>']
         context = ' '.join(context_tokens)
-    
+
         if annotations['type'] == 'singleAnswer':
             # unambiguous question
             assert len(annotations['answer']) == 1
@@ -83,10 +87,11 @@ class AmbigQA(HFTask):
             for q, a in zip(all_questions, all_answers):
                 if a == nq_answer:
                     question = q
-        
-        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
-                                preprocess=self.preprocess_field, lower=False)
-    
+
+        return Example.from_raw(
+            self.name + '/' + example_id, context, question, answer, preprocess=self.preprocess_field, lower=False
+        )
+
     def get_splits(self, root, **kwargs):
         return HFDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
 
@@ -96,7 +101,7 @@ class CONLLNER(HFTask):
     tagging_scheme = 'IOB2'
     conll_labels = ['O', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG', 'B-LOC', 'I-LOC', 'B-MISC', 'I-MISC']
     domain2labels = {"conll": conll_labels}
-    
+
     def __init__(self, name, args):
         self.all_labels = tuple(self.conll_labels)
         self.label2id = {}
@@ -106,27 +111,27 @@ class CONLLNER(HFTask):
         self.id2label = {v: k for k, v in self.label2id.items()}
         self.num_labels = len(self.label2id)
         super().__init__(name, args)
-    
+
     @property
     def metrics(self):
         return ['ner_f1', 'em', 'f1', 'pem']
-    
+
     def utterance_field(self):
         return 'context'
-    
+
     def _make_example(self, ex, **kwargs):
         example_id = ex['id']
         context = ' '.join(ex['tokens'])
         question = ''
         answer = ' '.join(map(lambda item: str(item), ex['ner_tags']))
-        
-        return Example.from_raw(self.name + '/' + example_id, context, question, answer,
-                                preprocess=self.preprocess_field, lower=False)
-    
+
+        return Example.from_raw(
+            self.name + '/' + example_id, context, question, answer, preprocess=self.preprocess_field, lower=False
+        )
+
     def get_splits(self, root, **kwargs):
         splits, paths = HFDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
         for split in splits:
             if split:
                 split.is_classification = True
         return splits, paths
-

@@ -1,23 +1,22 @@
+import logging
 import random
+
 import torch
 import torch.nn as nn
-import logging
-
 from transformers import XLMRobertaConfig
-
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
-
 from transformers.models.bert.modeling_bert import BertEmbeddings, BertModel
-from transformers.models.roberta.modeling_roberta import create_position_ids_from_input_ids, RobertaEncoder, \
-    RobertaPooler, RobertaPreTrainedModel
-
-from transformers.models.marian.convert_marian_to_pytorch import GROUPS
-from transformers.models.marian.convert_marian_tatoeba_to_pytorch import GROUP_MEMBERS
-
-from transformers.models.mbart.tokenization_mbart import MBartTokenizer
 from transformers.models.gpt2 import tokenization_gpt2
+from transformers.models.marian.convert_marian_tatoeba_to_pytorch import GROUP_MEMBERS
+from transformers.models.marian.convert_marian_to_pytorch import GROUPS
+from transformers.models.mbart.tokenization_mbart import MBartTokenizer
+from transformers.models.roberta.modeling_roberta import (
+    RobertaEncoder,
+    RobertaPooler,
+    RobertaPreTrainedModel,
+    create_position_ids_from_input_ids,
+)
 from transformers.models.t5 import tokenization_t5
-
 
 logger = logging.getLogger(__name__)
 
@@ -29,22 +28,22 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",
     "facebook/bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
     "facebook/bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
-    
     # community models; see https://huggingface.co/models?filter=bart for more
-    "sshleifer/bart-tiny-random": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/bart-tiny-random/config.json"
+    "sshleifer/bart-tiny-random": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/bart-tiny-random/config.json",
 }
 
 MBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # official models
     "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
     "facebook/mbart-large-cc25": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-cc25/config.json",
-    
     # community models; see https://huggingface.co/models?filter=mbart for more
-    "sshleifer/tiny-mbart": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/tiny-mbart/config.json"
+    "sshleifer/tiny-mbart": "https://s3.amazonaws.com/models.huggingface.co/bert/sshleifer/tiny-mbart/config.json",
 }
 
-MT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {'google/mt5-{}'.format(v): "https://s3.amazonaws.com/models.huggingface.co/bert/google/mt5-{}/config.json".format(v)
-                                     for v in ['small', 'base', 'large', 'xl', 'xxl']}
+MT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    'google/mt5-{}'.format(v): "https://s3.amazonaws.com/models.huggingface.co/bert/google/mt5-{}/config.json".format(v)
+    for v in ['small', 'base', 'large', 'xl', 'xxl']
+}
 
 
 BART_MODEL_LIST = list(BART_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
@@ -64,11 +63,14 @@ MARIAN_TATOEBA_GROUPS = {k: set(v[1]) for k, v in GROUP_MEMBERS.items()}
 MARIAN_GROUP_MEMBERS = {**MARIAN_GROUPS, **MARIAN_TATOEBA_GROUPS}
 
 
-MODEL_PARALLEL_SUPPORTED_MODELS = list(tokenization_gpt2.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys()) + \
-                                    list(tokenization_t5.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys()) + \
-                                    list(MT5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
+MODEL_PARALLEL_SUPPORTED_MODELS = (
+    list(tokenization_gpt2.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys())
+    + list(tokenization_t5.PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES.keys())
+    + list(MT5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())
+)
 
 ###############
+
 
 # TODO try fixing this upstream
 class GenieMBartTokenizer(MBartTokenizer):
@@ -97,9 +99,9 @@ class GenieMBartTokenizer(MBartTokenizer):
 ###############
 ## BERT
 
+
 class BertEmbeddingsForNER(BertEmbeddings):
-    """Construct the embeddings from word, position, token_type, and entity_type embeddings.
-    """
+    """Construct the embeddings from word, position, token_type, and entity_type embeddings."""
 
     def __init__(self, config, num_db_types, db_unk_id):
         super().__init__(config)
@@ -109,18 +111,27 @@ class BertEmbeddingsForNER(BertEmbeddings):
         if num_db_types > 0:
             self.entity_type_embeddings = nn.Embedding(num_db_types, config.hidden_size, padding_idx=db_unk_id)
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None,
-                entity_ids=None, entity_masking=None, entity_probs=None, entity_word_embeds_dropout=False):
+    def forward(
+        self,
+        input_ids=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        entity_ids=None,
+        entity_masking=None,
+        entity_probs=None,
+        entity_word_embeds_dropout=False,
+    ):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
             input_shape = inputs_embeds.size()[:-1]
 
         seq_length = input_shape[1]
-        
+
         if position_ids is None:
             position_ids = self.position_ids[:, :seq_length]
-            
+
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
@@ -131,42 +142,44 @@ class BertEmbeddingsForNER(BertEmbeddings):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-            
+
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
-        
+
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
-        
+
         if self.num_db_types > 0 and entity_ids is not None:
             # get length for unpadded types
             type_lengths = entity_masking.sum(-1)
-            
+
             # avoid division by zero
             type_lengths[type_lengths == 0] = 1
-            
+
             entity_type_embeddings = self.entity_type_embeddings(entity_ids)
-            
+
             # weighted average
             if entity_probs is not None:
                 entity_type_embeddings = entity_type_embeddings * entity_probs.unsqueeze(-1)
-            
+
             # average embedding of different types
             # size (batch, length, num_types, emb_dim)
             entity_type_embeddings = entity_type_embeddings.sum(-2) / type_lengths.unsqueeze(-1)
-            
+
             embeddings += entity_type_embeddings
 
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
+
 class BertModelForNER(BertModel):
     """
     Subcalss of BertModel model with an additional entity type embedding layer in the bottom
     """
+
     def __init__(self, config, num_db_types, db_unk_id):
         super().__init__(config)
 
@@ -174,29 +187,27 @@ class BertModelForNER(BertModel):
         self.init_weights()
 
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            entity_ids=None,
-            entity_masking=None,
-            entity_probs=None,
-            entity_word_embeds_dropout=False,
-            head_mask=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
-            embedding_output=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        entity_ids=None,
+        entity_masking=None,
+        entity_probs=None,
+        entity_word_embeds_dropout=False,
+        head_mask=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        embedding_output=None,
     ):
-        
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
@@ -209,7 +220,7 @@ class BertModelForNER(BertModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
-        
+
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
@@ -236,13 +247,19 @@ class BertModelForNER(BertModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-        
+
         if embedding_output is None:
             embedding_output = self.embeddings(
-                input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds,
-                entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs, entity_word_embeds_dropout=entity_word_embeds_dropout
+                input_ids=input_ids,
+                position_ids=position_ids,
+                token_type_ids=token_type_ids,
+                inputs_embeds=inputs_embeds,
+                entity_ids=entity_ids,
+                entity_masking=entity_masking,
+                entity_probs=entity_probs,
+                entity_word_embeds_dropout=entity_word_embeds_dropout,
             )
-            
+
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -266,9 +283,11 @@ class BertModelForNER(BertModel):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
-    
+
+
 ###############
 ## Roberta
+
 
 class RobertaEmbeddingsForNER(BertEmbeddingsForNER):
     """
@@ -278,10 +297,22 @@ class RobertaEmbeddingsForNER(BertEmbeddingsForNER):
     def __init__(self, config, num_db_types, db_unk_id):
         super().__init__(config, num_db_types, db_unk_id)
         self.padding_idx = config.pad_token_id
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx)
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
+        )
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0,
-                entity_ids=None, entity_masking=None, entity_probs=None, entity_word_embeds_dropout=False):
+    def forward(
+        self,
+        input_ids=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        past_key_values_length=0,
+        entity_ids=None,
+        entity_masking=None,
+        entity_probs=None,
+        entity_word_embeds_dropout=False,
+    ):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
@@ -290,8 +321,15 @@ class RobertaEmbeddingsForNER(BertEmbeddingsForNER):
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         return super().forward(
-            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, inputs_embeds=inputs_embeds,
-            entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs, entity_word_embeds_dropout=entity_word_embeds_dropout)
+            input_ids,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            entity_ids=entity_ids,
+            entity_masking=entity_masking,
+            entity_probs=entity_probs,
+            entity_word_embeds_dropout=entity_word_embeds_dropout,
+        )
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
@@ -312,7 +350,7 @@ class RobertaEmbeddingsForNER(BertEmbeddingsForNER):
 
 
 class RobertaModelForNER(RobertaPreTrainedModel):
-    def __init__(self, config, num_db_types, db_unk_id,  add_pooling_layer=True):
+    def __init__(self, config, num_db_types, db_unk_id, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
@@ -320,7 +358,7 @@ class RobertaModelForNER(RobertaPreTrainedModel):
         self.encoder = RobertaEncoder(config)
 
         self.pooler = RobertaPooler(config) if add_pooling_layer else None
-        
+
         self.init_weights()
 
     def get_input_embeddings(self):
@@ -328,37 +366,35 @@ class RobertaModelForNER(RobertaPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        
+
     def _prune_heads(self, heads_to_prune):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            entity_ids=None,
-            entity_masking=None,
-            entity_probs=None,
-            entity_word_embeds_dropout=False,
-            head_mask=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
-            embedding_output=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        entity_ids=None,
+        entity_masking=None,
+        entity_probs=None,
+        entity_word_embeds_dropout=False,
+        head_mask=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        embedding_output=None,
     ):
-    
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-    
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -367,18 +403,18 @@ class RobertaModelForNER(RobertaPreTrainedModel):
             input_shape = inputs_embeds.size()[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-    
+
         device = input_ids.device if input_ids is not None else inputs_embeds.device
-    
+
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-    
+
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
-    
+
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
@@ -389,22 +425,26 @@ class RobertaModelForNER(RobertaPreTrainedModel):
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
-    
+
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-    
+
         if embedding_output is None:
             embedding_output = self.embeddings(
-                input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
+                input_ids=input_ids,
+                position_ids=position_ids,
+                token_type_ids=token_type_ids,
                 inputs_embeds=inputs_embeds,
-                entity_ids=entity_ids, entity_masking=entity_masking, entity_probs=entity_probs,
-                entity_word_embeds_dropout=entity_word_embeds_dropout
+                entity_ids=entity_ids,
+                entity_masking=entity_masking,
+                entity_probs=entity_probs,
+                entity_word_embeds_dropout=entity_word_embeds_dropout,
             )
-    
+
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -417,10 +457,10 @@ class RobertaModelForNER(RobertaPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-    
+
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
-    
+
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,

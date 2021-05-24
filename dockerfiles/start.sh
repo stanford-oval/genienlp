@@ -8,4 +8,3 @@ if [ -n "${S3_DATABASE_DIR}" ]; then
   aws s3 sync --no-progress "${S3_DATABASE_DIR}" ./database
 fi
 exec genienlp $@
-

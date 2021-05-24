@@ -4,7 +4,9 @@ repos:
     hooks:
       - id: check-yaml
       - id: end-of-file-fixer
+        exclude: ^(tests/dataset/|tests/database/|tests/expected_results/)
       - id: trailing-whitespace
+        exclude: ^(tests/dataset/|tests/database/|tests/expected_results/)
 -   repo: https://github.com/PyCQA/isort
     rev: 5.8.0
     hooks:

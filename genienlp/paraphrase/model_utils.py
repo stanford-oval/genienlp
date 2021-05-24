@@ -1,16 +1,16 @@
-import torch
+import glob
+import logging
 import math
 import os
-import glob
 import re
-import logging
 import shutil
 
-from .transformers_utils import MARIAN_GROUP_MEMBERS
+import torch
 from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 
 from ..metrics import computeBLEU
 from ..util import get_mbart_lang
+from .transformers_utils import MARIAN_GROUP_MEMBERS
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,7 @@ def freeze_embeds(model):
         for d in [model.encoder, model.decoder]:
             freeze_params(d.embed_tokens)
 
+
 def unfreeze_embeds(model):
     """Unfreeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
     if hasattr(model, 'model'):
@@ -61,11 +62,14 @@ def unfreeze_embeds(model):
         for d in [model.encoder, model.decoder]:
             unfreeze_params(d.embed_tokens)
 
+
 def check_args(args):
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:
         if not args.tgt_lang:
-            raise ValueError('For translation task using Marian model, if target language is a group of languages, '
-                             'you have to specify the --tgt_lang flag.')
+            raise ValueError(
+                'For translation task using Marian model, if target language is a group of languages, '
+                'you have to specify the --tgt_lang flag.'
+            )
         elif args.tgt_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 1)[1]]:
             if args.tgt_lang == 'pl':
                 args.tgt_lang = 'pol'
@@ -73,39 +77,48 @@ def check_args(args):
                 args.tgt_lang = 'pes'
             else:
                 raise ValueError(
-                    'Target language is not in the model group languages, please specify the correct target language.')
-    
+                    'Target language is not in the model group languages, please specify the correct target language.'
+                )
+
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] in MARIAN_GROUP_MEMBERS:
         if not args.src_lang:
-            raise ValueError('For translation task using Marian model, if source language is a group of languages, '
-                             'you have to specify the --src_lang flag.')
+            raise ValueError(
+                'For translation task using Marian model, if source language is a group of languages, '
+                'you have to specify the --src_lang flag.'
+            )
         elif args.src_lang not in MARIAN_GROUP_MEMBERS[args.model_name_or_path.rsplit('-', 2)[1]]:
             if args.src_lang == 'pl':
                 args.src_lang = 'pol'
             elif args.src_lang == 'fa':
                 args.src_lang = 'pes'
             raise ValueError(
-                'Source language is not in the model group languages, please specify the correct source language.')
-    
+                'Source language is not in the model group languages, please specify the correct source language.'
+            )
+
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 1)[1] not in MARIAN_GROUP_MEMBERS and args.tgt_lang:
-        logger.warning('Target language should not be provided when using Marian models with single target language,'
-                       ' otherwise the translation outputs will be incorrect; thus we ignore the target language you provided...')
+        logger.warning(
+            'Target language should not be provided when using Marian models with single target language,'
+            ' otherwise the translation outputs will be incorrect; thus we ignore the target language you provided...'
+        )
         args.tgt_lang = None
-    
+
     if args.model_type == 'marian' and args.model_name_or_path.rsplit('-', 2)[1] not in MARIAN_GROUP_MEMBERS and args.src_lang:
-        logger.warning('Source language should not be provided when using Marian models with single source language,'
-                       ' otherwise the translation outputs will be incorrect; thus we ignore the source language you provided...')
+        logger.warning(
+            'Source language should not be provided when using Marian models with single source language,'
+            ' otherwise the translation outputs will be incorrect; thus we ignore the source language you provided...'
+        )
         args.src_lang = None
-    
+
     if args.model_type == 'mbart' and not (args.tgt_lang and args.src_lang):
         raise ValueError('Source and Target language should be provided when using mBART cc25 model')
-    
+
     # adjust language ids for mbart models
     if args.model_type in ['mbart', 'mbart50']:
         if args.src_lang not in FAIRSEQ_LANGUAGE_CODES:
             args.src_lang = get_mbart_lang(args.src_lang)
         if args.tgt_lang not in FAIRSEQ_LANGUAGE_CODES:
             args.tgt_lang = get_mbart_lang(args.tgt_lang)
+
 
 def sort_checkpoints(output_dir):
     return list(sorted(glob.glob(os.path.join(output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
@@ -116,10 +129,13 @@ def get_transformer_schedule_with_warmup(optimizer, num_warmup_steps, num_traini
 
     def lr_lambda(current_step):
         current_step += 1
-        return 1. / math.sqrt(dimension) * min(1 / math.sqrt(current_step), current_step / (num_warmup_steps * math.sqrt(num_warmup_steps)))
+        return (
+            1.0
+            / math.sqrt(dimension)
+            * min(1 / math.sqrt(current_step), current_step / (num_warmup_steps * math.sqrt(num_warmup_steps)))
+        )
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-
 
 
 def _rotate_checkpoints(args, checkpoint_prefix, use_mtime=False):
@@ -182,6 +198,4 @@ def compute_metrics(generations, golds, reduction='average'):
         total_exact_match += exact_match
         count += 1
 
-    return {'bleu': total_bleu/count, 'em': total_exact_match/count*100}
-
-
+    return {'bleu': total_bleu / count, 'em': total_exact_match / count * 100}

@@ -28,21 +28,22 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
-import re
-from typing import Iterable
-import torch
-import io
 import csv
-import json
 import glob
 import hashlib
-import unicodedata
+import io
+import json
 import logging
+import os
+import re
+import unicodedata
 import xml.etree.ElementTree as ET
+from typing import Iterable
 
-from .base_dataset import Dataset, interleave_keys, Split
+import torch
+
 from ..data_utils.example import Example, NumericalizedExamples
+from .base_dataset import Dataset, Split, interleave_keys
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +51,15 @@ logger = logging.getLogger(__name__)
 def make_example_id(dataset, example_id):
     return dataset.name + '/' + str(example_id)
 
+
 # sort_key funcs
 def context_answer_len(ex: NumericalizedExamples):
     return interleave_keys(ex.context.length, ex.answer.length)
 
+
 def context_question_len(ex: NumericalizedExamples):
-    return ex.context.length # question is already appended to context
+    return ex.context.length  # question is already appended to context
+
 
 def input_then_output_len(ex: NumericalizedExamples):
     """
@@ -63,8 +67,10 @@ def input_then_output_len(ex: NumericalizedExamples):
     """
     return (context_question_len(ex), answer_len(ex))
 
+
 def answer_len(ex: NumericalizedExamples):
     return ex.answer.length
+
 
 def id_value(ex):
     id_ = ex.example_id.rsplit('/', 1)
@@ -76,16 +82,16 @@ def id_value(ex):
 def input_tokens_fn(batch: Iterable[NumericalizedExamples]):
     return max([context_question_len(e) for e in batch]) * len(batch)
 
+
 def all_tokens_fn(batch: Iterable[NumericalizedExamples]):
     return (max([context_question_len(e) for e in batch]) + max([answer_len(e) for e in batch])) * len(batch)
+
 
 def default_batch_fn(batch: Iterable[NumericalizedExamples]):
     return len(batch)
 
 
-
 class CQA(Dataset):
-    
     def __init__(self, examples, sort_key_fn=input_then_output_len, batch_size_fn=all_tokens_fn, groups=None, **kwargs):
         self.sort_key_fn = sort_key_fn
         self.batch_size_fn = batch_size_fn
@@ -113,9 +119,9 @@ class IMDb(CQA):
                     with open(fname, 'r') as f:
                         context = f.readline()
                     answer = labels[label]
-                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
-                                                     context, question, answer,
-                                                     lower=lower))
+                    examples.append(
+                        Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
+                    )
                     if subsample is not None and len(examples) > subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -128,28 +134,29 @@ class IMDb(CQA):
         assert validation is None
         path = cls.download(root)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, f'{train}'), **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, f'{test}'), **kwargs)
-        
+        train_data = None if train is None else cls(os.path.join(path, f'{train}'), **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, f'{test}'), **kwargs)
+
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux' + '.tsv'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
 
 class SST(CQA):
     urls = [
         'https://raw.githubusercontent.com/openai/generating-reviews-discovering-sentiment/master/data/train_binary_sent.csv',
         'https://raw.githubusercontent.com/openai/generating-reviews-discovering-sentiment/master/data/dev_binary_sent.csv',
-        'https://raw.githubusercontent.com/openai/generating-reviews-discovering-sentiment/master/data/test_binary_sent.csv']
+        'https://raw.githubusercontent.com/openai/generating-reviews-discovering-sentiment/master/data/test_binary_sent.csv',
+    ]
     name = 'sst'
     dirname = ''
 
@@ -170,9 +177,9 @@ class SST(CQA):
                     parsed = list(csv.reader([line.rstrip('\n')]))[0]
                     context = parsed[-1]
                     answer = labels[int(parsed[0])]
-                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
-                                                     context, question, answer,
-                                                     lower=lower))
+                    examples.append(
+                        Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
+                    )
 
                     if subsample is not None and len(examples) > subsample:
                         break
@@ -187,31 +194,28 @@ class SST(CQA):
     @classmethod
     def splits(cls, root='.data', train='train', validation='dev', test='test', **kwargs):
         path = cls.download(root)
-        postfix = f'_binary_sent.csv'
+        postfix = '_binary_sent.csv'
 
+        train_data = None if train is None else cls(os.path.join(path, f'{train}{postfix}'), **kwargs)
+        validation_data = None if validation is None else cls(os.path.join(path, f'{validation}{postfix}'), **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, f'{test}{postfix}'), **kwargs)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, f'{train}{postfix}'), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}{postfix}'), **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, f'{test}{postfix}'), **kwargs)
-        
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, f'aux{postfix}'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
 
 class TranslationDataset(CQA):
-    def __init__(self, path, exts, subsample=None, lower=False, cached_path=None, skip_cache=False,
-                 **kwargs):
+    def __init__(self, path, exts, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         """Create a TranslationDataset given paths and fields.
 
         Arguments:
@@ -226,8 +230,15 @@ class TranslationDataset(CQA):
             logger.info(f'Loading cached data from {cache_name}')
             examples = torch.load(cache_name)
         else:
-            langs = {'.de': 'German', '.en': 'English', '.fr': 'French', '.ar': 'Arabic', '.cs': 'Czech',
-                     '.tt': 'ThingTalk', '.fa': 'Farsi'}
+            langs = {
+                '.de': 'German',
+                '.en': 'English',
+                '.fr': 'French',
+                '.ar': 'Arabic',
+                '.cs': 'Czech',
+                '.tt': 'ThingTalk',
+                '.fa': 'Farsi',
+            }
             source, target = langs[exts[0]], langs[exts[1]]
             src_path, trg_path = tuple(os.path.expanduser(path + x) for x in exts)
             question = f'Translate from {source} to {target}'
@@ -239,9 +250,9 @@ class TranslationDataset(CQA):
                     if src_line != '' and trg_line != '':
                         context = src_line
                         answer = trg_line
-                        examples.append(Example.from_raw(make_example_id(self, len(examples)),
-                                                         context, question, answer,
-                                                         lower=lower))
+                        examples.append(
+                            Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
+                        )
                         if subsample is not None and len(examples) >= subsample:
                             break
 
@@ -268,30 +279,30 @@ class TranslationDataset(CQA):
         """
         path = cls.download(root)
 
-
-        train_data = None if train is None else cls(
-            os.path.join(path, train), exts, **kwargs)
-        val_data = None if validation is None else cls(
-            os.path.join(path, validation), exts, **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, test), exts, **kwargs)
+        train_data = None if train is None else cls(os.path.join(path, train), exts, **kwargs)
+        val_data = None if validation is None else cls(os.path.join(path, validation), exts, **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, test), exts, **kwargs)
 
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux'), exts, **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else val_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else val_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
 
 class Multi30k(TranslationDataset, CQA):
-    urls = ['http://www.quest.dcs.shef.ac.uk/wmt16_files_mmt/training.tar.gz',
-            'http://www.quest.dcs.shef.ac.uk/wmt16_files_mmt/validation.tar.gz',
-            'http://www.quest.dcs.shef.ac.uk/wmt17_files_mmt/mmt_task1_test2016.tar.gz']
+    urls = [
+        'http://www.quest.dcs.shef.ac.uk/wmt16_files_mmt/training.tar.gz',
+        'http://www.quest.dcs.shef.ac.uk/wmt16_files_mmt/validation.tar.gz',
+        'http://www.quest.dcs.shef.ac.uk/wmt17_files_mmt/mmt_task1_test2016.tar.gz',
+    ]
     name = 'multi30k'
     dirname = ''
 
@@ -302,9 +313,7 @@ class IWSLT(TranslationDataset, CQA):
     base_dirname = '{}-{}'
 
     @classmethod
-    def splits(cls, exts, root='.data',
-               train='train', validation='IWSLT16.TED.tst2013',
-               test='IWSLT16.TED.tst2014', **kwargs):
+    def splits(cls, exts, root='.data', train='train', validation='IWSLT16.TED.tst2013', test='IWSLT16.TED.tst2014', **kwargs):
         """Create dataset objects for splits of the IWSLT dataset.
 
         Arguments:
@@ -334,12 +343,9 @@ class IWSLT(TranslationDataset, CQA):
         if not os.path.exists(os.path.join(path, '.'.join(['train', cls.dirname])) + exts[0]):
             cls.clean(path)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, train), exts, **kwargs)
-        val_data = None if validation is None else cls(
-            os.path.join(path, validation), exts, **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, test), exts, **kwargs)
+        train_data = None if train is None else cls(os.path.join(path, train), exts, **kwargs)
+        val_data = None if validation is None else cls(os.path.join(path, validation), exts, **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, test), exts, **kwargs)
 
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
@@ -347,12 +353,13 @@ class IWSLT(TranslationDataset, CQA):
             kwargs.pop('curriculum')
             aux = '.'.join(['aux', cls.dirname])
             aux_data = cls(os.path.join(path, aux), exts, **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else val_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
 
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else val_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
     @staticmethod
     def clean(path):
@@ -365,23 +372,23 @@ class IWSLT(TranslationDataset, CQA):
                     for e in doc.findall('seg'):
                         fd_txt.write(e.text.strip() + '\n')
 
-        xml_tags = ['<url', '<keywords', '<talkid', '<description',
-                    '<reviewer', '<translator', '<title', '<speaker']
+        xml_tags = ['<url', '<keywords', '<talkid', '<description', '<reviewer', '<translator', '<title', '<speaker']
         for f_orig in glob.iglob(os.path.join(path, 'train.tags*')):
             print(f_orig)
             f_txt = f_orig.replace('.tags', '')
-            with io.open(f_txt, mode='w', encoding='utf-8') as fd_txt, \
-                    io.open(f_orig, mode='r', encoding='utf-8') as fd_orig:
-                for l in fd_orig:
-                    if not any(tag in l for tag in xml_tags):
-                        fd_txt.write(l.strip() + '\n')
+            with io.open(f_txt, mode='w', encoding='utf-8') as fd_txt, io.open(f_orig, mode='r', encoding='utf-8') as fd_orig:
+                for l_ in fd_orig:
+                    if not any(tag in l_ for tag in xml_tags):
+                        fd_txt.write(l_.strip() + '\n')
 
 
 class SQuAD(CQA):
-    urls = ['https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v1.1.json',
-            'https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json',
-            'https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v2.0.json',
-            'https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v2.0.json', ]
+    urls = [
+        'https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v1.1.json',
+        'https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json',
+        'https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v2.0.json',
+        'https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v2.0.json',
+    ]
     name = 'squad'
     dirname = ''
 
@@ -407,9 +414,7 @@ class SQuAD(CQA):
                                 answer = 'unanswerable'
                                 all_answers.append(['unanswerable'])
                                 context = ' '.join(context.split())
-                                ex = Example.from_raw(make_example_id(self, qa['id']),
-                                                      context, question, answer,
-                                                      lower=lower)
+                                ex = Example.from_raw(make_example_id(self, qa['id']), context, question, answer, lower=lower)
                             else:
                                 answer = qa['answers'][0]['text']
                                 all_answers.append([a['text'] for a in qa['answers']])
@@ -436,7 +441,8 @@ class SQuAD(CQA):
                                 original_answer_end = answer_end
                                 indexed_with_spaces = tagged_context[answer_start:answer_end]
                                 if len(indexed_with_spaces) != len(tokenized_answer):
-                                    import pdb;
+                                    import pdb
+
                                     pdb.set_trace()
 
                                 # remove spaces
@@ -451,24 +457,31 @@ class SQuAD(CQA):
                                 tagged_context = new_context
                                 tokenized_answer = [x for x in tokenized_answer if len(x.strip()) > 0]
                                 if len(tagged_context[answer_start:answer_end]) != len(tokenized_answer):
-                                    import pdb;
+                                    import pdb
+
                                     pdb.set_trace()
                                 context_spans = list(range(answer_start, answer_end))
-                                indexed_answer = tagged_context[context_spans[0]:context_spans[-1] + 1]
+                                indexed_answer = tagged_context[context_spans[0] : context_spans[-1] + 1]
                                 if len(indexed_answer) != len(tokenized_answer):
-                                    import pdb;
+                                    import pdb
+
                                     pdb.set_trace()
                                 context_spans += [len(tagged_context)]
                                 for context_idx, answer_word in zip(context_spans, ex.answer):
                                     if context_idx == len(tagged_context):
                                         continue
                                     if tagged_context[context_idx] != answer_word:
-                                        import pdb;
+                                        import pdb
+
                                         pdb.set_trace()
 
-                                ex = Example.from_raw(make_example_id(self, qa['id']),
-                                                      ' '.join(tagged_context), question, ' '.join(tokenized_answer),
-                                                      lower=lower)
+                                ex = Example.from_raw(
+                                    make_example_id(self, qa['id']),
+                                    ' '.join(tagged_context),
+                                    question,
+                                    ' '.join(tokenized_answer),
+                                    lower=lower,
+                                )
 
                             examples.append(ex)
                             if subsample is not None and len(examples) > subsample:
@@ -505,10 +518,8 @@ class SQuAD(CQA):
         train = '-'.join([train, extension]) if train is not None else None
         validation = '-'.join([validation, extension]) if validation is not None else None
 
-        train_data = None if train is None else cls(
-            os.path.join(path, train), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, validation), **kwargs)
+        train_data = None if train is None else cls(os.path.join(path, train), **kwargs)
+        validation_data = None if validation is None else cls(os.path.join(path, validation), **kwargs)
 
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
@@ -516,11 +527,14 @@ class SQuAD(CQA):
             kwargs.pop('curriculum')
             aux = '-'.join(['aux', extension])
             aux_data = cls(os.path.join(path, aux), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None,
+            aux=None if do_curriculum is None else aux_data,
+        )
+
 
 # https://github.com/abisee/cnn-dailymail/blob/8eace60f306dcbab30d1f1d715e379f07a3782db/make_datafiles.py
 dm_single_close_quote = u'\u2019'
@@ -531,15 +545,17 @@ END_TOKENS = ['.', '!', '?', '...', "'", "`", '"', dm_single_close_quote, dm_dou
 
 def fix_missing_period(line):
     """Adds a period to a line that is missing a period"""
-    if "@highlight" in line: return line
-    if line == "": return line
-    if line[-1] in END_TOKENS: return line
+    if "@highlight" in line:
+        return line
+    if line == "":
+        return line
+    if line[-1] in END_TOKENS:
+        return line
     return line + "."
 
 
 class Summarization(CQA):
-    def __init__(self, path, one_answer=True, subsample=None, lower=False,
-                 cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, one_answer=True, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         examples = []
@@ -552,9 +568,9 @@ class Summarization(CQA):
                 for line in lines:
                     ex = json.loads(line)
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
-                                                     context, question, answer,
-                                                     lower=lower))
+                    examples.append(
+                        Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
+                    )
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -576,8 +592,9 @@ class Summarization(CQA):
                 url_file_name = os.path.join(path, f'{cls.name}_wayback_{split}_urls.txt')
                 with open(url_file_name) as url_file:
                     for url in url_file:
-                        story_file_name = os.path.join(path, 'stories',
-                                                       f"{hashlib.sha1(url.strip().encode('utf-8')).hexdigest()}.story")
+                        story_file_name = os.path.join(
+                            path, 'stories', f"{hashlib.sha1(url.strip().encode('utf-8')).hexdigest()}.story"
+                        )
                         try:
                             story_file = open(story_file_name)
                         except EnvironmentError as e:
@@ -602,9 +619,11 @@ class Summarization(CQA):
                                         highlight.append(line)
                                     else:
                                         article.append(line)
-                                example = {'context': unicodedata.normalize('NFKC', ' '.join(article)),
-                                           'answer': unicodedata.normalize('NFKC', ' '.join(highlight)),
-                                           'question': 'What is the summary?'}
+                                example = {
+                                    'context': unicodedata.normalize('NFKC', ' '.join(article)),
+                                    'answer': unicodedata.normalize('NFKC', ' '.join(highlight)),
+                                    'question': 'What is the summary?',
+                                }
                                 split_file.write(json.dumps(example) + '\n')
                                 collected_stories += 1
                                 if collected_stories % 1000 == 0:
@@ -617,48 +636,64 @@ class Summarization(CQA):
         path = cls.download(root)
         cls.cache_splits(path)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, 'training.jsonl'), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, 'validation.jsonl'), one_answer=False, **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, 'test.jsonl'), one_answer=False, **kwargs)
+        train_data = None if train is None else cls(os.path.join(path, 'training.jsonl'), **kwargs)
+        validation_data = (
+            None if validation is None else cls(os.path.join(path, 'validation.jsonl'), one_answer=False, **kwargs)
+        )
+        test_data = None if test is None else cls(os.path.join(path, 'test.jsonl'), one_answer=False, **kwargs)
 
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'auxiliary.jsonl'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
+
 
 class DailyMail(Summarization):
     name = 'dailymail'
     dirname = 'dailymail'
-    urls = [('https://drive.google.com/uc?export=download&id=0BwmD_VLjROrfM1BxdkxVaTY2bWs', 'dailymail_stories.tgz'),
-            (
+    urls = [
+        ('https://drive.google.com/uc?export=download&id=0BwmD_VLjROrfM1BxdkxVaTY2bWs', 'dailymail_stories.tgz'),
+        (
             'https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/dailymail_wayback_training_urls.txt',
-            'dailymail/dailymail_wayback_training_urls.txt'),
-            (
+            'dailymail/dailymail_wayback_training_urls.txt',
+        ),
+        (
             'https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/dailymail_wayback_validation_urls.txt',
-            'dailymail/dailymail_wayback_validation_urls.txt'),
-            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/dailymail_wayback_test_urls.txt',
-             'dailymail/dailymail_wayback_test_urls.txt')]
+            'dailymail/dailymail_wayback_validation_urls.txt',
+        ),
+        (
+            'https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/dailymail_wayback_test_urls.txt',
+            'dailymail/dailymail_wayback_test_urls.txt',
+        ),
+    ]
 
 
 class CNN(Summarization):
     name = 'cnn'
     dirname = 'cnn'
-    urls = [('https://drive.google.com/uc?export=download&id=0BwmD_VLjROrfTHk4NFg2SndKcjQ', 'cnn_stories.tgz'),
-            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_training_urls.txt',
-             'cnn/cnn_wayback_training_urls.txt'),
-            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_validation_urls.txt',
-             'cnn/cnn_wayback_validation_urls.txt'),
-            ('https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_test_urls.txt',
-             'cnn/cnn_wayback_test_urls.txt')]
+    urls = [
+        ('https://drive.google.com/uc?export=download&id=0BwmD_VLjROrfTHk4NFg2SndKcjQ', 'cnn_stories.tgz'),
+        (
+            'https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_training_urls.txt',
+            'cnn/cnn_wayback_training_urls.txt',
+        ),
+        (
+            'https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_validation_urls.txt',
+            'cnn/cnn_wayback_validation_urls.txt',
+        ),
+        (
+            'https://raw.githubusercontent.com/abisee/cnn-dailymail/master/url_lists/cnn_wayback_test_urls.txt',
+            'cnn/cnn_wayback_test_urls.txt',
+        ),
+    ]
 
 
 class Query:
@@ -666,8 +701,22 @@ class Query:
 
     agg_ops = ['', 'MAX', 'MIN', 'COUNT', 'SUM', 'AVG']
     cond_ops = ['=', '>', '<', 'OP']
-    syms = ['SELECT', 'WHERE', 'AND', 'COL', 'TABLE', 'CAPTION', 'PAGE', 'SECTION', 'OP', 'COND', 'QUESTION', 'AGG',
-            'AGGOPS', 'CONDOPS']
+    syms = [
+        'SELECT',
+        'WHERE',
+        'AND',
+        'COL',
+        'TABLE',
+        'CAPTION',
+        'PAGE',
+        'SECTION',
+        'OP',
+        'COND',
+        'QUESTION',
+        'AGG',
+        'AGGOPS',
+        'CONDOPS',
+    ]
 
     def __init__(self, sel_index, agg_index, columns, conditions=tuple()):
         self.sel_index = sel_index
@@ -682,7 +731,8 @@ class Query:
         )
         if self.conditions:
             rep += ' WHERE ' + ' AND '.join(
-                ['{} {} {}'.format(self.columns[i], self.cond_ops[o], v) for i, o, v in self.conditions])
+                ['{} {} {}'.format(self.columns[i], self.cond_ops[o], v) for i, o, v in self.conditions]
+            )
         return ' '.join(rep.split())
 
     @classmethod
@@ -695,10 +745,15 @@ class WikiSQL(CQA):
     name = 'wikisql'
     dirname = 'data'
 
-    def __init__(self, path, query_as_question=False, subsample=None, lower=False,
-                 cached_path=None, skip_cache=False, **kwargs):
-        cache_name = os.path.join(cached_path, 'query_as_question' if query_as_question else 'query_as_context',
-                                  os.path.basename(path), str(subsample))
+    def __init__(
+        self, path, query_as_question=False, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs
+    ):
+        cache_name = os.path.join(
+            cached_path,
+            'query_as_question' if query_as_question else 'query_as_context',
+            os.path.basename(path),
+            str(subsample),
+        )
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples, all_answers = torch.load(cache_name)
@@ -722,16 +777,16 @@ class WikiSQL(CQA):
                     sql = entry['sql']
                     header = table['header']
                     answer = repr(Query.from_dict(sql, header))
-                    context = (f'The table has columns {", ".join(table["header"])} ' +
-                               f'and key words {", ".join(Query.agg_ops[1:] + Query.cond_ops + Query.syms)}')
+                    context = (
+                        f'The table has columns {", ".join(table["header"])} '
+                        + f'and key words {", ".join(Query.agg_ops[1:] + Query.cond_ops + Query.syms)}'
+                    )
                     if query_as_question:
                         question = human_query
                     else:
                         question = 'What is the translation from English to SQL?'
                         context += f'-- {human_query}'
-                    examples.append(Example.from_raw(make_example_id(self, idx),
-                                                     context, question, answer,
-                                                     lower=lower))
+                    examples.append(Example.from_raw(make_example_id(self, idx), context, question, answer, lower=lower))
                     all_answers.append({'sql': sql, 'header': header, 'answer': answer, 'table': table})
                     if subsample is not None and len(examples) > subsample:
                         break
@@ -756,37 +811,53 @@ class WikiSQL(CQA):
         """
         path = cls.download(root)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, train), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, validation), **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, test), **kwargs)
-        
+        train_data = None if train is None else cls(os.path.join(path, train), **kwargs)
+        validation_data = None if validation is None else cls(os.path.join(path, validation), **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, test), **kwargs)
+
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
 
 class SRL(CQA):
-    urls = ['https://dada.cs.washington.edu/qasrl/data/wiki1.train.qa',
-            'https://dada.cs.washington.edu/qasrl/data/wiki1.dev.qa',
-            'https://dada.cs.washington.edu/qasrl/data/wiki1.test.qa']
+    urls = [
+        'https://dada.cs.washington.edu/qasrl/data/wiki1.train.qa',
+        'https://dada.cs.washington.edu/qasrl/data/wiki1.dev.qa',
+        'https://dada.cs.washington.edu/qasrl/data/wiki1.test.qa',
+    ]
 
     name = 'srl'
     dirname = ''
 
     @classmethod
     def clean(cls, s):
-        closing_punctuation = {' .', ' ,', ' ;', ' !', ' ?', ' :', ' )', " 'll", " n't ", " %", " 't", " 's", " 'm",
-                               " 'd", " 're"}
+        closing_punctuation = {
+            ' .',
+            ' ,',
+            ' ;',
+            ' !',
+            ' ?',
+            ' :',
+            ' )',
+            " 'll",
+            " n't ",
+            " %",
+            " 't",
+            " 's",
+            " 'm",
+            " 'd",
+            " 're",
+        }
         opening_punctuation = {'( ', '$ '}
         both_sides = {' - '}
         s = ' '.join(s.split()).strip()
@@ -811,8 +882,7 @@ class SRL(CQA):
         s = s.replace(" '", '')
         return ' '.join(s.split()).strip()
 
-    def __init__(self, path, one_answer=True, subsample=None, lower=False,
-                 cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, one_answer=True, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
 
         examples, all_answers = [], []
@@ -825,9 +895,9 @@ class SRL(CQA):
                     ex = json.loads(line)
                     aa = ex['all_answers']
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    examples.append(Example.from_raw(make_example_id(self, len(all_answers)),
-                                                     context, question, answer,
-                                                     lower=lower))
+                    examples.append(
+                        Example.from_raw(make_example_id(self, len(all_answers)), context, question, answer, lower=lower)
+                    )
                     all_answers.append(aa)
                     if subsample is not None and len(examples) >= subsample:
                         break
@@ -850,6 +920,7 @@ class SRL(CQA):
 
             with open(split_file_name, 'w') as split_file:
                 with open(os.path.expanduser(wiki_file)) as f:
+
                     def is_int(x):
                         try:
                             int(x)
@@ -863,7 +934,7 @@ class SRL(CQA):
                         if len(line) == 0:
                             lines.append(line)
                             continue
-                        if not 'WIKI1' in line.split('_')[0]:
+                        if 'WIKI1' not in line.split('_')[0]:
                             if not is_int(line.split()[0]) or len(line.split()) > 3:
                                 lines.append(line)
 
@@ -900,7 +971,8 @@ class SRL(CQA):
                                 elif answer.lower() in context:
                                     answer = answer.lower()
                                 else:
-                                    import pdb;
+                                    import pdb
+
                                     pdb.set_trace()
                         assert answer in context
                         modified_all_answers = []
@@ -924,35 +996,46 @@ class SRL(CQA):
                                     elif a.lower() in context:
                                         a = a.lower()
                                     else:
-                                        import pdb;
+                                        import pdb
+
                                         pdb.set_trace()
                             assert a in context
                             modified_all_answers.append(a)
-                        split_file.write(json.dumps(
-                            {'context': context, 'question': question, 'answer': answer, 'type': 'wiki',
-                             'all_answers': modified_all_answers}) + '\n')
+                        split_file.write(
+                            json.dumps(
+                                {
+                                    'context': context,
+                                    'question': question,
+                                    'answer': answer,
+                                    'type': 'wiki',
+                                    'all_answers': modified_all_answers,
+                                }
+                            )
+                            + '\n'
+                        )
 
     @classmethod
     def splits(cls, root='.data', train='train', validation='dev', test='test', **kwargs):
         path = cls.download(root)
         cls.cache_splits(path)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), one_answer=False, **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), one_answer=False, **kwargs)
+        train_data = None if train is None else cls(os.path.join(path, f'{train}.jsonl'), **kwargs)
+        validation_data = (
+            None if validation is None else cls(os.path.join(path, f'{validation}.jsonl'), one_answer=False, **kwargs)
+        )
+        test_data = None if test is None else cls(os.path.join(path, f'{test}.jsonl'), one_answer=False, **kwargs)
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
 
 class WinogradSchema(CQA):
@@ -961,8 +1044,7 @@ class WinogradSchema(CQA):
     name = 'schema'
     dirname = ''
 
-    def __init__(self, path, subsample=None, lower=False,
-                 cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
@@ -973,9 +1055,9 @@ class WinogradSchema(CQA):
                 for line in f:
                     ex = json.loads(line)
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
-                                                     context, question, answer,
-                                                     lower=lower))
+                    examples.append(
+                        Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
+                    )
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -1043,42 +1125,41 @@ class WinogradSchema(CQA):
         path = cls.download(root)
         cls.cache_splits(path)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), **kwargs)
-        
+        train_data = None if train is None else cls(os.path.join(path, f'{train}.jsonl'), **kwargs)
+        validation_data = None if validation is None else cls(os.path.join(path, f'{validation}.jsonl'), **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, f'{test}.jsonl'), **kwargs)
+
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
 
 class WOZ(CQA):
-    urls = ['https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_train_en.json',
-            'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_test_de.json',
-            'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_test_en.json',
-            'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_train_de.json',
-            'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_train_en.json',
-            'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_validate_de.json',
-            'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_validate_en.json']
+    urls = [
+        'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_train_en.json',
+        'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_test_de.json',
+        'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_test_en.json',
+        'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_train_de.json',
+        'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_train_en.json',
+        'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_validate_de.json',
+        'https://raw.githubusercontent.com/nmrksic/neural-belief-tracker/master/data/woz/woz_validate_en.json',
+    ]
 
     name = 'woz'
     dirname = ''
 
-    def __init__(self, path, subsample=None, lower=False, description='woz.en',
-                 cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, subsample=None, lower=False, description='woz.en', cached_path=None, skip_cache=False, **kwargs):
         examples, all_answers = [], []
-        cache_name = os.path.join(cached_path, os.path.basename(path),
-                                  str(subsample), description)
+        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample), description)
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
             examples, all_answers = torch.load(cache_name)
@@ -1089,9 +1170,9 @@ class WOZ(CQA):
                     if example_dict['lang'] in description:
                         context, question, answer = ex['context'], ex['question'], ex['answer']
                         all_answers.append((ex['lang_dialogue_turn'], answer))
-                        examples.append(Example.from_raw(make_example_id(self, woz_id),
-                                                         context, question, answer,
-                                                         lower=lower))
+                        examples.append(
+                            Example.from_raw(make_example_id(self, woz_id), context, question, answer, lower=lower)
+                        )
 
                     if subsample is not None and len(examples) >= subsample:
                         break
@@ -1139,11 +1220,10 @@ class WOZ(CQA):
                                             act = item['act']
                                             if act == 'inform':
                                                 current_state['inform'].append(slot)
-                                                if not slot in previous_state['inform']:
+                                                if slot not in previous_state['inform']:
                                                     delta_state['inform'].append(slot)
                                                 else:
-                                                    prev_slot = previous_state['inform'][
-                                                        previous_state['inform'].index(slot)]
+                                                    prev_slot = previous_state['inform'][previous_state['inform'].index(slot)]
                                                     if prev_slot[1] != slot[1]:
                                                         delta_state['inform'].append(slot)
                                             else:
@@ -1157,10 +1237,13 @@ class WOZ(CQA):
                                 if len(delta_state['request']) > 0:
                                     answer += ' '
                                     answer += ', '.join(delta_state['request'])
-                                ex = {'context': ' '.join(context.split()),
-                                      'question': ' '.join(question.split()), 'lang': lang,
-                                      'answer': answer if len(answer) > 1 else 'None',
-                                      'lang_dialogue_turn': f'{lang}_{di}_{ti}'}
+                                ex = {
+                                    'context': ' '.join(context.split()),
+                                    'question': ' '.join(question.split()),
+                                    'lang': lang,
+                                    'answer': answer if len(answer) > 1 else 'None',
+                                    'lang_dialogue_turn': f'{lang}_{di}_{ti}',
+                                }
                                 split_file.write(json.dumps(ex) + '\n')
 
     @classmethod
@@ -1168,24 +1251,22 @@ class WOZ(CQA):
         path = cls.download(root)
         cls.cache_splits(path)
 
-
-        train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), **kwargs)
+        train_data = None if train is None else cls(os.path.join(path, f'{train}.jsonl'), **kwargs)
+        validation_data = None if validation is None else cls(os.path.join(path, f'{validation}.jsonl'), **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, f'{test}.jsonl'), **kwargs)
 
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
 
 class MultiNLI(CQA):
@@ -1194,8 +1275,9 @@ class MultiNLI(CQA):
     name = 'multinli'
     dirname = 'multinli_1.0'
 
-    def __init__(self, path, subsample=None, lower=False, description='multinli.in.out',
-                 cached_path=None, skip_cache=False, **kwargs):
+    def __init__(
+        self, path, subsample=None, lower=False, description='multinli.in.out', cached_path=None, skip_cache=False, **kwargs
+    ):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample), description)
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
@@ -1207,9 +1289,9 @@ class MultiNLI(CQA):
                     ex = example_dict = json.loads(line)
                     if example_dict['subtask'] in description:
                         context, question, answer = ex['context'], ex['question'], ex['answer']
-                        examples.append(Example.from_raw(make_example_id(self, len(examples)),
-                                                         context, question, answer,
-                                                         lower=lower))
+                        examples.append(
+                            Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
+                        )
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -1224,26 +1306,29 @@ class MultiNLI(CQA):
         if os.path.exists(train_jsonl):
             return
 
-        with open(os.path.expanduser(os.path.join(path, f'train.jsonl')), 'a') as split_file:
-            with open(os.path.expanduser(os.path.join(path, f'multinli_1.0_train.jsonl'))) as src_file:
+        with open(os.path.expanduser(os.path.join(path, 'train.jsonl')), 'a') as split_file:
+            with open(os.path.expanduser(os.path.join(path, 'multinli_1.0_train.jsonl'))) as src_file:
                 for line in src_file:
                     ex = json.loads(line)
-                    ex = {'context': f'Premise: "{ex["sentence1"]}"',
-                          'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?',
-                          'answer': ex['gold_label'],
-                          'subtask': 'multinli'}
+                    ex = {
+                        'context': f'Premise: "{ex["sentence1"]}"',
+                        'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?',
+                        'answer': ex['gold_label'],
+                        'subtask': 'multinli',
+                    }
                     split_file.write(json.dumps(ex) + '\n')
 
-        with open(os.path.expanduser(os.path.join(path, f'validation.jsonl')), 'a') as split_file:
+        with open(os.path.expanduser(os.path.join(path, 'validation.jsonl')), 'a') as split_file:
             for subtask in ['matched', 'mismatched']:
-                with open(os.path.expanduser(
-                        os.path.join(path, 'multinli_1.0_dev_{}.jsonl'.format(subtask)))) as src_file:
+                with open(os.path.expanduser(os.path.join(path, 'multinli_1.0_dev_{}.jsonl'.format(subtask)))) as src_file:
                     for line in src_file:
                         ex = json.loads(line)
-                        ex = {'context': f'Premise: "{ex["sentence1"]}"',
-                              'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?',
-                              'answer': ex['gold_label'],
-                              'subtask': 'in' if subtask == 'matched' else 'out'}
+                        ex = {
+                            'context': f'Premise: "{ex["sentence1"]}"',
+                            'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?',
+                            'answer': ex['gold_label'],
+                            'subtask': 'in' if subtask == 'matched' else 'out',
+                        }
                         split_file.write(json.dumps(ex) + '\n')
 
     @classmethod
@@ -1251,23 +1336,22 @@ class MultiNLI(CQA):
         path = cls.download(root)
         cls.cache_splits(path)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), **kwargs)
-        
+        train_data = None if train is None else cls(os.path.join(path, f'{train}.jsonl'), **kwargs)
+        validation_data = None if validation is None else cls(os.path.join(path, f'{validation}.jsonl'), **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, f'{test}.jsonl'), **kwargs)
+
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
 
 class ZeroShotRE(CQA):
@@ -1286,9 +1370,9 @@ class ZeroShotRE(CQA):
                 for line in f:
                     ex = json.loads(line)
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
-                                                     context, question, answer,
-                                                     lower=lower))
+                    examples.append(
+                        Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
+                    )
 
                     if subsample is not None and len(examples) >= subsample:
                         break
@@ -1318,9 +1402,11 @@ class ZeroShotRE(CQA):
                             relation, question, subject, context = split_line[:4]
                             answer = ', '.join(split_line[4:])
                         question = question.replace('XXX', subject)
-                        ex = {'context': context,
-                              'question': question,
-                              'answer': answer if len(answer) > 0 else 'unanswerable'}
+                        ex = {
+                            'context': context,
+                            'question': question,
+                            'answer': answer if len(answer) > 0 else 'unanswerable',
+                        }
                         split_file.write(json.dumps(ex) + '\n')
 
     @classmethod
@@ -1328,29 +1414,30 @@ class ZeroShotRE(CQA):
         path = cls.download(root)
         cls.cache_splits(path)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), **kwargs)
-        
+        train_data = None if train is None else cls(os.path.join(path, f'{train}.jsonl'), **kwargs)
+        validation_data = None if validation is None else cls(os.path.join(path, f'{validation}.jsonl'), **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, f'{test}.jsonl'), **kwargs)
+
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
 
 class OntoNotesNER(CQA):
-    urls = ['http://conll.cemantix.org/2012/download/ids/english/all/train.id',
-            'http://conll.cemantix.org/2012/download/ids/english/all/development.id',
-            'http://conll.cemantix.org/2012/download/ids/english/all/test.id']
+    urls = [
+        'http://conll.cemantix.org/2012/download/ids/english/all/train.id',
+        'http://conll.cemantix.org/2012/download/ids/english/all/development.id',
+        'http://conll.cemantix.org/2012/download/ids/english/all/test.id',
+    ]
 
     name = 'ontonotes.ner'
     dirname = ''
@@ -1391,21 +1478,31 @@ class OntoNotesNER(CQA):
                     quote_idx = s.find('"')
                     continue
             if quote_is_open:
-                raw += s[:quote_idx + 1]
-                s = s[quote_idx + 1:].strip()
+                raw += s[: quote_idx + 1]
+                s = s[quote_idx + 1 :].strip()
                 quote_is_open = False
             else:
                 raw += s[:quote_idx].strip() + '"'
-                s = s[quote_idx + 1:]
+                s = s[quote_idx + 1 :]
                 quote_is_open = True
             quote_idx = s.find('"')
         raw += s
 
         return ' '.join(raw.split()).strip()
 
-    def __init__(self, path, one_answer=True, subsample=None, lower=False,
-                 path_to_files='.data/ontonotes-release-5.0/data/files',
-                 subtask='all', nones=True, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(
+        self,
+        path,
+        one_answer=True,
+        subsample=None,
+        lower=False,
+        path_to_files='.data/ontonotes-release-5.0/data/files',
+        subtask='all',
+        nones=True,
+        cached_path=None,
+        skip_cache=False,
+        **kwargs,
+    ):
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample), subtask, str(nones))
         if os.path.exists(cache_name) and not skip_cache:
             logger.info(f'Loading cached data from {cache_name}')
@@ -1417,13 +1514,13 @@ class OntoNotesNER(CQA):
                     example_dict = json.loads(line)
                     t = example_dict['type']
                     a = example_dict['answer']
-                    if (subtask == 'both' or t == subtask):
+                    if subtask == 'both' or t == subtask:
                         if a != 'None' or nones:
                             ex = example_dict
                             context, question, answer = ex['context'], ex['question'], ex['answer']
-                            examples.append(Example.from_raw(make_example_id(self, len(examples)),
-                                                             context, question, answer,
-                                                             lower=lower))
+                            examples.append(
+                                Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
+                            )
 
                     if subsample is not None and len(examples) >= subsample:
                         break
@@ -1436,32 +1533,47 @@ class OntoNotesNER(CQA):
     @classmethod
     def cache_splits(cls, path, path_to_files, train='train', validation='development', test='test'):
 
-        label_to_answer = {'PERSON': 'person',
-                           'NORP': 'political',
-                           'FAC': 'facility',
-                           'ORG': 'organization',
-                           'GPE': 'geopolitical',
-                           'LOC': 'location',
-                           'PRODUCT': 'product',
-                           'EVENT': 'event',
-                           'WORK_OF_ART': 'artwork',
-                           'LAW': 'legal',
-                           'LANGUAGE': 'language',
-                           'DATE': 'date',
-                           'TIME': 'time',
-                           'PERCENT': 'percentage',
-                           'MONEY': 'monetary',
-                           'QUANTITY': 'quantitative',
-                           'ORDINAL': 'ordinal',
-                           'CARDINAL': 'cardinal'}
+        label_to_answer = {
+            'PERSON': 'person',
+            'NORP': 'political',
+            'FAC': 'facility',
+            'ORG': 'organization',
+            'GPE': 'geopolitical',
+            'LOC': 'location',
+            'PRODUCT': 'product',
+            'EVENT': 'event',
+            'WORK_OF_ART': 'artwork',
+            'LAW': 'legal',
+            'LANGUAGE': 'language',
+            'DATE': 'date',
+            'TIME': 'time',
+            'PERCENT': 'percentage',
+            'MONEY': 'monetary',
+            'QUANTITY': 'quantitative',
+            'ORDINAL': 'ordinal',
+            'CARDINAL': 'cardinal',
+        }
 
-        pluralize = {'person': 'persons', 'political': 'political', 'facility': 'facilities',
-                     'organization': 'organizations',
-                     'geopolitical': 'geopolitical', 'location': 'locations', 'product': 'products', 'event': 'events',
-                     'artwork': 'artworks', 'legal': 'legal', 'language': 'languages', 'date': 'dates', 'time': 'times',
-                     'percentage': 'percentages', 'monetary': 'monetary', 'quantitative': 'quantitative',
-                     'ordinal': 'ordinal',
-                     'cardinal': 'cardinal'}
+        pluralize = {
+            'person': 'persons',
+            'political': 'political',
+            'facility': 'facilities',
+            'organization': 'organizations',
+            'geopolitical': 'geopolitical',
+            'location': 'locations',
+            'product': 'products',
+            'event': 'events',
+            'artwork': 'artworks',
+            'legal': 'legal',
+            'language': 'languages',
+            'date': 'dates',
+            'time': 'times',
+            'percentage': 'percentages',
+            'monetary': 'monetary',
+            'quantitative': 'quantitative',
+            'ordinal': 'ordinal',
+            'cardinal': 'cardinal',
+        }
 
         for split in [train, validation, test]:
             split_file_name = os.path.join(path, f'{split}.jsonl')
@@ -1498,18 +1610,21 @@ class OntoNotesNER(CQA):
 
                                     if 'S_OFF' in enamex_open_tag:
                                         s_off_start = enamex_open_tag.find('S_OFF="')
-                                        s_off_end = enamex_open_tag.find(
-                                            '">') if 'E_OFF' not in enamex_open_tag else enamex_open_tag.find('" E_OFF')
-                                        s_off = int(enamex_open_tag[s_off_start + len('S_OFF="'):s_off_end])
-                                        enamex_open_tag = enamex_open_tag[:s_off_start - 2] + '">'
+                                        s_off_end = (
+                                            enamex_open_tag.find('">')
+                                            if 'E_OFF' not in enamex_open_tag
+                                            else enamex_open_tag.find('" E_OFF')
+                                        )
+                                        s_off = int(enamex_open_tag[s_off_start + len('S_OFF="') : s_off_end])
+                                        enamex_open_tag = enamex_open_tag[: s_off_start - 2] + '">'
                                         before_entity += entity[:s_off]
                                         entity = entity[s_off:]
 
                                     if 'E_OFF' in enamex_open_tag:
                                         s_off_start = enamex_open_tag.find('E_OFF="')
                                         s_off_end = enamex_open_tag.find('">')
-                                        s_off = int(enamex_open_tag[s_off_start + len('E_OFF="'):s_off_end])
-                                        enamex_open_tag = enamex_open_tag[:s_off_start - 2] + '">'
+                                        s_off = int(enamex_open_tag[s_off_start + len('E_OFF="') : s_off_end])
+                                        enamex_open_tag = enamex_open_tag[: s_off_start - 2] + '">'
                                         after_entity = entity[-s_off:] + after_entity
                                         entity = entity[:-s_off]
 
@@ -1531,18 +1646,32 @@ class OntoNotesNER(CQA):
                                         is_no_good = True
                                         break
                                 if is_no_good:
-                                    logger.warning('Throwing out example that looks poorly labeled: ', original.strip(),
-                                                   ' (', file_id.strip(), ')')
+                                    logger.warning(
+                                        'Throwing out example that looks poorly labeled: ',
+                                        original.strip(),
+                                        ' (',
+                                        file_id.strip(),
+                                        ')',
+                                    )
                                     continue
                                 question = 'What are the tags for all entities?'
-                                answer = '; '.join(
-                                    [f'{x["entity"]} -- {label_to_answer[x["label"]]}' for x in entities])
+                                answer = '; '.join([f'{x["entity"]} -- {label_to_answer[x["label"]]}' for x in entities])
                                 if len(answer) == 0:
                                     answer = 'None'
-                                split_file.write(json.dumps({'context': context, 'question': question, 'answer': answer,
-                                                             'file_id': file_id.strip(),
-                                                             'original': original.strip(), 'entity_list': entities,
-                                                             'type': 'all'}) + '\n')
+                                split_file.write(
+                                    json.dumps(
+                                        {
+                                            'context': context,
+                                            'question': question,
+                                            'answer': answer,
+                                            'file_id': file_id.strip(),
+                                            'original': original.strip(),
+                                            'entity_list': entities,
+                                            'type': 'all',
+                                        }
+                                    )
+                                    + '\n'
+                                )
                                 partial_question = 'Which entities are {}?'
 
                                 for lab, ans in label_to_answer.items():
@@ -1551,14 +1680,20 @@ class OntoNotesNER(CQA):
                                     answer = ', '.join(entity_of_type_lab)
                                     if len(answer) == 0:
                                         answer = 'None'
-                                    split_file.write(json.dumps({'context': context,
-                                                                 'question': question,
-                                                                 'answer': answer,
-                                                                 'file_id': file_id.strip(),
-                                                                 'original': original.strip(),
-                                                                 'entity_list': entities,
-                                                                 'type': 'one',
-                                                                 }) + '\n')
+                                    split_file.write(
+                                        json.dumps(
+                                            {
+                                                'context': context,
+                                                'question': question,
+                                                'answer': answer,
+                                                'file_id': file_id.strip(),
+                                                'original': original.strip(),
+                                                'entity_list': entities,
+                                                'type': 'one',
+                                            }
+                                        )
+                                        + '\n'
+                                    )
 
     @classmethod
     def splits(cls, root='.data', train='train', validation='development', test='test', **kwargs):
@@ -1567,23 +1702,25 @@ class OntoNotesNER(CQA):
         path = cls.download(root)
         cls.cache_splits(path, path_to_files)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), one_answer=False, **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), one_answer=False, **kwargs)
-        
+        train_data = None if train is None else cls(os.path.join(path, f'{train}.jsonl'), **kwargs)
+        validation_data = (
+            None if validation is None else cls(os.path.join(path, f'{validation}.jsonl'), one_answer=False, **kwargs)
+        )
+        test_data = None if test is None else cls(os.path.join(path, f'{test}.jsonl'), one_answer=False, **kwargs)
+
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
+
 
 class SNLI(CQA):
     urls = ['http://nlp.stanford.edu/projects/snli/snli_1.0.zip']
@@ -1602,9 +1739,9 @@ class SNLI(CQA):
                     example_dict = json.loads(line)
                     ex = example_dict
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
-                                                     context, question, answer,
-                                                     lower=lower))
+                    examples.append(
+                        Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
+                    )
 
                     if subsample is not None and len(examples) >= subsample:
                         break
@@ -1627,9 +1764,11 @@ class SNLI(CQA):
                 with open(os.path.expanduser(os.path.join(path, src_file_name))) as src_file:
                     for line in src_file:
                         ex = json.loads(line)
-                        ex = {'context': f'Premise: "{ex["sentence1"]}"',
-                              'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?',
-                              'answer': ex['gold_label']}
+                        ex = {
+                            'context': f'Premise: "{ex["sentence1"]}"',
+                            'question': f'Hypothesis: "{ex["sentence2"]}" -- entailment, neutral, or contradiction?',
+                            'answer': ex['gold_label'],
+                        }
                         split_file.write(json.dumps(ex) + '\n')
 
     @classmethod
@@ -1637,23 +1776,22 @@ class SNLI(CQA):
         path = cls.download(root)
         cls.cache_splits(path)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, f'{train}.jsonl'), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, f'{validation}.jsonl'), **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, f'{test}.jsonl'), **kwargs)
-        
+        train_data = None if train is None else cls(os.path.join(path, f'{train}.jsonl'), **kwargs)
+        validation_data = None if validation is None else cls(os.path.join(path, f'{validation}.jsonl'), **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, f'{test}.jsonl'), **kwargs)
+
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
 
 class JSON(CQA):
@@ -1672,9 +1810,9 @@ class JSON(CQA):
                 for line in lines:
                     ex = json.loads(line)
                     context, question, answer = ex['context'], ex['question'], ex['answer']
-                    examples.append(Example.from_raw(make_example_id(self, len(examples)),
-                                                     context, question, answer,
-                                                     lower=lower))
+                    examples.append(
+                        Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
+                    )
                     if subsample is not None and len(examples) >= subsample:
                         break
             os.makedirs(os.path.dirname(cache_name), exist_ok=True)
@@ -1687,34 +1825,33 @@ class JSON(CQA):
     def splits(cls, root='.data', name=None, train='train', validation='val', test='test', **kwargs):
         path = os.path.join(root, name)
 
-        train_data = None if train is None else cls(
-            os.path.join(path, 'train.jsonl'), **kwargs)
-        validation_data = None if validation is None else cls(
-            os.path.join(path, 'val.jsonl'), **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, 'test.jsonl'), **kwargs)
-        
+        train_data = None if train is None else cls(os.path.join(path, 'train.jsonl'), **kwargs)
+        validation_data = None if validation is None else cls(os.path.join(path, 'val.jsonl'), **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, 'test.jsonl'), **kwargs)
+
         aux_data = None
         do_curriculum = kwargs.get('curriculum', False)
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux.jsonl'), **kwargs)
-        
-        return Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is None else aux_data)
+
+        return Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is None else aux_data,
+        )
 
 
 class CrossNERDataset(CQA):
     is_classification = True
-    
+
     def __init__(self, data, *, make_example, **kwargs):
-        
+
         subsample = kwargs.pop('subsample')
         domain = kwargs.pop('domain')
         examples = []
-        
+
         example_id, tokens, labels = 0, [], []
         for i, line in enumerate(data):
             line = line.strip()
@@ -1728,17 +1865,17 @@ class CrossNERDataset(CQA):
                 splits = line.split("\t")
                 tokens.append(splits[0])
                 labels.append(splits[1])
-    
+
             if subsample is not None and len(examples) >= subsample:
                 break
 
         super().__init__(examples, **kwargs)
-    
+
     @classmethod
     def return_splits(cls, name, path='.data', train='train', validation='dev', test='test', **kwargs):
-    
+
         ner_domains = kwargs.pop('ner_domains')
-        
+
         all_train_data = []
         all_validation_data = []
         all_test_data = []
@@ -1758,7 +1895,7 @@ class CrossNERDataset(CQA):
                 test_path = os.path.join(path, domain, 'test.txt')
                 with open(test_path, "r") as fin:
                     test_data = fin.readlines()
-            
+
             # Uncomment for testing
             if kwargs.pop("hf_test_overfit", False):
                 if validation:
@@ -1769,13 +1906,13 @@ class CrossNERDataset(CQA):
                     test_path = os.path.join(path, domain, 'train.txt')
                     with open(test_path, "r") as fin:
                         test_data = fin.readlines()
-            
+
             kwargs['domain'] = domain
-            
+
             train_data = None if train is None else cls(train_data, **kwargs)
             validation_data = None if validation is None else cls(validation_data, **kwargs)
             test_data = None if test is None else cls(test_data, **kwargs)
-        
+
             if not all_train_data:
                 all_train_data = train_data
             elif train_data:
@@ -1789,5 +1926,6 @@ class CrossNERDataset(CQA):
             elif test_data:
                 all_test_data.examples = all_test_data.examples + test_data.examples
 
-        return Split(train=all_train_data, eval=all_validation_data, test=all_test_data), \
-               Split(train=train_path, eval=validation_path, test=test_path)
+        return Split(train=all_train_data, eval=all_validation_data, test=all_test_data), Split(
+            train=train_path, eval=validation_path, test=test_path
+        )

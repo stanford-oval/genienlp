@@ -27,16 +27,17 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
-import torch
 import logging
 import math
 import multiprocessing as mp
+import os
 
-from .generic_dataset import CQA
-from genienlp.data_utils.almond_utils import create_examples_from_file, chunk_file
+import torch
+
+from genienlp.data_utils.almond_utils import chunk_file, create_examples_from_file
 
 from .base_dataset import Split
+from .generic_dataset import CQA
 
 logger = logging.getLogger(__name__)
 
@@ -47,15 +48,15 @@ class AlmondDataset(CQA):
     base_url = None
 
     def __init__(self, path, *, make_example, **kwargs):
-        
+
         # TODO fix cache_path for multilingual task
         subsample = kwargs.get('subsample')
         cached_path = kwargs.get('cached_path')
-        
+
         skip_cache = kwargs.get('skip_cache', True)
         cache_input_data = kwargs.get('cache_input_data', False)
         num_workers = kwargs.get('num_workers', 0)
-        
+
         cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
         dir_name = os.path.basename(os.path.dirname(path))
 
@@ -74,37 +75,49 @@ class AlmondDataset(CQA):
                 logger.info(f'Using {num_processes} workers...')
                 chunk_size = int(math.ceil(max_examples / num_processes))
                 num_chunks = int(math.ceil(max_examples / chunk_size))
-    
+
                 base_path, extension = path.rsplit('.', 1)
-    
+
                 chunk_file_paths = [f'{base_path}_{chunk_id}.tsv' for chunk_id in range(num_chunks)]
                 chunk_file(path, chunk_file_paths, chunk_size, num_chunks)
                 num_processes = min(num_processes, num_chunks)
-    
+
                 with mp.Pool(processes=num_processes) as pool:
-                    process_args = [{'in_file': chunk_file_paths[i], 'chunk_size': chunk_size, 'dir_name': dir_name,
-                                     'example_batch_size': 1, 'make_process_example': make_example,
-                                     'kwargs': kwargs} for i in range(num_chunks)]
+                    process_args = [
+                        {
+                            'in_file': chunk_file_paths[i],
+                            'chunk_size': chunk_size,
+                            'dir_name': dir_name,
+                            'example_batch_size': 1,
+                            'make_process_example': make_example,
+                            'kwargs': kwargs,
+                        }
+                        for i in range(num_chunks)
+                    ]
                     results = pool.map(create_examples_from_file, process_args)
-    
+
                 # merge all results
                 examples = [item for sublist in results for item in sublist]
-    
+
                 for file in chunk_file_paths:
                     os.remove(file)
             else:
-                process_args = {'in_file': path, 'chunk_size': max_examples, 'dir_name': dir_name,
-                                'example_batch_size': 1, 'make_process_example': make_example,
-                                'kwargs': kwargs}
+                process_args = {
+                    'in_file': path,
+                    'chunk_size': max_examples,
+                    'dir_name': dir_name,
+                    'example_batch_size': 1,
+                    'make_process_example': make_example,
+                    'kwargs': kwargs,
+                }
                 examples = create_examples_from_file(process_args)
-            
+
             if cache_input_data:
                 os.makedirs(os.path.dirname(cache_name), exist_ok=True)
                 logger.info(f'Caching data to {cache_name}')
                 torch.save(examples, cache_name)
 
         super().__init__(examples, **kwargs)
-        
 
     @classmethod
     def return_splits(cls, path, train='train', validation='eval', test='test', **kwargs):
@@ -127,17 +140,19 @@ class AlmondDataset(CQA):
         if do_curriculum:
             kwargs.pop('curriculum')
             aux_data = cls(os.path.join(path, 'aux' + '.tsv'), **kwargs)
-            
-        data_splits = Split(train=None if train is None else train_data,
-                     eval=None if validation is None else validation_data,
-                     test=None if test is None else test_data,
-                     aux=None if do_curriculum is False else aux_data)
-        
-        all_paths = Split(train=None if train is None else os.path.join(path, train + '.tsv'),
-                     eval=None if validation is None else os.path.join(path, validation + '.tsv'),
-                     test=None if test is None else os.path.join(path, test + '.tsv'),
-                     aux=None if do_curriculum is False else os.path.join(path, 'aux' + '.tsv'))
-        
-        return data_splits, all_paths
-            
 
+        data_splits = Split(
+            train=None if train is None else train_data,
+            eval=None if validation is None else validation_data,
+            test=None if test is None else test_data,
+            aux=None if do_curriculum is False else aux_data,
+        )
+
+        all_paths = Split(
+            train=None if train is None else os.path.join(path, train + '.tsv'),
+            eval=None if validation is None else os.path.join(path, validation + '.tsv'),
+            test=None if test is None else os.path.join(path, test + '.tsv'),
+            aux=None if do_curriculum is False else os.path.join(path, 'aux' + '.tsv'),
+        )
+
+        return data_splits, all_paths

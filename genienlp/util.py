@@ -29,25 +29,26 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import json
-from json.decoder import JSONDecodeError
 import logging
 import os
-import shutil
 import random
-import time
 import re
+import shutil
+import time
+from json.decoder import JSONDecodeError
 from typing import List, Optional
+
 import numpy as np
 import torch
 import ujson
-from transformers import MBartConfig, MarianConfig
-from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 from torch.functional import Tensor
+from transformers import MarianConfig, MBartConfig
+from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 
+from .data_utils.almond_utils import token_type_regex
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
 from .paraphrase.transformers_utils import MARIAN_GROUP_MEMBERS
-from .data_utils.almond_utils import token_type_regex
 
 logger = logging.getLogger(__name__)
 
@@ -63,17 +64,17 @@ class SpecialTokenMap:
             backward_func: a function with signature backward_func(str) -> list[str]
         """
         if isinstance(forward_func, list):
-            self.forward_func = lambda x: forward_func[int(x)%len(forward_func)]
+            self.forward_func = lambda x: forward_func[int(x) % len(forward_func)]
         else:
             self.forward_func = forward_func
 
         if isinstance(backward_func, list):
-            self.backward_func = lambda x: backward_func[int(x)%len(backward_func)]
+            self.backward_func = lambda x: backward_func[int(x) % len(backward_func)]
         else:
             self.backward_func = backward_func
-    
+
         self.pattern = pattern
-    
+
     def forward(self, s: str):
         reverse_map = []
         matches = re.finditer(self.pattern, s)
@@ -93,19 +94,19 @@ class SpecialTokenMap:
         if self.backward_func is None:
             list_of_strings_to_match = [self.forward_func(parameter)]
         else:
-            list_of_strings_to_match = sorted(self.backward_func(parameter), key=lambda x:len(x), reverse=True)
+            list_of_strings_to_match = sorted(self.backward_func(parameter), key=lambda x: len(x), reverse=True)
         for string_to_match in list_of_strings_to_match:
-            l = [' '+string_to_match+' ', string_to_match+' ', ' '+string_to_match]
-            o = [' '+occurrence+' ', occurrence+' ', ' '+occurrence]
+            l_ = [' ' + string_to_match + ' ', string_to_match + ' ', ' ' + string_to_match]
+            o_ = [' ' + occurrence + ' ', occurrence + ' ', ' ' + occurrence]
             new_s = s
-            for i in range(len(l)):
-                new_s = re.sub(l[i], o[i], s, flags=re.IGNORECASE)
+            for i in range(len(l_)):
+                new_s = re.sub(l_[i], o_[i], s, flags=re.IGNORECASE)
                 if s != new_s:
                     break
             if s != new_s:
                 s = new_s
                 break
-            
+
         return s
 
 
@@ -114,12 +115,21 @@ class ConfidenceFeatures:
     Contains all necessary features that are useful for calculating confidence of a single generated output
     """
 
-    def __init__(self, drop_logits: List[Tensor], drop_probs: List[Tensor],
-                 gold_answer: Tensor, prediction: Tensor,
-                 nodrop_logits: Tensor, nodrop_probs: Tensor,
-                 nodrop_entropies: Tensor, context: Tensor,
-                 nodrop_top1_probs: Tensor=None, nodrop_top2_probs: Tensor=None,
-                 drop_top1_probs: List[Tensor]=None, drop_top2_probs: List[Tensor]=None):
+    def __init__(
+        self,
+        drop_logits: List[Tensor],
+        drop_probs: List[Tensor],
+        gold_answer: Tensor,
+        prediction: Tensor,
+        nodrop_logits: Tensor,
+        nodrop_probs: Tensor,
+        nodrop_entropies: Tensor,
+        context: Tensor,
+        nodrop_top1_probs: Tensor = None,
+        nodrop_top2_probs: Tensor = None,
+        drop_top1_probs: List[Tensor] = None,
+        drop_top2_probs: List[Tensor] = None,
+    ):
         """
         Inputs:
             droplogits: logits after MC dropout
@@ -128,7 +138,7 @@ class ConfidenceFeatures:
             nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
             nodrop_top1_probs, nodrop_top2_probs: highest and second highest probabilities of the next token, given that the previous token was from `prediction`
         """
-        
+
         # store the results of MC dropout if provided
         self.drop_logits = drop_logits
         self.drop_probs = drop_probs
@@ -165,7 +175,7 @@ class ConfidenceFeatures:
         self.prediction = prediction
         self.gold_answer = gold_answer
         self.first_mistake = ConfidenceFeatures.find_first_mistake(gold_answer, prediction)
-        self.label = (self.first_mistake == -1)
+        self.label = self.first_mistake == -1
         self.context = context
 
     @property
@@ -199,30 +209,42 @@ class ConfidenceFeatures:
         return -1
 
     def __repr__(self) -> str:
-        return '<Confidence: drop_logits=' + str(self.drop_logits) \
-                + ', drop_probs=' + str(self.drop_probs) \
-                + ', first_mistake=' + str(self.first_mistake) \
-                + ', nodrop_logits=' + str(self.nodrop_logits) \
-                + ', nodrop_probs=' + str(self.nodrop_probs) \
-                + ', nodrop_entropies=' + str(self.nodrop_entropies) \
-                + ', context=' + str(self.context) \
-                + ', label=' + str(self.label) \
-                + '>'
+        return (
+            '<Confidence: drop_logits='
+            + str(self.drop_logits)
+            + ', drop_probs='
+            + str(self.drop_probs)
+            + ', first_mistake='
+            + str(self.first_mistake)
+            + ', nodrop_logits='
+            + str(self.nodrop_logits)
+            + ', nodrop_probs='
+            + str(self.nodrop_probs)
+            + ', nodrop_entropies='
+            + str(self.nodrop_entropies)
+            + ', context='
+            + str(self.context)
+            + ', label='
+            + str(self.label)
+            + '>'
+        )
 
 
-class GenerationOutput():
+class GenerationOutput:
     """
     Contains all the information that the generation function may need to output
     """
 
-    def __init__(self,
-                 loss: Optional[float] = None,
-                 example_ids: Optional[List] = None,
-                 predictions: Optional[List] = None,
-                 answers: Optional[List] = None,
-                 contexts: Optional[List] = None,
-                 confidence_features: Optional[List] = None,
-                 confidence_scores: Optional[List] = None):
+    def __init__(
+        self,
+        loss: Optional[float] = None,
+        example_ids: Optional[List] = None,
+        predictions: Optional[List] = None,
+        answers: Optional[List] = None,
+        contexts: Optional[List] = None,
+        confidence_features: Optional[List] = None,
+        confidence_scores: Optional[List] = None,
+    ):
         self.loss = loss
         self.example_ids = example_ids
         self.predictions = predictions
@@ -239,12 +261,12 @@ def remove_thingtalk_quotes(thingtalk):
         l1 = thingtalk.find('"')
         if l1 < 0:
             break
-        l2 = thingtalk.find('"', l1+1)
+        l2 = thingtalk.find('"', l1 + 1)
         if l2 < 0:
             # ThingTalk code is not syntactic
             return thingtalk, None
-        quote_values.append(thingtalk[l1+1: l2].strip())
-        thingtalk = thingtalk[:l1] + '<temp>' + thingtalk[l2+1:]
+        quote_values.append(thingtalk[l1 + 1 : l2].strip())
+        thingtalk = thingtalk[:l1] + '<temp>' + thingtalk[l2 + 1 :]
         # print('after: ', thingtalk)
     thingtalk = thingtalk.replace('<temp>', '""')
     return thingtalk, quote_values
@@ -270,7 +292,7 @@ def find_span_type(program, begin_index, end_index):
 
 
 def requote_program(program):
-    
+
     program = program.split(' ')
     requoted = []
 
@@ -287,16 +309,16 @@ def requote_program(program):
                 span_type, end_index = find_span_type(program, begin_index, i)
                 requoted.append(span_type)
                 i = end_index
-           
+
         elif not in_string:
             entity_match = ENTITY_MATCH_REGEX.match(token)
             if entity_match is not None:
                 requoted.append(entity_match[1])
             elif token != 'location:':
                 requoted.append(token)
-        
+
         i += 1
-        
+
     return ' '.join(requoted)
 
 
@@ -338,8 +360,8 @@ def tokenize(string: str):
     string = string.replace('gonna', 'gon na')
     string = string.replace('wanna', 'wan na')
     string = unmask_special_tokens(string, exceptions)
-    string = re.sub('([A-Za-z:_.]+_[0-9]+)-', r'\1 - ', string) # add space before and after hyphen, e.g. "NUMBER_0-hour"
-    string = re.sub('\s+', ' ', string) # remove duplicate spaces
+    string = re.sub('([A-Za-z:_.]+_[0-9]+)-', r'\1 - ', string)  # add space before and after hyphen, e.g. "NUMBER_0-hour"
+    string = re.sub('\s+', ' ', string)  # remove duplicate spaces
     return string.strip()
 
 
@@ -364,21 +386,22 @@ def get_part_path(path, part_idx):
         path = path[:-1]
     else:
         has_separator = False
-    return path + '_part' + str(part_idx+1) + (os.path.sep if has_separator else '')
+    return path + '_part' + str(part_idx + 1) + (os.path.sep if has_separator else '')
 
 
 def split_folder_on_disk(folder_path, num_splits):
     new_folder_paths = [get_part_path(folder_path, part_idx) for part_idx in range(num_splits)]
     for subdir, dirs, files in os.walk(folder_path):
         for file in files:
-            new_file_paths = [os.path.join(subdir.replace(folder_path, new_folder_paths[part_idx]), file) for part_idx in range(num_splits)]
+            new_file_paths = [
+                os.path.join(subdir.replace(folder_path, new_folder_paths[part_idx]), file) for part_idx in range(num_splits)
+            ]
             split_file_on_disk(os.path.join(subdir, file), num_splits, output_paths=new_file_paths)
     return new_folder_paths
 
 
 def split_file_on_disk(file_path, num_splits, output_paths=None, delete=False):
-    """
-    """
+    """ """
 
     all_output_paths = []
     all_output_files = []
@@ -399,7 +422,7 @@ def split_file_on_disk(file_path, num_splits, output_paths=None, delete=False):
 
     for f in all_output_files:
         f.close()
-        
+
     if delete:
         os.remove(file_path)
 
@@ -416,7 +439,7 @@ def combine_folders_on_disk(folder_path_prefix, num_files, line_group_size, dele
                 if new_file_path not in new_to_olds_map:
                     new_to_olds_map[new_file_path] = []
                 new_to_olds_map[new_file_path].append(os.path.join(subdir, file))
-    
+
     for new, olds in new_to_olds_map.items():
         os.makedirs(os.path.dirname(new), exist_ok=True)
         with open(new, 'w') as combined_file:
@@ -457,7 +480,7 @@ def combine_folders_on_disk(folder_path_prefix, num_files, line_group_size, dele
                         if all(finished_reading):
                             break
                     old_file_idx = (old_file_idx + 1) % len(all_old_file_contents)
-                
+
     if delete:
         for folder in folder_paths:
             shutil.rmtree(folder)
@@ -471,7 +494,7 @@ def combine_files_on_disk(file_path_prefix, num_files, line_group_size, delete=F
         all_input_file_paths.append(input_file_path)
         with open(input_file_path, 'r') as f:
             all_input_file_contents.append([line for line in f])
-    
+
     all_indices = [0] * len(all_input_file_contents)
     finished_reading = [False] * len(all_input_file_contents)
     input_file_idx = 0
@@ -508,7 +531,7 @@ def get_devices(devices=None):
     if not torch.cuda.is_available():
         return [torch.device('cpu')]
     if not devices:
-        return [torch.device('cuda:'+str(i)) for i in range(torch.cuda.device_count())]
+        return [torch.device('cuda:' + str(i)) for i in range(torch.cuda.device_count())]
     return [torch.device(ordinal) for ordinal in devices]
 
 
@@ -520,7 +543,7 @@ def set_seed(args):
 
 
 def get_trainable_params(model, name=False):
-    #TODO is always called with name=False, so remove the if statement
+    # TODO is always called with name=False, so remove the if statement
     if name:
         return list(filter(lambda p: p[1].requires_grad, model.named_parameters()))
     else:
@@ -550,33 +573,48 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
 
-    logger.info(f'context lengths (min, mean, max): {np.min(context_lengths)}, {int(np.mean(context_lengths))}, {np.max(context_lengths)}')
-    logger.info(f'answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}')
-    
-    sampler = LengthSortedIterator(all_features, batch_size=batch_size, sort=True, shuffle_and_repeat=train,
-                                   sort_key_fn=dataset.sort_key_fn, batch_size_fn=dataset.batch_size_fn, groups=dataset.groups)
+    logger.info(
+        f'context lengths (min, mean, max): {np.min(context_lengths)}, {int(np.mean(context_lengths))}, {np.max(context_lengths)}'
+    )
+    logger.info(
+        f'answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}'
+    )
+
+    sampler = LengthSortedIterator(
+        all_features,
+        batch_size=batch_size,
+        sort=True,
+        shuffle_and_repeat=train,
+        sort_key_fn=dataset.sort_key_fn,
+        batch_size_fn=dataset.batch_size_fn,
+        groups=dataset.groups,
+    )
     # get the sorted data_source
     all_f = sampler.data_source
-    data_loader = torch.utils.data.DataLoader(all_f, batch_sampler=sampler,
-                                              collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer, device),
-                                              num_workers=0)
-    
+    data_loader = torch.utils.data.DataLoader(
+        all_f,
+        batch_sampler=sampler,
+        collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer, device),
+        num_workers=0,
+    )
+
     if return_original_order:
         return data_loader, sampler.original_order
     else:
         return data_loader
 
+
 def ned_dump_entity_type_pairs(dataset, path, name, utterance_field):
-    
+
     with open(os.path.join(path, f'{name}_labels.jsonl'), 'w') as fout:
         for ex in dataset.examples:
             text = ex.question_plus_types if utterance_field == 'question' else ex.context_plus_types
-            
+
             span_beg = text.index('<e>')
             sentence = text[:span_beg].strip()
             entity_span = text[span_beg:].strip()
-            entity_token_string = entity_span[len('<e>'):-len('</e>')].strip('; ')
-            
+            entity_token_string = entity_span[len('<e>') : -len('</e>')].strip('; ')
+
             entities = []
             ent_types = []
             if entity_token_string:
@@ -586,7 +624,7 @@ def ned_dump_entity_type_pairs(dataset, path, name, utterance_field):
                     types = types.split('|')
                     entities.append(entity.strip())
                     ent_types.append(types)
-    
+
             fout.write(ujson.dumps({"sentence": sentence, "aliases": entities, "thingtalk_types": ent_types}) + '\n')
 
 
@@ -594,9 +632,10 @@ def get_mbart_lang(orig_lang):
     for lang in FAIRSEQ_LANGUAGE_CODES:
         if lang.startswith(orig_lang):
             return lang
-        
+
+
 def adjust_language_code(config, pretrained_model, src_lang, tgt_lang):
-    
+
     # adjust src and tgt languages for Marian models
     model_is_marian = isinstance(config, MarianConfig)
 
@@ -607,8 +646,10 @@ def adjust_language_code(config, pretrained_model, src_lang, tgt_lang):
             elif src_lang == 'fa':
                 src_lang = 'pes'
             else:
-                raise ValueError('Source language is not in this Marian model group languages, please specify the correct source language.')
-    
+                raise ValueError(
+                    'Source language is not in this Marian model group languages, please specify the correct source language.'
+                )
+
     if model_is_marian and pretrained_model.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:
         if tgt_lang not in MARIAN_GROUP_MEMBERS[pretrained_model.rsplit('-', 1)[1]]:
             if tgt_lang == 'pl':
@@ -616,26 +657,28 @@ def adjust_language_code(config, pretrained_model, src_lang, tgt_lang):
             elif tgt_lang == 'fa':
                 tgt_lang = 'pes'
             else:
-                raise ValueError('Target language is not in this Marian model group languages, please specify the correct target language.')
-    
+                raise ValueError(
+                    'Target language is not in this Marian model group languages, please specify the correct target language.'
+                )
+
     if model_is_marian and pretrained_model.rsplit('-', 2)[1] not in MARIAN_GROUP_MEMBERS:
         # Source language should not be provided when using marian models with single language pairs
         # otherwise the translation outputs will be incorrect; hence we ignore the source language
         src_lang = None
-    
+
     if model_is_marian and pretrained_model.rsplit('-', 1)[1] not in MARIAN_GROUP_MEMBERS:
         # Target language should not be provided when using marian models with single language pairs
         # otherwise the translation outputs will be incorrect; hence we ignore the target language
         tgt_lang = None
-    
+
     # adjust src and tgt languages for Mbart models
     if isinstance(config, MBartConfig):
         src_lang = get_mbart_lang(src_lang)
         tgt_lang = get_mbart_lang(tgt_lang)
-        
+
     return src_lang, tgt_lang
 
-    
+
 def have_multilingual(task_names):
     return any(['multilingual' in name for name in task_names])
 
@@ -645,26 +688,76 @@ def load_config_json(args):
     with open(os.path.join(args.path, 'config.json')) as config_file:
         config = json.load(config_file)
 
-        retrieve = ['model', 'pretrained_model', 'rnn_dimension', 'rnn_layers', 'rnn_zero_state',
-                    'max_generative_vocab', 'lower', 'trainable_decoder_embeddings', 'override_context', 'override_question',
-                    'almond_lang_as_question', 'almond_has_multiple_programs', 'almond_detokenize_sentence', 'almond_thingtalk_version',
-                    'preprocess_special_tokens', 'dropper_ratio', 'dropper_min_count', 'label_smoothing',
-                    'use_encoder_loss', 'num_workers', 'no_fast_tokenizer', 'force_fast_tokenizer',
-                    'override_question', 'override_context', 'add_types_to_text',
-                    'do_ned', 'database_type', 'min_entity_len', 'max_entity_len',
-                    'entity_type_agg_method', 'entity_word_embeds_dropout',
-                    'num_db_types', 'db_unk_id', 'ned_retrieve_method', 'database_lookup_method', 'almond_domains',
-                    'ned_features', 'ned_features_size', 'ned_features_default_val',
-                    'bootleg_output_dir', 'bootleg_model', 'bootleg_prob_threshold', 'bootleg_post_process_types',
-                    'att_pooling', 'plot_heatmaps', 'replace_qp', 'force_replace_qp', 'no_separator',
-                    'num_labels', 'ner_domains', 'hf_test_overfit'
-                    ]
+        retrieve = [
+            'model',
+            'pretrained_model',
+            'rnn_dimension',
+            'rnn_layers',
+            'rnn_zero_state',
+            'max_generative_vocab',
+            'lower',
+            'trainable_decoder_embeddings',
+            'override_context',
+            'override_question',
+            'almond_lang_as_question',
+            'almond_has_multiple_programs',
+            'almond_detokenize_sentence',
+            'almond_thingtalk_version',
+            'preprocess_special_tokens',
+            'dropper_ratio',
+            'dropper_min_count',
+            'label_smoothing',
+            'use_encoder_loss',
+            'num_workers',
+            'no_fast_tokenizer',
+            'force_fast_tokenizer',
+            'override_question',
+            'override_context',
+            'add_types_to_text',
+            'do_ned',
+            'database_type',
+            'min_entity_len',
+            'max_entity_len',
+            'entity_type_agg_method',
+            'entity_word_embeds_dropout',
+            'num_db_types',
+            'db_unk_id',
+            'ned_retrieve_method',
+            'database_lookup_method',
+            'almond_domains',
+            'ned_features',
+            'ned_features_size',
+            'ned_features_default_val',
+            'bootleg_output_dir',
+            'bootleg_model',
+            'bootleg_prob_threshold',
+            'bootleg_post_process_types',
+            'att_pooling',
+            'plot_heatmaps',
+            'replace_qp',
+            'force_replace_qp',
+            'no_separator',
+            'num_labels',
+            'ner_domains',
+            'hf_test_overfit',
+        ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
-        overwrite = ['val_batch_size', 'num_beams', 'num_beam_groups', 'diversity_penalty',
-                     'num_outputs', 'no_repeat_ngram_size', 'top_p', 'top_k', 'repetition_penalty',
-                     'temperature', 'max_output_length', 'reduce_metrics',
-                     'database_dir']
+        overwrite = [
+            'val_batch_size',
+            'num_beams',
+            'num_beam_groups',
+            'diversity_penalty',
+            'num_outputs',
+            'no_repeat_ngram_size',
+            'top_p',
+            'top_k',
+            'repetition_penalty',
+            'temperature',
+            'max_output_length',
+            'reduce_metrics',
+            'database_dir',
+        ]
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -673,11 +766,19 @@ def load_config_json(args):
             if r in config:
                 setattr(args, r, config[r])
             # These are for backward compatibility with models that were trained before we added these arguments
-            elif r in ('do_ned', 'use_encoder_loss',
-                       'almond_has_multiple_programs', 'almond_lang_as_question', 'preprocess_special_tokens', 'almond_thingtalk_version',
-                       'plot_heatmaps', 'replace_qp', 'force_replace_qp',
-                       'no_fast_tokenizer', 'force_fast_tokenizer'
-                       ):
+            elif r in (
+                'do_ned',
+                'use_encoder_loss',
+                'almond_has_multiple_programs',
+                'almond_lang_as_question',
+                'preprocess_special_tokens',
+                'almond_thingtalk_version',
+                'plot_heatmaps',
+                'replace_qp',
+                'force_replace_qp',
+                'no_fast_tokenizer',
+                'force_fast_tokenizer',
+            ):
                 setattr(args, r, False)
             elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
                 setattr(args, r, 0)
@@ -720,11 +821,11 @@ def load_config_json(args):
             elif r == 'label_smoothing':
                 setattr(args, r, 0.0)
             elif r == 'no_separator':
-                setattr(args, r, True) # old models don't use a separator
+                setattr(args, r, True)  # old models don't use a separator
             else:
                 # use default value
                 setattr(args, r, None)
-                
+
         args.dropout_ratio = 0.0
         args.verbose = False
 

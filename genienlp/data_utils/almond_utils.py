@@ -37,33 +37,60 @@ device_pattern = re.compile(r'\s@([\w\.]+)\s')
 entity_regex = re.compile('<e>.*?</e>')
 token_type_regex = re.compile('(.*?) \( (.*?) \)')
 
-ISO_to_LANG = {'en': 'English', 'en-US': 'English', 'fa': 'Persian', 'it': 'Italian', 'zh': 'Chinese',
-               'hr': 'Croatian', 'ja': 'Japanese', 'ko': 'Korean', 'ru': 'Russian', 'es': 'Spanish',
-               'sv': 'Swedish', 'tr': 'Turkish', 'hi': 'Hindi', 'fr': 'French', 'de': 'German',
-               'pl': 'Polsih', 'ar': 'Arabic', 'vi': 'Vietnamese', 'ji': 'Yiddish', 'pt': 'Portuguese',
-               'el': 'Greek', 'he': 'Hebrew', 'si': 'Sinhala', 'ta': 'Tamil', 'fi': 'Finnish', 'cs': 'Czech',
-               'no': 'Norwegian', 'tl': 'Filipino', 'da': 'Danish'}
+ISO_to_LANG = {
+    'en': 'English',
+    'en-US': 'English',
+    'fa': 'Persian',
+    'it': 'Italian',
+    'zh': 'Chinese',
+    'hr': 'Croatian',
+    'ja': 'Japanese',
+    'ko': 'Korean',
+    'ru': 'Russian',
+    'es': 'Spanish',
+    'sv': 'Swedish',
+    'tr': 'Turkish',
+    'hi': 'Hindi',
+    'fr': 'French',
+    'de': 'German',
+    'pl': 'Polsih',
+    'ar': 'Arabic',
+    'vi': 'Vietnamese',
+    'ji': 'Yiddish',
+    'pt': 'Portuguese',
+    'el': 'Greek',
+    'he': 'Hebrew',
+    'si': 'Sinhala',
+    'ta': 'Tamil',
+    'fi': 'Finnish',
+    'cs': 'Czech',
+    'no': 'Norwegian',
+    'tl': 'Filipino',
+    'da': 'Danish',
+}
 
 
 CJK_RANGES = [
-    (ord(u"\u3300"), ord(u"\u33ff")), (ord(u"\ufe30"), ord(u"\ufe4f")),   # compatibility ideographs
-    (ord(u"\uf900"), ord(u"\ufaff")), (ord(u"\U0002F800"), ord(u"\U0002fa1f")),   # compatibility ideographs
-    (ord(u'\u3040'), ord(u'\u309f')),   # Japanese Hiragana
-    (ord(u"\u30a0"), ord(u"\u30ff")),   # Japanese Katakana
-    (ord(u"\u2e80"), ord(u"\u2eff")),   # cjk radicals supplement
+    (ord(u"\u3300"), ord(u"\u33ff")),
+    (ord(u"\ufe30"), ord(u"\ufe4f")),  # compatibility ideographs
+    (ord(u"\uf900"), ord(u"\ufaff")),
+    (ord(u"\U0002F800"), ord(u"\U0002fa1f")),  # compatibility ideographs
+    (ord(u'\u3040'), ord(u'\u309f')),  # Japanese Hiragana
+    (ord(u"\u30a0"), ord(u"\u30ff")),  # Japanese Katakana
+    (ord(u"\u2e80"), ord(u"\u2eff")),  # cjk radicals supplement
     (ord(u"\u4e00"), ord(u"\u9fff")),
     (ord(u"\u3400"), ord(u"\u4dbf")),
     (ord(u"\U00020000"), ord(u"\U0002a6df")),
     (ord(u"\U0002a700"), ord(u"\U0002b73f")),
     (ord(u"\U0002b740"), ord(u"\U0002b81f")),
-    (ord(u"\U0002b820"), ord(u"\U0002ceaf"))
+    (ord(u"\U0002b820"), ord(u"\U0002ceaf")),
 ]
 
 CJK_ADDONS = [ord(u"\u3001")]
 
 
 def is_cjk_char(cp):
-  return cp in CJK_ADDONS or any([range[0] <= cp <= range[1] for range in CJK_RANGES])
+    return cp in CJK_ADDONS or any([range[0] <= cp <= range[1] for range in CJK_RANGES])
 
 
 ENTITY_REGEX = re.compile('^[A-Z]+_')
@@ -107,10 +134,10 @@ def tokenize_cjk_chars(sentence):
         elif not is_cjk_char(ord(sentence[i])) and i + 1 < len(sentence) and is_cjk_char(ord(sentence[i + 1])):
             output.append(' ')
         i += 1
-    
+
     output = "".join(output)
     output = output.replace('  ', ' ')
-    
+
     return output
 
 
@@ -120,13 +147,17 @@ def detokenize_cjk_chars(sentence):
     while i < len(sentence):
         output.append(sentence[i])
         # skip space after cjk chars only if followed by another cjk char
-        if is_cjk_char(ord(sentence[i])) and \
-                i+1 < len(sentence) and sentence[i+1] == ' ' and \
-                i+2 < len(sentence) and is_cjk_char(ord(sentence[i+2])):
+        if (
+            is_cjk_char(ord(sentence[i]))
+            and i + 1 < len(sentence)
+            and sentence[i + 1] == ' '
+            and i + 2 < len(sentence)
+            and is_cjk_char(ord(sentence[i + 2]))
+        ):
             i += 2
         else:
             i += 1
-            
+
     return "".join(output)
 
 
@@ -154,9 +185,9 @@ def create_examples_from_file(args):
     example_batch_size = args['example_batch_size']
     make_process_example = args['make_process_example']
     kwargs = args['kwargs']
-    
+
     chunk_examples = []
-    
+
     batch = []
     last_batch = False
     for i, line in progress_bar(enumerate(open(path, 'r', encoding='utf-8')), desc='Reading dataset'):
@@ -164,11 +195,11 @@ def create_examples_from_file(args):
         batch.append(parts)
         if len(chunk_examples) + example_batch_size > chunk_size:
             # trim batch
-            batch = batch[:chunk_size - len(chunk_examples)]
+            batch = batch[: chunk_size - len(chunk_examples)]
             last_batch = True
         if len(batch) % example_batch_size != 0 and not last_batch:
             continue
-            
+
         # TODO remote database lookup is faster when multiple examples are sent in one HTTP request
         # For now we only do one at a time; support processing examples as a batch
         assert len(batch) == 1
@@ -177,6 +208,5 @@ def create_examples_from_file(args):
         batch = []
         if len(chunk_examples) >= chunk_size:
             break
-    
-    return chunk_examples
 
+    return chunk_examples

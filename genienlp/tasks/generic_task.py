@@ -29,12 +29,12 @@
 
 from collections import OrderedDict
 
+from ..data_utils.example import Example
 from . import generic_dataset
 from .almond_task import BaseAlmondTask
 from .base_task import BaseTask
 from .generic_dataset import CrossNERDataset
 from .registry import register_task
-from ..data_utils.example import Example
 
 
 @register_task('multi30k')
@@ -45,9 +45,7 @@ class Multi30K(BaseTask):
 
     def get_splits(self, root, **kwargs):
         src, trg = ['.' + x for x in self.name.split('.')[1:]]
-        return generic_dataset.Multi30k.splits(exts=(src, trg),
-                                               root=root,
-                                               **kwargs)
+        return generic_dataset.Multi30k.splits(exts=(src, trg), root=root, **kwargs)
 
 
 @register_task('iwslt')
@@ -58,9 +56,7 @@ class IWSLT(BaseTask):
 
     def get_splits(self, root, **kwargs):
         src, trg = ['.' + x for x in self.name.split('.')[1:]]
-        return generic_dataset.IWSLT.splits(exts=(src, trg),
-                                            root=root,
-                                            **kwargs)
+        return generic_dataset.IWSLT.splits(exts=(src, trg), root=root, **kwargs)
 
 
 @register_task('squad')
@@ -70,9 +66,7 @@ class SQuAD(BaseTask):
         return ['nf1', 'em', 'nem']
 
     def get_splits(self, root, **kwargs):
-        return generic_dataset.SQuAD.splits(root=root,
-                                            description=self.name,
-                                            **kwargs)
+        return generic_dataset.SQuAD.splits(root=root, description=self.name, **kwargs)
 
 
 @register_task('wikisql')
@@ -82,10 +76,7 @@ class WikiSQL(BaseTask):
         return ['lfem', 'em', 'nem', 'nf1']
 
     def get_splits(self, root, **kwargs):
-        return generic_dataset.WikiSQL.splits(
-            root=root,
-            query_as_question='query_as_question' in self.name,
-            **kwargs)
+        return generic_dataset.WikiSQL.splits(root=root, query_as_question='query_as_question' in self.name, **kwargs)
 
 
 @register_task('ontonotes')
@@ -94,9 +85,8 @@ class OntoNotesNER(BaseTask):
         split_task = self.name.split('.')
         _, _, subtask, nones, counting = split_task
         return generic_dataset.OntoNotesNER.splits(
-            subtask=subtask, nones=True if nones == 'nones' else False,
-            root=root,
-            **kwargs)
+            subtask=subtask, nones=True if nones == 'nones' else False, root=root, **kwargs
+        )
 
 
 @register_task('woz')
@@ -106,17 +96,13 @@ class WoZ(BaseTask):
         return ['joint_goal_em', 'turn_request_em', 'turn_goal_em', 'avg_dialogue', 'em', 'nem', 'nf1']
 
     def get_splits(self, root, **kwargs):
-        return generic_dataset.WOZ.splits(description=self.name,
-                                          root=root,
-                                          **kwargs)
+        return generic_dataset.WOZ.splits(description=self.name, root=root, **kwargs)
 
 
 @register_task('multinli')
 class MultiNLI(BaseTask):
     def get_splits(self, root, **kwargs):
-        return generic_dataset.MultiNLI.splits(description=self.name,
-                                               root=root,
-                                               **kwargs)
+        return generic_dataset.MultiNLI.splits(description=self.name, root=root, **kwargs)
 
 
 @register_task('srl')
@@ -194,37 +180,169 @@ class ZRE(BaseTask):
 
 @register_task('cross_ner')
 class CrossNERTask(BaseAlmondTask):
-    politics_labels = ['O', 'B-country', 'B-politician', 'I-politician', 'B-election', 'I-election', 'B-person',
-                       'I-person', 'B-organisation', 'I-organisation', 'B-location', 'B-misc', 'I-location',
-                       'I-country', 'I-misc', 'B-politicalparty', 'I-politicalparty', 'B-event', 'I-event']
-    
-    science_labels = ['O', 'B-scientist', 'I-scientist', 'B-person', 'I-person', 'B-university', 'I-university',
-                      'B-organisation', 'I-organisation', 'B-country', 'I-country', 'B-location', 'I-location',
-                      'B-discipline', 'I-discipline', 'B-enzyme', 'I-enzyme', 'B-protein', 'I-protein',
-                      'B-chemicalelement', 'I-chemicalelement', 'B-chemicalcompound', 'I-chemicalcompound',
-                      'B-astronomicalobject', 'I-astronomicalobject', 'B-academicjournal', 'I-academicjournal',
-                      'B-event', 'I-event', 'B-theory', 'I-theory', 'B-award', 'I-award', 'B-misc', 'I-misc']
-    
-    music_labels = ['O', 'B-musicgenre', 'I-musicgenre', 'B-song', 'I-song', 'B-band', 'I-band', 'B-album', 'I-album',
-                    'B-musicalartist', 'I-musicalartist', 'B-musicalinstrument', 'I-musicalinstrument', 'B-award',
-                    'I-award', 'B-event', 'I-event', 'B-country', 'I-country', 'B-location', 'I-location',
-                    'B-organisation', 'I-organisation', 'B-person', 'I-person', 'B-misc', 'I-misc']
-    
-    literature_labels = ['O', 'B-book', 'I-book', 'B-writer', 'I-writer', 'B-award', 'I-award', 'B-poem', 'I-poem',
-                         'B-event', 'I-event', 'B-magazine', 'I-magazine', 'B-literarygenre', 'I-literarygenre',
-                         'B-country', 'I-country', 'B-person', 'I-person', 'B-location', 'I-location', 'B-organisation',
-                         'I-organisation', 'B-misc', 'I-misc']
-    
-    ai_labels = ['O', 'B-field', 'I-field', 'B-task', 'I-task', 'B-product', 'I-product', 'B-algorithm', 'I-algorithm',
-                 'B-researcher', 'I-researcher', 'B-metrics', 'I-metrics', 'B-programlang', 'I-programlang',
-                 'B-conference', 'I-conference', 'B-university', 'I-university', 'B-country', 'I-country', 'B-person',
-                 'I-person', 'B-organisation', 'I-organisation', 'B-location', 'I-location', 'B-misc', 'I-misc']
-    
+    politics_labels = [
+        'O',
+        'B-country',
+        'B-politician',
+        'I-politician',
+        'B-election',
+        'I-election',
+        'B-person',
+        'I-person',
+        'B-organisation',
+        'I-organisation',
+        'B-location',
+        'B-misc',
+        'I-location',
+        'I-country',
+        'I-misc',
+        'B-politicalparty',
+        'I-politicalparty',
+        'B-event',
+        'I-event',
+    ]
+
+    science_labels = [
+        'O',
+        'B-scientist',
+        'I-scientist',
+        'B-person',
+        'I-person',
+        'B-university',
+        'I-university',
+        'B-organisation',
+        'I-organisation',
+        'B-country',
+        'I-country',
+        'B-location',
+        'I-location',
+        'B-discipline',
+        'I-discipline',
+        'B-enzyme',
+        'I-enzyme',
+        'B-protein',
+        'I-protein',
+        'B-chemicalelement',
+        'I-chemicalelement',
+        'B-chemicalcompound',
+        'I-chemicalcompound',
+        'B-astronomicalobject',
+        'I-astronomicalobject',
+        'B-academicjournal',
+        'I-academicjournal',
+        'B-event',
+        'I-event',
+        'B-theory',
+        'I-theory',
+        'B-award',
+        'I-award',
+        'B-misc',
+        'I-misc',
+    ]
+
+    music_labels = [
+        'O',
+        'B-musicgenre',
+        'I-musicgenre',
+        'B-song',
+        'I-song',
+        'B-band',
+        'I-band',
+        'B-album',
+        'I-album',
+        'B-musicalartist',
+        'I-musicalartist',
+        'B-musicalinstrument',
+        'I-musicalinstrument',
+        'B-award',
+        'I-award',
+        'B-event',
+        'I-event',
+        'B-country',
+        'I-country',
+        'B-location',
+        'I-location',
+        'B-organisation',
+        'I-organisation',
+        'B-person',
+        'I-person',
+        'B-misc',
+        'I-misc',
+    ]
+
+    literature_labels = [
+        'O',
+        'B-book',
+        'I-book',
+        'B-writer',
+        'I-writer',
+        'B-award',
+        'I-award',
+        'B-poem',
+        'I-poem',
+        'B-event',
+        'I-event',
+        'B-magazine',
+        'I-magazine',
+        'B-literarygenre',
+        'I-literarygenre',
+        'B-country',
+        'I-country',
+        'B-person',
+        'I-person',
+        'B-location',
+        'I-location',
+        'B-organisation',
+        'I-organisation',
+        'B-misc',
+        'I-misc',
+    ]
+
+    ai_labels = [
+        'O',
+        'B-field',
+        'I-field',
+        'B-task',
+        'I-task',
+        'B-product',
+        'I-product',
+        'B-algorithm',
+        'I-algorithm',
+        'B-researcher',
+        'I-researcher',
+        'B-metrics',
+        'I-metrics',
+        'B-programlang',
+        'I-programlang',
+        'B-conference',
+        'I-conference',
+        'B-university',
+        'I-university',
+        'B-country',
+        'I-country',
+        'B-person',
+        'I-person',
+        'B-organisation',
+        'I-organisation',
+        'B-location',
+        'I-location',
+        'B-misc',
+        'I-misc',
+    ]
+
     news_labels = ['O', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG', 'B-LOC', 'I-LOC', 'B-MISC', 'I-MISC']
-    
-    domain2labels = OrderedDict({'politics': politics_labels, 'science': science_labels, 'music': music_labels,
-                     'literature': literature_labels, 'ai': ai_labels, 'news': news_labels})
-    
+
+    domain2labels = OrderedDict(
+        {
+            'politics': politics_labels,
+            'science': science_labels,
+            'music': music_labels,
+            'literature': literature_labels,
+            'ai': ai_labels,
+            'news': news_labels,
+        }
+    )
+
     def __init__(self, name, args):
         self.all_labels = []
         # OrderedDict respect keys order
@@ -237,24 +355,25 @@ class CrossNERTask(BaseAlmondTask):
         self.id2label = {v: k for k, v in self.label2id.items()}
         self.num_labels = len(self.label2id)
         super().__init__(name, args)
-    
+
     @property
     def metrics(self):
         return ['ner_f1', 'em', 'f1', 'pem']
-    
+
     def _is_program_field(self, field_name):
         return field_name == 'answer'
-    
+
     def utterance_field(self):
         return 'context'
-    
+
     def _make_example(self, example_id, token_list, label_list, domain):
         context = ' '.join(token_list)
         question = ''
         answer = ' '.join([str(self.label2id[label]) for label in label_list])
-        
-        return Example.from_raw(self.name + '/' + str(example_id), context, question, answer,
-                                preprocess=self.preprocess_field, lower=False)
-    
+
+        return Example.from_raw(
+            self.name + '/' + str(example_id), context, question, answer, preprocess=self.preprocess_field, lower=False
+        )
+
     def get_splits(self, root, **kwargs):
         return CrossNERDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)

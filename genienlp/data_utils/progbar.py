@@ -27,13 +27,14 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
 import math
+import sys
+
 from tqdm import tqdm
 
 
 class LogFriendlyProgressBar:
-    def __init__(self, iterable, desc, total, step: int=1):
+    def __init__(self, iterable, desc, total, step: int = 1):
         """
         Inputs:
             step: Will print progress every `step` %
@@ -65,6 +66,7 @@ class LogFriendlyProgressBar:
 
     def close(self):
         return
+
 
 def progress_bar(iterable, desc=None, total=None, disable=False):
     if disable:

@@ -41,26 +41,38 @@ from pprint import pformat
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
-from transformers import get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, AdamW, get_cosine_schedule_with_warmup
+from transformers import (
+    AdamW,
+    get_constant_schedule_with_warmup,
+    get_cosine_schedule_with_warmup,
+    get_linear_schedule_with_warmup,
+)
 
-from . import arguments
-from . import models
+from . import arguments, models
+from .arguments import save_args
 from .data_utils.bootleg import Bootleg
-from .run_bootleg import bootleg_process_splits
-from .util import elapsed_time, set_seed, get_trainable_params, make_data_loader, \
-    log_model_size, get_devices, ned_dump_entity_type_pairs
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
-from .validate import validate, print_results
-from .arguments import save_args
+from .run_bootleg import bootleg_process_splits
+from .util import (
+    elapsed_time,
+    get_devices,
+    get_trainable_params,
+    log_model_size,
+    make_data_loader,
+    ned_dump_entity_type_pairs,
+    set_seed,
+)
+from .validate import print_results, validate
 
 
 def initialize_logger(args):
     # set up file logger
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
-    handler = logging.handlers.RotatingFileHandler(os.path.join(args.log_dir, f'train.log'),
-                                                   maxBytes=1024 * 1024 * 10, backupCount=1)
+    handler = logging.handlers.RotatingFileHandler(
+        os.path.join(args.log_dir, 'train.log'), maxBytes=1024 * 1024 * 10, backupCount=1
+    )
     handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(name)s - %(message)s')
     handler.setFormatter(formatter)
@@ -75,21 +87,22 @@ def initialize_logger(args):
 
 
 def prepare_data(args, logger):
-    
+
     # initialize bootleg
     bootleg = None
     if args.do_ned and args.ned_retrieve_method == 'bootleg':
         bootleg = Bootleg(args)
-    
+
     train_sets, val_sets, aux_sets = [], [], []
 
-    train_eval_shared_kwargs = {'subsample': args.subsample,
-                                'skip_cache': args.skip_cache,
-                                'cache_input_data': args.cache_input_data,
-                                'sentence_batching': args.sentence_batching,
-                                'almond_lang_as_question': args.almond_lang_as_question,
-                                'num_workers': args.num_workers,
-                                }
+    train_eval_shared_kwargs = {
+        'subsample': args.subsample,
+        'skip_cache': args.skip_cache,
+        'cache_input_data': args.cache_input_data,
+        'sentence_batching': args.sentence_batching,
+        'almond_lang_as_question': args.almond_lang_as_question,
+        'num_workers': args.num_workers,
+    }
 
     if any(args.train_iterations):
         for task in args.train_tasks:
@@ -101,13 +114,13 @@ def prepare_data(args, logger):
             kwargs['ner_domains'] = args.ner_domains
             if args.use_curriculum:
                 kwargs['curriculum'] = True
-    
+
             logger.info(f'Adding {task.name} to training datasets')
             t0 = time.time()
             splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
-    
+
             t1 = time.time()
-            logger.info('Data loading took {:.2f} seconds'.format(t1-t0))
+            logger.info('Data loading took {:.2f} seconds'.format(t1 - t0))
             assert not splits.eval and not splits.test
             if args.use_curriculum:
                 assert splits.aux
@@ -115,15 +128,15 @@ def prepare_data(args, logger):
                 logger.info(f'{task.name} has {len(splits.aux)} auxiliary examples')
             else:
                 assert splits.train
-    
+
             if bootleg:
                 bootleg_process_splits(args, splits.train.examples, paths.train, task, bootleg)
-    
+
             train_sets.append(splits.train)
             logger.info(f'{task.name} has {len(splits.train)} training examples')
-            
+
             logger.info(f"train all_schema_types: {getattr(task, 'all_schema_types', None)}")
-            
+
             if task.name.startswith('almond'):
                 if args.ned_features_default_val:
                     args.db_unk_id = int(args.ned_features_default_val[0])
@@ -140,8 +153,7 @@ def prepare_data(args, logger):
                 args.db_unk_id = 0
                 args.num_db_types = 0
             save_args(args, force_overwrite=True)
-    
-    
+
         for task in args.val_tasks:
             logger.info(f'Loading {task.name}')
             kwargs = {'train': None, 'test': None}
@@ -153,28 +165,27 @@ def prepare_data(args, logger):
             kwargs['cached_path'] = os.path.join(args.cache, task.name)
             kwargs['ner_domains'] = args.ner_domains
             kwargs['hf_test_overfit'] = args.hf_test_overfit
-            
+
             logger.info(f'Adding {task.name} to validation datasets')
             splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
-            
+
             assert not splits.train and not splits.test and not splits.aux
             logger.info(f'{task.name} has {len(splits.eval)} validation examples')
-    
+
             if bootleg:
                 bootleg_process_splits(args, splits.eval.examples, paths.eval, task, bootleg)
-    
+
             val_sets.append(splits.eval)
-    
+
             logger.info(f"validation all_schema_types: {getattr(task, 'all_schema_types', None)}")
-            
+
     return train_sets, val_sets, aux_sets
 
 
 accumulated_batch_lengths = 0
 
 
-def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None,
-               gradient_accumulation_steps=1):
+def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None, gradient_accumulation_steps=1):
     # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of
     # the total batch size
     global accumulated_batch_lengths
@@ -187,12 +198,12 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
     if len(devices) > 1:
         loss = loss.mean()
     non_accumulated_loss = loss.item()
-    loss = loss*len(batch[0])
+    loss = loss * len(batch[0])
     accumulated_batch_lengths += len(batch[0])
-    
+
     loss.backward()
     grad_norm = None
-    if (iteration+1) % gradient_accumulation_steps == 0:
+    if (iteration + 1) % gradient_accumulation_steps == 0:
         for p in model.parameters():
             if p.grad is None:
                 continue
@@ -235,8 +246,9 @@ def should_log(iteration, log_every):
     return iteration % log_every == 0
 
 
-def do_validate(iteration, args, model, numericalizer, val_iters, *,
-                train_task, round_progress, task_progress, writer, logger):
+def do_validate(
+    iteration, args, model, numericalizer, val_iters, *, train_task, round_progress, task_progress, writer, logger
+):
     deca_score = 0
     for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
         output, metric_dict = validate(val_task, val_iter, model, numericalizer, args, num_print=args.num_print)
@@ -262,13 +274,28 @@ def do_validate(iteration, args, model, numericalizer, val_iters, *,
     if writer is not None:
         writer.add_scalar('deca/val', deca_score, iteration)
     logger.info(
-        f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_deca:deca_{deca_score:.2f}')
+        f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_deca:deca_{deca_score:.2f}'
+    )
 
     return deca_score
 
 
-def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
-               saver, logger, train_task, round_progress, task_progress, timestamp, log_dir, model_parallel):
+def maybe_save(
+    iteration,
+    model,
+    opt,
+    deca_score,
+    best_decascore,
+    *,
+    saver,
+    logger,
+    train_task,
+    round_progress,
+    task_progress,
+    timestamp,
+    log_dir,
+    model_parallel,
+):
     should_save_best = False
     if deca_score is not None and (best_decascore is None or best_decascore < deca_score):
         best_decascore = deca_score
@@ -281,23 +308,21 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
         # punch through the nn.DataParallel to access the real model, otherwise we won't be able
         # to load this model later
         model_state_dict = model.module.state_dict()
-        
+
     model_state_dict = {k: v.cpu() for k, v in model_state_dict.items()}
 
-    save_model_state_dict = {
-        'model_state_dict': model_state_dict,
-        'best_decascore': best_decascore
-    }
+    save_model_state_dict = {'model_state_dict': model_state_dict, 'best_decascore': best_decascore}
     save_opt_state_dict = opt.state_dict()
     save_opt_state_dict.update({'start_iteration': iteration})
 
     saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
     if should_save_best:
         logger.info(
-            f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}saving new best model')
+            f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}saving new best model'
+        )
         torch.save(save_model_state_dict, os.path.join(log_dir, 'best.pth'))
         torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
-        
+
         if model_parallel:
             model.numericalizer.save(saver._savedir)
         else:
@@ -306,14 +331,28 @@ def maybe_save(iteration, model, opt, deca_score, best_decascore, *,
     return best_decascore
 
 
-def do_log_training_loss(iteration, loss, *,
-                         lr_scheduler, grad_norm,
-                         num_examples, len_contexts, len_answers,
-                         logger, train_task, round_progress, epochs, task_progress,
-                         timestamp, writer, log_prefix):
+def do_log_training_loss(
+    iteration,
+    loss,
+    *,
+    lr_scheduler,
+    grad_norm,
+    num_examples,
+    len_contexts,
+    len_answers,
+    logger,
+    train_task,
+    round_progress,
+    epochs,
+    task_progress,
+    timestamp,
+    writer,
+    log_prefix,
+):
     avg_batch_size = f'avbatch_{num_examples:.0f}_{len_contexts:.0f}_{len_answers:.0f}:'
     logger.info(
-        f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:epoch_{epochs:.2f}:{round_progress}train_{train_task.name}:{task_progress}{avg_batch_size}{log_prefix}/loss_{loss:.4f}')
+        f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:epoch_{epochs:.2f}:{round_progress}train_{train_task.name}:{task_progress}{avg_batch_size}{log_prefix}/loss_{loss:.4f}'
+    )
 
     if writer is not None:
         writer.add_scalar(f'{log_prefix}/loss/{train_task.name}', loss, iteration)
@@ -344,9 +383,30 @@ def get_next_batch(train_iter, aux_iters, *, task, task_idx, task_fraction, use_
     return batch
 
 
-def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations, numericalizer, *,
-          log_every, val_every, save_every, rounds, val_sets, aux_sets, writer, logger, log_prefix,
-          start_iteration=1, rnd=1, best_decascore, use_curriculum):
+def train(
+    args,
+    devices,
+    model,
+    opt,
+    lr_scheduler,
+    train_sets,
+    train_iterations,
+    numericalizer,
+    *,
+    log_every,
+    val_every,
+    save_every,
+    rounds,
+    val_sets,
+    aux_sets,
+    writer,
+    logger,
+    log_prefix,
+    start_iteration=1,
+    rnd=1,
+    best_decascore,
+    use_curriculum,
+):
     """main training function"""
     local_loss, num_examples, len_contexts, len_answers, iteration = 0, 0, 0, 0, 1
 
@@ -356,7 +416,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     task_done = dict()
     task_fraction = dict()
     task_total_num_examples = dict()
-    task_train_size = dict() # number of examples in each task
+    task_train_size = dict()  # number of examples in each task
 
     for task, train_set in zip(args.train_tasks, train_sets):
         task_iteration[task] = 1
@@ -368,35 +428,41 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
     saver = Saver(args.log_dir, args.max_to_keep)
     per_task_iterations = 0
 
-    logger.info(f'Preparing iterators')
+    logger.info('Preparing iterators')
     main_device = devices[0]
 
     t0 = time.time()
-    train_iters = [(task, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
-                   for task, dataset, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)]
+    train_iters = [
+        (task, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
+        for task, dataset, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)
+    ]
     t1 = time.time()
     logger.info('Preparing iterators took {:.2f} seconds'.format(t1 - t0))
-    
+
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
     # save memory
     del train_sets
 
-    val_iters = [(task, make_data_loader(dataset, numericalizer, bs, main_device, train=False))
-                 for task, dataset, bs in zip(args.val_tasks, val_sets, args.val_batch_size)]
+    val_iters = [
+        (task, make_data_loader(dataset, numericalizer, bs, main_device, train=False))
+        for task, dataset, bs in zip(args.val_tasks, val_sets, args.val_batch_size)
+    ]
     # save memory
     del val_sets
 
     aux_iters = []
     if use_curriculum:
-        aux_iters = [(name, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
-                     for name, dataset, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)]
+        aux_iters = [
+            (name, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
+            for name, dataset, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)
+        ]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]
         # save memory
         del aux_sets
-        
+
     zero_loss = 0
     logger.info(f'Begin {log_prefix}')
-    
+
     if any(train_iterations):
         while not all(task_done.values()):
             # For some number of rounds, we 'jump start' some subset of the tasks
@@ -409,7 +475,7 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                     train_iterations[j] = 1
             else:
                 train_iterations = train_iter_deep
-    
+
             for task_idx, (task, train_iter) in enumerate(train_iters):
                 task_iterations = train_iterations[task_idx] if train_iterations is not None else None
                 if task_iterations == 0:
@@ -417,28 +483,41 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                 if task_iterations is not None and task_iteration[task] > task_iterations:
                     task_done[task] = True
                     continue
-    
+
                 # load batches even if (args.resume == True) and we are going to skip the iteration
                 # this makes runs that are resumed have the exact same behavior as runs that are
                 # finished in one pass (given that the random seed is the same).
-                batch = get_next_batch(train_iter, aux_iters, task=task, task_idx=task_idx,
-                                       task_fraction=task_fraction, use_curriculum=use_curriculum)
-    
+                batch = get_next_batch(
+                    train_iter,
+                    aux_iters,
+                    task=task,
+                    task_idx=task_idx,
+                    task_fraction=task_fraction,
+                    use_curriculum=use_curriculum,
+                )
+
                 if iteration < start_iteration:
                     # skip this iteration (this is done to ensure iterators are at the same position when resuming)
                     task_iteration[task] += 1
                     iteration += 1
-                    if (iteration+1) % args.gradient_accumulation_steps == 0:
-                        lr_scheduler.step() # update the learning rate
+                    if (iteration + 1) % args.gradient_accumulation_steps == 0:
+                        lr_scheduler.step()  # update the learning rate
                     continue
-    
+
                 task_progress = f'{task_iteration[task]}/{task_iterations}:' if task_iterations is not None else ''
                 round_progress = f'round_{rnd}:' if rounds else ''
-    
+
                 # param update
-                loss, grad_norm = train_step(model, batch, iteration, opt, devices, lr_scheduler=lr_scheduler,
-                                             grad_clip=args.grad_clip,
-                                             gradient_accumulation_steps=args.gradient_accumulation_steps)
+                loss, grad_norm = train_step(
+                    model,
+                    batch,
+                    iteration,
+                    opt,
+                    devices,
+                    lr_scheduler=lr_scheduler,
+                    grad_clip=args.grad_clip,
+                    gradient_accumulation_steps=args.gradient_accumulation_steps,
+                )
                 if loss is None:
                     logger.info('Encountered NAN loss during training. Continue training ignoring the current batch')
                     continue
@@ -449,66 +528,94 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
                         return
                 else:
                     zero_loss = 0
-    
+
                 # update curriculum fraction
                 if args.use_curriculum:
                     task_fraction[task] = update_fraction(args, task_iteration[task])
-    
+
                 # train metrics
                 local_loss += loss
-    
+
                 # train logs
                 num_examples += batch.context.value.size(0)
                 len_contexts += batch.context.value.size(1)
                 len_answers += batch.answer.value.size(1)
-                
+
                 task_total_num_examples[task] += batch.context.value.size(0)
-    
+
                 if should_log(iteration, log_every):
                     local_loss /= log_every
                     num_examples /= log_every
                     len_contexts /= log_every
                     len_answers /= log_every
-                    do_log_training_loss(iteration, 
-                                         local_loss,
-                                         lr_scheduler=lr_scheduler,
-                                         grad_norm=grad_norm,
-                                         num_examples=num_examples, len_contexts=len_contexts, len_answers=len_answers,
-                                         logger=logger, writer=writer, train_task=task,
-                                         round_progress=round_progress,
-                                         epochs=task_total_num_examples[task]/task_train_size[task],
-                                         task_progress=task_progress,
-                                         timestamp=args.timestamp,
-                                         log_prefix=log_prefix)
+                    do_log_training_loss(
+                        iteration,
+                        local_loss,
+                        lr_scheduler=lr_scheduler,
+                        grad_norm=grad_norm,
+                        num_examples=num_examples,
+                        len_contexts=len_contexts,
+                        len_answers=len_answers,
+                        logger=logger,
+                        writer=writer,
+                        train_task=task,
+                        round_progress=round_progress,
+                        epochs=task_total_num_examples[task] / task_train_size[task],
+                        task_progress=task_progress,
+                        timestamp=args.timestamp,
+                        log_prefix=log_prefix,
+                    )
                     num_examples = 0
                     len_contexts = 0
                     len_answers = 0
                     local_loss = 0
-    
+
                 # validate
                 if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
                     if args.print_train_examples_too:
                         names = ['answer', 'context']
-                        values = [numericalizer.reverse(batch.answer.value.data, 'answer'),
-                                  numericalizer.reverse(batch.context.value.data, 'context')]
+                        values = [
+                            numericalizer.reverse(batch.answer.value.data, 'answer'),
+                            numericalizer.reverse(batch.context.value.data, 'context'),
+                        ]
                         num_print = min(len(values[0]), args.num_print)
                         print_results(names, values, num_print=num_print)
-                        
-                    deca_score = do_validate(iteration, args, model, numericalizer, val_iters,
-                                             train_task=task, round_progress=round_progress,
-                                             task_progress=task_progress, writer=writer, logger=logger)
-    
+
+                    deca_score = do_validate(
+                        iteration,
+                        args,
+                        model,
+                        numericalizer,
+                        val_iters,
+                        train_task=task,
+                        round_progress=round_progress,
+                        task_progress=task_progress,
+                        writer=writer,
+                        logger=logger,
+                    )
+
                     # saving
                     if should_save(iteration, save_every):
-                        best_decascore = maybe_save(iteration, model, opt, deca_score, best_decascore,
-                                                    saver=saver, logger=logger, train_task=task,
-                                                    round_progress=round_progress, task_progress=task_progress,
-                                                    timestamp=args.timestamp, log_dir=args.log_dir, model_parallel=args.model_parallel)
-    
+                        best_decascore = maybe_save(
+                            iteration,
+                            model,
+                            opt,
+                            deca_score,
+                            best_decascore,
+                            saver=saver,
+                            logger=logger,
+                            train_task=task,
+                            round_progress=round_progress,
+                            task_progress=task_progress,
+                            timestamp=args.timestamp,
+                            log_dir=args.log_dir,
+                            model_parallel=args.model_parallel,
+                        )
+
                 # book keeping
                 task_iteration[task] += 1
                 iteration += 1
-    
+
             # book keeping
             per_task_iterations += 1
             rnd += 1
@@ -519,18 +626,28 @@ def train(args, devices, model, opt, lr_scheduler, train_sets, train_iterations,
         # Save pretrained models as is without any finetuning
         # Useful for doing prediction/ generation on those models with genienlp
         for task in args.train_tasks:
-            maybe_save(0, model, opt, deca_score=0, best_decascore=-1,
-                       saver=saver, logger=logger, train_task=task,
-                       round_progress=0, task_progress=0,
-                       timestamp=args.timestamp, log_dir=args.log_dir, model_parallel=args.model_parallel)
-        
-        logger.info(f'{args.pretrained_model} model is saved to {args.save} without any fine-tuning')
+            maybe_save(
+                0,
+                model,
+                opt,
+                deca_score=0,
+                best_decascore=-1,
+                saver=saver,
+                logger=logger,
+                train_task=task,
+                round_progress=0,
+                task_progress=0,
+                timestamp=args.timestamp,
+                log_dir=args.log_dir,
+                model_parallel=args.model_parallel,
+            )
 
+        logger.info(f'{args.pretrained_model} model is saved to {args.save} without any fine-tuning')
 
 
 def get_transformer_learning_rate(i, *, dimension, warmup):
     i += 1
-    return 1. / math.sqrt(dimension) * min(1 / math.sqrt(i), i / (warmup * math.sqrt(warmup)))
+    return 1.0 / math.sqrt(dimension) * min(1 / math.sqrt(i), i / (warmup * math.sqrt(warmup)))
 
 
 def get_sgd_learning_rate(i, *, warmup):
@@ -542,35 +659,48 @@ def init_opt(args, model, logger):
     if args.optimizer == 'adam':
         # Adam with transformer schedule has a different set of default hyperparameters:
         if args.lr_schedule == 'transformer':
-            opt = torch.optim.Adam(model.params, lr=args.lr_multiply, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay)
+            opt = torch.optim.Adam(
+                model.params, lr=args.lr_multiply, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay
+            )
         else:
-            opt = torch.optim.Adam(model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
+            opt = torch.optim.Adam(
+                model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay
+            )
     elif args.optimizer == 'adamw':
         opt = AdamW(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay)
     elif args.optimizer == 'radam':
         import radam
+
         if args.warmup > 1:
             logger.warning('With RAdam optimizer, warmup is never applied')
         opt = radam.RAdam(model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
     else:
         assert args.optimizer == 'sgd'
         opt = torch.optim.SGD(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay)
-    
+
     if args.lr_schedule == 'transformer':
         lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
         scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
     elif args.lr_schedule == 'constant':
         scheduler = get_constant_schedule_with_warmup(opt, num_warmup_steps=args.warmup)
     elif args.lr_schedule == 'linear':
-        scheduler = get_linear_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations)//args.gradient_accumulation_steps, num_warmup_steps=args.warmup)
+        scheduler = get_linear_schedule_with_warmup(
+            opt,
+            num_training_steps=sum(args.train_iterations) // args.gradient_accumulation_steps,
+            num_warmup_steps=args.warmup,
+        )
     elif args.lr_schedule == 'cosine':
-        scheduler = get_cosine_schedule_with_warmup(opt, num_training_steps=sum(args.train_iterations)//args.gradient_accumulation_steps, num_warmup_steps=args.warmup, num_cycles=0.5)
+        scheduler = get_cosine_schedule_with_warmup(
+            opt,
+            num_training_steps=sum(args.train_iterations) // args.gradient_accumulation_steps,
+            num_warmup_steps=args.warmup,
+            num_cycles=0.5,
+        )
     elif args.lr_schedule == 'sgd':
         lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
         scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
     else:
         raise ValueError('Invalid learning rate scheduler.')
-    
 
     return opt, scheduler
 
@@ -595,9 +725,9 @@ def main(args):
     if (args.use_curriculum and aux_sets is None) or (not args.use_curriculum and len(aux_sets) > 0):
         logging.error('Something unpleasant is happening with curriculum')
 
-    logger.info(f'Processing')
+    logger.info('Processing')
     logger.start = time.time()
-    
+
     # TODO handle multiple languages
     # TODO handle different train and eval languages
     src_lang = args.train_src_languages.split('+')[0]
@@ -606,23 +736,24 @@ def main(args):
     ########## initialize model
     best_decascore = None
     if args.load is not None:
-        model, best_decascore = model_class.load(args.save,
-                                                args=args,
-                                                model_checkpoint_file=args.load,
-                                                vocab_sets=train_sets+val_sets,
-                                                tasks=tasks,
-                                                device=devices[0],
-                                                src_lang=src_lang,
-                                                tgt_lang=tgt_lang
-                                                )
+        model, best_decascore = model_class.load(
+            args.save,
+            args=args,
+            model_checkpoint_file=args.load,
+            vocab_sets=train_sets + val_sets,
+            tasks=tasks,
+            device=devices[0],
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+        )
         model.add_new_vocab_from_data(tasks=tasks, resize_decoder=True)
         if not args.resume:
             # we are fine-tuning, so reset the best score since the new fine-tune dataset usually has a different validation set from the original
             best_decascore = None
     else:
         logger.info(f'Initializing a new {model_name}')
-        model = model_class(args=args, vocab_sets=train_sets+val_sets, tasks=tasks, src_lang=src_lang, tgt_lang=tgt_lang)
-        
+        model = model_class(args=args, vocab_sets=train_sets + val_sets, tasks=tasks, src_lang=src_lang, tgt_lang=tgt_lang)
+
     # dump entities if required
     if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
         for task, train_set, val_set in zip(tasks, train_sets, val_sets):
@@ -631,31 +762,33 @@ def main(args):
 
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)
-    
+
     if args.model_parallel:
         n_layers = len(model.model.encoder.block)
         layers = list(range(n_layers))
-        
+
         if args.mp_device_ratio is not None:
             if len(args.devices) > torch.cuda.device_count() or max(args.devices) >= torch.cuda.device_count():
                 raise ValueError('Provided GPU devices exceeds the number of available GPU')
-            
+
             mp_device_ratio = [(device_ratio / sum(args.mp_device_ratio)) for device_ratio in args.mp_device_ratio]
             layers_list = []
             beg = 0
             for i in range(len(args.devices)):
                 end = min(beg + math.ceil(n_layers * mp_device_ratio[i]), n_layers)
-                layers_list.append(layers[beg: end])
+                layers_list.append(layers[beg:end])
                 beg = end
-                
+
             if any([len(val_list) == 0 for val_list in layers_list]):
-                raise ValueError('One device got no layers given the mp_device_ratio you provided'
-                                 'Hint: if you do not provide mp_device_ratio, layers will be distributed evenly')
-            
+                raise ValueError(
+                    'One device got no layers given the mp_device_ratio you provided'
+                    'Hint: if you do not provide mp_device_ratio, layers will be distributed evenly'
+                )
+
         else:
             n_blocks = int(math.ceil(n_layers / len(args.devices)))
-            layers_list = list(layers[i: i + n_blocks] for i in range(0, n_layers, n_blocks))
-            
+            layers_list = list(layers[i : i + n_blocks] for i in range(0, n_layers, n_blocks))
+
         device_map = dict(zip(args.devices, layers_list))
         model.model.parallelize(device_map)
         logger.info(f'Model parallel is used with following device map: {model.model.device_map}')
@@ -677,16 +810,33 @@ def main(args):
         opt.load_state_dict(opt_state_dict)
 
     if hasattr(args, 'tensorboard') and args.tensorboard:
-        logger.info(f'Initializing Writer')
+        logger.info('Initializing Writer')
         writer = SummaryWriter(log_dir=args.tensorboard_dir, purge_step=start_iteration, flush_secs=60)
     else:
         writer = None
 
-    train(args, devices, model, opt, lr_scheduler, train_sets,
-          args.train_iterations, model.module.numericalizer if not args.model_parallel else model.numericalizer, val_sets=val_sets, aux_sets=aux_sets, logger=logger, writer=writer,
-          log_every=args.log_every, val_every=args.val_every, save_every=args.save_every,
-          rounds=len(train_sets) > 1, start_iteration=start_iteration, use_curriculum=args.use_curriculum,
-          best_decascore=best_decascore, log_prefix='training')
+    train(
+        args,
+        devices,
+        model,
+        opt,
+        lr_scheduler,
+        train_sets,
+        args.train_iterations,
+        model.module.numericalizer if not args.model_parallel else model.numericalizer,
+        val_sets=val_sets,
+        aux_sets=aux_sets,
+        logger=logger,
+        writer=writer,
+        log_every=args.log_every,
+        val_every=args.val_every,
+        save_every=args.save_every,
+        rounds=len(train_sets) > 1,
+        start_iteration=start_iteration,
+        use_curriculum=args.use_curriculum,
+        best_decascore=best_decascore,
+        log_prefix='training',
+    )
 
     if writer is not None:
-        writer.close() # otherwise the last written value may not be flushed
+        writer.close()  # otherwise the last written value may not be flushed

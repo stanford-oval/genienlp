@@ -29,7 +29,7 @@
 
 import logging
 
-from .database_utils import is_banned, normalize_text, has_overlap
+from .database_utils import has_overlap, is_banned, normalize_text
 
 tracer = logging.getLogger('elasticsearch')
 tracer.setLevel(logging.CRITICAL)
@@ -46,25 +46,26 @@ class Database(object):
 
         self.unk_id = ned_features_default_val[0]
         self.unk_type = self.id2type[self.unk_id]
-        
+
         self.ned_features_default_val = ned_features_default_val
         self.ned_features_size = ned_features_size
 
     def lookup_ngrams(self, tokens, min_entity_len, max_entity_len):
         # load nltk lazily
         import nltk
+
         nltk.download('averaged_perceptron_tagger', quiet=True)
-        
+
         tokens_type_ids = [[self.unk_id] * self.ned_features_size[0]] * len(tokens)
-    
+
         max_entity_len = min(max_entity_len, len(tokens))
         min_entity_len = min(min_entity_len, len(tokens))
 
         pos_tagged = nltk.pos_tag(tokens)
         verbs = set([x[0] for x in pos_tagged if x[1].startswith('V')])
-        
+
         used_aliases = []
-        for n in range(max_entity_len, min_entity_len-1, -1):
+        for n in range(max_entity_len, min_entity_len - 1, -1):
             ngrams = nltk.ngrams(tokens, n)
             start = -1
             end = n - 1
@@ -72,20 +73,20 @@ class Database(object):
                 start += 1
                 end += 1
                 gram_text = normalize_text(" ".join(gram))
-            
-                if not is_banned(gram_text) and not gram_text in verbs and gram_text in self.all_canonicals:
+
+                if not is_banned(gram_text) and gram_text not in verbs and gram_text in self.all_canonicals:
                     if has_overlap(start, end, used_aliases):
                         continue
-                
+
                     used_aliases.append([self.typeqid2id.get(self.canonical2type[gram_text], self.unk_id), start, end])
-    
+
         for type_id, beg, end in used_aliases:
             tokens_type_ids[beg:end] = [[type_id] * self.ned_features_size[0]] * (end - beg)
-            
+
         return tokens_type_ids
 
     def lookup_smaller(self, tokens):
-        
+
         tokens_type_ids = []
         i = 0
         while i < len(tokens):
@@ -103,29 +104,29 @@ class Database(object):
                         break
                     j += 1
                     cur += 1
-                
+
                 if j == len(key_tokenized):
                     if is_banned(' '.join(key_tokenized)):
                         continue
-                    
+
                     # match found
                     found = True
                     tokens_type_ids.extend([[self.typeqid2id[type] * self.ned_features_size[0]] for _ in range(i, cur)])
-                    
+
                     # move i to current unprocessed position
                     i = cur
                     break
-            
+
             if not found:
                 tokens_type_ids.append([self.unk_id * self.ned_features_size[0]])
                 i += 1
-        
+
         return tokens_type_ids
-    
+
     def lookup_longer(self, tokens):
         i = 0
         tokens_type_ids = []
-        
+
         length = len(tokens)
         found = False
         while i < length:
@@ -135,7 +136,9 @@ class Database(object):
                 if tokens_str in self.all_canonicals:
                     # match found
                     found = True
-                    tokens_type_ids.extend([[self.typeqid2id[self.canonical2type[tokens_str]] * self.ned_features_size[0]] for _ in range(i, end)])
+                    tokens_type_ids.extend(
+                        [[self.typeqid2id[self.canonical2type[tokens_str]] * self.ned_features_size[0]] for _ in range(i, end)]
+                    )
                     # move i to current unprocessed position
                     i = end
                     break
@@ -145,32 +148,30 @@ class Database(object):
                 tokens_type_ids.append([self.unk_id * self.ned_features_size[0]])
                 i += 1
             found = False
-        
+
         return tokens_type_ids
 
-    
     def lookup_entities(self, tokens, entities):
         tokens_type_ids = [[self.unk_id] * self.ned_features_size[0]] * len(tokens)
         tokens_text = " ".join(tokens)
-        
+
         for ent in entities:
             if ent not in self.all_canonicals:
                 continue
             ent_num_tokens = len(ent.split(' '))
             idx = tokens_text.index(ent)
             token_pos = len(tokens_text[:idx].strip().split(' '))
-            
+
             type = self.typeqid2id.get(self.canonical2type[ent], self.unk_id)
-            
-            tokens_type_ids[token_pos: token_pos+ent_num_tokens] = [[type] * self.ned_features_size[0]] * ent_num_tokens
-        
+
+            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [[type] * self.ned_features_size[0]] * ent_num_tokens
+
         return tokens_type_ids
-        
-    
+
     def lookup(self, tokens, database_lookup_method=None, min_entity_len=2, max_entity_len=4, answer_entities=None):
-    
+
         tokens_type_ids = [[self.unk_id] * self.ned_features_size[0]] * len(tokens)
-        
+
         if answer_entities is not None:
             tokens_type_ids = self.lookup_entities(tokens, answer_entities)
         else:

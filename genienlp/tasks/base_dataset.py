@@ -29,12 +29,12 @@
 
 
 import os
-import zipfile
 import tarfile
 import urllib
-import requests
-from typing import NamedTuple
+import zipfile
+from typing import NamedTuple, Union
 
+import requests
 import torch.utils.data
 
 
@@ -46,6 +46,7 @@ class Dataset(torch.utils.data.Dataset):
             together examples with similar lengths to minimize padding.
         examples (list(Example)): The examples in this dataset.
     """
+
     sort_key = None
 
     def __init__(self, examples, filter_pred=None, **kwargs):
@@ -63,10 +64,9 @@ class Dataset(torch.utils.data.Dataset):
             if make_list:
                 examples = list(examples)
         self.examples = examples
-        
+
     @classmethod
-    def splits(cls, root='.data', train=None, validation=None,
-               test=None, **kwargs):
+    def splits(cls, root='.data', train=None, validation=None, test=None, **kwargs):
         """Create Dataset objects for multiple splits of a dataset.
 
         Arguments:
@@ -85,14 +85,10 @@ class Dataset(torch.utils.data.Dataset):
                 test splits in that order, if provided.
         """
         path = cls.download(root)
-        train_data = None if train is None else cls(
-            os.path.join(path, train), **kwargs)
-        val_data = None if validation is None else cls(
-            os.path.join(path, validation), **kwargs)
-        test_data = None if test is None else cls(
-            os.path.join(path, test), **kwargs)
-        return tuple(d for d in (train_data, val_data, test_data)
-                     if d is not None)
+        train_data = None if train is None else cls(os.path.join(path, train), **kwargs)
+        val_data = None if validation is None else cls(os.path.join(path, validation), **kwargs)
+        test_data = None if test is None else cls(os.path.join(path, test), **kwargs)
+        return tuple(d for d in (train_data, val_data, test_data) if d is not None)
 
     def __getitem__(self, i):
         return self.examples[i]
@@ -109,7 +105,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def __repr__(self):
         if self.examples is not None:
-            return 'Dataset('+self.examples.__repr__()+')'
+            return 'Dataset(' + self.examples.__repr__() + ')'
         else:
             return 'Dataset()'
 
@@ -155,8 +151,8 @@ class Dataset(torch.utils.data.Dataset):
                         tar.extractall(path=path, members=dirs)
 
         return os.path.join(path, cls.dirname)
-    
-from typing import Union
+
+
 class Split(NamedTuple):
     train: Union[Dataset, str] = None
     eval: Union[Dataset, str] = None
@@ -204,6 +200,3 @@ def download_from_url(url, path):
         for chunk in response.iter_content(chunk_size):
             if chunk:
                 f.write(chunk)
-                
-                
-

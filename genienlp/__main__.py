@@ -30,10 +30,9 @@
 
 import argparse
 
-from . import arguments, train, predict, server, kfserver, cache_embeddings, export, calibrate, run_bootleg, \
-    write_kf_metrics
-from .paraphrase import run_lm_finetuning, run_generation
-from .paraphrase.scripts import split_dataset, dialog_to_tsv, clean_paraphrasing_dataset, transform_dataset
+from . import arguments, cache_embeddings, calibrate, export, kfserver, predict, run_bootleg, server, train, write_kf_metrics
+from .paraphrase import run_generation, run_lm_finetuning
+from .paraphrase.scripts import clean_paraphrasing_dataset, dialog_to_tsv, split_dataset, transform_dataset
 from .sts import sts_calculate_scores, sts_filter
 
 subcommands = {
@@ -45,26 +44,45 @@ subcommands = {
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
     'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.parse_argv, run_lm_finetuning.main),
     'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main),
-    
     # calibration commands
     'calibrate': ('Train a confidence calibration model', calibrate.parse_argv, calibrate.main),
-
     # commands that work with datasets
-    'transform-dataset': ('Apply transformations to a tab-separated dataset', transform_dataset.parse_argv, transform_dataset.main),
-    'clean-paraphrasing-dataset': ('Select a clean subset from the ParaBank2 dataset', clean_paraphrasing_dataset.parse_argv, clean_paraphrasing_dataset.main),
-    'dialog-to-tsv': ('Convert a dialog dataset to a turn-by-turn tab-separated format', dialog_to_tsv.parse_argv, dialog_to_tsv.main),
+    'transform-dataset': (
+        'Apply transformations to a tab-separated dataset',
+        transform_dataset.parse_argv,
+        transform_dataset.main,
+    ),
+    'clean-paraphrasing-dataset': (
+        'Select a clean subset from the ParaBank2 dataset',
+        clean_paraphrasing_dataset.parse_argv,
+        clean_paraphrasing_dataset.main,
+    ),
+    'dialog-to-tsv': (
+        'Convert a dialog dataset to a turn-by-turn tab-separated format',
+        dialog_to_tsv.parse_argv,
+        dialog_to_tsv.main,
+    ),
     'split-dataset': ('Split a dataset file into two files', split_dataset.parse_argv, split_dataset.main),
-    
     # sts commands
-    'calculate-paraphrase-sts': ('Calculate semantic similarity scores between a dataset and its paraphrase', sts_calculate_scores.parse_argv, sts_calculate_scores.main),
-    'filter-paraphrase-sts': ('Filter paraphrases based on semantic similarity scores', sts_filter.parse_argv, sts_filter.main),
-    
+    'calculate-paraphrase-sts': (
+        'Calculate semantic similarity scores between a dataset and its paraphrase',
+        sts_calculate_scores.parse_argv,
+        sts_calculate_scores.main,
+    ),
+    'filter-paraphrase-sts': (
+        'Filter paraphrases based on semantic similarity scores',
+        sts_filter.parse_argv,
+        sts_filter.main,
+    ),
     # bootleg commands
-    'bootleg-dump-features': ('Extract candidate features for named entity mentions in the dataset', run_bootleg.parse_argv, run_bootleg.main),
-    
+    'bootleg-dump-features': (
+        'Extract candidate features for named entity mentions in the dataset',
+        run_bootleg.parse_argv,
+        run_bootleg.main,
+    ),
     # kf commands
     'kfserver': ('Export KFServing interface to predict', server.parse_argv, kfserver.main),
-    'write-kf-metrics': ('Write KF evaluation metrics', write_kf_metrics.parse_argv, write_kf_metrics.main)
+    'write-kf-metrics': ('Write KF evaluation metrics', write_kf_metrics.parse_argv, write_kf_metrics.main),
 }
 
 

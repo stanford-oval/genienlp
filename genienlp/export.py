@@ -30,23 +30,23 @@
 import logging
 import os
 import shutil
+
 import torch
 
-from .util import load_config_json
 from . import models
 from .calibrate import ConfidenceEstimator
+from .util import load_config_json
 
 logger = logging.getLogger(__name__)
 
 
 def parse_argv(parser):
-    parser.add_argument('--path', required=True,
-                        help='the model training directory to export')
+    parser.add_argument('--path', required=True, help='the model training directory to export')
     parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to load embeddings from')
-    parser.add_argument('--checkpoint_name', default='best.pth',
-                        help='Checkpoint file to use (relative to --path, defaults to best.pth)')
-    parser.add_argument('-o', '--output', required=True,
-                        help='the directory where to export into')
+    parser.add_argument(
+        '--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)'
+    )
+    parser.add_argument('-o', '--output', required=True, help='the directory where to export into')
 
 
 def main(args):
@@ -55,19 +55,22 @@ def main(args):
 
     # load everything - this will ensure that we initialize the numericalizer correctly
     Model = getattr(models, args.model)
-    model, _ = Model.load(args.path,
-                                     model_checkpoint_file=args.checkpoint_name,
-                                     args=args,
-                                     device=torch.device('cpu'),
-                                     tasks=[],
-                                     )
+    model, _ = Model.load(
+        args.path,
+        model_checkpoint_file=args.checkpoint_name,
+        args=args,
+        device=torch.device('cpu'),
+        tasks=[],
+    )
 
     # save the numericalizer to the target directory
     # this will copy over all the necessary vocabulary and config files that the numericalizer needs
     model.numericalizer.save(args.output)
 
     # now copy over the config.json, checkpoint file, and calibrator files (if any)
-    for fn in ['config.json', args.checkpoint_name] + [fn for fn in os.listdir(args.path) if ConfidenceEstimator.is_estimator(fn)]:
+    for fn in ['config.json', args.checkpoint_name] + [
+        fn for fn in os.listdir(args.path) if ConfidenceEstimator.is_estimator(fn)
+    ]:
         src = os.path.join(args.path, fn)
         dst = os.path.join(args.output, fn)
         shutil.copyfile(src, dst)

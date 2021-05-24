@@ -4,14 +4,10 @@ from ...data_utils.progbar import progress_bar
 
 
 def parse_argv(parser):
-    parser.add_argument('input', type=str,
-                        help='The path to the input.')
-    parser.add_argument('output1', type=str,
-                        help='The path to the output train file.')
-    parser.add_argument('output2', type=str,
-                        help='The path to the output dev file.')
-    parser.add_argument('--output1_ratio', type=float, required=True,
-                        help='The ratio of input examples that go to output1')
+    parser.add_argument('input', type=str, help='The path to the input.')
+    parser.add_argument('output1', type=str, help='The path to the output train file.')
+    parser.add_argument('output2', type=str, help='The path to the output dev file.')
+    parser.add_argument('--output1_ratio', type=float, required=True, help='The ratio of input examples that go to output1')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
 
 

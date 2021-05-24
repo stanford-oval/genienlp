@@ -35,7 +35,6 @@ import torch.nn as nn
 from torch.jit import Final
 from torch.nn import functional as F
 
-
 INF = 1e10
 EPSILON = 1e-10
 
@@ -77,7 +76,6 @@ def matmul(x, y):
 
 
 class LayerNorm(nn.Module):
-
     def __init__(self, d_model, eps=1e-6):
         super().__init__()
         self.gamma = nn.Parameter(torch.ones(d_model))
@@ -91,7 +89,7 @@ class LayerNorm(nn.Module):
 
 
 def mask(targets, out, squash=True, pad_idx=1):
-    mask = (targets != pad_idx)
+    mask = targets != pad_idx
     out_mask = mask.unsqueeze(-1).expand_as(out).contiguous()
     if squash:
         out_after = out[out_mask].contiguous().view(-1, out.size(-1))
@@ -102,7 +100,6 @@ def mask(targets, out, squash=True, pad_idx=1):
 
 
 class LinearFeedforward(nn.Module):
-
     def __init__(self, d_in, d_hid, d_out, activation='relu', dropout=0.2):
         super().__init__()
         self.feedforward = Feedforward(d_in, d_hid, activation=activation)
@@ -114,15 +111,12 @@ class LinearFeedforward(nn.Module):
 
 
 class Linear(nn.Linear):
-
     def forward(self, x):
         size = x.size()
-        return super().forward(
-            x.contiguous().view(-1, size[-1])).view(*size[:-1], -1)
+        return super().forward(x.contiguous().view(-1, size[-1])).view(*size[:-1], -1)
 
 
 class Feedforward(nn.Module):
-
     def __init__(self, d_in, d_out, activation=None, bias=True, dropout=0.2):
         super().__init__()
         if activation is not None:
@@ -140,10 +134,7 @@ class CombinedEmbedding(nn.Module):
     project: Final[bool]
     dimension: Final[int]
 
-    def __init__(self, numericalizer, pretrained_embeddings,
-                 output_dimension,
-                 trained_dimension=0,
-                 project=True):
+    def __init__(self, numericalizer, pretrained_embeddings, output_dimension, trained_dimension=0, project=True):
         super().__init__()
         self.project = project
         self.pretrained_embeddings = nn.ModuleList(pretrained_embeddings)
@@ -173,7 +164,7 @@ class CombinedEmbedding(nn.Module):
             return
         assert new_vocab_size > dimensions[0], 'Cannot shrink the embedding matrix'
         resized_embeddings = nn.Embedding(new_vocab_size, dimensions[1])
-        resized_embeddings.weight.data[0:dimensions[0], :] = self.trained_embeddings.weight.data
+        resized_embeddings.weight.data[0 : dimensions[0], :] = self.trained_embeddings.weight.data
         self.trained_embeddings = resized_embeddings
 
     def _combine_embeddings(self, embeddings):
@@ -258,6 +249,6 @@ class LabelSmoothingCrossEntropy(torch.nn.Module):
         nll_loss = -logprobs.gather(dim=-1, index=target.unsqueeze(1))
         nll_loss = nll_loss.squeeze(1)
         smooth_loss = -logprobs.mean(dim=-1)
-        loss = (1. - self.smoothing) * nll_loss + self.smoothing * smooth_loss
+        loss = (1.0 - self.smoothing) * nll_loss + self.smoothing * smooth_loss
         loss.masked_fill_((target == ignore_index), 0)
         return loss

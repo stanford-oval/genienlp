@@ -21,4 +21,3 @@ export SENTENCE_TRANSFORMERS_HOME="$EMBEDDING_DIR"
 TMPDIR=`pwd`
 workdir=`mktemp -d $TMPDIR/genieNLP-tests-XXXXXX`
 trap on_error ERR INT TERM
-
