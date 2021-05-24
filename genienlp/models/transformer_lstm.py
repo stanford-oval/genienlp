@@ -31,8 +31,8 @@
 import logging
 
 import torch
-from transformers import AutoModel, PretrainedConfig, AutoConfig
-from transformers import BertConfig, XLMRobertaConfig
+from transformers import AutoConfig, AutoModel, BertConfig, PretrainedConfig, XLMRobertaConfig
+
 from genienlp.model_utils.transformers_utils import BertModelForNER, XLMRobertaModelForNER
 
 from ..data_utils.numericalizer import TransformerNumericalizer

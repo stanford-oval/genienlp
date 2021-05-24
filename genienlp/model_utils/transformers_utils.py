@@ -1,11 +1,9 @@
+import logging
 import random
 
 import torch
 import torch.nn as nn
-import logging
-
-from transformers import XLMRobertaConfig, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast, M2M100Tokenizer
-
+from transformers import M2M100Tokenizer, MBart50Tokenizer, MBart50TokenizerFast, MBartTokenizerFast, XLMRobertaConfig
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 from transformers.models.bert.modeling_bert import BertEmbeddings, BertModel
 from transformers.models.gpt2 import tokenization_gpt2
@@ -44,6 +42,7 @@ MODEL_PARALLEL_SUPPORTED_MODELS = (
 )
 
 ###############
+
 
 class GenieMBartTokenizer(MBartTokenizer):
     '''

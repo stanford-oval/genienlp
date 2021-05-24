@@ -639,9 +639,9 @@ class Translate(NaturalSeq2Seq):
         all_text_outputs = []
         # post-process predictions ids
         for i, (tgt_tokens, cross_att) in enumerate(zip(all_tgt_tokens, cross_attention_pooled)):
-            
+
             src_tokens = all_src_tokens[i // num_outputs]
-            
+
             # shift target tokens left to match the attention positions
             if tgt_tokens[0] in tokenizer.all_special_tokens:
                 tgt_tokens = tgt_tokens[1:]

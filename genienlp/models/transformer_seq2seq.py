@@ -35,7 +35,6 @@ from torch.tensor import Tensor
 from transformers import AutoConfig, AutoModelForSeq2SeqLM, MBartTokenizer, MBartTokenizerFast
 
 from ..data_utils.numericalizer import TransformerNumericalizer
-
 from ..model_utils.transformers_utils import MULTILINGUAL_TOKENIZERS
 from ..util import ConfidenceFeatures, adjust_language_code
 from .base import GenieModel
@@ -79,12 +78,14 @@ class TransformerSeq2Seq(GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
         # set decoder_start_token_id for mbart
-        if self.model.config.decoder_start_token_id is None and isinstance(self.numericalizer._tokenizer, (MBartTokenizer, MBartTokenizerFast)):
+        if self.model.config.decoder_start_token_id is None and isinstance(
+            self.numericalizer._tokenizer, (MBartTokenizer, MBartTokenizerFast)
+        ):
             if isinstance(self.numericalizer._tokenizer, MBartTokenizer):
                 self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[self.tgt_lang]
             else:
                 self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.convert_tokens_to_ids(self.tgt_lang)
-                
+
         # check decoder_start_token_id is set
         if self.model.config.decoder_start_token_id is None:
             raise ValueError("Make sure that decoder_start_token_id for the model is defined")
@@ -150,56 +151,50 @@ class TransformerSeq2Seq(GenieModel):
         else:
             return self.model(**kwargs)
 
-
-    def generate(self,
-                 batch,
-                 max_output_length,
-                 num_outputs,
-                 temperature,
-                 repetition_penalty,
-                 top_k,
-                 top_p,
-                 num_beams,
-                 num_beam_groups,
-                 diversity_penalty,
-                 no_repeat_ngram_size,
-                 do_sample
-                 ):
-        
-        # decoder_start_token_id, forced_bos_token_id = None, None
-        # if self._is_mbart:
-        #     decoder_start_token_id = self.model.config.decoder_start_token_id
+    def generate(
+        self,
+        batch,
+        max_output_length,
+        num_outputs,
+        temperature,
+        repetition_penalty,
+        top_k,
+        top_p,
+        num_beams,
+        num_beam_groups,
+        diversity_penalty,
+        no_repeat_ngram_size,
+        do_sample,
+    ):
 
         input_ids = batch.context.value
-        
-        # when attention_mask is not provided to generate(), it will default to masking pad tokens, which is the correct thing
-        generated = self.model.generate(input_ids=input_ids,
-                                        max_length=max_output_length,
-                                        min_length=3, # generate at least one token after BOS and language code
-                                        bos_token_id=self.numericalizer.init_id,
-                                        pad_token_id=self.numericalizer.pad_id,
-                                        early_stopping=False,
-                                        num_return_sequences=num_outputs,
-                                        repetition_penalty=repetition_penalty,
-                                        temperature=temperature,
-                                        eos_token_id=self.numericalizer.eos_id,
-                                        top_k=top_k,
-                                        top_p=top_p,
-                                        num_beams=num_beams,
-                                        num_beam_groups=num_beam_groups,
-                                        diversity_penalty=diversity_penalty,
-                                        no_repeat_ngram_size=no_repeat_ngram_size,
-                                        do_sample=do_sample,
-                                        # decoder_start_token_id=decoder_start_token_id,
-                                        # forced_bos_token_id=forced_bos_token_id,
-                                        output_scores=False,
-                                        output_attentions=True,
-                                        output_hidden_states=False,
-                                        return_dict_in_generate=True
-                                        )
-        
-        return generated
 
+        # when attention_mask is not provided to generate(), it will default to masking pad tokens, which is the correct thing
+        generated = self.model.generate(
+            input_ids=input_ids,
+            max_length=max_output_length,
+            min_length=3,  # generate at least one token after BOS and language code
+            bos_token_id=self.numericalizer.init_id,
+            pad_token_id=self.numericalizer.pad_id,
+            early_stopping=False,
+            num_return_sequences=num_outputs,
+            repetition_penalty=repetition_penalty,
+            temperature=temperature,
+            eos_token_id=self.numericalizer.eos_id,
+            top_k=top_k,
+            top_p=top_p,
+            num_beams=num_beams,
+            num_beam_groups=num_beam_groups,
+            diversity_penalty=diversity_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            do_sample=do_sample,
+            output_scores=False,
+            output_attentions=True,
+            output_hidden_states=False,
+            return_dict_in_generate=True,
+        )
+
+        return generated
 
     def confidence_features(self, batch, predictions, mc_dropout_num=0) -> List[ConfidenceFeatures]:
         """

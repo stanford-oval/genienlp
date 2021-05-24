@@ -4,10 +4,11 @@ import math
 import os
 import re
 import shutil
+
 import torch
+from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 
 from genienlp.model_utils.transformers_utils import MARIAN_GROUP_MEMBERS
-from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 
 from ..metrics import computeBLEU
 from ..util import get_mbart_lang

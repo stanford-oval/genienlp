@@ -46,24 +46,31 @@ except RuntimeError:
     pass
 
 import torch
+from transformers import (
+    BartForConditionalGeneration,
+    BartTokenizer,
+    GPT2Tokenizer,
+    MarianMTModel,
+    MarianTokenizer,
+    MBart50Tokenizer,
+    MBartForConditionalGeneration,
+    MT5ForConditionalGeneration,
+    PretrainedConfig,
+    T5ForConditionalGeneration,
+    T5Tokenizer,
+)
 
-from transformers import T5ForConditionalGeneration, MT5ForConditionalGeneration, BartForConditionalGeneration,\
-    MBartForConditionalGeneration, MarianMTModel
-from transformers import GPT2Tokenizer, T5Tokenizer, MarianTokenizer, BartTokenizer, MBart50Tokenizer
+from genienlp.model_utils.transformers_utils import GenieMBartTokenizer
 
-
-from transformers import PretrainedConfig
-from ..util import set_seed, combine_files_on_disk, split_file_on_disk, get_part_path
+from ..util import combine_files_on_disk, get_part_path, set_seed, split_file_on_disk
 from .data_utils import group_together
 from .GPT2Seq2Seq import GPT2Seq2Seq
 from .model_utils import check_args
-from genienlp.model_utils.transformers_utils import GenieMBartTokenizer
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s', datefmt='%m/%d/%Y %H:%M:%S', level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
 
 MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'bos_token': '<unk>', 'sep_token': '<paraphrase>', 'eos_token': '</paraphrase>'}),

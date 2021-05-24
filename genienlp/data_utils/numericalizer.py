@@ -37,11 +37,24 @@ from typing import List, Tuple
 
 from pathos import multiprocessing
 from torch.nn.utils.rnn import pad_sequence
-
-from transformers import MarianConfig, AutoTokenizer, BertTokenizer, BertTokenizerFast, \
-    XLMRobertaTokenizer, XLMRobertaTokenizerFast, GPT2Tokenizer, GPT2TokenizerFast, MBart50Tokenizer, \
-    MBart50TokenizerFast, T5Tokenizer, T5TokenizerFast, MarianTokenizer, M2M100Tokenizer, SPIECE_UNDERLINE, \
-    T5_PRETRAINED_CONFIG_ARCHIVE_MAP
+from transformers import (
+    SPIECE_UNDERLINE,
+    T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    AutoTokenizer,
+    BertTokenizer,
+    BertTokenizerFast,
+    GPT2Tokenizer,
+    GPT2TokenizerFast,
+    M2M100Tokenizer,
+    MarianConfig,
+    MarianTokenizer,
+    MBart50Tokenizer,
+    MBart50TokenizerFast,
+    T5Tokenizer,
+    T5TokenizerFast,
+    XLMRobertaTokenizer,
+    XLMRobertaTokenizerFast,
+)
 
 from ..util import get_devices
 from .decoder_vocab import DecoderVocabulary

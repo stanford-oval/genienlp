@@ -20,4 +20,4 @@ repos:
     rev: v2.3.0
     hooks:
       - id: flake8
-        verbose: true
+        verbose: false

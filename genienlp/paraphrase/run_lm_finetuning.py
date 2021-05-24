@@ -32,20 +32,41 @@ import torch
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
+from transformers import (
+    WEIGHTS_NAME,
+    AdamW,
+    BartConfig,
+    BartForConditionalGeneration,
+    BartTokenizer,
+    BertConfig,
+    BertForMaskedLM,
+    BertTokenizer,
+    CamembertConfig,
+    CamembertForMaskedLM,
+    CamembertTokenizer,
+    DistilBertConfig,
+    DistilBertForMaskedLM,
+    DistilBertTokenizer,
+    GPT2Config,
+    GPT2LMHeadModel,
+    GPT2Tokenizer,
+    MarianConfig,
+    MarianMTModel,
+    MarianTokenizer,
+    MBartConfig,
+    MBartForConditionalGeneration,
+    OpenAIGPTConfig,
+    OpenAIGPTLMHeadModel,
+    OpenAIGPTTokenizer,
+    RobertaConfig,
+    RobertaForMaskedLM,
+    RobertaTokenizer,
+    get_linear_schedule_with_warmup,
+)
 
+from genienlp.model_utils.transformers_utils import GenieMBartTokenizer
 
-from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
-                                  BertConfig, BertForMaskedLM, BertTokenizer,
-                                  GPT2Config, GPT2LMHeadModel, GPT2Tokenizer,
-                                  OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer,
-                                  RobertaConfig, RobertaForMaskedLM, RobertaTokenizer,
-                                  DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer,
-                                  CamembertConfig, CamembertForMaskedLM, CamembertTokenizer,
-                                  BartConfig, BartForConditionalGeneration, BartTokenizer,
-                                  MBartConfig, MBartForConditionalGeneration,
-                                  MarianConfig, MarianMTModel, MarianTokenizer)
-
-from ..data_utils.progbar import progress_bar, prange
+from ..data_utils.progbar import prange, progress_bar
 from ..util import set_seed, split_file_on_disk
 from .data_utils import add_special_tokens, mask_tokens
 from .dataset import LengthSortedSampler, TextDataset
@@ -57,7 +78,6 @@ from .model_utils import (
     get_transformer_schedule_with_warmup,
     shift_tokens_right,
 )
-from genienlp.model_utils.transformers_utils import GenieMBartTokenizer
 
 logger = logging.getLogger(__name__)
 
