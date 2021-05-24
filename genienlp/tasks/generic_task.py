@@ -366,10 +366,11 @@ class CrossNERTask(BaseAlmondTask):
     def utterance_field(self):
         return 'context'
 
-    def _make_example(self, example_id, token_list, label_list, domain):
-        context = ' '.join(token_list)
+    def _make_example(self, parts, dir_name=None, **kwargs):
+        example_id = parts[0]
+        context = ' '.join(parts[1])
         question = ''
-        answer = ' '.join([str(self.label2id[label]) for label in label_list])
+        answer = ' '.join([str(self.label2id[label]) for label in parts[2]])
 
         return Example.from_raw(
             self.name + '/' + str(example_id), context, question, answer, preprocess=self.preprocess_field, lower=False

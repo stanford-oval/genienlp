@@ -869,7 +869,6 @@ class AlmondDialogueNLG(BaseAlmondTask):
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task
         example_id, context, sentence, target_code = parts
-        context = context
         question = target_code
         answer = sentence
         return Example.from_raw(
@@ -900,7 +899,6 @@ class AlmondDialoguePolicy(BaseAlmondTask):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
         example_id, context, _sentence, target_code = parts
         question = 'what should the agent do ?'
-        context = context
         answer = target_code
         return Example.from_raw(
             self.name + '/' + example_id, context, question, answer, preprocess=self.preprocess_field, lower=False

@@ -40,7 +40,6 @@ from pprint import pformat
 from torch.multiprocessing import Process, set_start_method
 
 from .data_utils.bootleg import Bootleg, extract_features_with_annotator, init_bootleg_annotator
-from .models import TransformerForTokenClassification
 from .run_bootleg import bootleg_process_splits
 
 try:

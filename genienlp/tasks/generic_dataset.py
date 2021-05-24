@@ -1858,7 +1858,7 @@ class CrossNERDataset(CQA):
             if line == "":
                 # reached end of this example
                 if len(tokens):
-                    examples.append(make_example(example_id, tokens, labels, domain))
+                    examples.append(make_example([example_id, tokens, labels], domain))
                 tokens, labels = [], []
                 example_id += 1
             else:

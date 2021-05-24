@@ -306,7 +306,7 @@ class RemoteElasticDatabase(object):
                 if scroll_id is None and total_values == -1:
                     break
                 i += 1
-            except:
+            except BaseException:
                 break
 
         # dump any remaining values

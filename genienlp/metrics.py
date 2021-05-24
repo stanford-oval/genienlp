@@ -145,7 +145,7 @@ def computeLFEM(greedy, answer):
                 lower_conds.append(lc)
             gt['conds'] = lower_conds
             correct += lf == gt
-        except:
+        except BaseException:
             continue
     return correct / count * 100, text_answers
 
@@ -387,10 +387,10 @@ def to_delta_state(line):
             try:
                 k, v = i.split(':')
                 inform_pairs[k.strip()] = v.strip()
-            except:
+            except BaseException:
                 pass
         delta_state = {'inform': inform_pairs, 'request': request}
-    except:
+    except BaseException:
         pass
     finally:
         return delta_state
