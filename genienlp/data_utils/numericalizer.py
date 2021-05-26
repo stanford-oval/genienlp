@@ -39,6 +39,7 @@ from pathos import multiprocessing
 from torch.nn.utils.rnn import pad_sequence
 from transformers import (
     SPIECE_UNDERLINE,
+    T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
     AutoTokenizer,
     BertTokenizer,
     BertTokenizerFast,
@@ -49,7 +50,6 @@ from transformers import (
     MarianTokenizer,
     MBart50Tokenizer,
     MBart50TokenizerFast,
-    T5Config,
     T5Tokenizer,
     T5TokenizerFast,
     XLMRobertaTokenizer,
@@ -186,10 +186,13 @@ class TransformerNumericalizer(object):
         input_prefix = ''
         if isinstance(config, MarianConfig) and tgt_lang:
             input_prefix = f'>>{tgt_lang}<< '
-        elif isinstance(config, T5Config):
-            t5_task = f'translation_{src_lang}_to_{tgt_lang}'
-            # TODO add support for summarization
-            # t5_task = 'summarization'
+        # only older T5 models need task-specific input prefix
+        elif self._pretrained_name in T5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys():
+            assert src_lang == 'en'
+            if tgt_lang == 'en':
+                t5_task = 'summarization'
+            else:
+                t5_task = f'translation_en_to_{tgt_lang}'
             input_prefix = config.task_specific_params[t5_task]['prefix']
 
         self.input_prefix = input_prefix

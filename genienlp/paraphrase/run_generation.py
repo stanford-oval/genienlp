@@ -47,8 +47,6 @@ except RuntimeError:
 
 import torch
 from transformers import (
-    GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
     BartForConditionalGeneration,
     BartTokenizer,
     GPT2Tokenizer,
@@ -62,29 +60,17 @@ from transformers import (
     T5Tokenizer,
 )
 
+from genienlp.model_utils.transformers_utils import GenieMBartTokenizer
+
 from ..util import combine_files_on_disk, get_part_path, set_seed, split_file_on_disk
 from .data_utils import group_together
 from .GPT2Seq2Seq import GPT2Seq2Seq
 from .model_utils import check_args
-from .transformers_utils import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, GenieMBartTokenizer
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s', datefmt='%m/%d/%Y %H:%M:%S', level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-ALL_MODELS = sum(
-    (
-        tuple(map.keys())
-        for map in (
-            GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-            T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
-            BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
-            MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        )
-    ),
-    (),
-)
 
 MODEL_CLASSES = {
     'gpt2': (GPT2Seq2Seq, GPT2Tokenizer, {'bos_token': '<unk>', 'sep_token': '<paraphrase>', 'eos_token': '</paraphrase>'}),
@@ -111,7 +97,7 @@ def parse_argv(parser):
         default=None,
         type=str,
         required=True,
-        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS),
+        help="Path to pre-trained model or shortcut name",
     )
     parser.add_argument("--input_file", type=str, help="The file from which we read prompts. Defaults to stdin.")
     parser.add_argument(

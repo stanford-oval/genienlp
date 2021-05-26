@@ -34,8 +34,9 @@ import logging
 import os
 import subprocess
 
+from genienlp.model_utils.transformers_utils import MODEL_PARALLEL_SUPPORTED_MODELS
+
 from .data_utils.example import VALID_FEATURE_FIELDS
-from .paraphrase.transformers_utils import MODEL_PARALLEL_SUPPORTED_MODELS
 from .tasks.registry import get_tasks
 from .util import have_multilingual
 

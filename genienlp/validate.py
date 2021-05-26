@@ -124,7 +124,7 @@ def generate_with_seq2seq_model(
             generated = model.generate(
                 batch,
                 max_output_length=args.max_output_length,
-                num_outputs=args.num_outputs[hyperparameter_idx],
+                num_outputs=args.num_outputs[hyperparameter_idx] if args.temperature[hyperparameter_idx] != 0 else 1,
                 temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
                 repetition_penalty=args.repetition_penalty[hyperparameter_idx],
                 top_k=args.top_k[hyperparameter_idx],
