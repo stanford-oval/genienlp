@@ -35,17 +35,15 @@ with open("README.md", "r") as fh:
 setuptools.setup(
     name='genienlp',
     version='0.6.0a4',
-    
     packages=setuptools.find_packages(exclude=['tests']),
     entry_points={
         'console_scripts': ['genienlp=genienlp.__main__:main'],
-    },    
+    },
     license='BSD-3-Clause',
     author="Salesforce Inc., Stanford University Open Virtual Assistant Lab",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/stanford-oval/genienlp",
-
     install_requires=[
         'numpy>=1.14.5',
         'torch~=1.7.1',
@@ -72,6 +70,6 @@ setuptools.setup(
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',
-        'xgboost~=1.3'
-    ]
+        'xgboost~=1.3',
+    ],
 )

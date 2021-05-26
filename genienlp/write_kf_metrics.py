@@ -39,15 +39,13 @@ def parse_argv(parser):
 def main(args):
     with open(args.eval_file, 'r') as fin:
         metrics = json.load(fin)
-    
+
     # kf dashboard is hardcoded to only show two metrics
     # we choose the first two from task metrics that are important
     items = list(metrics.items())[:2]
-    
-    extracted_metrics = [
-        {'name': key, 'numberValue': val / 100, 'format': "PERCENTAGE"} for key, val in items
-    ]
-    
+
+    extracted_metrics = [{'name': key, 'numberValue': val / 100, 'format': "PERCENTAGE"} for key, val in items]
+
     metrics = {'metrics': extracted_metrics}
     with open('/tmp/mlpipeline-metrics.json', 'w') as fout:
         json.dump(metrics, fout)

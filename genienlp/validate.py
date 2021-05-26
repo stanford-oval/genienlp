@@ -29,36 +29,60 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys
-import torch
 from collections import OrderedDict
 
-from .models import TransformerForTokenClassification
-from .util import GenerationOutput
+import torch
+
 from .data_utils.progbar import progress_bar
 from .metrics import compute_metrics
+from .models import TransformerForTokenClassification
+from .util import GenerationOutput
 
-def generate_with_model(model, data_iterator, numericalizer, task, args, output_predictions_only=False,
-                                output_confidence_features=False, original_order=None, confidence_estimators=None,
-                                disable_progbar=True):
-    
+
+def generate_with_model(
+    model,
+    data_iterator,
+    numericalizer,
+    task,
+    args,
+    output_predictions_only=False,
+    output_confidence_features=False,
+    original_order=None,
+    confidence_estimators=None,
+    disable_progbar=True,
+):
+
     if isinstance(model, TransformerForTokenClassification):
-        return generate_with_classification_model(model, data_iterator, numericalizer, task,
-                                           original_order=original_order, disable_progbar=disable_progbar)
+        return generate_with_classification_model(
+            model, data_iterator, numericalizer, task, original_order=original_order, disable_progbar=disable_progbar
+        )
     else:
-        return generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
-                                           output_predictions_only=output_predictions_only,
-                                           output_confidence_features=output_confidence_features,
-                                           original_order=original_order,
-                                           confidence_estimators=confidence_estimators,
-                                           disable_progbar=disable_progbar)
+        return generate_with_seq2seq_model(
+            model,
+            data_iterator,
+            numericalizer,
+            task,
+            args,
+            output_predictions_only=output_predictions_only,
+            output_confidence_features=output_confidence_features,
+            original_order=original_order,
+            confidence_estimators=confidence_estimators,
+            disable_progbar=disable_progbar,
+        )
 
 
-def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
-                                output_predictions_only=False,
-                                output_confidence_features=False,
-                                original_order=None,
-                                confidence_estimators=None,
-                                disable_progbar=True) -> GenerationOutput:
+def generate_with_seq2seq_model(
+    model,
+    data_iterator,
+    numericalizer,
+    task,
+    args,
+    output_predictions_only=False,
+    output_confidence_features=False,
+    original_order=None,
+    confidence_estimators=None,
+    disable_progbar=True,
+) -> GenerationOutput:
     """
     Inputs:
         original_order: List of indices. If provided, we will sort the results according to this order
@@ -75,7 +99,7 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
     example_ids = []
     answers = []
     contexts = []
-    
+
     for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
@@ -85,7 +109,9 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
         example_ids += batch_example_ids
         if not output_predictions_only:
             batch_answer = numericalizer.reverse(batch.answer.value.data, 'answer')
-            batch_answer = [task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))]
+            batch_answer = [
+                task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))
+            ]
             answers += batch_answer
             batch_context = numericalizer.reverse(batch.context.value.data, 'context')
             contexts += batch_context
@@ -95,26 +121,27 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
             answers += batch_answer
 
         for hyperparameter_idx in range(len(args.temperature)):
-            generated = model.generate(batch,
-                                    max_output_length=args.max_output_length,
-                                    num_outputs=args.num_outputs[hyperparameter_idx],
-                                    temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
-                                    repetition_penalty=args.repetition_penalty[hyperparameter_idx],
-                                    top_k=args.top_k[hyperparameter_idx],
-                                    top_p=args.top_p[hyperparameter_idx],
-                                    num_beams=args.num_beams[hyperparameter_idx],
-                                    num_beam_groups=args.num_beam_groups[hyperparameter_idx],
-                                    diversity_penalty=args.diversity_penalty[hyperparameter_idx],
-                                    no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
-                                    do_sample=args.temperature[hyperparameter_idx]!=0,  # if temperature==0, we do not sample
-                                    )
+            generated = model.generate(
+                batch,
+                max_output_length=args.max_output_length,
+                num_outputs=args.num_outputs[hyperparameter_idx],
+                temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
+                repetition_penalty=args.repetition_penalty[hyperparameter_idx],
+                top_k=args.top_k[hyperparameter_idx],
+                top_p=args.top_p[hyperparameter_idx],
+                num_beams=args.num_beams[hyperparameter_idx],
+                num_beam_groups=args.num_beam_groups[hyperparameter_idx],
+                diversity_penalty=args.diversity_penalty[hyperparameter_idx],
+                no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
+                do_sample=args.temperature[hyperparameter_idx] != 0,  # if temperature==0, we do not sample
+            )
             partial_batch_prediction_ids = generated.sequences
             cross_attentions = getattr(generated, 'cross_attentions', None)
 
             if cross_attentions is not None:
                 # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)
                 cross_attentions = torch.stack(([torch.stack(tuple) for tuple in cross_attentions]))
-    
+
                 # reshape to (num_layers, batch_size, num_heads, max_output_length, max_input_length)
                 cross_attentions = cross_attentions.squeeze(4)
                 cross_attentions = cross_attentions.permute(1, 2, 3, 0, 4).contiguous()
@@ -122,13 +149,17 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
                 # choose only last layer attentions
                 # TODO: get penultimate layer of attention vectors instead
                 cross_attentions = cross_attentions[-1, ...]
-                
+
                 # postprocess prediction ids
                 kwargs = {'numericalizer': numericalizer, 'cross_attentions': cross_attentions}
-                partial_batch_prediction_ids = task.batch_postprocess_prediction_ids(batch_example_ids, batch.context.value.data, partial_batch_prediction_ids, **kwargs)
+                partial_batch_prediction_ids = task.batch_postprocess_prediction_ids(
+                    batch_example_ids, batch.context.value.data, partial_batch_prediction_ids, **kwargs
+                )
 
             if output_confidence_features or output_confidence_scores:
-                partial_batch_confidence_features = model.confidence_features(batch=batch, predictions=partial_batch_prediction_ids, mc_dropout_num=args.mc_dropout_num)
+                partial_batch_confidence_features = model.confidence_features(
+                    batch=batch, predictions=partial_batch_prediction_ids, mc_dropout_num=args.mc_dropout_num
+                )
 
             partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')
 
@@ -137,23 +168,28 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
 
             # post-process predictions
             for i in range(len(partial_batch_prediction)):
-                partial_batch_prediction[i] = task.postprocess_prediction(batch_example_ids[get_example_index(i)], partial_batch_prediction[i])
-                
+                partial_batch_prediction[i] = task.postprocess_prediction(
+                    batch_example_ids[get_example_index(i)], partial_batch_prediction[i]
+                )
+
             # put them into the right array
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[get_example_index(i)].append(partial_batch_prediction[i])
                 if output_confidence_features or output_confidence_scores:
                     batch_confidence_features[get_example_index(i)].append(partial_batch_confidence_features[i])
-        
+
         predictions += batch_prediction
         confidence_features += batch_confidence_features
-    
+
     if original_order is not None:
         # sort back to the original order
         original_order, example_ids, predictions, answers, contexts, confidence_features = [
-            list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidence_features)))))
+            list(a)
+            for a in tuple(
+                zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidence_features))))
+            )
         ]
-    
+
     # TODO calculate and return loss
     loss = None
     output = GenerationOutput(loss=loss)
@@ -167,7 +203,7 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
         if args.override_confidence_labels:
             for i, example in enumerate(confidence_features):
                 for confidence in example:
-                    confidence.label = (answers[i] == args.override_confidence_labels)
+                    confidence.label = answers[i] == args.override_confidence_labels
     if output_confidence_scores:
         output.confidence_scores = []
         for estimator in confidence_estimators:
@@ -177,58 +213,60 @@ def generate_with_seq2seq_model(model, data_iterator, numericalizer, task, args,
     return output
 
 
-def generate_with_classification_model(model, data_iterator, numericalizer, task, original_order=None, disable_progbar=True) -> GenerationOutput:
+def generate_with_classification_model(
+    model, data_iterator, numericalizer, task, original_order=None, disable_progbar=True
+) -> GenerationOutput:
     all_example_ids = []
     all_answers = []
     all_contexts = []
     all_predictions = []
-    
+
     for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
         batch_example_ids = batch.example_id
-        
+
         batch_context = numericalizer.reverse(batch.context.value.data, 'context')
-        
+
         all_example_ids += batch_example_ids
-        
+
         output = model(input_ids=batch.context.value, attention_mask=(batch.context.value != numericalizer.pad_id))
-        
+
         labels = batch.answer.value.tolist()
-        
+
         logits = output.logits
         predictions = torch.argmax(logits, dim=2).tolist()
-        
+
         # Remove ignored index (special tokens)
         processed_preds = []
         processed_labels = []
         for pred, label in zip(predictions, labels):
             preds_list = []
             labels_list = []
-            for p, l in zip(pred, label):
-                if l == numericalizer.answer_pad_id:
+            for p_, l_ in zip(pred, label):
+                if l_ == numericalizer.answer_pad_id:
                     continue
-                preds_list.append(task.id2label[p])
-                labels_list.append(task.id2label[l])
-            
+                preds_list.append(task.id2label[p_])
+                labels_list.append(task.id2label[l_])
+
             processed_preds.append([" ".join(preds_list)])
             processed_labels.append(" ".join(labels_list))
-        
+
         all_contexts += batch_context
         all_answers += processed_labels
         all_predictions += processed_preds
 
     if original_order is not None:
         # sort back to the original order
-        original_order, all_example_ids, all_predictions, all_answers, all_contexts = \
-            [list(a) for a in tuple(zip(*sorted(list(zip(original_order, all_example_ids, all_predictions, all_answers, all_contexts)))))]
+        original_order, all_example_ids, all_predictions, all_answers, all_contexts = [
+            list(a)
+            for a in tuple(
+                zip(*sorted(list(zip(original_order, all_example_ids, all_predictions, all_answers, all_contexts))))
+            )
+        ]
 
     # TODO calculate and return loss
     loss = None
     output = GenerationOutput(
-        loss=loss,
-        example_ids=all_example_ids,
-        contexts=all_contexts,
-        answers=all_answers,
-        predictions=all_predictions
+        loss=loss, example_ids=all_example_ids, contexts=all_contexts, answers=all_answers, predictions=all_predictions
     )
 
     return output
@@ -260,20 +298,19 @@ def print_results(keys, values, num_print=1):
     sys.stdout.flush()
 
 
-
 def validate(task, val_iter, model, numericalizer, args, num_print=10):
     with torch.no_grad():
         model.eval()
         if isinstance(model, torch.nn.DataParallel):
             # get rid of the DataParallel wrapper
             model = model.module
-        
+
         names = ['beam search', 'answer', 'context']
 
         output = generate_with_model(model, val_iter, numericalizer, task, args)
-        
+
         metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args.reduce_metrics)
         results = [output.predictions, output.answers, output.contexts]
         print_results(names, results, num_print=num_print)
-        
+
         return output, metrics

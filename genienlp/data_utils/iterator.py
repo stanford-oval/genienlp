@@ -28,18 +28,18 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import torch
-import random
 import logging
+import random
 
+import torch
 
 logger = logging.getLogger(__name__)
 
 _warned_for_batch_size = False
 
+
 class LengthSortedIterator(torch.utils.data.Sampler):
-    """
-    """
+    """ """
 
     def __init__(self, data_source, batch_size, sort, shuffle_and_repeat, sort_key_fn, batch_size_fn, groups=1):
         """
@@ -56,21 +56,25 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         self.sort_key = sort_key_fn
         self.batch_size_fn = batch_size_fn
         self.groups = groups
-        
+
         if sort:
             # sort while keeping track of the original order
-            data_with_original_order = list(zip(data_source, range(len(data_source)))) # list of tuples of the form (data_source[i], i)
-            # sort based on data_source 
-            sorted_data_with_original_order = sorted(data_with_original_order, key=lambda x: self.sort_key(x[0]), reverse=True) # sort from long to short
+            data_with_original_order = list(
+                zip(data_source, range(len(data_source)))
+            )  # list of tuples of the form (data_source[i], i)
+            # sort based on data_source
+            sorted_data_with_original_order = sorted(
+                data_with_original_order, key=lambda x: self.sort_key(x[0]), reverse=True
+            )  # sort from long to short
             # separate the two parts of each tuple
             self.data_source, self.original_order = tuple(zip(*sorted_data_with_original_order))
         else:
             self.data_source, self.original_order = data_source, list(range(len(data_source)))
-        self.batch_size = batch_size # number of examples or number of tokens
+        self.batch_size = batch_size  # number of examples or number of tokens
         self.shuffle_and_repeat = shuffle_and_repeat
         self.last_batch_start_index = 0
         self.last_batch_start_index = self._get_next_batch_start_index()
-        
+
         if not self.shuffle_and_repeat:
             # do not allow skipping examples during validation/ prediction
             self.no_skip = True
@@ -84,8 +88,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         else:
             self.no_skip = False
             self.length = len(self.data_source)
-            
-            
+
     def __len__(self):
         return self.length
 
@@ -107,9 +110,13 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             if self.batch_size_fn([candidate_example]) > self.batch_size:
                 global _warned_for_batch_size
                 if self.no_skip:
-                    raise ValueError('Have to skip examples in validation/ prediction splits. Increase the validation batch size')
+                    raise ValueError(
+                        'Have to skip examples in validation/ prediction splits. Increase the validation batch size'
+                    )
                 if not _warned_for_batch_size:
-                    logger.warning('Skipping an example larger than batch size. Consider increasing the batch size to avoid this warning')
+                    logger.warning(
+                        'Skipping an example larger than batch size. Consider increasing the batch size to avoid this warning'
+                    )
                     _warned_for_batch_size = True
                 self.last_batch_start_index += 1
                 candidate_index += 1
@@ -119,7 +126,9 @@ class LengthSortedIterator(torch.utils.data.Sampler):
                     raise StopIteration
                 continue
 
-            candidate_batch_size = self.batch_size_fn([self.data_source[i] for i in batch_of_indices] + [candidate_example]) # the new batch size if we added this example to the batch
+            candidate_batch_size = self.batch_size_fn(
+                [self.data_source[i] for i in batch_of_indices] + [candidate_example]
+            )  # the new batch size if we added this example to the batch
             if candidate_batch_size > self.batch_size:
                 # the new example would put us over the batch size limit
                 break
@@ -129,7 +138,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             candidate_index += 1
 
             if candidate_index == len(self.data_source):
-                break # don't start from i=0; there is a large difference between the length of the first and last element
+                break  # don't start from i=0; there is a large difference between the length of the first and last element
 
         self.last_batch_start_index += len(batch_of_indices)
         return batch_of_indices
@@ -140,4 +149,3 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             return random.randrange(0, len(self.data_source) / self.groups) * self.groups
         else:
             return self.last_batch_start_index
-   

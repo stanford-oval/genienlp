@@ -33,7 +33,7 @@ import re
 import string
 from contextlib import closing
 from multiprocessing import Pool, cpu_count
-from subprocess import Popen, PIPE
+from subprocess import PIPE, Popen
 from typing import Iterable
 
 import numpy as np
@@ -71,7 +71,7 @@ def to_lf(s, table):
                 sel = idx
 
     full_conditions = []
-    if not condition_s is None:
+    if condition_s is not None:
 
         condition_s = ' ' + condition_s + ' '
         for idx, col in enumerate(headers):
@@ -145,7 +145,7 @@ def computeLFEM(greedy, answer):
                 lower_conds.append(lc)
             gt['conds'] = lower_conds
             correct += lf == gt
-        except Exception as e:
+        except BaseException:
             continue
     return correct / count * 100, text_answers
 
@@ -224,16 +224,18 @@ def f1_score(prediction, ground_truth):
 def exact_match(prediction, ground_truth):
     return prediction == ground_truth
 
+
 def partial_exact_match(prediction, ground_truth):
     prediction = prediction.split()
     ground_truth = ground_truth.split()
-    is_correct_token = [p==g for p, g in zip(prediction, ground_truth)]
+    is_correct_token = [p == g for p, g in zip(prediction, ground_truth)]
     partial_score = sum(is_correct_token) / len(is_correct_token)
     return partial_score
-    
+
 
 def structure_match(prediction, ground_truth):
     return requote_program(prediction) == requote_program(ground_truth)
+
 
 def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
     scores_for_ground_truths = []
@@ -247,13 +249,16 @@ def computeF1(outputs, targets):
     outs = [metric_max_over_ground_truths(f1_score, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
 
+
 def computeEM(outputs, targets):
     outs = [metric_max_over_ground_truths(exact_match, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
 
+
 def computePartialEM(outputs, targets):
     outs = [metric_max_over_ground_truths(partial_exact_match, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
+
 
 def computeSM(outputs, targets):
     outs = [metric_max_over_ground_truths(structure_match, o, t) for o, t in zip(outputs, targets)]
@@ -272,20 +277,26 @@ class Rouge(Rouge155):
     # https://github.com/andersjo/pyrouge/blob/master/tools/ROUGE-1.5.5/README.txt#L82
     DEFAULT_OPTIONS = [
         '-a',  # evaluate all systems
-        '-n', 4,  # max-ngram
+        '-n',
+        4,  # max-ngram
         '-x',  # do not calculate ROUGE-L
-        '-2', 4,  # max-gap-length
+        '-2',
+        4,  # max-gap-length
         '-u',  # include unigram in skip-bigram
-        '-c', 95,  # confidence interval
-        '-r', 1000,  # number-of-samples (for resampling)
-        '-f', 'A',  # scoring formula
-        '-p', 0.5,  # 0 <= alpha <=1
-        '-t', 0,  # count by token instead of sentence
+        '-c',
+        95,  # confidence interval
+        '-r',
+        1000,  # number-of-samples (for resampling)
+        '-f',
+        'A',  # scoring formula
+        '-p',
+        0.5,  # 0 <= alpha <=1
+        '-t',
+        0,  # count by token instead of sentence
         '-d',  # print per evaluation scores
     ]
 
-    def __init__(self, n_words=None,
-                 keep_files=False, options=None):
+    def __init__(self, n_words=None, keep_files=False, options=None):
 
         if options is None:
             self.options = self.DEFAULT_OPTIONS.copy()
@@ -297,30 +308,23 @@ class Rouge(Rouge155):
 
         stem = "-m" in self.options
 
-        super(Rouge, self).__init__(
-            n_words=n_words, stem=stem,
-            keep_files=keep_files)
+        super(Rouge, self).__init__(n_words=n_words, stem=stem, keep_files=keep_files)
 
     def _run_rouge(self):
         # Get full options
-        options = (
-                ['-e', self._rouge_data] +
-                list(map(str, self.options)) +
-                [os.path.join(self._config_dir, "settings.xml")])
+        options = ['-e', self._rouge_data] + list(map(str, self.options)) + [os.path.join(self._config_dir, "settings.xml")]
 
-        #logging.info("Running ROUGE with options {}".format(" ".join(options)))
+        # logging.info("Running ROUGE with options {}".format(" ".join(options)))
         # print([self._rouge_bin] + list(options))
         pipes = Popen([self._rouge_bin] + options, stdout=PIPE, stderr=PIPE)
         std_out, std_err = pipes.communicate()
 
-        div_by_zero_error = std_err.decode("utf-8"). \
-            startswith("Illegal division by zero")
+        div_by_zero_error = std_err.decode("utf-8").startswith("Illegal division by zero")
         if pipes.returncode == 0 or div_by_zero_error:
             # Still returns the correct output even with div by zero
             return std_out
         else:
-            raise ValueError(
-                std_out.decode("utf-8") + "\n" + std_err.decode("utf-8"))
+            raise ValueError(std_out.decode("utf-8") + "\n" + std_err.decode("utf-8"))
 
 
 def computeROUGE(greedy, answer):
@@ -328,8 +332,7 @@ def computeROUGE(greedy, answer):
     if len(rouges) > 0:
         avg_rouges = {}
         for key in rouges[0].keys():
-            avg_rouges[key] = sum(
-                [r.get(key, 0.0) for r in rouges]) / len(rouges) * 100
+            avg_rouges[key] = sum([r.get(key, 0.0) for r in rouges]) / len(rouges) * 100
     else:
         avg_rouges = None
     return avg_rouges
@@ -345,10 +348,13 @@ def compute_rouge_scores(summs, refs, splitchar='.', options=None, parallel=True
     assert len(summs) == len(refs)
     options = [
         '-a',  # evaluate all systems
-        '-c', 95,  # confidence interval
+        '-c',
+        95,  # confidence interval
         '-m',  # use Porter stemmer
-        '-n', 2,  # max-ngram
-        '-w', 1.3,  # weight (weighting factor for WLCS)
+        '-n',
+        2,  # max-ngram
+        '-w',
+        1.3,  # weight (weighting factor for WLCS)
     ]
     rr = Rouge(options=options)
     rouge_args = []
@@ -381,10 +387,10 @@ def to_delta_state(line):
             try:
                 k, v = i.split(':')
                 inform_pairs[k.strip()] = v.strip()
-            except:
+            except BaseException:
                 pass
         delta_state = {'inform': inform_pairs, 'request': request}
-    except:
+    except BaseException:
         pass
     finally:
         return delta_state
@@ -498,18 +504,20 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
     if 'ner_f1_IOB1' in requested_metrics:
         greedy_processed = [pred.split() for pred in greedy]
         answer_processed = [ans[0].split() for ans in answer]
-        
+
         def convert_IOB2_to_IOB1(labels):
             cur_category = None
             for n, label in enumerate(labels):
                 if label[0] == "B" and label[2:] != cur_category:
                     labels[n] = "I" + label[1:]
                 cur_category = label[2:]
-        
+
         convert_IOB2_to_IOB1(greedy_processed)
         convert_IOB2_to_IOB1(answer_processed)
-        f1 = seq_metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed, mode='strict', scheme=seq_scheme.IOB1) * 100
-        
+        f1 = (
+            seq_metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed, mode='strict', scheme=seq_scheme.IOB1) * 100
+        )
+
         metric_keys.append('ner_f1_IOB1')
         metric_values.append(f1)
 
@@ -518,7 +526,7 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
         answer_processed = [ans[0].split() for ans in answer]
 
         f1 = seq_metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed) * 100
-    
+
         metric_keys.append('ner_f1')
         metric_values.append(f1)
 

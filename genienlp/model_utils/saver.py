@@ -32,10 +32,11 @@ Created on Mar 3, 2019
 @author: gcampagn
 '''
 
-import torch
 import json
-import os
 import logging
+import os
+
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 class Saver(object):
     '''
     Wrap pytorch's save functionality into an interface similar to tensorflow.train.Saver
-    
+
     In particular, this class takes care of automatically cleaning up old checkpoints,
     and creating checkpoint files to keep track of which saves are valid and which are not.
     '''

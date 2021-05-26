@@ -52,25 +52,38 @@ class IdentityEncoder(nn.Module):
             self.projection = None
 
         if self.args.rnn_layers > 0 and self.args.rnn_zero_state in ['average', 'cls']:
-            self.pool = LinearFeedforward(config.hidden_size, config.hidden_size,
-                                          2 * args.rnn_dimension * args.rnn_layers,
-                                          dropout=args.dropout_ratio)
+            self.pool = LinearFeedforward(
+                config.hidden_size, config.hidden_size, 2 * args.rnn_dimension * args.rnn_layers, dropout=args.dropout_ratio
+            )
             self.norm = LayerNorm(2 * args.rnn_dimension * args.rnn_layers)
         else:
             self.pool = None
             self.norm = None
 
-    def compute_final_embeddings(self, context, context_lengths, context_padding, context_entity_ids, context_entity_probs=None, context_entity_masking=None, entity_word_embeds_dropout=True):
-        
+    def compute_final_embeddings(
+        self,
+        context,
+        context_lengths,
+        context_padding,
+        context_entity_ids,
+        context_entity_probs=None,
+        context_entity_masking=None,
+        entity_word_embeds_dropout=True,
+    ):
+
         if self.args.do_ned:
-            context_embedded_last_hidden_state = self.encoder_embeddings(context,
-                                                                         entity_ids=context_entity_ids,
-                                                                         entity_masking=context_entity_masking,
-                                                                         entity_probs=context_entity_probs,
-                                                                         entity_word_embeds_dropout=entity_word_embeds_dropout).last_hidden_state
+            context_embedded_last_hidden_state = self.encoder_embeddings(
+                context,
+                entity_ids=context_entity_ids,
+                entity_masking=context_entity_masking,
+                entity_probs=context_entity_probs,
+                entity_word_embeds_dropout=entity_word_embeds_dropout,
+            ).last_hidden_state
 
         else:
-            context_embedded_last_hidden_state = self.encoder_embeddings(context, attention_mask=(~context_padding).to(dtype=torch.float)).last_hidden_state
+            context_embedded_last_hidden_state = self.encoder_embeddings(
+                context, attention_mask=(~context_padding).to(dtype=torch.float)
+            ).last_hidden_state
 
         final_context = context_embedded_last_hidden_state
 
@@ -82,25 +95,30 @@ class IdentityEncoder(nn.Module):
         if self.args.rnn_layers > 0:
             batch_size = context.size(0)
             if self.args.rnn_zero_state == 'zero':
-        
-                zero = torch.zeros(self.args.rnn_layers, batch_size, self.args.rnn_dimension,
-                                   dtype=torch.float, requires_grad=False, device=context.device)
+
+                zero = torch.zeros(
+                    self.args.rnn_layers,
+                    batch_size,
+                    self.args.rnn_dimension,
+                    dtype=torch.float,
+                    requires_grad=False,
+                    device=context.device,
+                )
                 context_rnn_state = (zero, zero)
             else:
                 if self.args.rnn_zero_state == 'cls':
                     packed_rnn_state = self.norm(self.pool(final_context[:, 0, :]))
-        
+
                 else:
                     assert self.args.rnn_zero_state == 'average'
                     masked_final_context = final_context.masked_fill(context_padding.unsqueeze(2), 0)
                     summed_context = torch.sum(masked_final_context, dim=1)
                     average_context = summed_context / context_lengths.unsqueeze(1)
-            
+
                     packed_rnn_state = self.norm(self.pool(average_context))
-        
+
                 # packed_rnn_state is (batch, 2 * rnn_layers * rnn_dim)
-                packed_rnn_state = packed_rnn_state.reshape(batch_size, 2, self.args.rnn_layers,
-                                                            self.args.rnn_dimension)
+                packed_rnn_state = packed_rnn_state.reshape(batch_size, 2, self.args.rnn_layers, self.args.rnn_dimension)
                 # transpose to (2, batch, rnn_layers, rnn_dimension)
                 packed_rnn_state = packed_rnn_state.transpose(0, 1)
                 # transpose to (2, rnn_layers, batch, rnn_dimension)
@@ -108,7 +126,7 @@ class IdentityEncoder(nn.Module):
                 # convert to a tuple of two (rnn_layers, batch, rnn_dimension) tensors
                 packed_rnn_state = packed_rnn_state.chunk(2, dim=0)
                 context_rnn_state = (packed_rnn_state[0].squeeze(0), packed_rnn_state[1].squeeze(0))
-                
+
         return final_context, context_rnn_state
 
     def forward(self, batch):
@@ -118,15 +136,24 @@ class IdentityEncoder(nn.Module):
         context_entity_ids, context_entity_probs, context_entity_masking = None, None, None
 
         if self.args.num_db_types > 0 and self.args.add_types_to_text == 'no':
-            context_entity_ids = batch.context.feature[:, :, :self.args.ned_features_size[0]].long()
-            
+            context_entity_ids = batch.context.feature[:, :, : self.args.ned_features_size[0]].long()
+
             # indicates position of entities
             context_entity_masking = (context_entity_ids != self.args.ned_features_default_val[0]).int()
 
             if self.args.entity_type_agg_method == 'weighted':
-                context_entity_probs = batch.context.feature[:, :, self.args.ned_features_size[0]:self.args.ned_features_size[0] + self.args.ned_features_size[1]].long()
+                context_entity_probs = batch.context.feature[
+                    :, :, self.args.ned_features_size[0] : self.args.ned_features_size[0] + self.args.ned_features_size[1]
+                ].long()
 
-        final_context, context_rnn_state = self.compute_final_embeddings(context, context_lengths, context_padding, context_entity_ids, context_entity_probs, context_entity_masking, entity_word_embeds_dropout=self.args.entity_word_embeds_dropout)
-        
+        final_context, context_rnn_state = self.compute_final_embeddings(
+            context,
+            context_lengths,
+            context_padding,
+            context_entity_ids,
+            context_entity_probs,
+            context_entity_masking,
+            entity_word_embeds_dropout=self.args.entity_word_embeds_dropout,
+        )
+
         return final_context, context_rnn_state
-        

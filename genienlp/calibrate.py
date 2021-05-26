@@ -27,16 +27,18 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Callable, Iterable, List, Tuple, Union
-import xgboost as xgb
-import numpy as np
-import dill
-import torch
 import itertools
-from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_curve, auc
-from sklearn.model_selection import train_test_split
 import logging
 import os
+from typing import Callable, Iterable, List, Tuple, Union
+
+import dill
+import numpy as np
+import torch
+import xgboost as xgb
+from sklearn.metrics import accuracy_score, auc, confusion_matrix, precision_recall_curve
+from sklearn.model_selection import train_test_split
+
 from .util import ConfidenceFeatures
 
 logger = logging.getLogger(__name__)
@@ -45,14 +47,18 @@ logger = logging.getLogger(__name__)
 # Feature function builders
 # drop means after applying dropout, nodrop means before
 
+
 def max_of(f: Callable) -> Callable:
     return lambda x: f(x).max().view(-1)
+
 
 def min_of(f: Callable) -> Callable:
     return lambda x: f(x).min().view(-1)
 
+
 def neg_of(f: Callable) -> Callable:
     return lambda x: -f(x)
+
 
 def cv_drop_logit(i: int) -> Callable:
     def f(x):
@@ -60,57 +66,75 @@ def cv_drop_logit(i: int) -> Callable:
         a[a.isnan()] = 0
         a[a.isinf()] = 0
         return a
+
     return f
+
 
 def var_drop_logit(i: int) -> Callable:
     return lambda x: torch.var(x[i].drop_logits, dim=0).view(-1)
 
+
 def var_drop_top2_probs(i: int) -> Callable:
     return lambda x: torch.var(x[i].drop_top2_probs, dim=0).view(-1)
+
 
 def probability_that_2_overtakes_1(i):
     return lambda x: (x[i].drop_top2_probs > x[i].drop_top1_probs).float().mean(dim=0).view(-1)
 
+
 def diff_mean_drop_probability_2_and_1(i):
     return lambda x: (x[i].drop_top2_probs.mean(dim=0).float() - x[i].drop_top1_probs.mean(dim=0).float()).view(-1)
+
 
 def diff_var_drop_probability_2_and_1(i):
     return lambda x: (x[i].drop_top2_probs.var(dim=0).float() - x[i].drop_top1_probs.var(dim=0).float()).view(-1)
 
+
 def diff_nodrop_probability_2_and_1(i):
     return lambda x: (x[i].nodrop_top2_probs - x[i].nodrop_top1_probs).view(-1)
+
 
 def mean_drop_logit(i: int) -> Callable:
     return lambda x: torch.mean(x[i].drop_logits, dim=0).view(-1)
 
+
 def nodrop_entropies(i: int) -> Callable:
     return lambda x: x[i].nodrop_entropies
+
 
 def nodrop_logit(i: int) -> Callable:
     return lambda x: x[i].nodrop_logits
 
+
 def prediction_length(i: int) -> Callable:
     return lambda x: torch.tensor(len(x[i].nodrop_logits)).view(-1)
+
 
 def input_length(i: int) -> Callable:
     return lambda x: torch.tensor(len(x[i].context)).view(-1)
 
+
 def nodrop_avg_logprob(i: int):
     return lambda x: torch.mean(x[i].nodrop_logits).view(-1)
+
 
 def variance_of_beam_logits(x):
     a = torch.var(torch.tensor([torch.mean(x[i].nodrop_logits).item() for i in range(1, 5)])).view(-1)
     return a
 
+
 def variance_of_beam_probs(x):
     a = torch.var(torch.tensor([torch.mean(x[i].nodrop_probs).item() for i in range(1, 5)])).view(-1)
     return a
 
+
 def mean_drop_avg_logprob(i):
     return lambda x: torch.mean(x[i].drop_logits).view(-1)
 
+
 def var_drop_avg_logprob(i):
     return lambda x: torch.var(torch.mean(x[i].drop_logits, dim=1)).view(-1)
+
 
 def cv_drop_avg_logprob(i):
     def f(x):
@@ -118,38 +142,48 @@ def cv_drop_avg_logprob(i):
         a[a.isnan()] = 0
         a[a.isinf()] = 0
         return a
+
     return f
+
 
 def nodrop_prob(i):
     return lambda x: x[i].nodrop_probs.view(-1)
 
+
 def nodrop_seq_prob(i):
     return lambda x: torch.prod(x[i].nodrop_probs).view(-1)
 
+
 def mean_drop_seq_prob(i):
     return lambda x: torch.mean(torch.prod(x[i].drop_probs, dim=1)).view(-1)
+
 
 def prob_first_mistake(i):
     """
     probability that this is the first mistake
     """
+
     def f(x):
         probs = mean_drop_prob(i)(x)
         ret = torch.zeros_like(probs)
         for j in range(len(probs)):
-            ret[j] = torch.prod(probs[:j])*(1-probs[j])
+            ret[j] = torch.prod(probs[:j]) * (1 - probs[j])
         return ret
 
     return f
 
+
 def mean_drop_prob(i):
     return lambda x: torch.mean(x[i].drop_probs, dim=0).view(-1)
+
 
 def var_drop_seq_prob(i):
     return lambda x: torch.var(torch.prod(x[i].drop_probs, dim=1)).view(-1)
 
+
 def var_drop_prob(i):
     return lambda x: torch.var(x[i].drop_probs, dim=0).view(-1)
+
 
 def cv_drop_seq_prob(i):
     def f(x):
@@ -157,7 +191,9 @@ def cv_drop_seq_prob(i):
         a[a.isnan()] = 0
         a[a.isinf()] = 0
         return a
+
     return f
+
 
 def cv_drop_prob(i: int) -> Callable:
     def f(x):
@@ -165,30 +201,36 @@ def cv_drop_prob(i: int) -> Callable:
         a[a.isnan()] = 0
         a[a.isinf()] = 0
         return a
+
     return f
+
 
 def cev_drop_seq_prob(i):
     """
     Introduced in https://arxiv.org/pdf/1909.00157.pdf
     """
+
     def f(x):
         a = torch.square(1 - (var_drop_seq_prob(i)(x) / mean_drop_seq_prob(i)(x)))
         a[a.isnan()] = 0
         a[a.isinf()] = 0
         return a
+
     return f
+
 
 def cev_drop_prob(i):
     """
     Introduced in https://arxiv.org/pdf/1909.00157.pdf
     """
+
     def f(x):
         a = torch.square(1 - (var_drop_prob(i)(x) / mean_drop_prob(i)(x)))
         a[a.isnan()] = 0
         a[a.isinf()] = 0
         return a
-    return f
 
+    return f
 
 
 def accuracy_at_pass_rate(labels, confidence_scores):
@@ -207,12 +249,14 @@ def accuracy_at_pass_rate(labels, confidence_scores):
 
     return all_pass_rates, all_accuracies
 
+
 def oracle_score(confidence: ConfidenceFeatures):
     label = ConfidenceEstimator.convert_to_labels([confidence])[0]
     # assign confidence scores randomly in (0, 0.5) for incorrect examples and in (0.5, 1) for correct ones.
     # This way, all correct exampels are ranked above all incorrect examples.
-    oracle_confidence = label*(np.random.random()/2+0.5) + (1-label)*(np.random.random()/2)
+    oracle_confidence = label * (np.random.random() / 2 + 0.5) + (1 - label) * (np.random.random() / 2)
     return oracle_confidence
+
 
 def evaluate_raw(dev_confidences: Iterable[ConfidenceFeatures], featurizer: Callable):
     """
@@ -227,28 +271,63 @@ def evaluate_raw(dev_confidences: Iterable[ConfidenceFeatures], featurizer: Call
     pass_rate, accuracies = accuracy_at_pass_rate(dev_labels, dev_avg_logprobs)
     return precision, recall, pass_rate, accuracies, thresholds
 
+
 def parse_argv(parser):
-    parser.add_argument('--confidence_path', required=True, type=str,
-                        help='The path to the pickle file where the list of ConfidenceFeatures objects is saved')
-    parser.add_argument('--eval_metric', type=str, default='aucpr', choices=['aucpr'],
-                        help='An xgboost metric. The metric which will be used to select the best model on the validation set.')
-    parser.add_argument('--dev_split', type=float, default=0.2, help='The portion of the dataset to use for validation. The rest is used to train.')
+    parser.add_argument(
+        '--confidence_path',
+        required=True,
+        type=str,
+        help='The path to the pickle file where the list of ConfidenceFeatures objects is saved',
+    )
+    parser.add_argument(
+        '--eval_metric',
+        type=str,
+        default='aucpr',
+        choices=['aucpr'],
+        help='An xgboost metric. The metric which will be used to select the best model on the validation set.',
+    )
+    parser.add_argument(
+        '--dev_split',
+        type=float,
+        default=0.2,
+        help='The portion of the dataset to use for validation. The rest is used to train.',
+    )
     parser.add_argument('--seed', type=int, default=123, help='Random seed to use for reproducibility')
-    parser.add_argument('--save', required=True, type=str, help='The directory to save the calibrator model and plots after training')
-    parser.add_argument('--name_prefix', required=True, type=str, help='A string to prepend to files associated with the calibrator.')
-    parser.add_argument('--plot', action='store_true', help='If True, will plot metrics and save them. Requires Matplotlib installation.')
-    parser.add_argument('--testing', action='store_true',
-                        help='If True, will change labels so that not all of them are equal. This is only used for testing purposes.')
-    parser.add_argument('--fast', action='store_true',
-                        help='If True, will only train calibrators that don\'t use MC dropout. This substantially increases inference speed.')
+    parser.add_argument(
+        '--save', required=True, type=str, help='The directory to save the calibrator model and plots after training'
+    )
+    parser.add_argument(
+        '--name_prefix', required=True, type=str, help='A string to prepend to files associated with the calibrator.'
+    )
+    parser.add_argument(
+        '--plot', action='store_true', help='If True, will plot metrics and save them. Requires Matplotlib installation.'
+    )
+    parser.add_argument(
+        '--testing',
+        action='store_true',
+        help='If True, will change labels so that not all of them are equal. This is only used for testing purposes.',
+    )
+    parser.add_argument(
+        '--fast',
+        action='store_true',
+        help='If True, will only train calibrators that don\'t use MC dropout. This substantially increases inference speed.',
+    )
 
     # Options to normalize scores for a given threshold
-    parser.add_argument('--threshold', type=float, default=None, help='The threshold above (below) which scores are considered to be positive (negative).')
+    parser.add_argument(
+        '--threshold',
+        type=float,
+        default=None,
+        help='The threshold above (below) which scores are considered to be positive (negative).',
+    )
     parser.add_argument('--precision', type=float, default=None, help='Set this if scores should be normalize by precision.')
     parser.add_argument('--recall', type=float, default=None, help='Set this if scores should be normalize by recall.')
 
-class ConfidenceEstimator():
-    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout_num:int):
+
+class ConfidenceEstimator:
+    def __init__(
+        self, name: str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout_num: int
+    ):
         raise NotImplementedError()
 
     def convert_to_features(self, confidences: Iterable[ConfidenceFeatures], train: bool = False):
@@ -263,7 +342,7 @@ class ConfidenceEstimator():
         # logger.info('labels = %s', str(labels))
         return labels
 
-    def convert_to_dataset(self, confidences: Iterable[ConfidenceFeatures], train :bool):
+    def convert_to_dataset(self, confidences: Iterable[ConfidenceFeatures], train: bool):
         labels = ConfidenceEstimator.convert_to_labels(confidences)
         features = self.convert_to_features(confidences, train)
 
@@ -299,10 +378,15 @@ class ConfidenceEstimator():
             obj = dill.load(f)
         return obj
 
+
 class RawConfidenceEstimator(ConfidenceEstimator):
-    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout_num:int):
+    def __init__(
+        self, name: str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout_num: int
+    ):
         # don't change the interface, to match the parent class
-        assert len(featurizers) == 1, 'RawConfidenceEstimator only works with a single featurizer that outputs a single numerical value'
+        assert (
+            len(featurizers) == 1
+        ), 'RawConfidenceEstimator only works with a single featurizer that outputs a single numerical value'
         self.name = name
         self.featurizer = featurizers[0]
         self.eval_metric = eval_metric
@@ -334,8 +418,11 @@ class RawConfidenceEstimator(ConfidenceEstimator):
         pass_rate, accuracies = accuracy_at_pass_rate(dev_labels, confidence_scores)
         return precision, recall, pass_rate, accuracies, thresholds
 
+
 class TreeConfidenceEstimator(ConfidenceEstimator):
-    def __init__(self, name:str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout_num:int):
+    def __init__(
+        self, name: str, featurizers: List[Union[Callable, Tuple[Callable, Callable]]], eval_metric: str, mc_dropout_num: int
+    ):
         self.name = name
         self.featurizers = featurizers
         self.eval_metric = eval_metric
@@ -360,8 +447,10 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
             logger.info('feature size of the model is set to %d', self.feature_size)
         padded_features = []
         for f in features:
-            f = f[:self.feature_size] # truncate
-            padded_features.append(np.pad(f, pad_width=(0, self.feature_size-len(f)), constant_values=np.nan, mode='constant'))
+            f = f[: self.feature_size]  # truncate
+            padded_features.append(
+                np.pad(f, pad_width=(0, self.feature_size - len(f)), constant_values=np.nan, mode='constant')
+            )
 
         padded_features = np.stack(padded_features)
         if train:
@@ -382,7 +471,7 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
                 raise ValueError('Unexpected value for `normalize`')
         padded_features = (padded_features - self.normalizer_sub) / self.normalizer_div
         padded_features[np.isnan(padded_features)] = 0
-        
+
         return padded_features
 
     @staticmethod
@@ -390,9 +479,9 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
         all_interleaved = []
         for i in range(len(features_list[0])):
             interleaved_length = features_list[0][i].shape[0] * len(features_list)
-            interleaved = np.empty((interleaved_length, ), dtype=np.float32)
+            interleaved = np.empty((interleaved_length,), dtype=np.float32)
             for j in range(len(features_list)):
-                interleaved[j::len(features_list)] = features_list[j][i]
+                interleaved[j :: len(features_list)] = features_list[j][i]
             all_interleaved.append(interleaved)
 
         return all_interleaved
@@ -411,9 +500,11 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
         features = []
         for featurizer in self.featurizers:
             if isinstance(featurizer, tuple):
-                feature = TreeConfidenceEstimator._interleave_features([[f(c) for c in confidences] for f in featurizer]) # list of np.arrays
+                feature = TreeConfidenceEstimator._interleave_features(
+                    [[f(c) for c in confidences] for f in featurizer]
+                )  # list of np.arrays
             else:
-                feature = [featurizer(c) for c in confidences] # list of np.arrays
+                feature = [featurizer(c) for c in confidences]  # list of np.arrays
             features.append(feature)
         features = TreeConfidenceEstimator._concatenate(features)
         padded_features = self._pad_and_normalize(features, train=train)
@@ -422,10 +513,10 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
 
         return padded_features
 
-    def _tune_and_train(self, train_dataset, dev_dataset, dev_labels, scale_pos_weight :float):
+    def _tune_and_train(self, train_dataset, dev_dataset, dev_labels, scale_pos_weight: float):
         # set of all possible hyperparameters
-        max_depth = [3, 5, 7, 10, 20, 30, 50] # the maximum depth of each tree
-        eta = [0.02, 0.1, 0.5, 0.7] # the training step for each iteration
+        max_depth = [3, 5, 7, 10, 20, 30, 50]  # the maximum depth of each tree
+        eta = [0.02, 0.1, 0.5, 0.7]  # the training step for each iteration
         num_round = [300]
 
         best_score = 0
@@ -434,25 +525,27 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
         best_params = None
         for m, e, n in itertools.product(max_depth, eta, num_round):
             params = {
-                'max_depth': m,  
-                'eta': e,  
+                'max_depth': m,
+                'eta': e,
                 'objective': 'binary:logistic',
                 'eval_metric': self.eval_metric,
-                'scale_pos_weight': scale_pos_weight
-                }
+                'scale_pos_weight': scale_pos_weight,
+            }
             evals_result = {}
-            model = xgb.train(params=params,
-                            dtrain=train_dataset,
-                            evals=[(dev_dataset, 'dev')],
-                            num_boost_round=n, 
-                            early_stopping_rounds=50,
-                            evals_result=evals_result,
-                            verbose_eval=False)
+            model = xgb.train(
+                params=params,
+                dtrain=train_dataset,
+                evals=[(dev_dataset, 'dev')],
+                num_boost_round=n,
+                early_stopping_rounds=50,
+                evals_result=evals_result,
+                verbose_eval=False,
+            )
             # print('evals_result = ', evals_result)
             prediction_probs = TreeConfidenceEstimator._extract_confidence_scores(model, dev_dataset)
             predictions = np.round(np.asarray(prediction_probs))
             accuracy = accuracy_score(dev_labels, predictions)
-            score = model.best_score #evals_result['dev']['aucpr'][-1]#
+            score = model.best_score  # evals_result['dev']['aucpr'][-1]#
             logger.info('score=%.3f \t accuracy=%.1f \t best_iteration=%d \t', score, accuracy * 100, model.best_iteration)
             confusion_m = confusion_matrix(dev_labels, predictions)
             if score > best_score:
@@ -485,10 +578,12 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
     def train_and_validate(self, train_features, train_labels, dev_features, dev_labels):
         train_dataset = xgb.DMatrix(data=train_features, label=train_labels)
         dev_dataset = xgb.DMatrix(data=dev_features, label=dev_labels)
-        scale_pos_weight = np.sum(dev_labels)/(np.sum(1-dev_labels)) # 1s over 0s
+        scale_pos_weight = np.sum(dev_labels) / (np.sum(1 - dev_labels))  # 1s over 0s
         # logger.info('scale_pos_weight = %f', scale_pos_weight)
 
-        best_model, best_score, best_confusion_matrix, best_params = self._tune_and_train(train_dataset=train_dataset, dev_dataset=dev_dataset, dev_labels=dev_labels, scale_pos_weight=scale_pos_weight)
+        best_model, best_score, best_confusion_matrix, best_params = self._tune_and_train(
+            train_dataset=train_dataset, dev_dataset=dev_dataset, dev_labels=dev_labels, scale_pos_weight=scale_pos_weight
+        )
         logger.info('best dev set score = %.3f', best_score)
         logger.info('best confusion_matrix = %s', str(best_confusion_matrix))
         logger.info('best hyperparameters (max_depth, eta, num_iterations) = %s', str(best_params))
@@ -523,11 +618,48 @@ slow_feature_sets = [
     # ([mean_drop_avg_logprob(0)], 'mean_drop_avg_logprob'),
     # ([var_drop_avg_logprob(0)], 'var_drop_avg_logprob'),
     # ([cv_drop_avg_logprob(0)], 'cv_drop_avg_logprob'),
-
     # One of these three usually outperforms all the other ones:
-    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
-    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), min_of(cv_drop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length'),
-    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), max_of(cv_drop_logit(0)), min_of(nodrop_logit(0)), input_length(0), cev_drop_seq_prob(0), mean_drop_seq_prob(0)], 'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob'),
+    (
+        [
+            prediction_length(0),
+            max_of(nodrop_logit(0)),
+            max_of(nodrop_entropies(0)),
+            max_of(cv_drop_logit(0)),
+            min_of(nodrop_logit(0)),
+            min_of(nodrop_entropies(0)),
+            min_of(cv_drop_logit(0)),
+            input_length(0),
+        ],
+        'prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length',
+    ),
+    (
+        [
+            nodrop_avg_logprob(0),
+            prediction_length(0),
+            max_of(nodrop_logit(0)),
+            max_of(nodrop_entropies(0)),
+            max_of(cv_drop_logit(0)),
+            min_of(nodrop_logit(0)),
+            min_of(nodrop_entropies(0)),
+            min_of(cv_drop_logit(0)),
+            input_length(0),
+        ],
+        'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + min_entropy + min_cv + input_length',
+    ),
+    (
+        [
+            nodrop_avg_logprob(0),
+            prediction_length(0),
+            max_of(nodrop_logit(0)),
+            max_of(nodrop_entropies(0)),
+            max_of(cv_drop_logit(0)),
+            min_of(nodrop_logit(0)),
+            input_length(0),
+            cev_drop_seq_prob(0),
+            mean_drop_seq_prob(0),
+        ],
+        'logprob + prediction_length + max_logit + max_entropy + max_cv + min_logit + input_length + cev_seq_prob + mean_seq_prob',
+    ),
 ]
 
 fast_feature_sets = [
@@ -538,27 +670,59 @@ fast_feature_sets = [
     # ([neg_of(cv_drop_seq_prob(0))], 'raw_cv_seq_prob'),
     # ([cev_drop_seq_prob(0)], 'raw_cev_drop_seq_prob'),
     # ([nodrop_entropies(0)], 'entropy'),
-
     # These three are the fast versions of the best slow feature sets
-    ([prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), input_length(0)], 'prediction_length + max_logit + max_entropy  + min_logit + min_entropy + input_length'),
-    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), min_of(nodrop_logit(0)), min_of(nodrop_entropies(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + min_logit + min_entropy + input_length'),
-    ([nodrop_avg_logprob(0), prediction_length(0), max_of(nodrop_logit(0)), max_of(nodrop_entropies(0)), min_of(nodrop_logit(0)), input_length(0)], 'logprob + prediction_length + max_logit + max_entropy + min_logit + input_length'),
+    (
+        [
+            prediction_length(0),
+            max_of(nodrop_logit(0)),
+            max_of(nodrop_entropies(0)),
+            min_of(nodrop_logit(0)),
+            min_of(nodrop_entropies(0)),
+            input_length(0),
+        ],
+        'prediction_length + max_logit + max_entropy  + min_logit + min_entropy + input_length',
+    ),
+    (
+        [
+            nodrop_avg_logprob(0),
+            prediction_length(0),
+            max_of(nodrop_logit(0)),
+            max_of(nodrop_entropies(0)),
+            min_of(nodrop_logit(0)),
+            min_of(nodrop_entropies(0)),
+            input_length(0),
+        ],
+        'logprob + prediction_length + max_logit + max_entropy + min_logit + min_entropy + input_length',
+    ),
+    (
+        [
+            nodrop_avg_logprob(0),
+            prediction_length(0),
+            max_of(nodrop_logit(0)),
+            max_of(nodrop_entropies(0)),
+            min_of(nodrop_logit(0)),
+            input_length(0),
+        ],
+        'logprob + prediction_length + max_logit + max_entropy + min_logit + input_length',
+    ),
 ]
+
 
 def main(args):
 
     if args.threshold is not None:
-        assert (args.precision is not None and args.recall is None) or (args.precision is None and args.recall is not None), \
-            'When `--threshold` is specified, exactly one of `--precision` and `--recall` should be set.'
+        assert (args.precision is not None and args.recall is None) or (
+            args.precision is None and args.recall is not None
+        ), 'When `--threshold` is specified, exactly one of `--precision` and `--recall` should be set.'
 
     if args.plot:
-        from matplotlib import pyplot # lazy import
+        from matplotlib import pyplot  # lazy import
 
     confidences = torch.load(args.confidence_path, map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
 
     all_estimators = []
     train_confidences, dev_confidences = train_test_split(confidences, test_size=args.dev_split, random_state=args.seed)
-    
+
     feature_sets = fast_feature_sets
     if not args.fast:
         feature_sets += slow_feature_sets
@@ -570,7 +734,7 @@ def main(args):
         mc_dropout_num = train_confidences[0][0].mc_dropout_num
         estimator = estimator_class(name=name, featurizers=f, eval_metric=args.eval_metric, mc_dropout_num=mc_dropout_num)
         logger.info('name = %s', name)
-        
+
         train_features, train_labels = estimator.convert_to_dataset(train_confidences, train=True)
         dev_features, dev_labels = estimator.convert_to_dataset(dev_confidences, train=False)
         if args.testing:
@@ -593,13 +757,13 @@ def main(args):
             pyplot.figure('precision-recall')
             pyplot.plot(recall, precision, marker='.', label=name)
             pyplot.figure('thresholds')
-            pyplot.plot(range(len(thresholds)), thresholds, marker='*', label=name+ ' (thresholds)')
+            pyplot.plot(range(len(thresholds)), thresholds, marker='*', label=name + ' (thresholds)')
             pyplot.figure('pass_rate')
             pyplot.plot(pass_rate, accuracies, marker='.', label=name)
 
         all_estimators.append(estimator)
-        
-    logger.info('\n'+'\n'.join([f'{e.name}: {e.score:.3f}' for e in all_estimators]))
+
+    logger.info('\n' + '\n'.join([f'{e.name}: {e.score:.3f}' for e in all_estimators]))
     best_estimator = all_estimators[np.argmax([e.score for e in all_estimators])]
     logger.info('Best estimator is %s with score = %.3f', best_estimator.name, best_estimator.score)
     best_estimator.save(os.path.join(args.save, args.name_prefix + '.calib'))
@@ -629,4 +793,3 @@ def main(args):
         pyplot.xlabel('Pass Rate')
         pyplot.ylabel('Accuracy')
         pyplot.savefig(os.path.join(args.save, args.name_prefix + '_pass-accuracy.svg'))
-    

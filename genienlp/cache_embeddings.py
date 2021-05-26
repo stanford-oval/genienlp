@@ -29,6 +29,7 @@
 
 
 import logging
+
 from transformers import AutoModel, AutoTokenizer
 
 from .util import set_seed

@@ -1,10 +1,12 @@
 import csv
 import re
 
-from ...util import tokenize, lower_case, remove_thingtalk_quotes
 from ...data_utils.progbar import progress_bar
+from ...util import lower_case, remove_thingtalk_quotes, tokenize
 
 special_token_pattern = re.compile("(^|(?<= ))" + "[A-Z]+_[0-9]" + "($|(?= ))")
+
+
 def find_special_tokens(s: str):
     return list(sorted([a.group(0) for a in special_token_pattern.finditer(s)]))
 
@@ -14,6 +16,7 @@ def is_subset(set1, set2):
     Returns True if set1 is a subset of or equal to set2
     """
     return all([e in set2 for e in set1])
+
 
 def passes_heuristic_checks(row, args, old_query=None):
     if 'QUOTED_STRING' in row[args.utterance_column] or (old_query is not None and 'QUOTED_STRING' in old_query):
@@ -30,38 +33,64 @@ def passes_heuristic_checks(row, args, old_query=None):
         return False
     _, quote_values = remove_thingtalk_quotes(row[args.thingtalk_column])
     if quote_values is None:
-        return False # ThingTalk is not syntactic, so remove this example
+        return False  # ThingTalk is not syntactic, so remove this example
     for q in quote_values:
         if q not in all_input_columns:
             return False
     return True
-    
+
+
 def parse_argv(parser):
-    parser.add_argument('input', type=str,
-                        help='The path to the input file.')
-    parser.add_argument('output', type=str,
-                        help='The path to the output file.')
-    parser.add_argument('--query_file', type=str,
-                        help='The path to the file containing new queries.')
-    parser.add_argument('--thrown_away', type=str, default=None,
-                        help='The path to the output file that will contain inputs that were removed because of `--transformation`.')
-    parser.add_argument('--thingtalk_gold_file', type=str,
-                        help='The path to the file containing the dataset with a correct thingtalk column.')
-    parser.add_argument('--transformation', type=str, choices=['remove_thingtalk_quotes',
-                                                                'replace_queries',
-                                                                'remove_wrong_thingtalk',
-                                                                'get_wrong_thingtalk',
-                                                                'merge_input_file_with_query_file',
-                                                                'none'], default='none', help='The type of transformation to apply.')
-    parser.add_argument('--remove_duplicates', action='store_true',
-                        help='Remove duplicate natural utterances. Note that this also removes cases where a natural utterance has multiple ThingTalk codes.')
+    parser.add_argument('input', type=str, help='The path to the input file.')
+    parser.add_argument('output', type=str, help='The path to the output file.')
+    parser.add_argument('--query_file', type=str, help='The path to the file containing new queries.')
+    parser.add_argument(
+        '--thrown_away',
+        type=str,
+        default=None,
+        help='The path to the output file that will contain inputs that were removed because of `--transformation`.',
+    )
+    parser.add_argument(
+        '--thingtalk_gold_file', type=str, help='The path to the file containing the dataset with a correct thingtalk column.'
+    )
+    parser.add_argument(
+        '--transformation',
+        type=str,
+        choices=[
+            'remove_thingtalk_quotes',
+            'replace_queries',
+            'remove_wrong_thingtalk',
+            'get_wrong_thingtalk',
+            'merge_input_file_with_query_file',
+            'none',
+        ],
+        default='none',
+        help='The type of transformation to apply.',
+    )
+    parser.add_argument(
+        '--remove_duplicates',
+        action='store_true',
+        help='Remove duplicate natural utterances. Note that this also removes cases where a natural utterance has multiple ThingTalk codes.',
+    )
 
     # These arguments are effective only if --transformation=get_wrong_thingtalk
-    parser.add_argument('--remove_with_heuristics', action='store_true',
-                        help='Remove examples if the values inside quotations in ThingTalk have changed or special words like NUMBER_0 cannot be found in TT anymore.')
-    parser.add_argument('--replace_with_gold', action='store_true', help='Instead of the original ThingTalk, output what the parser said is gold.')
-    parser.add_argument('--task', type=str, required=True, choices=['almond', 'almond_dialogue_nlu', 'almond_dialogue_nlu_agent'],
-                        help='Specifies the meaning of columns in the input file and the ones that should go to the output')
+    parser.add_argument(
+        '--remove_with_heuristics',
+        action='store_true',
+        help='Remove examples if the values inside quotations in ThingTalk have changed or special words like NUMBER_0 cannot be found in TT anymore.',
+    )
+    parser.add_argument(
+        '--replace_with_gold',
+        action='store_true',
+        help='Instead of the original ThingTalk, output what the parser said is gold.',
+    )
+    parser.add_argument(
+        '--task',
+        type=str,
+        required=True,
+        choices=['almond', 'almond_dialogue_nlu', 'almond_dialogue_nlu_agent'],
+        help='Specifies the meaning of columns in the input file and the ones that should go to the output',
+    )
 
     # parser.add_argument('--output_columns', type=int, nargs='+', default=None,
     #                     help='The columns to write to output. By default, we output all columns.')
@@ -95,7 +124,7 @@ def main(args):
 
     if args.output_columns is None:
         # if args.transformation == 'remove_wrong_thingtalk':
-            # args.output_columns = [0, 1, 2, 3, 4] # we add original utterance and ThingTalk as well
+        # args.output_columns = [0, 1, 2, 3, 4] # we add original utterance and ThingTalk as well
         args.output_columns = [0, 1, 2]
     if args.remove_duplicates and args.no_duplication_columns is None:
         raise ValueError('You should specify columns that define duplication')
@@ -103,10 +132,10 @@ def main(args):
     with open(args.input, 'r') as input_file, open(args.output, 'w') as output_file:
         reader = csv.reader(input_file, delimiter='\t')
         if args.transformation in ['replace_queries', 'merge_input_file_with_query_file']:
-            new_queries = [] # list of lists
+            new_queries = []  # list of lists
             query_file = open(args.query_file, 'r')
             for line in query_file:
-                queries = line.split('\t')[1:] # 0 is example id
+                queries = line.split('\t')[1:]  # 0 is example id
                 new_queries.append([lower_case(tokenize(q.strip())) for q in queries])
         if args.transformation in ['remove_wrong_thingtalk', 'get_wrong_thingtalk']:
             gold_thingtalks = []
@@ -114,7 +143,7 @@ def main(args):
             for q in thingtalk_gold_file_reader:
                 gold_thingtalks.append(q[1].strip())
             gold_thingtalk_count = 0
-            
+
         duplicate_count = 0
         heuristic_count = 0
         written_count = 0
@@ -153,7 +182,7 @@ def main(args):
                 for idx, new_query in enumerate(new_queries[row_idx]):
                     copy_row = row.copy()
                     copy_row[args.utterance_column] = new_query
-                    copy_row[args.id_column] = 'A' + copy_row[args.id_column] + '-' + str(idx) # add 'A' for auto-paraphrasing
+                    copy_row[args.id_column] = 'A' + copy_row[args.id_column] + '-' + str(idx)  # add 'A' for auto-paraphrasing
                     output_rows.append(copy_row)
             else:
                 assert args.transformation == 'none'
@@ -162,7 +191,7 @@ def main(args):
                 row[args.utterance_column] = re.sub('\s\s+', ' ', row[args.utterance_column])
                 row[args.utterance_column] = row[args.utterance_column].strip()
                 output_rows = [row]
-            
+
             for o in output_rows:
                 output_row = ""
                 if args.remove_with_heuristics:
@@ -180,11 +209,13 @@ def main(args):
                 written_count += 1
                 for i, column in enumerate(args.output_columns):
                     output_row += o[column]
-                    if i < len(args.output_columns)-1:
+                    if i < len(args.output_columns) - 1:
                         output_row += '\t'
                 output_file.write(output_row + '\n')
             for o in thrown_away_rows:
-                if not args.remove_with_heuristics or (args.remove_with_heuristics and passes_heuristic_checks(o, args, old_query=old_query)):
+                if not args.remove_with_heuristics or (
+                    args.remove_with_heuristics and passes_heuristic_checks(o, args, old_query=old_query)
+                ):
                     all_thrown_away_rows.append(o)
 
         if args.thrown_away is not None:
@@ -194,7 +225,7 @@ def main(args):
                     output_row = ""
                     for i, column in enumerate(args.output_columns):
                         output_row += o[column]
-                        if i < len(args.output_columns)-1:
+                        if i < len(args.output_columns) - 1:
                             output_row += '\t'
                     output_file.write(output_row + '\n')
 

@@ -33,7 +33,7 @@ from torch import nn
 from torch.nn import functional as F
 from transformers.modeling_outputs import Seq2SeqLMOutput
 
-from .common import CombinedEmbedding, LSTMDecoderAttention, Feedforward, mask, EPSILON, MultiLSTMCell
+from .common import EPSILON, CombinedEmbedding, Feedforward, LSTMDecoderAttention, MultiLSTMCell, mask
 
 
 class MQANDecoder(nn.Module):
@@ -44,13 +44,14 @@ class MQANDecoder(nn.Module):
         self.init_idx = numericalizer.init_id
         self.args = args
 
-        self.decoder_embeddings = CombinedEmbedding(numericalizer, [], args.dimension,
-                                                    trained_dimension=args.trainable_decoder_embeddings,
-                                                    project=True)
+        self.decoder_embeddings = CombinedEmbedding(
+            numericalizer, [], args.dimension, trained_dimension=args.trainable_decoder_embeddings, project=True
+        )
 
         if args.rnn_layers > 0:
-            self.rnn_decoder = LSTMDecoder(args.dimension, args.rnn_dimension,
-                                           dropout=args.dropout_ratio, num_layers=args.rnn_layers)
+            self.rnn_decoder = LSTMDecoder(
+                args.dimension, args.rnn_dimension, dropout=args.dropout_ratio, num_layers=args.rnn_layers
+            )
             switch_input_len = 2 * args.rnn_dimension + args.dimension
         else:
             self.context_attn = LSTMDecoderAttention(args.dimension, dot=True)
@@ -65,9 +66,17 @@ class MQANDecoder(nn.Module):
         if self.decoder_embeddings is not None:
             self.decoder_embeddings.set_embeddings(embeddings)
 
-
-    def forward(self, batch, final_context, context_rnn_state, encoder_loss,
-                current_token_id=None, decoder_wrapper=None, expansion_factor=1, generation_dict=None):
+    def forward(
+        self,
+        batch,
+        final_context,
+        context_rnn_state,
+        encoder_loss,
+        current_token_id=None,
+        decoder_wrapper=None,
+        expansion_factor=1,
+        generation_dict=None,
+    ):
 
         context, context_limited = batch.context.value, batch.context.limited
         answer, answer_limited = batch.answer.value, batch.answer.limited
@@ -79,7 +88,6 @@ class MQANDecoder(nn.Module):
                 self.rnn_decoder.applyMasks(context_padding)
             else:
                 self.context_attn.applyMasks(context_padding)
-
 
             answer_padding = (answer.data == self.pad_idx)[:, :-1]
             answer_embedded = self.decoder_embeddings(answer[:, :-1], padding=answer_padding)
@@ -95,18 +103,24 @@ class MQANDecoder(nn.Module):
             vocab_pointer_switch = self.vocab_pointer_switch(vocab_pointer_switch_input)
 
             probs = self.probs(decoder_output, vocab_pointer_switch, context_attention, context_limited, decoder_vocab)
-        
+
             probs, targets = mask(answer_limited[:, 1:].contiguous(), probs.contiguous(), pad_idx=decoder_vocab.pad_idx)
             loss = F.nll_loss(probs.log(), targets, ignore_index=decoder_vocab.pad_idx)
             if encoder_loss is not None:
                 loss += self.args.encoder_loss_weight * encoder_loss
-            
+
             return Seq2SeqLMOutput(loss=loss)
         else:
             if decoder_wrapper is None:
-                decoder_wrapper = self.decoder_wrapper(final_context, context_padding,
-                                                       context_limited, decoder_vocab, rnn_state=context_rnn_state,
-                                                       expansion_factor=expansion_factor, generation_dict=generation_dict)
+                decoder_wrapper = self.decoder_wrapper(
+                    final_context,
+                    context_padding,
+                    context_limited,
+                    decoder_vocab,
+                    rnn_state=context_rnn_state,
+                    expansion_factor=expansion_factor,
+                    generation_dict=generation_dict,
+                )
             else:
                 current_token_id = current_token_id.clone().cpu().apply_(self.map_to_full).to(current_token_id.device)
             # (next_token_logits, past) where `past` includes all the states needed to continue generation
@@ -128,20 +142,39 @@ class MQANDecoder(nn.Module):
             scaled_p_vocab = torch.cat([scaled_p_vocab, buff], dim=buff.dim() - 1)
 
         # p_context_ptr
-        scaled_p_vocab.scatter_add_(scaled_p_vocab.dim() - 1, context_indices.unsqueeze(1).expand_as(context_attention),
-                                    ((1 - vocab_pointer_switches)).expand_as(context_attention) * context_attention)
+        scaled_p_vocab.scatter_add_(
+            scaled_p_vocab.dim() - 1,
+            context_indices.unsqueeze(1).expand_as(context_attention),
+            ((1 - vocab_pointer_switches)).expand_as(context_attention) * context_attention,
+        )
 
         return scaled_p_vocab
 
-    def decoder_wrapper(self, context, context_padding, context_indices,
-                        decoder_vocab, rnn_state=None, expansion_factor=1, generation_dict=None):
+    def decoder_wrapper(
+        self,
+        context,
+        context_padding,
+        context_indices,
+        decoder_vocab,
+        rnn_state=None,
+        expansion_factor=1,
+        generation_dict=None,
+    ):
         batch_size = context.size()[0]
         max_decoder_time = generation_dict['max_output_length']
 
-        decoder_wrapper = MQANDecoderWrapper(context, context_padding, context_indices,
-                                             decoder_vocab, rnn_state, batch_size, max_decoder_time,
-                                             self, expansion_factor=expansion_factor)
-        
+        decoder_wrapper = MQANDecoderWrapper(
+            context,
+            context_padding,
+            context_indices,
+            decoder_vocab,
+            rnn_state,
+            batch_size,
+            max_decoder_time,
+            self,
+            expansion_factor=expansion_factor,
+        )
+
         return decoder_wrapper
 
 
@@ -185,9 +218,7 @@ class LSTMDecoder(nn.Module):
             context_outputs.append(context_output)
             context_attentions.append(context_attention)
 
-        return [torch.cat(x, dim=1) for x in (context_outputs,
-                                              vocab_pointer_switch_inputs,
-                                              context_attentions)] + [hidden]
+        return [torch.cat(x, dim=1) for x in (context_outputs, vocab_pointer_switch_inputs, context_attentions)] + [hidden]
 
     def make_init_output(self, context):
         batch_size = context.size(0)
@@ -200,8 +231,18 @@ class MQANDecoderWrapper(object):
     A wrapper for MQANDecoder that wraps around its recurrent neural network, so that we can decode it like a Transformer
     """
 
-    def __init__(self, context, context_padding, context_indices,
-                 decoder_vocab, rnn_state, batch_size, max_decoder_time, mqan_decoder: MQANDecoder, expansion_factor:int):
+    def __init__(
+        self,
+        context,
+        context_padding,
+        context_indices,
+        decoder_vocab,
+        rnn_state,
+        batch_size,
+        max_decoder_time,
+        mqan_decoder: MQANDecoder,
+        expansion_factor: int,
+    ):
         self.decoder_vocab = decoder_vocab
         context = self.expand_for_beam_search(context, batch_size, expansion_factor)
         context_padding = self.expand_for_beam_search(context_padding, batch_size, expansion_factor)
@@ -232,7 +273,7 @@ class MQANDecoderWrapper(object):
         self.rnn_state = self.reorder_for_beam_search(self.rnn_state, new_order, dim=1)
 
         if self.mqan_decoder.args.rnn_layers > 0:
-                self.mqan_decoder.rnn_decoder.applyMasks(self.context_padding)
+            self.mqan_decoder.rnn_decoder.applyMasks(self.context_padding)
         else:
             self.mqan_decoder.context_attn.applyMasks(self.context_padding)
 
@@ -240,8 +281,9 @@ class MQANDecoderWrapper(object):
         embedding = self.mqan_decoder.decoder_embeddings(current_token_id)
 
         if self.mqan_decoder.args.rnn_layers > 0:
-            rnn_decoder_outputs = self.mqan_decoder.rnn_decoder(embedding, self.context,
-                                                                hidden=self.rnn_state, output=self.decoder_output)
+            rnn_decoder_outputs = self.mqan_decoder.rnn_decoder(
+                embedding, self.context, hidden=self.rnn_state, output=self.decoder_output
+            )
             self.decoder_output, vocab_pointer_switch_input, context_attention, self.rnn_state = rnn_decoder_outputs
         else:
             context_decoder_output, context_attention = self.mqan_decoder.context_attn(embedding, self.context)
@@ -251,8 +293,9 @@ class MQANDecoderWrapper(object):
 
         vocab_pointer_switch = self.mqan_decoder.vocab_pointer_switch(vocab_pointer_switch_input)
 
-        probs = self.mqan_decoder.probs(self.decoder_output, vocab_pointer_switch, context_attention,
-                                        self.context_indices, self.decoder_vocab)
+        probs = self.mqan_decoder.probs(
+            self.decoder_output, vocab_pointer_switch, context_attention, self.context_indices, self.decoder_vocab
+        )
 
         self.time += 1
         return probs
@@ -271,9 +314,9 @@ class MQANDecoderWrapper(object):
 
         original_size = list(t.shape)
         original_size[dim] *= num_beams
-        t = t.unsqueeze(dim+1)
+        t = t.unsqueeze(dim + 1)
         expanded_size = list(t.shape)
-        expanded_size[dim+1] = num_beams
+        expanded_size[dim + 1] = num_beams
         t = t.expand(*expanded_size)
         t = t.contiguous().view(*original_size)  # (batch_size * num_beams, -1)
         return t

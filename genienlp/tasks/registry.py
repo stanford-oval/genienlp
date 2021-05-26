@@ -29,6 +29,7 @@
 
 
 import logging
+
 from .base_task import BaseTask
 
 logger = logging.getLogger(__name__)

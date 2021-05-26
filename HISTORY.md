@@ -51,7 +51,7 @@
 * The internals of the library have been refactored to simplify development allow using any
   Huggingface Seq2Seq or MLM model. As a result, the name of the models have changed: `Seq2Seq`
   is now `TransformerLSTM` and `Bart` is now `TransformerSeq2Seq`. Command-line flags changed as well.
-  
+
 NOTE: due to the change in model names and commnd-line flags, this release is not backward
 compatible with models trained with genienlp <= 0.5.0
 
@@ -73,7 +73,7 @@ compatible with models trained with genienlp <= 0.5.0
 =====
 
 * Added the ability to run paraphrasing in FP-16 mixed precision mode.
-* The dependency on matplotlib and seaborn (used to produce plots for analysis) is now 
+* The dependency on matplotlib and seaborn (used to produce plots for analysis) is now
   optional [#36].
 
 Please see the development releases below for the full list of features in this release.

@@ -30,7 +30,6 @@
 import torch
 from torch.nn.parallel.scatter_gather import scatter as orig_scatter
 
-
 # The following code was copied from pytorch
 # Copyright 2016-2019 The PyTorch Authors
 #
@@ -62,6 +61,7 @@ from torch.nn.parallel.scatter_gather import scatter as orig_scatter
 # CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
+
 
 def scatter(inputs, target_gpus, dim=0):
     r"""
@@ -103,7 +103,7 @@ def scatter_kwargs(inputs, kwargs, target_gpus, dim=0):
         inputs.extend([() for _ in range(len(kwargs) - len(inputs))])
     elif len(kwargs) < len(inputs):
         kwargs.extend([{} for _ in range(len(inputs) - len(kwargs))])
-        
+
     # handle cases where len(inputs) < len(num_gpus) and len(kwargs) > 0
     num_empty = sum([int(len(input) == 0) for input in inputs])
     num_full = len(inputs) - num_empty

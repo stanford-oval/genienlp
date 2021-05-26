@@ -28,8 +28,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
-logging.getLogger("filelock").setLevel(logging.WARNING)
 
 from .transformer_lstm import TransformerLSTM
 from .transformer_seq2seq import TransformerSeq2Seq
 from .transformer_token_classification import TransformerForTokenClassification
+
+logging.getLogger("filelock").setLevel(logging.WARNING)

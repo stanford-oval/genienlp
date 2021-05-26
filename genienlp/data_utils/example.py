@@ -27,10 +27,12 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import NamedTuple, List, Union, Iterable
 import unicodedata
-import torch
 from dataclasses import dataclass
+from typing import Iterable, List, NamedTuple, Union
+
+import torch
+
 
 def identity(x, **kw):
     return x, [], x
@@ -61,7 +63,9 @@ class Feature:
                 result += field_val
         return result
 
+
 VALID_FEATURE_FIELDS = tuple(Feature.__annotations__.keys())
+
 
 def get_pad_feature(feature_fields, ned_features_default_val, ned_features_size):
     # return None if not using NED
@@ -80,15 +84,17 @@ class Example(object):
     both in text form (`*_plus_types` fields) and in embedding_id form (`*_feature`)
     """
 
-    def __init__(self,
-                 example_id: str,
-                 context: str,
-                 context_feature: List[Feature],
-                 context_plus_types: str,
-                 question: str,
-                 question_feature: List[Feature],
-                 question_plus_types: str,
-                 answer: str):
+    def __init__(
+        self,
+        example_id: str,
+        context: str,
+        context_feature: List[Feature],
+        context_plus_types: str,
+        question: str,
+        question_feature: List[Feature],
+        question_plus_types: str,
+        answer: str,
+    ):
 
         self.example_id = example_id
         self.context = context
@@ -99,21 +105,20 @@ class Example(object):
         self.question_plus_types = question_plus_types
         self.answer = answer
 
-
     @staticmethod
     def from_raw(example_id: str, context: str, question: str, answer: str, preprocess=identity, lower=False):
         args = [example_id]
         answer = unicodedata.normalize('NFD', answer)
-        
+
         for argname, arg in (('context', context), ('question', question), ('answer', answer)):
             arg = unicodedata.normalize('NFD', arg)
             if lower:
                 arg = arg.lower()
-                
+
             sentence, features, sentence_plus_types = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)
 
             args.append(sentence)
-    
+
             if argname != 'answer':
                 args.append(features)
 
@@ -123,7 +128,7 @@ class Example(object):
             elif argname == 'question':
                 question_plus_types = sentence_plus_types
                 args.append(question_plus_types)
-        
+
         return Example(*args)
 
 
@@ -131,10 +136,11 @@ class NumericalizedExamples(NamedTuple):
     """
     Conatains a batch of numericalized (i.e. tokenized and converted to token ids) examples, potentially of size 1
     """
+
     example_id: List[str]
     context: SequentialField
     answer: SequentialField
-    
+
     @staticmethod
     def from_examples(examples: Iterable[Example], numericalizer):
         assert all(isinstance(ex.example_id, str) for ex in examples)
@@ -158,33 +164,40 @@ class NumericalizedExamples(NamedTuple):
             # if question is empty, don't append anything
             context_plus_question = ex.context + sep_token + ex.question if len(ex.question) else ex.context
             all_context_plus_questions.append(context_plus_question)
-            context_plus_question_with_types = ex.context_plus_types + sep_token + ex.question_plus_types if len(ex.question_plus_types) else ex.context_plus_types
+            context_plus_question_with_types = (
+                ex.context_plus_types + sep_token + ex.question_plus_types
+                if len(ex.question_plus_types)
+                else ex.context_plus_types
+            )
             all_context_plus_question_with_types.append(context_plus_question_with_types)
             # concatenate question and context features with a separator, but no need for a separator if there are no features to begin with
-            context_plus_question_feature = ex.context_feature + pad_feature + ex.question_feature if len(ex.question_feature) + len(ex.context_feature) > 0 else []
+            context_plus_question_feature = (
+                ex.context_feature + pad_feature + ex.question_feature
+                if len(ex.question_feature) + len(ex.context_feature) > 0
+                else []
+            )
             all_context_plus_question_features.append(context_plus_question_feature)
-        
+
         if args.add_types_to_text == 'no':
             tokenized_contexts = numericalizer.encode_batch(
-                    all_context_plus_questions,
-                    field_name='context',
-                    features=[a for a in all_context_plus_question_features if a]
+                all_context_plus_questions, field_name='context', features=[a for a in all_context_plus_question_features if a]
             )
         else:
-            tokenized_contexts = numericalizer.encode_batch(
-                all_context_plus_question_with_types,
-                field_name='context'
-            )
-        
-        #TODO remove double attempts at context tokenization
+            tokenized_contexts = numericalizer.encode_batch(all_context_plus_question_with_types, field_name='context')
+
+        # TODO remove double attempts at context tokenization
         if getattr(examples, 'is_classification', False):
             assert args.add_types_to_text != 'insert'
-            tokenized_answers = numericalizer.process_classification_labels(all_context_plus_questions, all_context_plus_question_with_types, [ex.answer for ex in examples])
+            tokenized_answers = numericalizer.process_classification_labels(
+                all_context_plus_questions, all_context_plus_question_with_types, [ex.answer for ex in examples]
+            )
         else:
             tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
-        
+
         for i in range(len(examples)):
-            numericalized_examples.append(NumericalizedExamples([examples[i].example_id], tokenized_contexts[i], tokenized_answers[i]))
+            numericalized_examples.append(
+                NumericalizedExamples([examples[i].example_id], tokenized_contexts[i], tokenized_answers[i])
+            )
         return numericalized_examples
 
     @staticmethod
@@ -209,26 +222,18 @@ class NumericalizedExamples(NamedTuple):
         context_values = numericalizer.pad(context_values, pad_id=numericalizer.pad_id)
         context_limiteds = numericalizer.pad(context_limiteds, pad_id=numericalizer.decoder_pad_id)
         context_lengths = torch.stack(context_lengths, dim=0)
-        
+
         if context_features:
             context_features = numericalizer.pad(context_features, pad_id=numericalizer.args.db_unk_id)
-        
+
         answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
         answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)
         answer_lengths = torch.stack(answer_lengths, dim=0)
 
-        context = SequentialField(value=context_values,
-                                  length=context_lengths,
-                                  limited=context_limiteds,
-                                  feature=context_features)
+        context = SequentialField(
+            value=context_values, length=context_lengths, limited=context_limiteds, feature=context_features
+        )
 
+        answer = SequentialField(value=answer_values, length=answer_lengths, limited=answer_limiteds, feature=None)
 
-        answer = SequentialField(value=answer_values,
-                                 length=answer_lengths,
-                                 limited=answer_limiteds,
-                                 feature=None)
-
-
-        return NumericalizedExamples(example_id=example_id,
-                                     context=context,
-                                     answer=answer)
+        return NumericalizedExamples(example_id=example_id, context=context, answer=answer)
