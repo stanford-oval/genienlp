@@ -1,3 +1,12 @@
+0.6.0
+=====
+
+* Added support for token classification tasks, and added AmbigQA and CrossNER tasks [#128].
+* Added support for beam search in server mode [#141].
+* Misc bug fixes [#142, #143].
+* Updated dependencies [#133, #134, #136, #138, #140, #144, #145].
+* Build system and code style fixes [#146].
+
 0.6.0a4
 =======
 
@@ -7,7 +16,6 @@
 * Bumped Bootleg version to 1.0.1 [#124].
 * Bumped Transformers version to 4.5.1 [#114, #127].
 * Misc code upgrades and bug fixes [#115, #102, #123].
-
 
 0.6.0a3
 =======
