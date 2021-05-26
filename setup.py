@@ -54,7 +54,7 @@ setuptools.setup(
         'requests~=2.22',
         'datasets==1.6.2',
         'seqeval==1.2.2',
-        'transformers==4.5.1',
+        'transformers==4.6.1',
         'sentencepiece==0.1.*',
         'sentence-transformers==1.1.1',
         'mosestokenizer~=1.1',
