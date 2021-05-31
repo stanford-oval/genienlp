@@ -47,7 +47,7 @@ setuptools.setup(
     install_requires=[
         'numpy>=1.14.5',
         'torch~=1.7.1',
-        'tqdm==4.49.0',
+        'tqdm==4.61.0',
         'tensorboardX>=2.1,<2.3',
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
