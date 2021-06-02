@@ -135,3 +135,128 @@ class CONLLNER(HFTask):
             if split:
                 split.is_classification = True
         return splits, paths
+
+
+@register_task('few-nerd')
+class FEW_NERD(HFTask):
+    # tagging_scheme = 'IOB2'
+    all_labels = (
+        'o-o',
+        'art-broadcastprogram',
+        'art-film',
+        'art-music',
+        'art-other',
+        'art-painting',
+        'art-writtenart',
+        'building-airport',
+        'building-hospital',
+        'building-hotel',
+        'building-library',
+        'building-other',
+        'building-restaurant',
+        'building-sportsfacility',
+        'building-theater',
+        'event-attack/battle/war/militaryconflict',
+        'event-disaster',
+        'event-election',
+        'event-other',
+        'event-protest',
+        'event-sportsevent',
+        'location-GPE',
+        'location-bodiesofwater',
+        'location-island',
+        'location-mountain',
+        'location-other',
+        'location-park',
+        'location-road/railway/highway/transit',
+        'organization-company',
+        'organization-education',
+        'organization-government/governmentagency',
+        'organization-media/newspaper',
+        'organization-other',
+        'organization-politicalparty',
+        'organization-religion',
+        'organization-showorganization',
+        'organization-sportsleague',
+        'organization-sportsteam',
+        'other-astronomything',
+        'other-award',
+        'other-biologything',
+        'other-chemicalthing',
+        'other-currency',
+        'other-disease',
+        'other-educationaldegree',
+        'other-god',
+        'other-language',
+        'other-law',
+        'other-livingthing',
+        'other-medical',
+        'person-actor',
+        'person-artist/author',
+        'person-athlete',
+        'person-director',
+        'person-other',
+        'person-politician',
+        'person-scholar',
+        'person-soldier',
+        'product-airplane',
+        'product-car',
+        'product-food',
+        'product-game',
+        'product-other',
+        'product-ship',
+        'product-software',
+        'product-train',
+        'product-weapon',
+    )
+
+    def __init__(self, name, args):
+        self.label2id = {}
+        self.course_id2label = {}
+        self.finegrained_id2label = {}
+
+        for label in self.all_labels:
+            if label not in self.label2id:
+                self.label2id[label] = len(self.label2id)
+        self.id2label = {v: k for k, v in self.label2id.items()}
+
+        for i, label in enumerate(self.all_labels):
+            course_tag, finegrained_tag = label.split('-')
+            self.finegrained_id2label[i] = finegrained_tag
+            if course_tag not in self.course_id2label.values():
+                self.course_id2label[len(self.course_id2label)] = course_tag
+
+        self.num_labels = len(self.label2id)
+        super().__init__(name, args)
+
+    @property
+    def metrics(self):
+        return ['ner_f1', 'em', 'f1', 'pem']
+
+    def utterance_field(self):
+        return 'context'
+
+    def _make_example(self, ex, **kwargs):
+        example_id = ex['id']
+        context = ' '.join(ex['tokens'])
+        question = ''
+
+        # Create final tag by concatenating coarse and fine_grained types. Then map it to its id.
+        answer = ' '.join(
+            map(
+                lambda item: str(self.label2id[self.course_id2label[item[0]] + '-' + self.finegrained_id2label[item[1]]]),
+                zip(ex['course_tags'], ex['fine_tags']),
+            )
+        )
+
+        return Example.from_raw(
+            self.name + '/' + example_id, context, question, answer, preprocess=self.preprocess_field, lower=False
+        )
+
+    def get_splits(self, root, **kwargs):
+        kwargs['config_name'] = 'supervised'
+        splits, paths = HFDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
+        for split in splits:
+            if split:
+                split.is_classification = True
+        return splits, paths

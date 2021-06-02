@@ -68,27 +68,27 @@ class HFDataset(CQA):
 
     @classmethod
     def return_splits(cls, name, root='.data', train='train', validation='validation', test='test', **kwargs):
-
+        config_name = kwargs.pop('config_name', None)
         # download datasets and cache them
         train_data, validation_data, test_data = None, None, None
         train_path, validation_path, test_path = None, None, None
         if train:
-            train_data = load_dataset(name, split='train', cache_dir=root)
+            train_data = load_dataset(path=name, name=config_name, split='train', cache_dir=root)
             train_path = train_data.cache_files[0]['filename']
         if validation:
-            validation_data = load_dataset(name, split=validation, cache_dir=root)
+            validation_data = load_dataset(path=name, name=config_name, split=validation, cache_dir=root)
             validation_path = validation_data.cache_files[0]['filename']
         if test:
-            test_data = load_dataset(name, split='test', cache_dir=root)
+            test_data = load_dataset(path=name, name=config_name, split='test', cache_dir=root)
             test_path = test_data.cache_files[0]['filename']
 
         if kwargs.pop('hf_test_overfit', False):
             # override validation/ test data with train data
             if validation:
-                validation_data = load_dataset(name, split='train', cache_dir=root)
+                validation_data = load_dataset(path=name, name=config_name, split='train', cache_dir=root)
                 validation_path = validation_data.cache_files[0]['filename']
             if test:
-                test_data = load_dataset(name, split='train', cache_dir=root)
+                test_data = load_dataset(path=name, name=config_name, split='train', cache_dir=root)
                 test_path = test_data.cache_files[0]['filename']
 
         train_data = None if train is None else cls(train_data, **kwargs)
