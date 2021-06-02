@@ -33,6 +33,7 @@ import json
 import logging
 import os
 import shutil
+import unicodedata
 from collections import defaultdict
 from pprint import pformat
 
@@ -267,9 +268,9 @@ def run(args, device):
             # TODO change to jsonl format
             with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
                 for i in range(len(generation_output.example_ids)):
-                    line = (
-                        generation_output.example_ids[i] + '\t' + '\t'.join(generation_output.predictions[i])
-                    )  # all outputs separated by '\t'
+                    # normalize output
+                    predictions = [unicodedata.normalize('NFD', text) for text in generation_output.predictions[i]]
+                    line = generation_output.example_ids[i] + '\t' + '\t'.join(predictions)  # all outputs separated by '\t'
                     if args.calibrator_paths is not None:
                         for score in generation_output.confidence_scores:
                             line += '\t' + str(score[i])
