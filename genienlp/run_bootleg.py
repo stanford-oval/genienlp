@@ -154,6 +154,10 @@ def parse_argv(parser):
         default='dump_preds',
         help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings',
     )
+
+    parser.add_argument('--bootleg_neural_ner_model', type=str)
+    parser.add_argument('--bootleg_neural_ner_batch_size', type=int, default=32)
+
     parser.add_argument('--bootleg_batch_size', type=int, default=32, help='Batch size used for inference using bootleg')
     parser.add_argument(
         '--bootleg_prob_threshold',
@@ -273,6 +277,9 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
 
         # extract mentions and mention spans in the sentence and write them to output jsonl files
         bootleg.extract_mentions(path)
+        # import sys
+        #
+        # sys.exit(1)
 
         # find the right entity candidate for each mention
         bootleg.disambiguate_mentions(config_args)

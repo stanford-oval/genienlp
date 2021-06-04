@@ -225,6 +225,9 @@ class Bootleg(object):
             max_alias_len=self.args.max_entity_len,
             num_workers=getattr(self.args, 'bootleg_extract_num_workers', 32),
             verbose=False,
+            neural_ner_model=self.args.bootleg_neural_ner_model,
+            batch_size=self.args.bootleg_neural_ner_batch_size,
+            embeddings_dir=self.args.embeddings,
         )
 
     def pad_values(self, tokens, max_size, pad_id):

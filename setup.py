@@ -61,10 +61,10 @@ setuptools.setup(
         'nltk~=3.4',
         'ujson==4.0.2',
         'pathos==0.2.7',
-        # for kf
+        # for kf:
         'kfserving>=0.5.0',
-        # for NED
-        'bootleg==1.0.2',
+        # for NED:
+        'bootleg @ git+https://github.com/Mehrad0711/bootleg@a47482d4fd27e90f89cc75a5c9aec9fc3bfe76a4',
         'marisa_trie_m==0.7.6',
         'elasticsearch==7.13.0',
         # for calibration:
