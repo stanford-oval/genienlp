@@ -733,6 +733,8 @@ def load_config_json(args):
             'bootleg_model',
             'bootleg_prob_threshold',
             'bootleg_post_process_types',
+            'bootleg_neural_ner_model',
+            'bootleg_neural_ner_batch_size',
             'att_pooling',
             'plot_heatmaps',
             'replace_qp',

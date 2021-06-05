@@ -426,6 +426,9 @@ def parse_argv(parser):
     )
     parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
 
+    parser.add_argument('--bootleg_neural_ner_model', type=str)
+    parser.add_argument('--bootleg_neural_ner_batch_size', type=int, default=32)
+
     parser.add_argument(
         '--entity_type_agg_method',
         choices=['average', 'weighted'],

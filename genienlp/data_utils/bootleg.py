@@ -123,6 +123,9 @@ def init_bootleg_annotator(args, device):
         threshold=args.bootleg_prob_threshold,
         model_name=args.bootleg_model,
         verbose=False,
+        neural_ner_model=args.bootleg_neural_ner_model,
+        neural_batch_size=args.bootleg_neural_ner_batch_size,
+        neural_embeddings_dir=args.embeddings,
     )
     # collect all outputs now; we will filter later
     bootleg_annotator.set_threshold(0.0)
@@ -226,8 +229,8 @@ class Bootleg(object):
             num_workers=getattr(self.args, 'bootleg_extract_num_workers', 32),
             verbose=False,
             neural_ner_model=self.args.bootleg_neural_ner_model,
-            batch_size=self.args.bootleg_neural_ner_batch_size,
-            embeddings_dir=self.args.embeddings,
+            neural_batch_size=self.args.bootleg_neural_ner_batch_size,
+            neural_embeddings_dir=self.args.embeddings,
         )
 
     def pad_values(self, tokens, max_size, pad_id):
