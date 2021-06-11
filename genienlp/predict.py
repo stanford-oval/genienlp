@@ -261,6 +261,7 @@ def run(args, device):
 
             if len(generation_output.answers) > 0:
                 metrics_to_compute = task.metrics
+                metrics_to_compute += args.extra_metrics
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
                 metrics = calculate_and_reduce_metrics(
@@ -314,6 +315,7 @@ def parse_argv(parser):
         help='Name of dataset to run prediction for; will be ignored if --evaluate is test',
     )
     parser.add_argument('--tasks', dest='task_names', nargs='+', help='task names for prediction')
+    parser.add_argument('--extra_metrics', nargs='+', default=[], help='include these additional metrics in reported results')
     parser.add_argument(
         '--devices',
         default=None,
