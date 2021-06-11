@@ -37,8 +37,9 @@ from subprocess import PIPE, Popen
 from typing import Iterable
 
 import numpy as np
+import sacrebleu
+from datasets import load_metric
 from pyrouge import Rouge155
-from sacrebleu import corpus_bleu
 from seqeval import metrics as seq_metrics
 from seqeval import scheme as seq_scheme
 
@@ -267,7 +268,38 @@ def computeSM(outputs, targets):
 
 def computeBLEU(outputs, targets):
     targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
-    return corpus_bleu(outputs, targets, lowercase=True).score
+    return sacrebleu.corpus_bleu(outputs, targets, lowercase=True).score
+
+
+def computeSacreBLEU(outputs, targets):
+    # lowercase is false
+    sacrebleu_metric = load_metric("sacrebleu")
+    return sacrebleu_metric.compute(predictions=outputs, references=targets, lowercase=False)['score']
+
+
+def computeT5BLEU(outputs, targets):
+    # tokenize_v14_international is used instead of default tokenize_13a tokenizer
+    targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
+    return sacrebleu.corpus_bleu(
+        outputs,
+        targets,
+        smooth_method="exp",  # default
+        smooth_value=0.0,  # default
+        force=False,  # default
+        lowercase=False,  # default
+        tokenize="intl",
+        use_effective_order=False,  # default
+    ).score
+
+
+def computeNMTBLEU(outputs, targets):
+    # input should be tokenized
+    # TODO figure better tokenization esp. for CJK langs
+
+    outputs = [o.split(" ") for o in outputs]
+    targets = [[t.split(" ") for t in values] for values in targets]
+    bleu_metric = load_metric("bleu")
+    return bleu_metric.compute(predictions=outputs, references=targets)['bleu'] * 100
 
 
 class Rouge(Rouge155):
@@ -487,10 +519,22 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
         sm = computeSM(greedy, answer)
         metric_keys.append('sm')
         metric_values.append(sm)
+    if 'sacrebleu' in requested_metrics:
+        sacrebleu = computeSacreBLEU(greedy, answer)
+        metric_keys.append('sacrebleu')
+        metric_values.append(sacrebleu)
     if 'bleu' in requested_metrics:
         bleu = computeBLEU(greedy, answer)
         metric_keys.append('bleu')
         metric_values.append(bleu)
+    if 't5_bleu' in requested_metrics:
+        t5_bleu = computeT5BLEU(greedy, answer)
+        metric_keys.append('t5_bleu')
+        metric_values.append(t5_bleu)
+    if 'nmt_bleu' in requested_metrics:
+        nmt_bleu = computeNMTBLEU(greedy, answer)
+        metric_keys.append('nmt_bleu')
+        metric_values.append(nmt_bleu)
     if 'avg_rouge' in requested_metrics:
         rouge = computeROUGE(greedy, answer)
         metric_keys += ['rouge1', 'rouge2', 'rougeL', 'avg_rouge']
