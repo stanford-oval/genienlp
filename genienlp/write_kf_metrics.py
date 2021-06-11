@@ -28,24 +28,70 @@
 
 import json
 import logging
+from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
 
 def parse_argv(parser):
-    parser.add_argument('--eval_file', type=str, required=True, help='path to eval json file')
+    parser.add_argument('--eval_results', nargs='+', required=True, help='path to eval json files')
 
 
 def main(args):
-    with open(args.eval_file, 'r') as fin:
-        metrics = json.load(fin)
 
-    # kf dashboard is hardcoded to only show two metrics
-    # we choose the first two from task metrics that are important
-    items = list(metrics.items())[:2]
+    # write metrics
+    result = defaultdict(list)
 
-    extracted_metrics = [{'name': key, 'numberValue': val / 100, 'format': "PERCENTAGE"} for key, val in items]
+    num_files = len(args.eval_results)
+    if num_files > 2:
+        logger.warning('only metrics for first two splits will be shown')
+    max_size = 2 if num_files == 1 else 1
 
-    metrics = {'metrics': extracted_metrics}
+    for file in args.eval_results:
+        with open(file, 'r') as fin:
+            metrics = json.load(fin)
+
+        # get split name
+        split = file.rsplit('/', 2)[-2]
+
+        # kf dashboard is hardcoded to only show two metrics
+        # we show the first metric (i.e. decaScore) for each split if num_files is 1, otherwise the first two metrics for provided split
+
+        extracted_metrics = [
+            {
+                'name': split + '-' + key,
+                'numberValue': val / 100,
+                'format': "PERCENTAGE",
+            }
+            for key, val in list(metrics.items())[:max_size]
+        ]
+
+        result['metrics'].extend(extracted_metrics)
+
     with open('/tmp/mlpipeline-metrics.json', 'w') as fout:
-        json.dump(metrics, fout)
+        json.dump(result, fout)
+
+    # write UI metadata
+    metdata = defaultdict(list)
+
+    for file in args.eval_results:
+        with open(file, 'r') as fin:
+            metrics = json.load(fin)
+
+        # get split name
+        split = file.rsplit('/', 2)[-2]
+
+        extracted_metadata = [
+            {
+                'storage': 'inline',
+                'source': ','.join([split] + list(map(str, metrics.values()))),
+                "format": 'csv',
+                "type": "table",
+                "header": ["eval_set"] + list(metrics.keys()),
+            }
+        ]
+
+        metdata['outputs'].extend(extracted_metadata)
+
+    with open('/tmp/mlpipeline-ui-metadata.json', 'w') as fout:
+        json.dump(metdata, fout)
