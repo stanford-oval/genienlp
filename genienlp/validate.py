@@ -272,10 +272,10 @@ def generate_with_classification_model(
     return output
 
 
-def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics):
+def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics, lang):
     metrics = OrderedDict()
     for i in range(len(predictions[0])):
-        partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute)
+        partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute, lang)
         for k, v in partial_metrics.items():
             if reduce_metrics == 'max':
                 metrics[k] = max(metrics.get(k, 0), v)
@@ -309,7 +309,9 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
 
         output = generate_with_model(model, val_iter, numericalizer, task, args)
 
-        metrics = calculate_and_reduce_metrics(output.predictions, output.answers, task.metrics, args.reduce_metrics)
+        metrics = calculate_and_reduce_metrics(
+            output.predictions, output.answers, task.metrics, args.reduce_metrics, model.tgt_lang
+        )
         results = [output.predictions, output.answers, output.contexts]
         print_results(names, results, num_print=num_print)
 

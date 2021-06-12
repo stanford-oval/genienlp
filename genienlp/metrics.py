@@ -31,6 +31,7 @@ import collections
 import os
 import re
 import string
+from argparse import Namespace
 from contextlib import closing
 from multiprocessing import Pool, cpu_count
 from subprocess import PIPE, Popen
@@ -266,6 +267,18 @@ def computeSM(outputs, targets):
     return sum(outs) / len(outputs) * 100
 
 
+def computeBERTScore(outputs, targets, lang):
+    bertscore_metric = load_metric("bertscore")
+    return sum(bertscore_metric.compute(predictions=outputs, references=targets, lang=lang)['f1']) / len(outputs) * 100
+
+
+def computeTER(outputs, targets):
+    targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
+    args = Namespace(tokenize=sacrebleu.DEFAULT_TOKENIZER)
+    ter_metric = sacrebleu.metrics.TER(args)
+    return ter_metric.corpus_score(outputs, targets).score * 100
+
+
 def computeBLEU(outputs, targets):
     targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
     return sacrebleu.corpus_bleu(outputs, targets, lowercase=True).score
@@ -480,7 +493,7 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
 
 
-def compute_metrics(greedy, answer, requested_metrics: Iterable):
+def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
     """
     Inputs:
         requested_metrics: contains a subset of the following metrics
@@ -519,6 +532,14 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable):
         sm = computeSM(greedy, answer)
         metric_keys.append('sm')
         metric_values.append(sm)
+    if 'ter' in requested_metrics:
+        ter = computeTER(greedy, answer)
+        metric_keys.append('ter')
+        metric_values.append(ter)
+    if 'bertscore' in requested_metrics:
+        bertscore = computeBERTScore(greedy, answer, lang)
+        metric_keys.append('bertscore')
+        metric_values.append(bertscore)
     if 'sacrebleu' in requested_metrics:
         sacrebleu = computeSacreBLEU(greedy, answer)
         metric_keys.append('sacrebleu')
