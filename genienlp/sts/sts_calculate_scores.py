@@ -57,7 +57,7 @@ def main(args):
 
     ids = []
     src_sentences = []
-    trg_sentences = []
+    tgt_sentences = []
     programs = []
 
     with open(args.input_file, 'r') as fin:
@@ -65,23 +65,22 @@ def main(args):
             row = list(map(lambda part: part.strip(), line.split('\t')))
             ids.append(row[0])
             src_sentences.append(row[1])
-            trg_sentences.append(row[2])
-            programs.append(row[3])
+            tgt_sentences.append(row[2])
+            if len(row) > 3:
+                programs.append(row[3])
 
             if args.subsample != -1 and i >= args.subsample:
                 break
 
     embeddings1 = model.encode(src_sentences, batch_size=args.batch_size, show_progress_bar=True, convert_to_numpy=True)
-    embeddings2 = model.encode(trg_sentences, batch_size=args.batch_size, show_progress_bar=True, convert_to_numpy=True)
+    embeddings2 = model.encode(tgt_sentences, batch_size=args.batch_size, show_progress_bar=True, convert_to_numpy=True)
 
     cosine_scores = 1 - (paired_cosine_distances(embeddings1, embeddings2))
 
     with open(args.output_file, 'w') as fout:
-        for (
-            id_,
-            src,
-            tgt,
-            score,
-            program,
-        ) in zip(ids, src_sentences, trg_sentences, cosine_scores, programs):
-            fout.write('\t'.join([id_, src, tgt, '{:0.4f}'.format(score), program]) + '\n')
+        for i in range(len(ids)):
+            id_, src, tgt, score = ids[i], src_sentences[i], tgt_sentences[i], cosine_scores[i]
+            prog = None
+            if programs:
+                prog = programs[i]
+            fout.write('\t'.join([id_, src, tgt, '{:0.4f}'.format(score), prog if prog else '']) + '\n')
