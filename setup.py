@@ -60,7 +60,7 @@ setuptools.setup(
         'mosestokenizer~=1.1',
         'nltk~=3.4',
         'ujson==4.0.2',
-        'pathos==0.2.7',
+        'pathos==0.2.8',
         # for kf
         'kfserving>=0.5.0',
         # for NED
