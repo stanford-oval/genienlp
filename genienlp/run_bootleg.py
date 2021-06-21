@@ -154,6 +154,11 @@ def parse_argv(parser):
         default='dump_preds',
         help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings',
     )
+
+    parser.add_argument(
+        '--bootleg_device', type=int, default=0, help="device to run bootleg predictions on (-1 for cpu or gpu id)"
+    )
+
     parser.add_argument('--bootleg_batch_size', type=int, default=32, help='Batch size used for inference using bootleg')
     parser.add_argument(
         '--bootleg_prob_threshold',

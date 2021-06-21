@@ -176,6 +176,8 @@ class Bootleg(object):
             'True',
             "--emmental.model_path",
             self.model_ckpt_path,
+            "--emmental.device",
+            str(getattr(self.args, 'bootleg_device', 0)),
             # run configs
             "--run_config.dataset_threads",
             str(getattr(self.args, 'bootleg_dataset_threads', 1)),
