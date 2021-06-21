@@ -66,7 +66,7 @@ setuptools.setup(
         # for NED
         'bootleg==1.0.2',
         'marisa_trie_m==0.7.6',
-        'elasticsearch==7.13.1',
+        'elasticsearch==7.13.2',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',
