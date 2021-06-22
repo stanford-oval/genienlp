@@ -107,9 +107,10 @@ def extract_features_with_annotator(examples, bootleg_annotator, args, task):
             examples[i] = bootleg_process_examples(ex, bootleg_annotator, args, label, task)
 
 
-def init_bootleg_annotator(args, device):
+def init_bootleg_annotator(args, device, bootleg=None):
     # instantiate a bootleg object to load config and relevant databases
-    bootleg = Bootleg(args)
+    if bootleg is None:
+        bootleg = Bootleg(args)
     bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
 
     # instantiate the annotator class. we use annotator only in server mode

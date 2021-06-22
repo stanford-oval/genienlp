@@ -69,10 +69,6 @@ logger = logging.getLogger(__name__)
 
 
 def prepare_data(args, device):
-    # initialize bootleg
-    bootleg = None
-    if args.do_ned and args.ned_retrieve_method == 'bootleg':
-        bootleg = Bootleg(args)
 
     datasets = []
     paths = []
@@ -123,13 +119,15 @@ def prepare_data(args, device):
             else:
                 data = split.test
                 path = path.test
-            if bootleg:
-                if split.train or split.eval:
+            if args.do_ned and args.ned_retrieve_method == 'bootleg':
+                bootleg = Bootleg(args)
+                file_name = os.path.basename(path.rsplit('.', 1)[0])
+                if os.path.exists(f'{args.bootleg_output_dir}/{file_name}_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl'):
                     bootleg_process_splits(args, data.examples, path, task, bootleg)
                 else:
                     # no prepped bootleg features are available
                     # extract features on-the-fly using bootleg annotator
-                    bootleg_annotator = init_bootleg_annotator(args, device)
+                    bootleg_annotator = init_bootleg_annotator(args, device, bootleg)
                     extract_features_with_annotator(data.examples, bootleg_annotator, args, task)
             task_data_processed.append(data)
             task_path_processed.append(path)
