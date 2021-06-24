@@ -757,8 +757,7 @@ def load_config_json(args):
         ]
         # these are true/ false arguments
         overwrite_actions = [
-            'replace_qp',
-            'force_replace_qp',
+            'do_alignment',
         ]
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
@@ -778,8 +777,7 @@ def load_config_json(args):
                 'almond_lang_as_question',
                 'preprocess_special_tokens',
                 'almond_thingtalk_version',
-                'replace_qp',
-                'force_replace_qp',
+                'do_alignment',
                 'no_fast_tokenizer',
                 'force_fast_tokenizer',
             ):

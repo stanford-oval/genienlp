@@ -48,7 +48,7 @@ from ..data_utils.almond_utils import (
 from ..data_utils.database import Database
 from ..data_utils.example import Example, Feature, get_pad_feature
 from ..data_utils.remote_database import RemoteElasticDatabase
-from ..model_utils.translation import compute_attention, force_replace_quoted_params, replace_quoted_params
+from ..model_utils.translation import align_and_replace, compute_attention
 from ..paraphrase.data_utils import input_heuristics, output_heuristics
 from .almond_dataset import AlmondDataset
 from .base_dataset import Split
@@ -615,13 +615,34 @@ class Translate(NaturalSeq2Seq):
         super().__init__(name, args)
         self._metrics = ['casedbleu']
 
-    def postprocess_prediction(self, example_id, prediction):
-        return super().postprocess_prediction(example_id, prediction)
+    def preprocess_field(self, sentence, field_name=None, answer=None, preprocess_entities=True):
+
+        src_spans_flatten = []
+        if field_name != 'answer':
+            src_quotation_symbol = '"'
+            src_tokens = sentence.split(" ")
+            src_spans_ind = [index for index, token in enumerate(src_tokens) if token == src_quotation_symbol]
+
+            if len(src_spans_ind) % 2 != 0:
+                raise ValueError(f'Corrupted span in sentence: [{sentence}]')
+
+            src_tokens = [token for token in src_tokens if token != src_quotation_symbol]
+            sentence = " ".join(src_tokens)
+
+            src_spans = [
+                (src_spans_ind[i] + 1 - (i + 1), src_spans_ind[i + 1] - 1 - (i + 1)) for i in range(0, len(src_spans_ind), 2)
+            ]
+            src_spans_flatten = [val for tup in src_spans for val in tup]
+
+        sentence, features, sentence_plus_types = super().preprocess_field(sentence, field_name, answer, preprocess_entities)
+
+        return sentence, features, sentence_plus_types, src_spans_flatten
 
     def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, batch_tgt_ids, **kwargs):
 
         numericalizer = kwargs.pop('numericalizer')
         cross_attentions = kwargs.pop('cross_attentions')
+        batch_spans = kwargs.pop('batch_spans')
         num_outputs = len(batch_tgt_ids) // len(batch_src_ids)
 
         # TODO _tokenizer should not be private
@@ -642,6 +663,7 @@ class Translate(NaturalSeq2Seq):
         for i, (tgt_tokens, cross_att) in enumerate(zip(all_tgt_tokens, cross_attention_pooled)):
 
             src_tokens = all_src_tokens[i // num_outputs]
+            src_spans = batch_spans[i // num_outputs]
 
             # shift target tokens left to match the attention positions (since eos_token is prepended not generated)
             if tgt_tokens[0] in tokenizer.all_special_tokens:
@@ -679,16 +701,14 @@ class Translate(NaturalSeq2Seq):
 
                 plt.savefig(
                     os.path.join(
-                        os.path.dirname(getattr(self.args, 'save', self.args.eval_dir)),
+                        getattr(self.args, 'save', self.args.eval_dir),
                         f'heatmap_{batch_example_ids[i].replace("/", "-")}',
                     )
                 )
                 plt.show()
 
-            if self.args.replace_qp:
-                text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att)
-                if not is_replaced and self.args.force_replace_qp:
-                    text = force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att)
+            if self.args.do_alignment:
+                text = align_and_replace(src_tokens, tgt_tokens, tokenizer, cross_att, src_spans.tolist())
             else:
                 text = tokenizer.convert_tokens_to_string(tgt_tokens)
 
