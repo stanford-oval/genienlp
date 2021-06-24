@@ -147,7 +147,7 @@ def generate_with_seq2seq_model(
                 cross_attentions = cross_attentions.permute(1, 2, 3, 0, 4).contiguous()
 
                 # choose only last layer attentions
-                # TODO: get penultimate layer of attention vectors instead
+                # cross_attentions = torch.mean(cross_attentions[-3:, ...], dim=0)
                 cross_attentions = cross_attentions[-1, ...]
 
                 # postprocess prediction ids

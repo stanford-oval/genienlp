@@ -445,6 +445,16 @@ def parse_argv(parser):
         help='if true the provided dataset would not contain the answer (translated sentence)',
     )
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
+    parser.add_argument(
+        '--replace_qp',
+        action='store_true',
+        help='whether to replace tokens between quotation marks after translation with source values',
+    )
+    parser.add_argument(
+        '--force_replace_qp',
+        action='store_true',
+        help='if replace_qp is not successful, attempt again by leveraging cross-attention to find text spans',
+    )
 
 
 def set_default_values(args):

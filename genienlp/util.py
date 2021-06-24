@@ -734,9 +734,6 @@ def load_config_json(args):
             'bootleg_prob_threshold',
             'bootleg_post_process_types',
             'att_pooling',
-            'plot_heatmaps',
-            'replace_qp',
-            'force_replace_qp',
             'no_separator',
             'num_labels',
             'ner_domains',
@@ -759,8 +756,17 @@ def load_config_json(args):
             'reduce_metrics',
             'database_dir',
         ]
+        # these are true/ false arguments
+        overwrite_actions = [
+            'plot_heatmaps',
+            'replace_qp',
+            'force_replace_qp',
+        ]
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
+                retrieve.append(o)
+        for o in overwrite_actions:
+            if o not in args or getattr(args, o) is False:
                 retrieve.append(o)
 
         for r in retrieve:

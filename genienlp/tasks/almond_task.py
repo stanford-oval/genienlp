@@ -629,7 +629,7 @@ class Translate(NaturalSeq2Seq):
         all_src_tokens = numericalizer.convert_ids_to_tokens(batch_src_ids, skip_special_tokens=False)
         all_tgt_tokens = numericalizer.convert_ids_to_tokens(batch_tgt_ids, skip_special_tokens=False)
 
-        # remove language code from the beginning of src_tokens and shift layer_attention
+        # remove input_prefix from the beginning of src_tokens and shift layer_attention
         len_prefix_wp = len(tokenizer.tokenize(numericalizer.input_prefix))
         all_src_tokens = [tokens[len_prefix_wp:] for tokens in all_src_tokens]
         cross_attentions = cross_attentions[:, :, :, len_prefix_wp:]
@@ -642,13 +642,27 @@ class Translate(NaturalSeq2Seq):
 
             src_tokens = all_src_tokens[i // num_outputs]
 
-            # shift target tokens left to match the attention positions
+            # shift target tokens left to match the attention positions (since eos_token is prepended not generated)
             if tgt_tokens[0] in tokenizer.all_special_tokens:
                 tgt_tokens = tgt_tokens[1:]
+
+            # remove all beginning special tokens from target and shift attention too
+            while tgt_tokens[0] in tokenizer.all_special_tokens:
+                tgt_tokens = tgt_tokens[1:]
+                cross_att = cross_att[1:, :]
+
+            # remove all beginning special tokens from source and shift attention too
+            while src_tokens[0] in tokenizer.all_special_tokens:
+                src_tokens = src_tokens[1:]
+                cross_att = cross_att[:, 1:]
 
             # remove all trailing special tokens from source
             while src_tokens[-1] in tokenizer.all_special_tokens:
                 src_tokens = src_tokens[:-1]
+
+            # remove all trailing special tokens from target
+            while tgt_tokens[-1] in tokenizer.all_special_tokens:
+                tgt_tokens = tgt_tokens[:-1]
 
             # crop to match src and tgt new lengths
             cross_att = cross_att[: len(tgt_tokens), : len(src_tokens)]
@@ -662,12 +676,13 @@ class Translate(NaturalSeq2Seq):
                 graph.set_xticklabels(graph.get_xmajorticklabels(), fontsize=12)
                 graph.set_yticklabels(graph.get_ymajorticklabels(), fontsize=12)
 
-                plt.savefig(os.path.join(os.path.dirname(self.args.save), f'heatmap_{batch_example_ids[i]}'))
+                plt.savefig(
+                    os.path.join(
+                        os.path.dirname(getattr(self.args, 'save', self.args.eval_dir)),
+                        f'heatmap_{batch_example_ids[i].replace("/", "-")}',
+                    )
+                )
                 plt.show()
-
-            # remove eos and all pad tokens if present
-            while tgt_tokens[-1] in tokenizer.all_special_tokens:
-                tgt_tokens = tgt_tokens[:-1]
 
             if self.args.replace_qp:
                 text, is_replaced = replace_quoted_params(src_tokens, tgt_tokens, tokenizer, cross_att)
