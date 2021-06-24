@@ -7,6 +7,10 @@ repos:
         exclude: ^(tests/dataset/|tests/database/|tests/expected_results/)
       - id: trailing-whitespace
         exclude: ^(tests/dataset/|tests/database/|tests/expected_results/)
+-   repo: https://github.com/hadialqattan/pycln
+    rev: v0.0.2
+    hooks:
+      - id: pycln
 -   repo: https://github.com/PyCQA/isort
     rev: 5.8.0
     hooks:
