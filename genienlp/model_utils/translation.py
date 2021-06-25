@@ -100,6 +100,7 @@ def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_
         for i in range(0, len(src_spans), 2)
         if ' '.join(src_strings_words[src_spans[i] : src_spans[i + 1] + 1]) not in no_align_numbers
     ]
+
     piece_src_spans = [(src_word2piece_span_mapping[beg][0], src_word2piece_span_mapping[end][1]) for beg, end in src_spans]
 
     src_matches = [' '.join(src_strings_words[beg : end + 1]) for beg, end in src_spans]

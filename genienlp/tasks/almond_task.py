@@ -604,6 +604,22 @@ class Paraphrase(NaturalSeq2Seq):
         return Example.from_raw(example_id, context, question, answer, preprocess=self.preprocess_field, lower=False)
 
 
+def split_text_into_sentences(text, lang):
+    import re
+
+    if lang in ['zh', 'ja', 'ko']:
+        sentences = list(re.findall(u'([^!?。]+[!?。]*)\s?', text, flags=re.U))
+    elif lang in ['en']:
+        sentences = re.sub('(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.\!\?])\s|(?:。)', '\n', text).split('\n')
+    else:
+        import nltk
+
+        nltk.download('punkt', quiet=True)
+        sentences = nltk.sent_tokenize(text)
+
+    return sentences
+
+
 @register_task('almond_translate')
 class Translate(NaturalSeq2Seq):
     """
@@ -724,6 +740,8 @@ class Translate(NaturalSeq2Seq):
     def _make_example(self, parts, dir_name=None, **kwargs):
         # answer has to be provided by default unless doing prediction
         no_answer = kwargs.get('translate_no_answer', False)
+        split_sentence = kwargs.get('translate_example_split', False)
+        src_lang = kwargs.get('src_lang', 'en')
         example_id = 'id-null'
         if not no_answer:
             if len(parts) == 2:
@@ -755,9 +773,29 @@ class Translate(NaturalSeq2Seq):
         if no_answer:
             answer = '.'
 
-        return Example.from_raw(
-            self.name + '/' + example_id, context, question, answer, preprocess=self.preprocess_field, lower=False
-        )
+        contexts = []
+        if split_sentence:
+            contexts = split_text_into_sentences(context, src_lang)
+
+        if len(contexts) > 1:
+            examples = []
+            for i, text in enumerate(contexts):
+                examples.append(
+                    Example.from_raw(
+                        self.name + '/' + example_id + f'@{i}',
+                        text,
+                        question,
+                        answer,
+                        preprocess=self.preprocess_field,
+                        lower=False,
+                    )
+                )
+        else:
+            examples = Example.from_raw(
+                self.name + '/' + example_id, context, question, answer, preprocess=self.preprocess_field, lower=False
+            )
+
+        return examples
 
 
 @register_task('contextual_almond')

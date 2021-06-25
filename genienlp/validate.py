@@ -36,7 +36,7 @@ import torch
 from .data_utils.progbar import progress_bar
 from .metrics import compute_metrics
 from .models import TransformerForTokenClassification
-from .util import GenerationOutput
+from .util import GenerationOutput, merge_translated_sentences
 
 
 def generate_with_model(
@@ -190,6 +190,18 @@ def generate_with_seq2seq_model(
                 zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidence_features))))
             )
         ]
+
+    if args.translate_example_split:
+        # stitch sentences back together
+        example_ids, predictions, answers, contexts, confidence_features = merge_translated_sentences(
+            example_ids,
+            predictions,
+            answers,
+            contexts,
+            confidence_features,
+            numericalizer._tokenizer.src_lang,
+            numericalizer._tokenizer.tgt_lang,
+        )
 
     # TODO calculate and return loss
     loss = None

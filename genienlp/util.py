@@ -629,6 +629,63 @@ def ned_dump_entity_type_pairs(dataset, path, name, utterance_field):
             fout.write(ujson.dumps({"sentence": sentence, "aliases": entities, "thingtalk_types": ent_types}) + '\n')
 
 
+def merge_translated_sentences(example_ids, predictions, answers, contexts, confidence_features, src_lang, tgt_lang):
+    new_example_ids = []
+    new_predictions = []
+    new_answers = []
+    new_contexts = []
+    new_confidence_features = []
+    cur_pred, cur_context, cur_answer = [], [], []
+    i = 0
+    src_concat_token = '' if src_lang in ['zh', 'ja', 'ko'] else ' '
+    tgt_concat_token = '' if tgt_lang in ['zh', 'ja', 'ko'] else ' '
+    while i < len(predictions):
+        ex_id, pred, ans, ctxt, cf_feat = example_ids[i], predictions[i], answers[i], contexts[i], confidence_features[i]
+        if '@' in ex_id:
+            id_, split_id = ex_id.rsplit('@', 1)
+            cur_id = id_
+            while id_ == cur_id:
+                cur_pred.append(pred)
+                cur_context.append(ctxt)
+                cur_answer.append(ans)
+                i += 1
+                if i < len(predictions):
+                    ex_id, pred, ans, ctxt, cf_feat = (
+                        example_ids[i],
+                        predictions[i],
+                        answers[i],
+                        contexts[i],
+                        confidence_features[i],
+                    )
+                    if '@' in ex_id:
+                        id_, split_id = ex_id.rsplit('@', 1)
+                    else:
+                        id_ = ex_id
+                else:
+                    break
+
+            new_example_ids.append(cur_id)
+            new_predictions.append(
+                [tgt_concat_token.join([cur_pred[j][0] for j in range(len(cur_pred))]) for i in range(len(cur_pred[0]))]
+            )
+            new_contexts.append(src_concat_token.join(cur_context))
+            new_answers.append(src_concat_token.join(cur_answer))
+            new_confidence_features.append(cf_feat)
+
+            # reset block
+            cur_pred, cur_context, cur_answer = [], [], []
+
+        else:
+            new_example_ids.append(ex_id)
+            new_predictions.append(pred)
+            new_contexts.append(ctxt)
+            new_answers.append(ans)
+            new_confidence_features.append(cf_feat)
+            i += 1
+
+    return new_example_ids, new_predictions, new_answers, new_contexts, new_confidence_features
+
+
 def get_mbart_lang(orig_lang):
     for lang in FAIRSEQ_LANGUAGE_CODES:
         if lang.startswith(orig_lang):
