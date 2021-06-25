@@ -74,10 +74,10 @@ for model in "sshleifer/bart-tiny-random" "sshleifer/tiny-mbart" ; do
   paste <(cut -f1-2 $workdir/masked_paraphrasing/dev.tsv) <(cut -f2 $workdir/generated_"$model_type".tsv) <(cut -f3 $workdir/masked_paraphrasing/dev.tsv) > $workdir/sts_input_"$model_type".tsv
 
   # calculate sts score for paraphrases
-  genienlp calculate-paraphrase-sts --input_file $workdir/sts_input_"$model_type".tsv --output_file $workdir/sts_output_score_"$model_type".tsv
+  genienlp sts-calculate-scores --input_file $workdir/sts_input_"$model_type".tsv --output_file $workdir/sts_output_score_"$model_type".tsv
 
   # filter paraphrases based on sts score
-  genienlp filter-paraphrase-sts --input_file $workdir/sts_output_score_"$model_type".tsv --output_file $workdir/sts_output_"$model_type".tsv --filtering_metric constant --filtering_threshold 0.98
+  genienlp sts-filter --input_file $workdir/sts_output_score_"$model_type".tsv --output_file $workdir/sts_output_"$model_type".tsv --filtering_metric constant --filtering_threshold 0.98
 
 
   if test ! -f $workdir/generated_"$model_type".tsv || test ! -f $workdir/sts_output_"$model_type".tsv ; then

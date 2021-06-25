@@ -73,4 +73,4 @@ def main(args):
             if accepted_ids[i]:
                 parts = list(map(lambda p: p.strip(), line.split('\t')))
                 id_, orig_sent, para_sent, score, program = parts
-                fout.write('\t'.join(['P' + id_, para_sent, program]) + '\n')
+                fout.write('\t'.join([id_, para_sent, program]) + '\n')
