@@ -11,10 +11,10 @@ for model in "Helsinki-NLP/opus-mt-en-de" "sshleifer/tiny-mbart" ; do
 
     if [[ $model == Helsinki-NLP* ]] ; then
       base_model="marian"
-      expected_result='{"bleu": 95.37006954777766}'
+      expected_result='{"sacrebleu": 88.04086004116694}'
     elif [[ $model == *mbart* ]] ; then
       base_model="mbart"
-      expected_result='{"bleu": 0}'
+      expected_result='{"sacrebleu": 0}'
     fi
 
     mv $workdir/translation/en-de/dev_"$base_model"_aligned.tsv $workdir/translation/almond/train.tsv
