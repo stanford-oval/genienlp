@@ -494,6 +494,11 @@ def main(args):
 
     devices = get_devices(args.devices)
 
+    if args.override_valid_metrics:
+        assert len(args.override_valid_metrics) == len(args.tasks)
+        for task, metrics in zip(args.tasks, args.override_valid_metrics):
+            task.metrics = metrics
+
     if len(devices) > 1:
         logger.info(f'Independent multi-GPU generation on following devices: {devices}')
         all_processes = []

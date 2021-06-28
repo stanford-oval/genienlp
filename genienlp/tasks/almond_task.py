@@ -66,8 +66,9 @@ class BaseAlmondTask(BaseTask):
     def __init__(self, name, args):
         super().__init__(name, args)
         self.args = args
+        self._metrics = ['em', 'sm', 'f1']
         self.no_feature_fields = ['answer']
-        if self.utterance_field() == 'question':
+        if self.utterance_field == 'question':
             self.no_feature_fields.append('context')
         else:
             self.no_feature_fields.append('question')
@@ -120,7 +121,11 @@ class BaseAlmondTask(BaseTask):
 
     @property
     def metrics(self):
-        return ['em', 'sm', 'f1']
+        return self._metrics
+
+    @metrics.setter
+    def metrics(self, new_metrics):
+        self._metrics = new_metrics
 
     def _is_program_field(self, field_name):
         raise NotImplementedError()
@@ -487,7 +492,7 @@ class BaseAlmondTask(BaseTask):
         features = [Feature(*tup) for tup in zip(*zip_list)]
 
         sentence_plus_types = new_sentence
-        if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features) and field_name == self.utterance_field():
+        if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features) and field_name == self.utterance_field:
             sentence_plus_types = self.add_type_tokens(new_sentence, features, self.args.add_types_to_text)
 
         return new_sentence, features, sentence_plus_types
@@ -501,6 +506,7 @@ class Almond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name == 'answer'
 
+    @property
     def utterance_field(self):
         return 'context'
 
@@ -527,13 +533,14 @@ class NaturalSeq2Seq(BaseAlmondTask):
     Paraphrasing and translation inherit from this class.
     """
 
-    @property
-    def metrics(self):
-        return ['bleu', 'em', 'nf1']
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self._metrics = ['bleu', 'em', 'nf1']
 
     def _is_program_field(self, field_name):
         return False
 
+    @property
     def utterance_field(self):
         return 'context'
 
@@ -569,10 +576,7 @@ class Paraphrase(NaturalSeq2Seq):
     def __init__(self, name, args):
         super().__init__(name, args)
         self.reverse_maps = {}
-
-    @property
-    def metrics(self):
-        return ['bleu']
+        self._metrics = ['bleu']
 
     def postprocess_prediction(self, example_id, prediction):
         return output_heuristics(prediction, self.reverse_maps[example_id])
@@ -609,10 +613,7 @@ class Translate(NaturalSeq2Seq):
 
     def __init__(self, name, args):
         super().__init__(name, args)
-
-    @property
-    def metrics(self):
-        return ['bleu']
+        self._metrics = ['sacrebleu']
 
     def postprocess_prediction(self, example_id, prediction):
         return super().postprocess_prediction(example_id, prediction)
@@ -746,6 +747,7 @@ class ContextualAlmond(BaseAlmondTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    @property
     def utterance_field(self):
         return 'question'
 
@@ -766,10 +768,11 @@ class ReverseAlmond(BaseAlmondTask):
     """Reverse Almond semantic parsing task
     i.e. formal language to natural language mapping"""
 
-    @property
-    def metrics(self):
-        return ['bleu', 'em']
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self._metrics = ['blue', 'em']
 
+    @property
     def utterance_field(self):
         return 'context'
 
@@ -819,6 +822,7 @@ class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    @property
     def utterance_field(self):
         return 'question'
 
@@ -849,6 +853,7 @@ class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    @property
     def utterance_field(self):
         return 'question'
 
@@ -874,15 +879,16 @@ class AlmondDialogueNLG(BaseAlmondTask):
     and the desired system dialogue act)
     """
 
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self._metrics = ['bleu']
+
     def _is_program_field(self, field_name):
         return field_name in ('context', 'question')
 
+    @property
     def utterance_field(self):
         return 'answer'
-
-    @property
-    def metrics(self):
-        return ['bleu']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task
@@ -903,15 +909,16 @@ class AlmondDialoguePolicy(BaseAlmondTask):
     (generate the next dialogue act, given the current state of the conversation)
     """
 
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self._metrics = ['em', 'f1']
+
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    @property
     def utterance_field(self):
         return 'question'
-
-    @property
-    def metrics(self):
-        return ['em', 'f1']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task, and the sentence is intentionally ignored
@@ -1002,16 +1009,14 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     def __init__(self, name, args):
         super().__init__(name, args)
         self.lang_as_question = args.almond_lang_as_question
+        self._metrics = ['em', 'sm', 'bleu']
 
     def _is_program_field(self, field_name):
         return field_name == 'answer'
 
+    @property
     def utterance_field(self):
         return 'context'
-
-    @property
-    def metrics(self):
-        return ['em', 'sm', 'bleu']
 
     def _make_example(self, parts, dir_name, **kwargs):
         if self._almond_has_multiple_programs:
@@ -1039,15 +1044,16 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
 class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
     """Multi-turn NLU task (user and agent) for MultiLingual Almond dialogues"""
 
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self._metrics = ['em', 'sm', 'bleu']
+
     def _is_program_field(self, field_name):
         return field_name in ('answer', 'context')
 
+    @property
     def utterance_field(self):
         return 'question'
-
-    @property
-    def metrics(self):
-        return ['em', 'sm', 'bleu']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         if self._almond_has_multiple_programs:
@@ -1070,15 +1076,16 @@ class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
 class AlmondDialogMultiLingualNLG(BaseAlmondTask):
     """Multi-turn NLG task (agent) for MultiLingual Almond dialogues"""
 
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self._metrics = ['bleu']
+
     def _is_program_field(self, field_name):
         return field_name == 'context'
 
+    @property
     def utterance_field(self):
         return 'question'
-
-    @property
-    def metrics(self):
-        return ['bleu']
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # the question is irrelevant for this task

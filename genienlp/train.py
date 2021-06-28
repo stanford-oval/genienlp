@@ -757,8 +757,8 @@ def main(args):
     # dump entities if required
     if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
         for task, train_set, val_set in zip(tasks, train_sets, val_sets):
-            ned_dump_entity_type_pairs(train_set, args.data, 'train', task.utterance_field())
-            ned_dump_entity_type_pairs(val_set, args.data, 'eval', task.utterance_field())
+            ned_dump_entity_type_pairs(train_set, args.data, 'train', task.utterance_field)
+            ned_dump_entity_type_pairs(val_set, args.data, 'eval', task.utterance_field)
 
     params = get_trainable_params(model)
     log_model_size(logger, model, model_name)

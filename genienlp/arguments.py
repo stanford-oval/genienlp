@@ -121,6 +121,15 @@ def parse_argv(parser):
     parser.add_argument(
         '--num_print', default=10, type=int, help='how many validation examples with greedy output to print to std out'
     )
+
+    parser.add_argument(
+        '--override_valid_metrics',
+        nargs='+',
+        action='append',
+        type=str,
+        help='if provided will override metrics provided by the task (format is a list of lists)',
+    )
+
     parser.add_argument(
         '--print_train_examples_too',
         action='store_true',
@@ -651,6 +660,12 @@ def post_parse_train_specific(args):
             'You should use the cased version of provided model when not preprocessing special tokens.'
             ' Otherwise the program (answer) will not be tokenized properly'
         )
+
+    if args.override_valid_metrics:
+        assert len(args.override_valid_metrics) == len(args.train_tasks) == len(args.val_tasks)
+        for train_task, val_task, metrics in zip(args.train_tasks, args.val_tasks, args.override_valid_metrics):
+            train_task.metrics = metrics
+            val_task.metrics = metrics
 
     args.log_dir = args.save
     if args.tensorboard_dir is None:

@@ -712,8 +712,6 @@ def load_config_json(args):
             'num_workers',
             'no_fast_tokenizer',
             'force_fast_tokenizer',
-            'override_question',
-            'override_context',
             'add_types_to_text',
             'do_ned',
             'database_type',
@@ -738,6 +736,7 @@ def load_config_json(args):
             'num_labels',
             'ner_domains',
             'hf_test_overfit',
+            'override_valid_metrics',
         ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
@@ -795,7 +794,7 @@ def load_config_json(args):
                 setattr(args, r, [1])
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
-            elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val']:
+            elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val', 'override_valid_metrics']:
                 setattr(args, r, [])
             elif r == 'add_types_to_text':
                 setattr(args, r, 'no')

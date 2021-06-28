@@ -41,6 +41,7 @@ class BaseTask(object):
 
     def __init__(self, name, args):
         self.name = name
+        self._metrics = ['em', 'nem', 'nf1']
         # special task-specific tokens that should not be subword tokenized
         self.special_tokens = set()
         self.override_context = args.override_context
@@ -92,4 +93,11 @@ class BaseTask(object):
 
         :return: a list of metric names
         """
-        return ['em', 'nem', 'nf1']
+        return self._metrics
+
+    @metrics.setter
+    def metrics(self, new_metrics):
+        """
+        setter for metrics property
+        """
+        self._metrics = new_metrics
