@@ -121,9 +121,9 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
         while i <= end:
             max_tgt_att_idx = torch.argmax(sample_layer_attention_pooled[:, i]).item()
 
-            # find span in tgt that contains this index
+            # find span in tgt that contains this index; -1 and +1 to include target quotations marks
             for tgt_idx, (s1, s2) in enumerate(tgt_spans):
-                if s1 <= max_tgt_att_idx <= s2 and (s1, s2) not in tgt_span_success:
+                if s1 - 1 <= max_tgt_att_idx <= s2 + 1 and (s1, s2) not in tgt_span_success:
                     tgt_span_idx = tgt_idx
                     src2tgt_mapping[(beg, end)] = (s1, s2)
                     src2tgt_mapping_index[src_idx] = tgt_span_idx
@@ -185,31 +185,21 @@ def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_
     src_spans_ind = [
         index for index, token in enumerate(src_tokens) if any([symbol in token for symbol in src_quotation_symbols])
     ]
-    if hasattr(tokenizer, 'is_piece_fn'):
-        tgt_is_piece = [int(tokenizer.is_piece_fn(token)) for token in tgt_tokens]
-    else:
-        # assume spm tokenizer
-        tgt_is_piece = [int(not token.startswith(SPIECE_UNDERLINE)) for token in tgt_tokens]
-    tgt_piece2word_mapping = list(np.cumsum(tgt_is_piece) - 1)
+    tgt_is_not_piece = [int(not tokenizer.is_piece_fn(token)) for token in tgt_tokens]
+    tgt_piece2word_mapping = list(np.cumsum(tgt_is_not_piece) - 1)
 
     if len(src_spans_ind) % 2 != 0:
         if do_log(log_counter):
             tokenizer._decode_use_source_tokenizer = True
-            logging.error(f'Corrupted span in src string: [{tokenizer.convert_tokens_to_string(src_tokens)}]')
-            tokenizer._decode_use_source_tokenizer = False
-        log_counter += 1
-        # this almost never happens but if it does it is usually because quotation is missing from the end of src_tokens
-        # we temporary fix this by adding '"' to the end of src_tokens
-        src_tokens += tokenizer.tokenize('"')
-        src_spans_ind = [index for index, token in enumerate(src_tokens) if '"' in token]
+            raise ValueError(f'Corrupted span in src string: [{tokenizer.convert_tokens_to_string(src_tokens)}]')
 
     tokenizer._decode_use_source_tokenizer = True
     src_strings = tokenizer.convert_tokens_to_string(src_tokens)
     tokenizer._decode_use_source_tokenizer = False
     tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
 
-    # arrange spans and exclude quotation mark indices
-    src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
+    # arrange spans but DO NOT exclude quotation mark indices
+    src_spans = [(src_spans_ind[i], src_spans_ind[i + 1]) for i in range(0, len(src_spans_ind), 2)]
 
     for src_idx, (beg, end) in enumerate(src_spans):
         s1 = torch.argmax(sample_layer_attention_pooled[:, beg]).item()
@@ -218,6 +208,10 @@ def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_
         # clamp values to max tgt_tokens length
         s1 = min(s1, len(tgt_tokens) - 1)
         s2 = min(s2, len(tgt_tokens) - 1)
+
+        # switch tgt begin and end indices
+        if s1 > s2:
+            s1, s2 = s2, s1
 
         src2tgt_mapping[(beg, end)] = (s1, s2)
 
@@ -228,13 +222,10 @@ def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_
     # update src2tgt_mapping to map to word indices in response
     for key, value in src2tgt_mapping.items():
         s1, s2 = value
-        try:
-            src2tgt_mapping[key] = (
-                max(0, tgt_piece2word_mapping[s1] - 1),
-                min(tgt_piece2word_mapping[s2] + 1, len(tgt_tokens)),
-            )
-        except:
-            raise ValueError(f'Corrupted span in tgt string: [{tgt_strings}] with src string: [{src_strings}]\n')
+        src2tgt_mapping[key] = (
+            max(0, tgt_piece2word_mapping[s1]),
+            min(tgt_piece2word_mapping[s2], len(tgt_tokens)),
+        )
 
     # move through words
     tgt_strings_words = tgt_strings.split(' ')
@@ -246,7 +237,8 @@ def force_replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_
             tokens.extend(tgt_strings_words[curr:start])
         replace_match = src_matches[i]
         tokens.append(replace_match.group(0))
-        curr = end
+        # +1 since it's inclusive
+        curr = end + 1
     if curr < len(tgt_strings_words):
         tokens.extend(tgt_strings_words[curr:])
 

@@ -712,8 +712,6 @@ def load_config_json(args):
             'num_workers',
             'no_fast_tokenizer',
             'force_fast_tokenizer',
-            'override_question',
-            'override_context',
             'add_types_to_text',
             'do_ned',
             'database_type',
@@ -734,13 +732,11 @@ def load_config_json(args):
             'bootleg_prob_threshold',
             'bootleg_post_process_types',
             'att_pooling',
-            'plot_heatmaps',
-            'replace_qp',
-            'force_replace_qp',
             'no_separator',
             'num_labels',
             'ner_domains',
             'hf_test_overfit',
+            'override_valid_metrics',
         ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
@@ -759,8 +755,16 @@ def load_config_json(args):
             'reduce_metrics',
             'database_dir',
         ]
+        # these are true/ false arguments
+        overwrite_actions = [
+            'replace_qp',
+            'force_replace_qp',
+        ]
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
+                retrieve.append(o)
+        for o in overwrite_actions:
+            if o not in args or getattr(args, o) is False:
                 retrieve.append(o)
 
         for r in retrieve:
@@ -774,7 +778,6 @@ def load_config_json(args):
                 'almond_lang_as_question',
                 'preprocess_special_tokens',
                 'almond_thingtalk_version',
-                'plot_heatmaps',
                 'replace_qp',
                 'force_replace_qp',
                 'no_fast_tokenizer',
@@ -789,7 +792,7 @@ def load_config_json(args):
                 setattr(args, r, [1])
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
-            elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val']:
+            elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val', 'override_valid_metrics']:
                 setattr(args, r, [])
             elif r == 'add_types_to_text':
                 setattr(args, r, 'no')

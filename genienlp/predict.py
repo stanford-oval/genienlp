@@ -69,10 +69,6 @@ logger = logging.getLogger(__name__)
 
 
 def prepare_data(args, device):
-    # initialize bootleg
-    bootleg = None
-    if args.do_ned and args.ned_retrieve_method == 'bootleg':
-        bootleg = Bootleg(args)
 
     datasets = []
     paths = []
@@ -123,13 +119,15 @@ def prepare_data(args, device):
             else:
                 data = split.test
                 path = path.test
-            if bootleg:
-                if split.train or split.eval:
+            if args.do_ned and args.ned_retrieve_method == 'bootleg':
+                bootleg = Bootleg(args)
+                file_name = os.path.basename(path.rsplit('.', 1)[0])
+                if os.path.exists(f'{args.bootleg_output_dir}/{file_name}_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl'):
                     bootleg_process_splits(args, data.examples, path, task, bootleg)
                 else:
                     # no prepped bootleg features are available
                     # extract features on-the-fly using bootleg annotator
-                    bootleg_annotator = init_bootleg_annotator(args, device)
+                    bootleg_annotator = init_bootleg_annotator(args, device, bootleg)
                     extract_features_with_annotator(data.examples, bootleg_annotator, args, task)
             task_data_processed.append(data)
             task_path_processed.append(path)
@@ -261,10 +259,11 @@ def run(args, device):
 
             if len(generation_output.answers) > 0:
                 metrics_to_compute = task.metrics
+                metrics_to_compute += args.extra_metrics
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
                 metrics = calculate_and_reduce_metrics(
-                    generation_output.predictions, generation_output.answers, metrics_to_compute, args.reduce_metrics
+                    generation_output.predictions, generation_output.answers, metrics_to_compute, args.reduce_metrics, tgt_lang
                 )
 
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
@@ -314,6 +313,7 @@ def parse_argv(parser):
         help='Name of dataset to run prediction for; will be ignored if --evaluate is test',
     )
     parser.add_argument('--tasks', dest='task_names', nargs='+', help='task names for prediction')
+    parser.add_argument('--extra_metrics', nargs='+', default=[], help='include these additional metrics in reported results')
     parser.add_argument(
         '--devices',
         default=None,
@@ -445,6 +445,16 @@ def parse_argv(parser):
         help='if true the provided dataset would not contain the answer (translated sentence)',
     )
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
+    parser.add_argument(
+        '--replace_qp',
+        action='store_true',
+        help='whether to replace tokens between quotation marks after translation with source values',
+    )
+    parser.add_argument(
+        '--force_replace_qp',
+        action='store_true',
+        help='if replace_qp is not successful, attempt again by leveraging cross-attention to find text spans',
+    )
 
 
 def set_default_values(args):
@@ -483,6 +493,11 @@ def main(args):
     logger.info(f'Loading from {args.best_checkpoint}')
 
     devices = get_devices(args.devices)
+
+    if args.override_valid_metrics:
+        assert len(args.override_valid_metrics) == len(args.tasks)
+        for task, metrics in zip(args.tasks, args.override_valid_metrics):
+            task.metrics = metrics
 
     if len(devices) > 1:
         logger.info(f'Independent multi-GPU generation on following devices: {devices}')

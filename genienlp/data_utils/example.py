@@ -179,8 +179,11 @@ class NumericalizedExamples(NamedTuple):
             all_context_plus_question_features.append(context_plus_question_feature)
 
         if args.add_types_to_text == 'no':
+            features = [a for a in all_context_plus_question_features if a]
+            if len(features) == 0:
+                features = None
             tokenized_contexts = numericalizer.encode_batch(
-                all_context_plus_questions, field_name='context', features=[a for a in all_context_plus_question_features if a]
+                all_context_plus_questions, field_name='context', features=features
             )
         else:
             tokenized_contexts = numericalizer.encode_batch(all_context_plus_question_with_types, field_name='context')

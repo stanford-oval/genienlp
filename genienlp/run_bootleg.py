@@ -154,6 +154,11 @@ def parse_argv(parser):
         default='dump_preds',
         help='dump_preds will dump only predictions; dump_embs will dump both prediction and embeddings',
     )
+
+    parser.add_argument(
+        '--bootleg_device', type=int, default=0, help="device to run bootleg predictions on (-1 for cpu or gpu id)"
+    )
+
     parser.add_argument('--bootleg_batch_size', type=int, default=32, help='Batch size used for inference using bootleg')
     parser.add_argument(
         '--bootleg_prob_threshold',
@@ -182,6 +187,15 @@ def parse_argv(parser):
     parser.add_argument(
         '--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...'
     )
+
+    parser.add_argument(
+        '--bootleg_data_splits',
+        nargs='+',
+        type=str,
+        default=['train', 'eval'],
+        help='Data splits to prepare bootleg features for. train and eval should be included by default; test set is optional',
+    )
+
     parser.add_argument(
         '--ned_features',
         nargs='+',
@@ -269,7 +283,7 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
     if mode == 'dump':
         # create jsonl files from input examples
         # jsonl is the input format bootleg expects
-        bootleg.create_jsonl(path, examples, task.utterance_field())
+        bootleg.create_jsonl(path, examples, task.utterance_field)
 
         # extract mentions and mention spans in the sentence and write them to output jsonl files
         bootleg.extract_mentions(path)
@@ -289,7 +303,7 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
     if mode != 'dump':
         assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs)
         for n, (ex, tokens_type_ids, tokens_type_probs) in enumerate(zip(examples, all_token_type_ids, all_tokens_type_probs)):
-            if task.utterance_field() == 'question':
+            if task.utterance_field == 'question':
                 for i in range(len(tokens_type_ids)):
                     examples[n].question_feature[i].type_id = tokens_type_ids[i]
                     examples[n].question_feature[i].type_prob = tokens_type_probs[i]
@@ -327,6 +341,9 @@ def dump_bootleg_features(args, logger):
 
     bootleg = Bootleg(args)
 
+    if 'train' not in args.bootleg_data_splits or 'eval' not in args.bootleg_data_splits:
+        raise ValueError('Make sure bootleg\'s data_splits contain at least train and eval set')
+
     train_eval_shared_kwargs = {
         'subsample': args.subsample,
         'skip_cache': args.skip_cache,
@@ -358,7 +375,7 @@ def dump_bootleg_features(args, logger):
         assert not splits.eval and not splits.test
         assert not args.use_curriculum
 
-        train_dataset = splits.train
+        train_examples = splits.train.examples
         train_path = paths.train
 
         logger.info(f'{train_task.name} has {len(splits.train)} training examples')
@@ -404,10 +421,30 @@ def dump_bootleg_features(args, logger):
         if hasattr(val_task, 'all_schema_types'):
             logger.info(f'eval all_schema_types: {val_task.all_schema_types}')
 
-        eval_dataset = splits.eval
+        eval_examples = splits.eval.examples
+
+        if 'test' in args.bootleg_data_splits:
+            # process test split
+            logger.info(f'Loading {val_task.name}')
+            kwargs = {'train': None, 'validation': None}
+            kwargs.update(train_eval_shared_kwargs)
+            kwargs['all_dirs'] = args.eval_src_languages
+            kwargs['cached_path'] = os.path.join(args.cache, val_task.name)
+            kwargs['ner_domains'] = args.ner_domains
+            kwargs['hf_test_overfit'] = args.hf_test_overfit
+
+            logger.info(f'Adding {val_task.name} to test datasets')
+            splits, paths = val_task.get_splits(args.data, lower=args.lower, **kwargs)
+
+            assert not splits.train and not splits.eval and not splits.aux
+            logger.info(f'{val_task.name} has {len(splits.test)} test examples')
+
+            test_examples = splits.test.examples
+        else:
+            test_examples = []
 
         # merge all splits before feeding to bootleg
-        all_examples = train_dataset.examples + eval_dataset.examples
+        all_examples = train_examples + eval_examples + test_examples
         dir_name = os.path.dirname(train_path)
         extension = train_path.rsplit('.', 1)[1]
         all_paths = os.path.join(dir_name, 'combined' + '.' + extension)
@@ -419,13 +456,17 @@ def dump_bootleg_features(args, logger):
 
         train_output_path = f'{args.bootleg_output_dir}/train_bootleg/{bootleg.ckpt_name}'
         eval_output_path = f'{args.bootleg_output_dir}/{eval_file_name}_bootleg/{bootleg.ckpt_name}'
+        test_output_path = f'{args.bootleg_output_dir}/test_bootleg/{bootleg.ckpt_name}'
         os.makedirs(train_output_path, exist_ok=True)
         os.makedirs(eval_output_path, exist_ok=True)
+        os.makedirs(test_output_path, exist_ok=True)
         train_output_file = open(os.path.join(train_output_path, 'bootleg_labels.jsonl'), 'w')
         eval_output_file = open(os.path.join(eval_output_path, 'bootleg_labels.jsonl'), 'w')
+        test_output_file = open(os.path.join(test_output_path, 'bootleg_labels.jsonl'), 'w')
 
-        train_size = len(train_dataset.examples)
-        eval_size = len(eval_dataset.examples)
+        train_size = len(train_examples)
+        eval_size = len(eval_examples)
+        test_size = len(test_examples)
 
         # unmerge bootleg dumped labels
         with open(f'{args.bootleg_output_dir}/combined_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
@@ -435,19 +476,20 @@ def dump_bootleg_features(args, logger):
             all_sent_ids = [ujson.loads(line)['sent_idx_unq'] for line in all_lines]
             all_lines = list(zip(*sorted(zip(all_sent_ids, all_lines), key=lambda item: item[0])))[1]
 
-            i = 0
-            for line in all_lines:
+            for i, line in enumerate(all_lines):
                 if i < train_size:
                     train_output_file.write(line)
-                else:
+                elif train_size <= i < train_size + eval_size:
                     eval_output_file.write(line)
-                i += 1
+                else:
+                    test_output_file.write(line)
 
-        assert i == train_size + eval_size
+        assert i == train_size + eval_size + test_size - 1
 
         # close output files
         train_output_file.close()
         eval_output_file.close()
+        test_output_file.close()
 
         shutil.rmtree(f'{args.bootleg_output_dir}/combined_bootleg')
 

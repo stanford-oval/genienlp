@@ -43,6 +43,7 @@ from transformers import (
     AutoTokenizer,
     BertTokenizer,
     BertTokenizerFast,
+    ByT5Tokenizer,
     GPT2Tokenizer,
     GPT2TokenizerFast,
     M2M100Tokenizer,
@@ -216,6 +217,8 @@ class TransformerNumericalizer(object):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
         elif isinstance(self._tokenizer, (GPT2Tokenizer, GPT2TokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')
+        elif isinstance(self._tokenizer, ByT5Tokenizer):
+            self._tokenizer.is_piece_fn = lambda wp: False
 
         # make sure we assigned is_piece_fn
         assert self._tokenizer.is_piece_fn

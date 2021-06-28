@@ -51,6 +51,7 @@ setuptools.setup(
         'tensorboardX>=2.1,<2.3',
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
+        'bert-score~=0.3',
         'requests~=2.22',
         'datasets==1.8.0',
         'seqeval==1.2.2',

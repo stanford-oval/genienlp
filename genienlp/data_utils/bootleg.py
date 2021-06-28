@@ -62,7 +62,7 @@ def reverse_bisect_left(a, x, lo=None, hi=None):
 
 def bootleg_process_examples(ex, bootleg_annotator, args, label, task):
     line = {}
-    line['sentence'] = getattr(ex, task.utterance_field())
+    line['sentence'] = getattr(ex, task.utterance_field)
 
     assert len(label) == 7
     line['aliases'], line['spans'], line['cands'] = label['aliases'], label['spans'], label['cands']
@@ -71,7 +71,7 @@ def bootleg_process_examples(ex, bootleg_annotator, args, label, task):
         line, args.bootleg_prob_threshold, getattr(task, 'TTtype2qid', None)
     )
 
-    if task.utterance_field() == 'question':
+    if task.utterance_field == 'question':
         for i in range(len(tokens_type_ids)):
             ex.question_feature[i].type_id = tokens_type_ids[i]
             ex.question_feature[i].type_prob = tokens_type_probs[i]
@@ -91,7 +91,7 @@ def extract_features_with_annotator(examples, bootleg_annotator, args, task):
     with torch.no_grad():
         bootleg_inputs = []
         for ex in examples:
-            bootleg_inputs.append(getattr(ex, task.utterance_field()))
+            bootleg_inputs.append(getattr(ex, task.utterance_field))
 
         bootleg_labels = bootleg_annotator.label_mentions(bootleg_inputs)
 
@@ -107,9 +107,10 @@ def extract_features_with_annotator(examples, bootleg_annotator, args, task):
             examples[i] = bootleg_process_examples(ex, bootleg_annotator, args, label, task)
 
 
-def init_bootleg_annotator(args, device):
+def init_bootleg_annotator(args, device, bootleg=None):
     # instantiate a bootleg object to load config and relevant databases
-    bootleg = Bootleg(args)
+    if bootleg is None:
+        bootleg = Bootleg(args)
     bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
 
     # instantiate the annotator class. we use annotator only in server mode
@@ -176,6 +177,8 @@ class Bootleg(object):
             'True',
             "--emmental.model_path",
             self.model_ckpt_path,
+            "--emmental.device",
+            str(getattr(self.args, 'bootleg_device', 0)),
             # run configs
             "--run_config.dataset_threads",
             str(getattr(self.args, 'bootleg_dataset_threads', 1)),
