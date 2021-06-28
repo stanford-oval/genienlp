@@ -757,7 +757,6 @@ def load_config_json(args):
         ]
         # these are true/ false arguments
         overwrite_actions = [
-            'plot_heatmaps',
             'replace_qp',
             'force_replace_qp',
         ]
@@ -779,7 +778,6 @@ def load_config_json(args):
                 'almond_lang_as_question',
                 'preprocess_special_tokens',
                 'almond_thingtalk_version',
-                'plot_heatmaps',
                 'replace_qp',
                 'force_replace_qp',
                 'no_fast_tokenizer',

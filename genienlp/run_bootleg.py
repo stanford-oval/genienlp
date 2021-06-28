@@ -188,7 +188,13 @@ def parse_argv(parser):
         '--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...'
     )
 
-    parser.add_argument('--prep_test_too', action='store_true', help='Prepare bootleg features for test set too')
+    parser.add_argument(
+        '--bootleg_data_splits',
+        nargs='+',
+        type=str,
+        default=['train', 'eval'],
+        help='Data splits to prepare bootleg features for. train and eval should be included by default; test set is optional',
+    )
 
     parser.add_argument(
         '--ned_features',
@@ -335,6 +341,9 @@ def dump_bootleg_features(args, logger):
 
     bootleg = Bootleg(args)
 
+    if 'train' not in args.bootleg_data_splits or 'eval' not in args.bootleg_data_splits:
+        raise ValueError('Make sure bootleg\'s data_splits contain at least train and eval set')
+
     train_eval_shared_kwargs = {
         'subsample': args.subsample,
         'skip_cache': args.skip_cache,
@@ -414,7 +423,7 @@ def dump_bootleg_features(args, logger):
 
         eval_examples = splits.eval.examples
 
-        if args.prep_test_too:
+        if 'test' in args.bootleg_data_splits:
             # process test split
             logger.info(f'Loading {val_task.name}')
             kwargs = {'train': None, 'validation': None}

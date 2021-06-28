@@ -284,7 +284,7 @@ def computeBLEU(outputs, targets):
     return sacrebleu.corpus_bleu(outputs, targets, lowercase=True).score
 
 
-def computeSacreBLEU(outputs, targets):
+def computeCasedBLEU(outputs, targets):
     # lowercase is false
     sacrebleu_metric = load_metric("sacrebleu")
     return sacrebleu_metric.compute(predictions=outputs, references=targets, lowercase=False)['score']
@@ -540,10 +540,10 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
         bertscore = computeBERTScore(greedy, answer, lang)
         metric_keys.append('bertscore')
         metric_values.append(bertscore)
-    if 'sacrebleu' in requested_metrics:
-        sacrebleu = computeSacreBLEU(greedy, answer)
-        metric_keys.append('sacrebleu')
-        metric_values.append(sacrebleu)
+    if 'casedbleu' in requested_metrics:
+        casedbleu = computeCasedBLEU(greedy, answer)
+        metric_keys.append('casedbleu')
+        metric_values.append(casedbleu)
     if 'bleu' in requested_metrics:
         bleu = computeBLEU(greedy, answer)
         metric_keys.append('bleu')

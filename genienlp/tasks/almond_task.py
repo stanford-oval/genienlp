@@ -613,7 +613,7 @@ class Translate(NaturalSeq2Seq):
 
     def __init__(self, name, args):
         super().__init__(name, args)
-        self._metrics = ['sacrebleu']
+        self._metrics = ['casedbleu']
 
     def postprocess_prediction(self, example_id, prediction):
         return super().postprocess_prediction(example_id, prediction)
