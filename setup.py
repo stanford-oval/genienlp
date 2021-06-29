@@ -48,7 +48,7 @@ setuptools.setup(
         'numpy>=1.14.5',
         'torch~=1.7.1',
         'tqdm==4.49.0',
-        'tensorboardX>=2.1,<2.3',
+        'tensorboardX>=2.1,<2.4',
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
         'bert-score~=0.3',
