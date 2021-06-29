@@ -46,7 +46,7 @@ setuptools.setup(
     url="https://github.com/stanford-oval/genienlp",
     install_requires=[
         'numpy>=1.14.5',
-        'torch~=1.7.1',
+        'torch>=1.9.0,<1.10.0',
         'tqdm==4.49.0',
         'pyrouge>=0.1.3',
         'sacrebleu~=1.0',
@@ -64,7 +64,7 @@ setuptools.setup(
         # for kf
         'kfserving>=0.5.0',
         # for NED
-        'bootleg @ git+https://github.com/Mehrad0711/bootleg@c48e5e51015e001a95d5ed9b33f53f4e58f6de9b',
+        'bootleg @ git+https://github.com/Mehrad0711/bootleg@b6c207259a83c21c77aeaf8088ee85f24ec7e708',
         'marisa_trie_m==0.7.6',
         'elasticsearch==7.13.2',
         # for calibration:

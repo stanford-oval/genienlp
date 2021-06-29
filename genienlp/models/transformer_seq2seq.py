@@ -31,7 +31,7 @@ import logging
 from typing import List
 
 import torch
-from torch.tensor import Tensor
+from torch import Tensor
 from transformers import AutoConfig, AutoModelForSeq2SeqLM, MBartTokenizer, MBartTokenizerFast
 
 from ..data_utils.numericalizer import TransformerNumericalizer
