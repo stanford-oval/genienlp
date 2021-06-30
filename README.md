@@ -122,7 +122,7 @@ genienlp run-paraphrase --model_name_or_path <model_dir> --temperature 0.3 --rep
 Use the following command for training/ finetuning an NMT model:
 
 ```bash
-genienlp train train --train_tasks almond_translate --data <data_directory> --train_languages <src_lang> --eval_languages <tgt_lang> --no_commit --train_iterations <iterations> --preserve_case --save <save_dir> --exist_ok --skip_cache --model TransformerSeq2Seq --pretrained_model <hf_model_name>
+genienlp train --train_tasks almond_translate --data <data_directory> --train_languages <src_lang> --eval_languages <tgt_lang> --no_commit --train_iterations <iterations> --preserve_case --save <save_dir> --exist_ok --skip_cache --model TransformerSeq2Seq --pretrained_model <hf_model_name>
 ```
 
 We currently support MarianMT, MBART, MT5, and M2M100 models.<br>
@@ -135,7 +135,7 @@ genienlp predict --tasks almond_translate --data <data_directory> --pred_languag
 ```
 
 If your dataset is a document or contains long examples, pass `--translate_example_split` to break the examples down into individual sentences before translation for better results. <br>
-To use alignment as describe in our localization paper (cited below), use `--replace_qp` and `--force_replace_qp` which ensures the parameters between quotations marks in the sentence are preserved in the output.
+To use alignment as described in our localization paper (cited below), use `--replace_qp` and `--force_replace_qp` which ensures the parameters between quotations marks in the sentence are preserved in the output.
 The alignment code has been updated and improved since 0.6.0 release, so if you wish to compare the results use genienlp <=0.6.0. However, we recommend using the newer version for higher translation quality.
 
 ### Named Entity Disambiguation

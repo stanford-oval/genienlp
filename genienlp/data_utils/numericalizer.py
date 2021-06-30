@@ -535,6 +535,7 @@ class TransformerNumericalizer(object):
                     length=len(tokenized_answers[i]),
                     limited=batch_decoder_numerical[i],
                     feature=None,
+                    spans=None,
                 )
             )
 

@@ -191,7 +191,7 @@ def generate_with_seq2seq_model(
             )
         ]
 
-    if args.translate_example_split:
+    if getattr(args, 'translate_example_split', False):
         # stitch sentences back together
         example_ids, predictions, answers, contexts, confidence_features = merge_translated_sentences(
             example_ids,

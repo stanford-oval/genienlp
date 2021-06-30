@@ -31,7 +31,6 @@ import logging
 from typing import List
 
 import torch
-from torch import Tensor
 from transformers import AutoConfig, AutoModelForSeq2SeqLM, MBartTokenizer, MBartTokenizerFast
 
 from ..data_utils.numericalizer import TransformerNumericalizer
@@ -308,7 +307,7 @@ class TransformerSeq2Seq(GenieModel):
 
         return confidence_features
 
-    def get_length(self, prediction: Tensor):
+    def get_length(self, prediction: torch.Tensor):
         # skip the first token, because BOS is the same as EOS for some models
         prediction = prediction[:, 1:]
 

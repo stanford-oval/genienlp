@@ -29,7 +29,7 @@
 
 import unicodedata
 from dataclasses import dataclass
-from typing import Iterable, List, NamedTuple, Tuple, Union
+from typing import Iterable, List, NamedTuple, Union
 
 import torch
 
@@ -43,7 +43,7 @@ class SequentialField(NamedTuple):
     length: Union[torch.tensor, int]
     limited: Union[torch.tensor, List[int]]
     feature: Union[torch.tensor, List[List[int]], None]
-    spans: Union[torch.tensor, List[int]]
+    spans: Union[torch.tensor, List[int], None]
 
 
 # Feature is defined per token

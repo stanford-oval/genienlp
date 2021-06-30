@@ -610,10 +610,11 @@ def split_text_into_sentences(text, lang):
     if lang in ['zh', 'ja', 'ko']:
         sentences = list(re.findall(u'([^!?。]+[!?。]*)\s?', text, flags=re.U))
     elif lang in ['en']:
-        sentences = re.sub('(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.\!\?])\s|(?:。)', '\n', text).split('\n')
+        sentences = list(filter(None, re.sub('(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.\!\?])\s|(?:。)', '\n', text).split('\n')))
     else:
         import nltk
 
+        nltk.tokenize.PunktSentenceTokenizer()
         nltk.download('punkt', quiet=True)
         sentences = nltk.sent_tokenize(text)
 

@@ -820,7 +820,7 @@ def load_config_json(args):
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
         for o in overwrite_actions:
-            if o not in args or getattr(args, o) is False:
+            if not getattr(args, o, False):
                 retrieve.append(o)
 
         for r in retrieve:
@@ -829,12 +829,12 @@ def load_config_json(args):
             # These are for backward compatibility with models that were trained before we added these arguments
             elif r in (
                 'do_ned',
+                'do_alignment',
                 'use_encoder_loss',
                 'almond_has_multiple_programs',
                 'almond_lang_as_question',
                 'preprocess_special_tokens',
                 'almond_thingtalk_version',
-                'do_alignment',
                 'no_fast_tokenizer',
                 'force_fast_tokenizer',
             ):
