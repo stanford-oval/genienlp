@@ -13,7 +13,7 @@ The library is suitable for all NLP tasks that can be framed as Contextual Quest
 - text or structured output as _answer_
 
 As the work by [McCann et al.](https://arxiv.org/abs/1806.08730) shows, many NLP tasks can be framed in this way.
-Genie primarily uses the library for paraphrasing, translation, semantic parsing, and dialogue state tracking, and this is
+Genie primarily uses the library for semantic parsing, paraphrasing, translation, and dialogue state tracking, and this is
 what the models work best for.
 
 ## Installation
@@ -117,19 +117,39 @@ Generate paraphrases:
 genienlp run-paraphrase --model_name_or_path <model_dir> --temperature 0.3 --repetition_penalty 1.0 --num_samples 4 --batch_size 32 --input_file <input_tsv_file> --input_column 1
 ```
 
+### Translation
+
+Use the following command for training/ finetuning an NMT model:
+
+```bash
+genienlp train --train_tasks almond_translate --data <data_directory> --train_languages <src_lang> --eval_languages <tgt_lang> --no_commit --train_iterations <iterations> --preserve_case --save <save_dir> --exist_ok --skip_cache --model TransformerSeq2Seq --pretrained_model <hf_model_name>
+```
+
+We currently support MarianMT, MBART, MT5, and M2M100 models.<br>
+To save a pretrained model in genienlp format without any finetuning, set train_iterations to 0. You can then use this model to do inference.
+
+To produce translations for an eval/ test set run the following command:
+
+```bash
+genienlp predict --tasks almond_translate --data <data_directory> --pred_languages <src_lang> --pred_tgt_languages <tgt_lang> --path <path_to_saved_model> --eval_dir <eval_dir> --skip_cache --val_batch_size 4000 --evaluate <valid/test>  --overwrite --silent
+```
+
+If your dataset is a document or contains long examples, pass `--translate_example_split` to break the examples down into individual sentences before translation for better results. <br>
+To use alignment as described in our localization paper (cited below), use `--replace_qp` and `--force_replace_qp` which ensures the parameters between quotations marks in the sentence are preserved in the output.
+The alignment code has been updated and improved since 0.6.0 release, so if you wish to compare the results use genienlp <=0.6.0. However, we recommend using the newer version for higher translation quality.
 
 ### Named Entity Disambiguation
 
 First run a bootleg model to extract mentions, entity candidates, and contextual embeddings for the mentions.
 ```bash
-genienlp bootleg-dump-features --train_tasks <train_task_names> --save <savedir> --preserve_case --data <dataset_dir> --train_batch_tokens 400 --val_batch_size 400 --database_type json --database_dir <database_dir> --ned_features type_id type_prob --ned_features_size 1 1 --ned_features_default_val 0 1.0 --num_workers 0 --min_entity_len 1 --max_entity_len 4 --bootleg_model <bootleg_model>
+genienlp bootleg-dump-features --train_tasks <train_task_names> --save <savedir> --preserve_case --data <dataset_dir> --train_batch_tokens 1200 --val_batch_size 2000 --database_type json --database_dir <database_dir> --ned_features type_id type_prob --ned_features_size 1 1 --ned_features_default_val 0 1.0 --num_workers 0 --min_entity_len 1 --max_entity_len 4 --bootleg_model <bootleg_model>
 ```
 This command generates several output files. In `<dataset_dir>` you should see a `prep` dir which contains preprocessed data (e.g. data converted to memory-mapped format, several array to facilitate embedding lookup etc.) If your dataset doesn't change you can reuse the same files.
 It will also generate several files in <results_temp> folder. In `eval_bootleg/[train|eval]/<bootleg_model>/bootleg_lables.jsonl` you can see the examples, mentions, predicted candidates and their probabilities according to bootleg.
 
 Now you can use the extracted features from bootleg in downstream tasks such as semantic parsing to improve named entity understanding and consequently generation:
 ```bash
-genienlp train --train_tasks <train_task_names> --train_iterations 60000 --preserve_case --save <savedir> --data <dataset_dir> --model TransformerLSTM --pretrained_model bert-base-uncased --trainable_decoder_embeddings 50 --train_batch_tokens 1000 --val_batch_size 1000 --do_ned --database_type json --database_dir <database_dir> --ned_retrieve_method bootleg --ned_features type_id type_prob --ned_features_size 1 1 --ned_features_default_val 0 1.0 --num_workers 0 --min_entity_len 1 --max_entity_len 4 --bootleg_model <bootleg_model>
+genienlp train --train_tasks <train_task_names> --train_iterations <iterations> --preserve_case --save <savedir> --data <dataset_dir> --model TransformerLSTM --pretrained_model bert-base-uncased --trainable_decoder_embeddings 50 --train_batch_tokens 1000 --val_batch_size 1000 --do_ned --database_type json --database_dir <database_dir> --ned_retrieve_method bootleg --ned_features type_id type_prob --ned_features_size 1 1 --ned_features_default_val 0 1.0 --num_workers 0 --min_entity_len 1 --max_entity_len 4 --bootleg_model <bootleg_model>
 ```
 
 
@@ -177,7 +197,7 @@ If you use the paraphrasing model (BART or GPT-2 fine-tuned on a paraphrasing da
 }
 ```
 
-If you use MarianMT/ mBART/ T5 for translation task, or XLMR-LSTM model for Seq2Seq tasks, please cite [Localizing Open-Ontology QA Semantic Parsers in a Day Using Machine Translation](https://arxiv.org/abs/2010.05106) and the original paper that introduced the model.
+If you use MarianMT/ MBART/ MT5 for translation task, or XLMR-LSTM model for Seq2Seq tasks, please cite [Localizing Open-Ontology QA Semantic Parsers in a Day Using Machine Translation](https://arxiv.org/abs/2010.05106) and the original paper that introduced the model.
 
 ```bibtex
 @inproceedings{moradshahi-etal-2020-localizing,

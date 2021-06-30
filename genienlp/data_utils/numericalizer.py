@@ -736,7 +736,10 @@ class TransformerNumericalizer(object):
 
             sequential_fields.append(
                 SequentialField(
-                    value=batch_numerical[i], length=batch_length[i], limited=batch_decoder_numerical[i], feature=feature
+                    value=batch_numerical[i],
+                    length=batch_length[i],
+                    limited=batch_decoder_numerical[i],
+                    feature=feature,
                 )
             )
         return sequential_fields

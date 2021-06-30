@@ -68,7 +68,7 @@ from .validate import calculate_and_reduce_metrics, generate_with_model
 logger = logging.getLogger(__name__)
 
 
-def prepare_data(args, device):
+def prepare_data(args, device, src_lang):
 
     datasets = []
     paths = []
@@ -97,6 +97,8 @@ def prepare_data(args, device):
                 'num_workers': args.num_workers,
                 'separate_eval': args.separate_eval,
                 'translate_no_answer': args.translate_no_answer,
+                'translate_example_split': args.translate_example_split,
+                'src_lang': src_lang,
                 'ner_domains': args.ner_domains,
                 'hf_test_overfit': args.hf_test_overfit,
             }
@@ -131,6 +133,7 @@ def prepare_data(args, device):
                     extract_features_with_annotator(data.examples, bootleg_annotator, args, task)
             task_data_processed.append(data)
             task_path_processed.append(path)
+            logger.info(f'{task.name} has {len(data.examples)} prediction examples')
         datasets.append(task_data_processed)
         paths.append(task_path_processed)
 
@@ -184,7 +187,7 @@ def run(args, device):
         tgt_lang=tgt_lang,
     )
 
-    val_sets = prepare_data(args, device)
+    val_sets = prepare_data(args, device, src_lang)
     model.add_new_vocab_from_data(args.tasks)
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
@@ -444,16 +447,17 @@ def parse_argv(parser):
         action='store_true',
         help='if true the provided dataset would not contain the answer (translated sentence)',
     )
+    parser.add_argument(
+        '--translate_example_split',
+        action='store_true',
+        help='split examples with multiple sentences into individual examples',
+    )
+
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
     parser.add_argument(
-        '--replace_qp',
+        '--do_alignment',
         action='store_true',
         help='whether to replace tokens between quotation marks after translation with source values',
-    )
-    parser.add_argument(
-        '--force_replace_qp',
-        action='store_true',
-        help='if replace_qp is not successful, attempt again by leveraging cross-attention to find text spans',
     )
 
 
@@ -478,6 +482,11 @@ def check_args(args):
             config = json.load(config_file)
         if args.subsample > config['subsample']:
             raise ValueError('To use bootleg, you have to use a subsample value less than the number of prepped examples.')
+
+    if args.translate_example_split and not args.translate_no_answer:
+        raise ValueError(
+            'Currently example splitting can only be used in pure generation mode. Please use --translate_no_answer and --translate_example_split flags together'
+        )
 
 
 def main(args):

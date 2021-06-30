@@ -115,7 +115,9 @@ class Example(object):
             if lower:
                 arg = arg.lower()
 
-            sentence, features, sentence_plus_types = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer)
+            sentence, features, sentence_plus_types = preprocess(
+                arg.rstrip('\n'), field_name=argname, answer=answer, example_id=example_id
+            )
 
             args.append(sentence)
 
@@ -234,7 +236,10 @@ class NumericalizedExamples(NamedTuple):
         answer_lengths = torch.stack(answer_lengths, dim=0)
 
         context = SequentialField(
-            value=context_values, length=context_lengths, limited=context_limiteds, feature=context_features
+            value=context_values,
+            length=context_lengths,
+            limited=context_limiteds,
+            feature=context_features,
         )
 
         answer = SequentialField(value=answer_values, length=answer_lengths, limited=answer_limiteds, feature=None)

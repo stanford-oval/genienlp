@@ -204,7 +204,13 @@ def create_examples_from_file(args):
         # For now we only do one at a time; support processing examples as a batch
         assert len(batch) == 1
         batch = batch[0]
-        chunk_examples.append(make_process_example(batch, dir_name, **kwargs))
+        examples = make_process_example(batch, dir_name, **kwargs)
+        if isinstance(examples, list):
+            # account for extra examples created when using --translate_example_split
+            chunk_size += len(examples) - 1
+            chunk_examples.extend(examples)
+        else:
+            chunk_examples.append(examples)
         batch = []
         if len(chunk_examples) >= chunk_size:
             break

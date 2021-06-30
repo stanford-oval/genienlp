@@ -36,9 +36,9 @@ from torch.multiprocessing import Process, set_start_method
 
 from ..data_utils.almond_utils import tokenize_cjk_chars
 from ..data_utils.progbar import prange
-from ..model_utils.translation import compute_attention, force_replace_quoted_params, replace_quoted_params
+from ..model_utils.translation import compute_attention
 from .data_utils import create_features_from_tsv_file, output_heuristics
-from .model_utils import compute_metrics
+from .model_utils import compute_metrics, force_replace_quoted_params, replace_quoted_params
 
 try:
     set_start_method('spawn')
