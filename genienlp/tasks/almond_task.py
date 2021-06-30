@@ -373,7 +373,7 @@ class BaseAlmondTask(BaseTask):
 
         return ' '.join(sentence_plus_types_tokens)
 
-    def preprocess_field(self, sentence, field_name=None, answer=None, preprocess_entities=True):
+    def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         if self.override_context is not None and field_name == 'context':
             pad_feature = get_pad_feature(
                 self.args.ned_features, self.args.ned_features_default_val, self.args.ned_features_size
@@ -560,8 +560,8 @@ class NaturalSeq2Seq(BaseAlmondTask):
             self.name + '/' + example_id, context, question, answer, preprocess=self.preprocess_field, lower=False
         )
 
-    def preprocess_field(self, sentence, field_name=None, answer=None, preprocess_entities=False):
-        return super().preprocess_field(sentence, field_name, answer, preprocess_entities=False)
+    def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=False):
+        return super().preprocess_field(sentence, field_name, answer, example_id, preprocess_entities=False)
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
@@ -630,12 +630,19 @@ class Translate(NaturalSeq2Seq):
 
     def __init__(self, name, args):
         super().__init__(name, args)
+        self.input_spans = {}
+        self.all_ids = set()
         self._metrics = ['casedbleu']
 
-    def preprocess_field(self, sentence, field_name=None, answer=None, preprocess_entities=True):
-
-        src_spans_flatten = []
+    def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
+        assert example_id
         if field_name != 'answer':
+            if field_name + '-' + example_id in self.all_ids:
+                raise ValueError(
+                    f'example id: {example_id} is repeated in the dataset. If using alignment, ids have to be unique'
+                )
+            self.all_ids.add(field_name + '-' + example_id)
+
             src_quotation_symbol = '"'
             src_tokens = sentence.split(" ")
             src_spans_ind = [index for index, token in enumerate(src_tokens) if token == src_quotation_symbol]
@@ -651,15 +658,20 @@ class Translate(NaturalSeq2Seq):
             ]
             src_spans_flatten = [val for tup in src_spans for val in tup]
 
+            # append question spans to context spans
+            if example_id in self.input_spans:
+                self.input_spans[example_id] += src_spans_flatten
+            else:
+                self.input_spans[example_id] = src_spans_flatten
+
         sentence, features, sentence_plus_types = super().preprocess_field(sentence, field_name, answer, preprocess_entities)
 
-        return sentence, features, sentence_plus_types, src_spans_flatten
+        return sentence, features, sentence_plus_types
 
     def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, batch_tgt_ids, **kwargs):
 
         numericalizer = kwargs.pop('numericalizer')
         cross_attentions = kwargs.pop('cross_attentions')
-        batch_spans = kwargs.pop('batch_spans')
         num_outputs = len(batch_tgt_ids) // len(batch_src_ids)
 
         # TODO _tokenizer should not be private
@@ -680,7 +692,8 @@ class Translate(NaturalSeq2Seq):
         for i, (tgt_tokens, cross_att) in enumerate(zip(all_tgt_tokens, cross_attention_pooled)):
 
             src_tokens = all_src_tokens[i // num_outputs]
-            src_spans = batch_spans[i // num_outputs]
+            example_id = batch_example_ids[i // num_outputs]
+            src_spans = self.input_spans[example_id]
 
             # shift target tokens left to match the attention positions (since eos_token is prepended not generated)
             if tgt_tokens[0] in tokenizer.all_special_tokens:
@@ -725,7 +738,7 @@ class Translate(NaturalSeq2Seq):
                 plt.show()
 
             if self.args.do_alignment:
-                text = align_and_replace(src_tokens, tgt_tokens, tokenizer, cross_att, src_spans.tolist())
+                text = align_and_replace(src_tokens, tgt_tokens, tokenizer, cross_att, src_spans)
             else:
                 text = tokenizer.convert_tokens_to_string(tgt_tokens)
 
@@ -852,7 +865,7 @@ class ReverseAlmond(BaseAlmondTask):
 
 # TODO add a similar preprocessing step to Multilingual dialogue tasks as well
 class BaseAlmondDialogueNLUTask(BaseAlmondTask):
-    def preprocess_field(self, sentence, field_name=None, answer=None):
+    def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         if not sentence:
             return sentence, [], sentence
 
@@ -862,7 +875,7 @@ class BaseAlmondDialogueNLUTask(BaseAlmondTask):
         # starts with $dialogue
         if field_name in ['context', 'answer'] and sentence.startswith('$dialogue '):
             sentence = sentence[len('$dialogue ') :]
-        return super().preprocess_field(sentence, field_name, answer)
+        return super().preprocess_field(sentence, field_name, answer, example_id, preprocess_entities)
 
     def postprocess_prediction(self, example_id, prediction):
         prediction = super().postprocess_prediction(example_id, prediction)

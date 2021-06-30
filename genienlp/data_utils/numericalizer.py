@@ -535,13 +535,12 @@ class TransformerNumericalizer(object):
                     length=len(tokenized_answers[i]),
                     limited=batch_decoder_numerical[i],
                     feature=None,
-                    spans=None,
                 )
             )
 
         return answer_sequential_fields
 
-    def encode_batch(self, sentences: List[str], field_name, features=None, spans=[]) -> List[SequentialField]:
+    def encode_batch(self, sentences: List[str], field_name, features=None) -> List[SequentialField]:
         """
         Batched version of `encode_single()`. Uses multiprocessing on all CPU cores for preprocessing,
         and multithreading for tokenization if a `FastTokenizer` is used
@@ -741,7 +740,6 @@ class TransformerNumericalizer(object):
                     length=batch_length[i],
                     limited=batch_decoder_numerical[i],
                     feature=feature,
-                    spans=spans[i] if spans else None,
                 )
             )
         return sequential_fields

@@ -119,6 +119,10 @@ def prepare_data(args, logger):
             t0 = time.time()
             splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
 
+            # reset all_ids before iterating over validation data
+            if hasattr(task, 'all_ids'):
+                task.all_ids = set()
+
             t1 = time.time()
             logger.info('Data loading took {:.2f} seconds'.format(t1 - t0))
             assert not splits.eval and not splits.test

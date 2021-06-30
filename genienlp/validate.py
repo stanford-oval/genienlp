@@ -105,7 +105,6 @@ def generate_with_seq2seq_model(
         batch_prediction = [[] for _ in range(batch_size)]
         batch_confidence_features = [[] for _ in range(batch_size)]
         batch_example_ids = batch.example_id
-        batch_spans = batch.context.spans
 
         example_ids += batch_example_ids
         if not output_predictions_only:
@@ -152,7 +151,7 @@ def generate_with_seq2seq_model(
                 cross_attentions = cross_attentions[-1, ...]
 
                 # postprocess prediction ids
-                kwargs = {'numericalizer': numericalizer, 'cross_attentions': cross_attentions, 'batch_spans': batch_spans}
+                kwargs = {'numericalizer': numericalizer, 'cross_attentions': cross_attentions}
                 partial_batch_prediction_ids = task.batch_postprocess_prediction_ids(
                     batch_example_ids, batch.context.value.data, partial_batch_prediction_ids, **kwargs
                 )
