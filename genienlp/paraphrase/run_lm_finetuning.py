@@ -29,9 +29,9 @@ import os
 import shutil
 
 import torch
-from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
+from torch.utils.tensorboard import SummaryWriter
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -107,7 +107,7 @@ def train(
 ):
     """Train the model"""
     if args.local_rank in [-1, 0]:
-        tb_writer = SummaryWriter(logdir=args.tensorboard_dir)
+        tb_writer = SummaryWriter(log_dir=args.tensorboard_dir)
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     if args.sort_by_length:

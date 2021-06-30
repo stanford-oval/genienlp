@@ -40,7 +40,7 @@ from pprint import pformat
 
 import numpy as np
 import torch
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from transformers import (
     AdamW,
     get_constant_schedule_with_warmup,
@@ -358,7 +358,7 @@ def do_log_training_loss(
         writer.add_scalar(f'{log_prefix}/loss/{train_task.name}', loss, iteration)
 
         if lr_scheduler is not None:
-            writer.add_scalar(f'{log_prefix}/lr', lr_scheduler.get_last_lr(), iteration)
+            writer.add_scalar(f'{log_prefix}/lr', np.array(lr_scheduler.get_last_lr()), iteration)
         if grad_norm is not None:
             writer.add_scalar(f'{log_prefix}/norm', grad_norm, iteration)
 
