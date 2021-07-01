@@ -560,7 +560,7 @@ class Translate(NaturalSeq2Seq):
 
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         assert example_id
-        if field_name != 'answer':
+        if field_name != 'answer' and self.args.do_alignment:
             if field_name + '-' + example_id in self.all_ids:
                 raise ValueError(
                     f'example id: {example_id} is repeated in the dataset. If using alignment, ids have to be unique'
@@ -617,7 +617,6 @@ class Translate(NaturalSeq2Seq):
 
             src_tokens = all_src_tokens[i // num_outputs]
             example_id = batch_example_ids[i // num_outputs]
-            src_spans = self.input_spans[example_id]
 
             # shift target tokens left to match the attention positions (since eos_token is prepended not generated)
             if tgt_tokens[0] in tokenizer.all_special_tokens:
@@ -662,6 +661,7 @@ class Translate(NaturalSeq2Seq):
                 plt.show()
 
             if self.args.do_alignment:
+                src_spans = self.input_spans[example_id]
                 text = align_and_replace(src_tokens, tgt_tokens, tokenizer, cross_att, src_spans)
             else:
                 text = tokenizer.convert_tokens_to_string(tgt_tokens)
@@ -677,8 +677,8 @@ class Translate(NaturalSeq2Seq):
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # answer has to be provided by default unless doing prediction
-        no_answer = kwargs.get('translate_no_answer', False)
-        split_sentence = kwargs.get('translate_example_split', False)
+        no_answer = getattr(self.args, 'translate_no_answer', False)
+        split_sentence = getattr(self.args, 'translate_example_split', False)
         src_lang = kwargs.get('src_lang', 'en')
         example_id = 'id-null'
         if not no_answer:
@@ -971,7 +971,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
         used_fields = [field for field in all_datasets[0]._fields if getattr(all_datasets[0], field) is not None]
 
         assert len(all_datasets) >= 1
-        if kwargs.get('sentence_batching'):
+        if getattr(self.args, 'sentence_batching', False):
             for field in used_fields:
                 lengths = list(map(lambda dataset: len(getattr(dataset, field)), all_datasets))
                 assert len(set(lengths)) == 1, 'When using sentence batching your datasets should have the same size.'
@@ -988,9 +988,9 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
             sort_key_fn = input_then_output_len
             batch_size_fn = all_tokens_fn
 
-        groups = len(all_datasets) if kwargs.get('sentence_batching') else None
+        groups = len(all_datasets) if getattr(self.args, 'sentence_batching', False) else None
 
-        if kwargs.get('separate_eval') and (all_datasets[0].eval or all_datasets[0].test):
+        if getattr(self.args, 'separate_eval', False) and (all_datasets[0].eval or all_datasets[0].test):
             return all_datasets, all_paths
         # TODO fix handling paths for multilingual
         else:
@@ -1004,7 +1004,6 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
 class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     def __init__(self, name, args):
         super().__init__(name, args)
-        self.lang_as_question = args.almond_lang_as_question
         self._metrics = ['em', 'sm', 'bleu']
 
     def _is_program_field(self, field_name):
@@ -1020,7 +1019,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
         else:
             example_id, sentence, target_code = parts
         language = ISO_to_LANG.get(dir_name, 'English').lower()
-        if self.lang_as_question:
+        if self.args.almond_lang_as_question:
             question = 'translate from {} to thingtalk'.format(language)
         else:
             question = 'translate from english to thingtalk'
