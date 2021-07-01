@@ -505,6 +505,8 @@ def main(args):
     if args.override_valid_metrics:
         assert len(args.override_valid_metrics) == len(args.tasks)
         for task, metrics in zip(args.tasks, args.override_valid_metrics):
+            # backward compatibility for models validated on sacrebleu (now casedbleu)
+            metrics = [m if m != 'sacrebleu' else 'casedbleu' for m in metrics]
             task.metrics = metrics
 
     if len(devices) > 1:

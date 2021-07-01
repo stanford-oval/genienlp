@@ -127,7 +127,7 @@ def parse_argv(parser):
         nargs='+',
         action='append',
         type=str,
-        help='if provided will override metrics provided by the task (format is a list of lists)',
+        help='if specified, will override metrics provided by the task (format is a list of lists)',
     )
 
     parser.add_argument(
