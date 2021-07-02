@@ -560,7 +560,7 @@ def split_text_into_sentences(text, lang, src_char_spans):
         import nltk
 
         nltk.download('punkt', quiet=True)
-        sentences = nltk.sent_tokenize(text, language='chinese')
+        sentences = nltk.sent_tokenize(text, language=ISO_to_LANG[lang])
 
     return sentences
 
