@@ -518,6 +518,16 @@ def parse_argv(parser):
         action='store_true',
         help='whether to preserve token spans between quotation marks using alignment during translation',
     )
+    parser.add_argument(
+        '--align_preserve_input_quotation',
+        action='store_true',
+        help='preserve quotation marks in the input. Useful if using alignment for semantic parsing or NLG',
+    )
+    parser.add_argument(
+        '--align_remove_output_quotation',
+        action='store_true',
+        help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
+    )
 
     # token classification task args
     parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')

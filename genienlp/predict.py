@@ -227,6 +227,17 @@ def parse_argv(parser):
         action='store_true',
         help='whether to replace tokens between quotation marks after translation with source values',
     )
+    parser.add_argument(
+        '--align_preserve_input_quotation',
+        action='store_true',
+        help='preserve quotation marks in the input. Useful if using alignment for semantic parsing or NLG',
+    )
+    parser.add_argument(
+        '--align_remove_output_quotation',
+        action='store_true',
+        help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
+    )
+
 
 
 def set_default_values(args):

@@ -47,7 +47,7 @@ def compute_attention(sample_layer_attention, att_pooling, dim=0):
     return sample_layer_attention_pooled
 
 
-def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, src_spans):
+def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, src_spans, remove_output_quotation):
     # find positions of quotation marks in src
     src2tgt_mapping = {}
     src_quotation_symbol = '"'
@@ -135,7 +135,10 @@ def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_
         if start > curr:
             tokens.extend(tgt_strings_words[curr:start])
         replace_match = src_matches[i]
-        tokens.append(src_quotation_symbol + ' ' + replace_match + ' ' + src_quotation_symbol)
+        if remove_output_quotation:
+            tokens.append(replace_match)
+        else:
+            tokens.append(src_quotation_symbol + ' ' + replace_match + ' ' + src_quotation_symbol)
         # +1 since it's inclusive
         curr = end + 1
     if curr < len(tgt_strings_words):

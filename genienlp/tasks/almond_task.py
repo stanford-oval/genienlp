@@ -29,6 +29,7 @@
 
 import logging
 import os
+import re
 from collections import defaultdict
 
 import marisa_trie
@@ -46,6 +47,7 @@ from ..data_utils.almond_utils import (
     tokenize_cjk_chars,
 )
 from ..data_utils.database import Database
+from ..data_utils.database_utils import has_overlap
 from ..data_utils.example import Example, Feature, get_pad_feature
 from ..data_utils.remote_database import RemoteElasticDatabase
 from ..model_utils.translation import align_and_replace, compute_attention
@@ -528,19 +530,37 @@ class Paraphrase(NaturalSeq2Seq):
         return Example.from_raw(example_id, context, question, answer, preprocess=self.preprocess_field, lower=False)
 
 
-def split_text_into_sentences(text, lang):
-    import re
+def inside_spans(start, spans):
+    for span in spans:
+        if span[0] <= start < span[1]:
+            return True
+    return False
 
-    if lang in ['zh', 'ja', 'ko']:
-        sentences = list(re.findall(u'([^!?。]+[!?。]*)\s?', text, flags=re.U))
-    elif lang in ['en']:
-        sentences = list(filter(None, re.sub('(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.\!\?])\s|(?:。)', '\n', text).split('\n')))
+
+def return_sentences(text, regex_pattern, src_char_spans, lang):
+    sentences = []
+    cur = 0
+    for m in re.finditer(regex_pattern, text, flags=re.U):
+        if src_char_spans and not inside_spans(m.start(0), src_char_spans):
+            sentences.append(text[cur : m.start(0) + (1 if lang in ['zh', 'ja', 'ko'] else 0)])
+            cur = m.end(0)
+    if cur != len(text):
+        sentences.append(text[cur:])
+    return sentences
+
+
+def split_text_into_sentences(text, lang, src_char_spans):
+    if lang in ['en']:
+        sentences = return_sentences(text, '(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.!?])\s', src_char_spans, lang)
+        # sentences = list(filter(None, re.sub('(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.\!\?])\s|(?:。)', '\n', text).split('\n')))
+    elif lang in ['zh', 'ja', 'ko']:
+        sentences = return_sentences(text, u'([!?。])\s?', src_char_spans, lang)
+        # sentences = list(re.findall(u'([^!?。]+[!?。]*)\s?', text, flags=re.U))
     else:
         import nltk
 
-        nltk.tokenize.PunktSentenceTokenizer()
         nltk.download('punkt', quiet=True)
-        sentences = nltk.sent_tokenize(text)
+        sentences = nltk.sent_tokenize(text, language='chinese')
 
     return sentences
 
@@ -574,12 +594,16 @@ class Translate(NaturalSeq2Seq):
             if len(src_spans_ind) % 2 != 0:
                 raise ValueError(f'Corrupted span in sentence: [{sentence}]')
 
-            src_tokens = [token for token in src_tokens if token != src_quotation_symbol]
-            sentence = " ".join(src_tokens)
+            if self.args.align_preserve_input_quotation:
+                src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
+            else:
+                src_tokens = [token for token in src_tokens if token != src_quotation_symbol]
+                src_spans = [
+                    (src_spans_ind[i] + 1 - (i + 1), src_spans_ind[i + 1] - 1 - (i + 1))
+                    for i in range(0, len(src_spans_ind), 2)
+                ]
 
-            src_spans = [
-                (src_spans_ind[i] + 1 - (i + 1), src_spans_ind[i + 1] - 1 - (i + 1)) for i in range(0, len(src_spans_ind), 2)
-            ]
+            sentence = " ".join(src_tokens)
             src_spans_flatten = [val for tup in src_spans for val in tup]
 
             # append question spans to context spans
@@ -662,7 +686,9 @@ class Translate(NaturalSeq2Seq):
 
             if self.args.do_alignment:
                 src_spans = self.input_spans[example_id]
-                text = align_and_replace(src_tokens, tgt_tokens, tokenizer, cross_att, src_spans)
+                text = align_and_replace(
+                    src_tokens, tgt_tokens, tokenizer, cross_att, src_spans, self.args.align_remove_output_quotation
+                )
             else:
                 text = tokenizer.convert_tokens_to_string(tgt_tokens)
 
@@ -680,6 +706,7 @@ class Translate(NaturalSeq2Seq):
         no_answer = getattr(self.args, 'translate_no_answer', False)
         split_sentence = getattr(self.args, 'translate_example_split', False)
         src_lang = kwargs.get('src_lang', 'en')
+
         example_id = 'id-null'
         if not no_answer:
             if len(parts) == 2:
@@ -712,8 +739,15 @@ class Translate(NaturalSeq2Seq):
             answer = '.'
 
         contexts = []
+        src_char_spans = None
         if split_sentence:
-            contexts = split_text_into_sentences(context, src_lang)
+            if self.args.do_alignment:
+                src_quotation_symbol = '"'
+                src_char_spans_ind = [index for index, char in enumerate(context) if char == src_quotation_symbol]
+                src_char_spans = [
+                    (src_char_spans_ind[i], src_char_spans_ind[i + 1]) for i in range(0, len(src_char_spans_ind), 2)
+                ]
+            contexts = split_text_into_sentences(context, src_lang, src_char_spans)
 
         if len(contexts) > 1:
             examples = []
