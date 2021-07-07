@@ -131,9 +131,10 @@ def main(args):
     if args.remove_duplicates and args.no_duplication_columns is None:
         raise ValueError('You should specify columns that define duplication')
 
-    with open(args.input, 'r') as input_file, open(args.output, 'w') as output_file, open(
-        args.bootleg_output_file, 'w'
-    ) as bootleg_output_file:
+    if args.bootleg_output_file:
+        bootleg_output_file = open(args.bootleg_output_file, 'w')
+
+    with open(args.input, 'r') as input_file, open(args.output, 'w') as output_file:
         reader = csv.reader(input_file, delimiter='\t')
         if args.transformation in ['replace_queries', 'merge_input_file_with_query_file']:
             new_queries = []  # list of lists
@@ -168,11 +169,13 @@ def main(args):
             if args.transformation == 'remove_wrong_thingtalk':
                 if row[args.thingtalk_column] == gold_thingtalks[gold_thingtalk_count]:
                     output_rows = [row]
-                    bootleg_rows = [bootleg_lines[row_idx]]
+                    if args.bootleg_file:
+                        bootleg_rows = [bootleg_lines[row_idx]]
                 else:
                     output_rows = []
                     thrown_away_rows = [row]
-                    bootleg_rows = []
+                    if args.bootleg_file:
+                        bootleg_rows = []
                 gold_thingtalk_count += 1
             elif args.transformation == 'get_wrong_thingtalk':
                 if row[args.thingtalk_column] != gold_thingtalks[gold_thingtalk_count]:
@@ -202,8 +205,10 @@ def main(args):
                 row[args.utterance_column] = re.sub('\s\s+', ' ', row[args.utterance_column])
                 row[args.utterance_column] = row[args.utterance_column].strip()
                 output_rows = [row]
+                if args.bootleg_output_file:
+                    bootleg_rows = [bootleg_lines[row_idx]]
 
-            for o, b in zip(output_rows, bootleg_rows):
+            for j, o in enumerate(output_rows):
                 output_row = ""
                 if args.remove_with_heuristics:
                     if not passes_heuristic_checks(o, args, old_query=old_query):
@@ -223,7 +228,8 @@ def main(args):
                     if i < len(args.output_columns) - 1:
                         output_row += '\t'
                 output_file.write(output_row + '\n')
-                bootleg_output_file.write(b)
+                if args.bootleg_output_file:
+                    bootleg_output_file.write(bootleg_rows[j])
             for o in thrown_away_rows:
                 if not args.remove_with_heuristics or (
                     args.remove_with_heuristics and passes_heuristic_checks(o, args, old_query=old_query)
@@ -240,6 +246,9 @@ def main(args):
                         if i < len(args.output_columns) - 1:
                             output_row += '\t'
                     output_file.write(output_row + '\n')
+
+        if args.bootleg_output_file:
+            bootleg_output_file.close()
 
         print('Removed %d duplicate rows' % duplicate_count)
         print('Removed %d rows because the thingtalk quote did not satisfy heuristic rules' % heuristic_count)

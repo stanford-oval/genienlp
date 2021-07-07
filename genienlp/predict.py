@@ -512,10 +512,14 @@ def main(args):
         logger.info(f'Independent multi-GPU generation on following devices: {devices}')
         all_processes = []
         all_data_folders = split_folder_on_disk(args.data, len(devices))
+        if args.do_ned and args.ned_retrieve_method == 'bootleg':
+            all_bootleg_data_folders = split_folder_on_disk(args.bootleg_output_dir, len(devices))
 
         for device_id in range(len(devices)):
             copy_args = copy.copy(args)
             copy_args.data = all_data_folders[device_id]
+            if args.do_ned and args.ned_retrieve_method == 'bootleg':
+                copy_args.bootleg_output_dir = all_bootleg_data_folders[device_id]
             copy_args.eval_dir = get_part_path(args.eval_dir, device_id)
 
             p = Process(target=run, args=(copy_args, devices[device_id]))

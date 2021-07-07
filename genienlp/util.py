@@ -394,6 +394,9 @@ def split_folder_on_disk(folder_path, num_splits):
     new_folder_paths = [get_part_path(folder_path, part_idx) for part_idx in range(num_splits)]
     for subdir, dirs, files in os.walk(folder_path):
         for file in files:
+            # ignore system files
+            if file.startswith('.'):
+                continue
             new_file_paths = [
                 os.path.join(subdir.replace(folder_path, new_folder_paths[part_idx]), file) for part_idx in range(num_splits)
             ]
