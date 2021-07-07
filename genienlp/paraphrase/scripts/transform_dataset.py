@@ -44,6 +44,7 @@ def parse_argv(parser):
     parser.add_argument('input', type=str, help='The path to the input file.')
     parser.add_argument('output', type=str, help='The path to the output file.')
     parser.add_argument('--query_file', type=str, help='The path to the file containing new queries.')
+    parser.add_argument('--bootleg_file', type=str, help='The path to the bootleg prepped file if any')
     parser.add_argument(
         '--thrown_away',
         type=str,

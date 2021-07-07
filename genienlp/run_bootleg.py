@@ -83,11 +83,12 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training', required=True
-    )
-
-    parser.add_argument(
-        '--val_tasks', nargs='+', type=str, dest='val_task_names', help='tasks to collect evaluation metrics for'
+        '--tasks',
+        nargs='+',
+        type=str,
+        dest='train_task_names',
+        help='tasks to use for bootleg; we set dest to be train_task_names so we can resue previous code for arguments processsing',
+        required=True,
     )
 
     parser.add_argument(
@@ -107,8 +108,6 @@ def parse_argv(parser):
         default=0,
         help='Number of samples to use in each batch; will be used instead of train_batch_tokens when sentence_batching is on',
     )
-
-    parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
 
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument('--preserve_case', action='store_false', dest='lower', help='whether to preserve casing for all text')
@@ -250,10 +249,6 @@ def parse_argv(parser):
         '--cache_input_data', action='store_true', help='Cache examples from input data for faster subsequent trainings'
     )
 
-    parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')
-    parser.add_argument(
-        '--aux_dataset', default='', type=str, help='path to auxiliary dataset (ignored if curriculum is not used)'
-    )
     parser.add_argument(
         "--add_types_to_text",
         default='no',
@@ -359,138 +354,65 @@ def dump_bootleg_features(args, logger):
 
     bootleg = Bootleg(args)
 
-    if 'train' not in args.bootleg_data_splits or 'eval' not in args.bootleg_data_splits:
-        raise ValueError('Make sure bootleg\'s data_splits contain at least train and eval set')
-
-    train_eval_shared_kwargs = {
+    bootleg_shared_kwargs = {
         'subsample': args.subsample,
         'skip_cache': args.skip_cache,
         'cache_input_data': args.cache_input_data,
         'sentence_batching': args.sentence_batching,
         'almond_lang_as_question': args.almond_lang_as_question,
         'num_workers': args.num_workers,
+        'all_dirs': args.train_src_languages,
+        'ner_domains': args.ner_domains,
     }
 
-    assert len(args.train_tasks) == len(args.val_tasks)
-
-    for train_task, val_task in zip(args.train_tasks, args.val_tasks):
-
-        # process train split
-        logger.info(f'Loading {train_task.name}')
-        kwargs = {'test': None, 'validation': None}
-        kwargs.update(train_eval_shared_kwargs)
-        kwargs['all_dirs'] = args.train_src_languages
-        kwargs['cached_path'] = os.path.join(args.cache, train_task.name)
-        kwargs['ner_domains'] = args.ner_domains
-        if args.use_curriculum:
-            kwargs['curriculum'] = True
-
-        logger.info(f'Adding {train_task.name} to training datasets')
-        t0 = time.time()
-        splits, paths = train_task.get_splits(args.data, lower=args.lower, **kwargs)
-        t1 = time.time()
-        logger.info('Data loading took {:.2f} seconds'.format(t1 - t0))
-        assert not splits.eval and not splits.test
-        assert not args.use_curriculum
-
-        train_examples = splits.train.examples
-        train_path = paths.train
-
-        logger.info(f'{train_task.name} has {len(splits.train)} training examples')
-
-        if hasattr(train_task, 'all_schema_types'):
-            logger.info(f'train all_schema_types: {train_task.all_schema_types}')
-
-        if train_task.name.startswith('almond'):
-            if args.ned_features_default_val:
-                args.db_unk_id = int(args.ned_features_default_val[0])
-            else:
-                args.db_unk_id = 0
-            if args.do_ned:
-                if bootleg:
-                    args.num_db_types = len(bootleg.typeqid2id)
-                elif getattr(train_task, 'db', None):
-                    args.num_db_types = len(train_task.db.typeqid2id)
-            else:
-                args.num_db_types = 0
-        else:
+    # run_bootleg does not need special treatment for train vs eval/ test
+    for task in args.train_tasks:
+        if task.name.startswith('almond'):
+            args.db_unk_id = int(args.ned_features_default_val[0])
             args.db_unk_id = 0
-            args.num_db_types = 0
+            args.num_db_types = len(bootleg.typeqid2id)
         save_args(args, force_overwrite=True)
 
-        # process validation split
-        logger.info(f'Loading {val_task.name}')
-        kwargs = {'train': None, 'test': None}
-        # choose best model based on this dev set
-        if args.eval_set_name is not None:
-            kwargs['validation'] = args.eval_set_name
-        kwargs.update(train_eval_shared_kwargs)
-        kwargs['all_dirs'] = args.eval_src_languages
-        kwargs['cached_path'] = os.path.join(args.cache, val_task.name)
-        kwargs['ner_domains'] = args.ner_domains
-        kwargs['hf_test_overfit'] = args.hf_test_overfit
+        task_all_examples = []
+        task_all_paths = []
 
-        logger.info(f'Adding {val_task.name} to validation datasets')
-        splits, paths = val_task.get_splits(args.data, lower=args.lower, **kwargs)
+        kwargs = {'train': None, 'validation': None, 'test': None}
+        kwargs.update(bootleg_shared_kwargs)
+        kwargs['cached_path'] = os.path.join(args.cache, task.name)
+        for split in args.bootleg_data_splits:
+            if split == 'train':
+                del kwargs['train']  # deleting keys means use the default file name
+            elif split == 'test':
+                del kwargs['test']
+            else:
+                kwargs['validation'] = split
 
-        assert not splits.train and not splits.test and not splits.aux
-        logger.info(f'{val_task.name} has {len(splits.eval)} validation examples')
+            logger.info(f'Adding {task.name} to bootleg datasets')
+            t0 = time.time()
+            splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
+            t1 = time.time()
+            logger.info('Data loading took {:.2f} seconds'.format(t1 - t0))
 
-        if hasattr(val_task, 'all_schema_types'):
-            logger.info(f'eval all_schema_types: {val_task.all_schema_types}')
+            split_examples = (
+                getattr(splits, split).examples if split in ['train', 'test'] else getattr(splits, 'eval').examples
+            )
+            split_path = getattr(paths, split) if split in ['train', 'test'] else getattr(paths, 'eval')
 
-        eval_examples = splits.eval.examples
+            task_all_examples.append(split_examples)
+            task_all_paths.append(split_path)
 
-        if 'test' in args.bootleg_data_splits:
-            # process test split
-            logger.info(f'Loading {val_task.name}')
-            kwargs = {'train': None, 'validation': None}
-            kwargs.update(train_eval_shared_kwargs)
-            kwargs['all_dirs'] = args.eval_src_languages
-            kwargs['cached_path'] = os.path.join(args.cache, val_task.name)
-            kwargs['ner_domains'] = args.ner_domains
-            kwargs['hf_test_overfit'] = args.hf_test_overfit
-
-            logger.info(f'Adding {val_task.name} to test datasets')
-            splits, paths = val_task.get_splits(args.data, lower=args.lower, **kwargs)
-
-            assert not splits.train and not splits.eval and not splits.aux
-            logger.info(f'{val_task.name} has {len(splits.test)} test examples')
-
-            test_examples = splits.test.examples
-        else:
-            test_examples = []
+            logger.info(f'{task.name} has {len(split_examples)} examples')
 
         # merge all splits before feeding to bootleg
-        all_examples = train_examples + eval_examples + test_examples
-        dir_name = os.path.dirname(train_path)
-        extension = train_path.rsplit('.', 1)[1]
+        all_examples = [item for examples in task_all_examples for item in examples]
+        dir_name = os.path.dirname(task_all_paths[0])
+        extension = task_all_paths[0].rsplit('.', 1)[1]
         all_paths = os.path.join(dir_name, 'combined' + '.' + extension)
 
-        assert train_task == val_task
-        bootleg_process_splits(args, all_examples, all_paths, train_task, bootleg, mode='dump')
-
-        eval_file_name = args.eval_set_name if args.eval_set_name is not None else 'eval'
-
-        train_output_path = f'{args.bootleg_output_dir}/train_bootleg/{bootleg.ckpt_name}'
-        os.makedirs(train_output_path, exist_ok=True)
-        train_output_file = open(os.path.join(train_output_path, 'bootleg_labels.jsonl'), 'w')
-
-        eval_output_path = f'{args.bootleg_output_dir}/{eval_file_name}_bootleg/{bootleg.ckpt_name}'
-        os.makedirs(eval_output_path, exist_ok=True)
-        eval_output_file = open(os.path.join(eval_output_path, 'bootleg_labels.jsonl'), 'w')
-
-        test_output_file = None
-        if test_examples:
-            test_output_path = f'{args.bootleg_output_dir}/test_bootleg/{bootleg.ckpt_name}'
-            os.makedirs(test_output_path, exist_ok=True)
-            test_output_file = open(os.path.join(test_output_path, 'bootleg_labels.jsonl'), 'w')
-
-        train_size = len(train_examples)
-        eval_size = len(eval_examples)
-        test_size = len(test_examples)
+        bootleg_process_splits(args, all_examples, all_paths, task, bootleg, mode='dump')
 
         # unmerge bootleg dumped labels
+        line_number = 0
         with open(f'{args.bootleg_output_dir}/combined_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
 
             # sort output lines first to align with input (required for bootleg >=1.0.0)
@@ -498,21 +420,19 @@ def dump_bootleg_features(args, logger):
             all_sent_ids = [ujson.loads(line)['sent_idx_unq'] for line in all_lines]
             all_lines = list(zip(*sorted(zip(all_sent_ids, all_lines), key=lambda item: item[0])))[1]
 
-            for i, line in enumerate(all_lines):
-                if i < train_size:
-                    train_output_file.write(line)
-                elif train_size <= i < train_size + eval_size:
-                    eval_output_file.write(line)
-                elif test_output_file:
-                    test_output_file.write(line)
+            for i, split in enumerate(args.bootleg_data_splits):
+                output_path = f'{args.bootleg_output_dir}/{split}_bootleg/{bootleg.ckpt_name}'
+                os.makedirs(output_path, exist_ok=True)
+                output_file = open(os.path.join(output_path, 'bootleg_labels.jsonl'), 'w')
+                split_size = len(task_all_examples[i])
 
-        assert i == train_size + eval_size + test_size - 1
+                for _ in range(split_size):
+                    output_file.write(all_lines[line_number])
+                    line_number += 1
 
-        # close output files
-        train_output_file.close()
-        eval_output_file.close()
-        if test_output_file:
-            test_output_file.close()
+                output_file.close()
+
+            assert line_number == sum(map(lambda examples: len(examples), task_all_examples))
 
         shutil.rmtree(f'{args.bootleg_output_dir}/combined_bootleg')
 
@@ -525,6 +445,7 @@ def main(args):
     args.ned_retrieve_method = 'bootleg'
     args.override_context = None
     args.override_question = None
+    args.val_task_names = None
 
     args = post_parse_general(args)
     set_seed(args)
