@@ -33,102 +33,14 @@ import os
 import numpy as np
 import torch
 import ujson
-from bootleg.end2end.bootleg_annotator import BootlegAnnotator
+from bootleg.end2end.bootleg_annotator import BootlegAnnotator as BootlegClass
 from bootleg.end2end.extract_mentions import extract_mentions
 from bootleg.run import run_model
 from bootleg.utils.parser.parser_utils import parse_boot_and_emm_args
 
-from .database_utils import is_banned
+from .database_utils import is_banned, reverse_bisect_left
 
 logger = logging.getLogger(__name__)
-
-
-def reverse_bisect_left(a, x, lo=None, hi=None):
-    """Find item x in list a, and keep it reverse-sorted assuming a
-    is reverse-sorted.
-    """
-    if lo is None:
-        lo = 0
-    if hi is None:
-        hi = len(a)
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if x > a[mid]:
-            hi = mid
-        else:
-            lo = mid + 1
-    return lo
-
-
-def bootleg_process_examples(ex, bootleg_annotator, args, label, task):
-    line = {}
-    line['sentence'] = getattr(ex, task.utterance_field)
-
-    assert len(label) == 7
-    line['aliases'], line['spans'], line['cands'] = label['aliases'], label['spans'], label['cands']
-    line['cand_probs'] = list(map(lambda item: list(item), label['cand_probs']))
-    tokens_type_ids, tokens_type_probs = bootleg_annotator.bootleg.collect_features_per_line(
-        line, args.bootleg_prob_threshold, getattr(task, 'TTtype2qid', None)
-    )
-
-    if task.utterance_field == 'question':
-        for i in range(len(tokens_type_ids)):
-            ex.question_feature[i].type_id = tokens_type_ids[i]
-            ex.question_feature[i].type_prob = tokens_type_probs[i]
-
-    else:
-        for i in range(len(tokens_type_ids)):
-            ex.context_feature[i].type_id = tokens_type_ids[i]
-            ex.context_feature[i].type_prob = tokens_type_probs[i]
-
-    ex.question_plus_types = task.add_type_tokens(ex.question, ex.question_feature, args.add_types_to_text)
-    ex.context_plus_types = task.add_type_tokens(ex.context, ex.context_feature, args.add_types_to_text)
-
-    return ex
-
-
-def extract_features_with_annotator(examples, bootleg_annotator, args, task):
-    with torch.no_grad():
-        bootleg_inputs = []
-        for ex in examples:
-            bootleg_inputs.append(getattr(ex, task.utterance_field))
-
-        bootleg_labels = bootleg_annotator.label_mentions(bootleg_inputs)
-
-        keys = tuple(bootleg_labels.keys())
-        values = list(bootleg_labels.values())
-        values_unpacked = list(zip(*values))
-
-        bootleg_labels_unpacked = [dict(zip(keys, values)) for values in values_unpacked]
-
-        for i in range(len(examples)):
-            ex = examples[i]
-            label = bootleg_labels_unpacked[i]
-            examples[i] = bootleg_process_examples(ex, bootleg_annotator, args, label, task)
-
-
-def init_bootleg_annotator(args, device, bootleg=None):
-    # instantiate a bootleg object to load config and relevant databases
-    if bootleg is None:
-        bootleg = Bootleg(args)
-    bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
-
-    # instantiate the annotator class. we use annotator only in server mode
-    # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
-    bootleg_annotator = BootlegAnnotator(
-        config=bootleg_config,
-        device='cpu' if device.type == 'cpu' else 'cuda',
-        min_alias_len=args.min_entity_len,
-        max_alias_len=args.max_entity_len,
-        cand_map=bootleg.cand_map,
-        threshold=args.bootleg_prob_threshold,
-        model_name=args.bootleg_model,
-        verbose=False,
-    )
-    # collect all outputs now; we will filter later
-    bootleg_annotator.set_threshold(0.0)
-    setattr(bootleg_annotator, 'bootleg', bootleg)
-    return bootleg_annotator
 
 
 class Bootleg(object):
@@ -154,11 +66,30 @@ class Bootleg(object):
         with open(f'{self.args.database_dir}/es_material/typeqid2id.json', 'r') as fin:
             self.typeqid2id = ujson.load(fin)
 
-        # almond specific
+        ##### almond specific
         with open(f'{self.args.database_dir}/es_material/almond_type_mapping_matching.json', 'r') as fin:
             self.almond_type_mapping_match = ujson.load(fin)
         with open(f'{self.args.database_dir}/es_material/almond_type_mapping_inclusion.json', 'r') as fin:
             self.almond_type_mapping_include = ujson.load(fin)
+
+        # only keep subset for provided domains
+        self.type_mapping_match = dict()
+        self.type_mapping_include = dict()
+        for domain in self.almond_domains:
+            self.type_mapping_match.update(self.almond_type_mapping_match[domain])
+            self.type_mapping_include.update(self.almond_type_mapping_match[domain])
+
+        self.TTtype2qid = dict()
+        with open(f'{self.args.database_dir}/es_material/almond_type2qid.json', 'r') as fin:
+            almond_type2qid = ujson.load(fin)
+        for domain in self.almond_domains:
+            self.TTtype2qid.update(almond_type2qid[domain])
+        self.qid2TTtype = {v: k for k, v in self.TTtype2qid.items()}
+
+        with open(f'{self.args.database_dir}/es_material/typeqid2id.json', 'r') as fin:
+            self.typeqid2id = ujson.load(fin)
+        self.id2type = {v: k for k, v in self.typeqid2id.items()}
+        #####
 
         self.cur_entity_embed_size = 0
 
@@ -241,31 +172,94 @@ class Bootleg(object):
     def disambiguate_mentions(self, config_args):
         run_model(self.args.bootleg_dump_mode, config_args)
 
-    def post_process_bootleg_types(self, title, TTtype2qid):
-        type_mapping_match = dict()
-        type_mapping_include = dict()
-        for domain in self.almond_domains:
-            type_mapping_match.update(self.almond_type_mapping_match[domain])
-            type_mapping_include.update(self.almond_type_mapping_match[domain])
-
+    def post_process_bootleg_types(self, title):
         types = None
-        if title in type_mapping_match:
-            types = type_mapping_match[title]
+        if title in self.type_mapping_match:
+            types = self.type_mapping_match[title]
         else:
-            for key in type_mapping_include.keys():
+            for key in self.type_mapping_include.keys():
                 if key in title:
-                    types = type_mapping_include[key]
+                    types = self.type_mapping_include[key]
 
         typeqids = None
         if types is not None:
             if isinstance(types, str):
-                typeqids = [TTtype2qid[types]]
+                typeqids = [self.TTtype2qid[types]]
             elif isinstance(types, (list, tuple)):
-                typeqids = [TTtype2qid[type_] for type_ in types]
+                typeqids = [self.TTtype2qid[type_] for type_ in types]
 
         return typeqids
 
-    def collect_features_per_line(self, line, threshold, TTtype2qid):
+    def add_type_tokens(self, new_sentence, features):
+        new_sentence_tokens = new_sentence.split(' ')
+        assert len(new_sentence_tokens) == len(features)
+        sentence_plus_types_tokens = []
+        i = 0
+        if self.args.add_types_to_text == 'insert' or self.args.add_qids_to_text == 'insert':
+            while i < len(new_sentence_tokens):
+                token = new_sentence_tokens[i]
+                feat = features[i]
+                # token is an entity
+                if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
+                    final_token = '<e> '
+                    final_types = ''
+                    if self.args.add_types_to_text != 'no':
+                        all_types = ' | '.join(
+                            set(
+                                self.qid2TTtype[self.id2type[id]] for id in feat.type_id if self.id2type[id] in self.qid2TTtype
+                            )
+                        )
+                        final_types = '( ' + all_types + ' ) '
+                    final_qids = ''
+                    if self.args.add_qids_to_text != 'no':
+                        all_qids = ' | '.join(set('Q' + str(id) for id in feat.qid))
+                        final_qids = '[' + all_qids + ']'
+                    final_token += final_types + final_qids + token
+                    # append all entities with same type
+                    i += 1
+                    while i < len(new_sentence_tokens) and features[i] == feat:
+                        final_token += ' ' + new_sentence_tokens[i]
+                        i += 1
+                    final_token += ' </e>'
+                    sentence_plus_types_tokens.append(final_token)
+                else:
+                    sentence_plus_types_tokens.append(token)
+                    i += 1
+
+        elif self.args.add_types_to_text == 'append' or self.args.add_qids_to_text == 'append':
+            sentence_plus_types_tokens.extend(new_sentence_tokens)
+            sentence_plus_types_tokens.append('<e>')
+            while i < len(new_sentence_tokens):
+                feat = features[i]
+                # token is an entity
+                if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
+                    final_types = ''
+                    if self.args.add_types_to_text != 'no':
+                        all_types = ' | '.join(
+                            set(
+                                self.qid2TTtype[self.id2type[id]] for id in feat.type_id if self.id2type[id] in self.qid2TTtype
+                            )
+                        )
+                        final_types = ['( ', all_types, ' ) ']
+                    final_qids = ''
+                    if self.args.add_qids_to_text != 'no':
+                        all_qids = ' | '.join(set('Q' + str(id) for id in feat.qid))
+                        final_qids = ['[', all_qids, ']']
+                    all_tokens = []
+                    # append all entities with same type
+                    while i < len(new_sentence_tokens) and features[i] == feat:
+                        all_tokens.append(new_sentence_tokens[i])
+                        i += 1
+                    final_token = ' '.join([*all_tokens, *final_types, *final_qids, ';'])
+                    sentence_plus_types_tokens.append(final_token)
+                else:
+                    i += 1
+
+            sentence_plus_types_tokens.append('</e>')
+
+        return ' '.join(sentence_plus_types_tokens)
+
+    def collect_features_per_line(self, line, threshold):
 
         tokenized = line['sentence'].split(' ')
         tokens_type_ids = [
@@ -305,7 +299,7 @@ class Bootleg(object):
                                     # map qid to title
                                     title = self.wikidataqid_to_type_vocab[typeqid]
                                     # process may return multiple types for a single type when it's ambiguous
-                                    typeqids = self.post_process_bootleg_types(title, TTtype2qid)
+                                    typeqids = self.post_process_bootleg_types(title)
                                     if typeqids is None:
                                         typeqids = [typeqid]
 
@@ -334,8 +328,36 @@ class Bootleg(object):
 
         return tokens_type_ids, tokens_type_probs, tokens_qids
 
-    def collect_features(self, file_name, subsample, TTtype2qid):
+    def process_examples(self, examples, input_file_name, utterance_field):
+        # extract features for each token in input sentence from bootleg outputs
+        all_token_type_ids, all_tokens_type_probs, all_tokens_qids = self.collect_features(
+            input_file_name[: -len('_bootleg.jsonl')]
+        )
 
+        all_token_type_ids = all_token_type_ids[: self.args.subsample]
+        all_tokens_type_probs = all_tokens_type_probs[: self.args.subsample]
+        all_tokens_qids = all_tokens_qids[: self.args.subsample]
+
+        assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs) == len(all_tokens_qids)
+        for n, (ex, tokens_type_ids, tokens_type_probs, tokens_qids) in enumerate(
+            zip(examples, all_token_type_ids, all_tokens_type_probs, all_tokens_qids)
+        ):
+            if utterance_field == 'question':
+                for i in range(len(tokens_type_ids)):
+                    examples[n].question_feature[i].type_id = tokens_type_ids[i]
+                    examples[n].question_feature[i].type_prob = tokens_type_probs[i]
+                    examples[n].question_feature[i].qid = tokens_qids[i]
+                examples[n].question = self.add_type_tokens(ex.question, ex.question_feature)
+
+            else:
+                # context is the utterance field
+                for i in range(len(tokens_type_ids)):
+                    examples[n].context_feature[i].type_id = tokens_type_ids[i]
+                    examples[n].context_feature[i].type_prob = tokens_type_probs[i]
+                    examples[n].context_feature[i].qid = tokens_qids[i]
+                examples[n].context = self.add_type_tokens(ex.context, ex.context_feature)
+
+    def collect_features(self, file_name):
         all_tokens_type_ids = []
         all_tokens_type_probs = []
         all_tokens_qids = []
@@ -344,10 +366,10 @@ class Bootleg(object):
 
         with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/{self.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
             for i, line in enumerate(fin):
-                if i >= subsample:
+                if i >= self.args.subsample:
                     break
                 line = ujson.loads(line)
-                tokens_type_ids, tokens_type_probs, tokens_qids = self.collect_features_per_line(line, threshold, TTtype2qid)
+                tokens_type_ids, tokens_type_probs, tokens_qids = self.collect_features_per_line(line, threshold)
                 all_tokens_type_ids.append(tokens_type_ids)
                 all_tokens_type_probs.append(tokens_type_probs)
                 all_tokens_qids.append(tokens_qids)
@@ -358,6 +380,26 @@ class Bootleg(object):
                 self.cur_entity_embed_size += emb_data.shape[0]
 
         return all_tokens_type_ids, all_tokens_type_probs, all_tokens_qids
+
+    def replace_features_inplace(self, examples, all_token_type_ids, all_tokens_type_probs, all_tokens_qids, utterance_field):
+        assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs) == len(all_tokens_qids)
+        for n, (ex, tokens_type_ids, tokens_type_probs, tokens_qids) in enumerate(
+            zip(examples, all_token_type_ids, all_tokens_type_probs, all_tokens_qids)
+        ):
+            if utterance_field == 'question':
+                for i in range(len(tokens_type_ids)):
+                    examples[n].question_feature[i].type_id = tokens_type_ids[i]
+                    examples[n].question_feature[i].type_prob = tokens_type_probs[i]
+                    examples[n].question_feature[i].qid = tokens_qids[i]
+                examples[n].question = self.add_type_tokens(ex.question, ex.question_feature)
+
+            else:
+                # context is the utterance field
+                for i in range(len(tokens_type_ids)):
+                    examples[n].context_feature[i].type_id = tokens_type_ids[i]
+                    examples[n].context_feature[i].type_prob = tokens_type_probs[i]
+                    examples[n].context_feature[i].qid = tokens_qids[i]
+                examples[n].context = self.add_type_tokens(ex.context, ex.context_feature)
 
     def merge_embeds(self, file_list):
         all_emb_data = []
@@ -374,3 +416,61 @@ class Bootleg(object):
 
         os.makedirs(f'{self.args.bootleg_output_dir}/bootleg/eval/{self.ckpt_name}', exist_ok=True)
         np.save(f'{self.args.bootleg_output_dir}/bootleg/eval/{self.ckpt_name}/ent_embedding.npy', new_emb)
+
+
+class BootlegAnnotator(object):
+    def __init__(self, args, device, bootleg=None):
+        self.args = args
+        # instantiate a bootleg object to load config and relevant databases
+        if bootleg is None:
+            self.bootleg = Bootleg(args)
+        bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
+
+        # instantiate the annotator class. we use annotator only in server mode
+        # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
+        self.annotator = BootlegClass(
+            config=bootleg_config,
+            device='cpu' if device.type == 'cpu' else 'cuda',
+            min_alias_len=args.min_entity_len,
+            max_alias_len=args.max_entity_len,
+            cand_map=bootleg.cand_map,
+            threshold=args.bootleg_prob_threshold,
+            model_name=args.bootleg_model,
+            verbose=False,
+        )
+        # collect all outputs now; we will filter later
+        self.annotator.set_threshold(0.0)
+
+    def extract_features(self, examples, utterance_field):
+        with torch.no_grad():
+            bootleg_inputs = []
+            for ex in examples:
+                bootleg_inputs.append(getattr(ex, utterance_field))
+
+            bootleg_labels = self.annotator.label_mentions(bootleg_inputs)
+
+            keys = tuple(bootleg_labels.keys())
+            values = list(bootleg_labels.values())
+            values_unpacked = list(zip(*values))
+
+            bootleg_labels_unpacked = [dict(zip(keys, values)) for values in values_unpacked]
+
+            all_token_type_ids, all_tokens_type_probs, all_tokens_qids = [], [], []
+            for ex, label in zip(examples, bootleg_labels_unpacked):
+                line = {}
+                line['sentence'] = getattr(ex, utterance_field)
+
+                assert len(label) == 7
+                line['aliases'], line['spans'], line['cands'] = label['aliases'], label['spans'], label['cands']
+                line['cand_probs'] = list(map(lambda item: list(item), label['cand_probs']))
+
+                tokens_type_ids, tokens_type_probs, tokens_qids = self.bootleg.collect_features_per_line(
+                    line, self.args.bootleg_prob_threshold
+                )
+                all_token_type_ids.append(tokens_type_ids)
+                all_tokens_type_probs.append(tokens_type_probs)
+                all_tokens_qids.append(tokens_qids)
+
+            self.bootleg.replace_features_inplace(
+                examples, all_token_type_ids, all_tokens_type_probs, all_tokens_qids, utterance_field
+            )

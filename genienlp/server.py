@@ -41,7 +41,7 @@ import torch
 from . import models
 from .arguments import check_and_update_generation_args
 from .calibrate import ConfidenceEstimator
-from .data_utils.bootleg import extract_features_with_annotator, init_bootleg_annotator
+from .data_utils.bootleg import BootlegAnnotator
 from .data_utils.example import Example, NumericalizedExamples
 from .tasks.registry import get_tasks
 from .util import get_devices, load_config_json, log_model_size, set_seed
@@ -157,7 +157,7 @@ class Server(object):
 
         # process bootleg features
         if self.bootleg_annotator:
-            extract_features_with_annotator(examples, self.bootleg_annotator, self.args, task)
+            self.bootleg_annotator.extract_features(examples, task.utterance_field)
 
         self.model.add_new_vocab_from_data([task])
         batch = self.numericalize_examples(examples)
@@ -273,7 +273,7 @@ def init(args):
 
     bootleg_annotator = None
     if args.do_ned and args.ned_retrieve_method == 'bootleg':
-        bootleg_annotator = init_bootleg_annotator(args, device)
+        bootleg_annotator = BootlegAnnotator(args, device)
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')

@@ -35,7 +35,7 @@ import torch
 
 
 def identity(x, **kw):
-    return x, [], x
+    return x, []
 
 
 class SequentialField(NamedTuple):
@@ -81,8 +81,7 @@ def get_pad_feature(feature_fields, ned_features_default_val, ned_features_size)
 
 class Example(object):
     """
-    Contains all fields of a train/dev/test example in text form, alongside their NED features
-    both in text form (`*_plus_types` fields) and in embedding_id form (`*_feature`)
+    Contains all fields of a train/dev/test example in text form, alongside their NED features in embedding_id form (`*_feature`)
     """
 
     def __init__(
@@ -90,20 +89,16 @@ class Example(object):
         example_id: str,
         context: str,
         context_feature: List[Feature],
-        context_plus_types: str,
         question: str,
         question_feature: List[Feature],
-        question_plus_types: str,
         answer: str,
     ):
 
         self.example_id = example_id
         self.context = context
         self.context_feature = context_feature
-        self.context_plus_types = context_plus_types
         self.question = question
         self.question_feature = question_feature
-        self.question_plus_types = question_plus_types
         self.answer = answer
 
     @staticmethod
@@ -116,21 +111,12 @@ class Example(object):
             if lower:
                 arg = arg.lower()
 
-            sentence, features, sentence_plus_types = preprocess(
-                arg.rstrip('\n'), field_name=argname, answer=answer, example_id=example_id
-            )
+            sentence, features = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer, example_id=example_id)
 
             args.append(sentence)
 
             if argname != 'answer':
                 args.append(features)
-
-            if argname == 'context':
-                context_plus_types = sentence_plus_types
-                args.append(context_plus_types)
-            elif argname == 'question':
-                question_plus_types = sentence_plus_types
-                args.append(question_plus_types)
 
         return Example(*args)
 
@@ -163,16 +149,9 @@ class NumericalizedExamples(NamedTuple):
         all_context_plus_question_features = []
 
         for ex in examples:
-            # create context_plus_question fields by concatenating context and question fields
-            # if question is empty, don't append anything
             context_plus_question = ex.context + sep_token + ex.question if len(ex.question) else ex.context
             all_context_plus_questions.append(context_plus_question)
-            context_plus_question_with_types = (
-                ex.context_plus_types + sep_token + ex.question_plus_types
-                if len(ex.question_plus_types)
-                else ex.context_plus_types
-            )
-            all_context_plus_question_with_types.append(context_plus_question_with_types)
+
             # concatenate question and context features with a separator, but no need for a separator if there are no features to begin with
             context_plus_question_feature = (
                 ex.context_feature + pad_feature + ex.question_feature
@@ -181,15 +160,13 @@ class NumericalizedExamples(NamedTuple):
             )
             all_context_plus_question_features.append(context_plus_question_feature)
 
+        features = None
         if args.add_types_to_text == 'no' and args.add_qids_to_text == 'no':
             features = [a for a in all_context_plus_question_features if a]
             if len(features) == 0:
                 features = None
-            tokenized_contexts = numericalizer.encode_batch(
-                all_context_plus_questions, field_name='context', features=features
-            )
-        else:
-            tokenized_contexts = numericalizer.encode_batch(all_context_plus_question_with_types, field_name='context')
+
+        tokenized_contexts = numericalizer.encode_batch(all_context_plus_questions, field_name='context', features=features)
 
         # TODO remove double attempts at context tokenization
         if getattr(examples, 'is_classification', False):

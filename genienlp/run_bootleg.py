@@ -182,7 +182,6 @@ def parse_argv(parser):
     )
     parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
 
-    parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument(
         '--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...'
     )
@@ -295,59 +294,9 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
         # find the right entity candidate for each mention
         bootleg.disambiguate_mentions(config_args)
 
-    # extract features for each token in input sentence from bootleg outputs
-    all_token_type_ids, all_tokens_type_probs, all_tokens_qids = bootleg.collect_features(
-        input_file_name[: -len('_bootleg.jsonl')], args.subsample, getattr(task, 'TTtype2qid', None)
-    )
-
-    all_token_type_ids = all_token_type_ids[: args.subsample]
-    all_tokens_type_probs = all_tokens_type_probs[: args.subsample]
-    all_tokens_qids = all_tokens_qids[: args.subsample]
-
     # override examples features with bootleg features
-    if mode != 'dump':
-        assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs) == len(all_tokens_qids)
-        for n, (ex, tokens_type_ids, tokens_type_probs, tokens_qids) in enumerate(
-            zip(examples, all_token_type_ids, all_tokens_type_probs, all_tokens_qids)
-        ):
-            if task.utterance_field == 'question':
-                for i in range(len(tokens_type_ids)):
-                    examples[n].question_feature[i].type_id = tokens_type_ids[i]
-                    examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].question_feature[i].qid = tokens_qids[i]
-                question_plus_types = task.add_type_tokens(
-                    ex.question, ex.question_feature, args.add_types_to_text, args.add_qids_to_text
-                )
-                examples[n].question_plus_types = question_plus_types
-
-            else:
-                # context is the utterance field
-                for i in range(len(tokens_type_ids)):
-                    examples[n].context_feature[i].type_id = tokens_type_ids[i]
-                    examples[n].context_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].context_feature[i].qid = tokens_qids[i]
-                context_plus_types = task.add_type_tokens(
-                    ex.context, ex.context_feature, args.add_types_to_text, args.add_qids_to_text
-                )
-                examples[n].context_plus_types = context_plus_types
-
-    if args.verbose:
-        for ex in examples:
-            print()
-            print(
-                *[
-                    f'context token: {token}\ttype: {token_type}'
-                    for token, token_type in zip(ex.context.split(' '), ex.context_plus_feature)
-                ],
-                sep='\n',
-            )
-            print(
-                *[
-                    f'question token: {token}\ttype: {token_type}'
-                    for token, token_type in zip(ex.question.split(' '), ex.question_plus_feature)
-                ],
-                sep='\n',
-            )
+    else:
+        bootleg.process_examples(examples, input_file_name, task.utterance_field)
 
 
 def dump_bootleg_features(args, logger):

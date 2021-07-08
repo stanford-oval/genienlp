@@ -480,7 +480,6 @@ def parse_argv(parser):
         'ngrams: lookup all ngrams in the text and see if there is a match',
     )
 
-    parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument(
         '--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...'
     )
@@ -555,6 +554,9 @@ def check_and_update_generation_args(args):
 
 
 def post_parse_general(args):
+
+    if args.add_types_to_text != 'no' and args.add_qids_to_text != 'no' and args.add_types_to_text != args.add_qids_to_text:
+        raise ValueError('Method for adding types and qids should be the same')
 
     for feat in args.ned_features:
         if feat not in VALID_FEATURE_FIELDS:

@@ -39,7 +39,7 @@ from pprint import pformat
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
-from .data_utils.bootleg import Bootleg, extract_features_with_annotator, init_bootleg_annotator
+from .data_utils.bootleg import Bootleg, BootlegAnnotator
 from .run_bootleg import bootleg_process_splits
 
 try:
@@ -318,8 +318,8 @@ def prepare_data(args, device, src_lang):
                 else:
                     # no prepped bootleg features are available
                     # extract features on-the-fly using bootleg annotator
-                    bootleg_annotator = init_bootleg_annotator(args, device, bootleg)
-                    extract_features_with_annotator(data.examples, bootleg_annotator, args, task)
+                    bootleg_annotator = BootlegAnnotator(args, device, bootleg)
+                    bootleg_annotator.extract_features(data.examples, task.utterance_field)
             task_data_processed.append(data)
             task_path_processed.append(path)
             logger.info(f'{task.name} has {len(data.examples)} prediction examples')

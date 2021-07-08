@@ -572,7 +572,7 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
-    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer)
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
@@ -612,7 +612,7 @@ def ned_dump_entity_type_pairs(dataset, path, name, utterance_field):
 
     with open(os.path.join(path, f'{name}_labels.jsonl'), 'w') as fout:
         for ex in dataset.examples:
-            text = ex.question_plus_types if utterance_field == 'question' else ex.context_plus_types
+            text = ex.question if utterance_field == 'question' else ex.context
 
             span_beg = text.index('<e>')
             sentence = text[:span_beg].strip()
