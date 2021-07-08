@@ -708,31 +708,26 @@ class Translate(NaturalSeq2Seq):
         src_lang = kwargs.get('src_lang', 'en')
 
         example_id = 'id-null'
-        if not no_answer:
-            if len(parts) == 2:
-                sentence, answer = parts
-            elif len(parts) == 3:
-                example_id, sentence, answer = parts
-            elif len(parts) == 4:
-                example_id, sentence, answer, thingtalk = parts
-            elif len(parts) == 5:
-                example_id, _, sentence, answer, thingtalk = parts  # ignore dialogue context
-            else:
-                raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
-        else:
-            if len(parts) == 1:
-                sentence = parts
-            elif len(parts) == 2:
-                example_id, sentence = parts
-            elif len(parts) == 3:
-                example_id, sentence, thingtalk = parts
-            elif len(parts) == 4:
-                example_id, _, sentence, thingtalk = parts  # ignore dialogue context
-            else:
-                raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
-
         question = 'translate from input to output'
-        context = sentence
+
+        if no_answer:
+            if len(parts) == 1:
+                context = parts
+            elif len(parts) == 2:
+                example_id, context = parts
+            elif len(parts) == 3:
+                example_id, context, question = parts
+            elif len(parts) == 4:
+                raise ValueError(f'Input file contains a line with {len(parts)} parts: {str(parts)}')
+        else:
+            if len(parts) == 2:
+                context, answer = parts
+            elif len(parts) == 3:
+                example_id, context, answer = parts
+            elif len(parts) == 4:
+                example_id, context, question, answer = parts
+            else:
+                raise ValueError(f'Input file contains a line with {len(parts)} parts: {str(parts)}')
 
         # no answer is provided
         if no_answer:
