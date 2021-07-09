@@ -113,9 +113,9 @@ class Bootleg(object):
             "--run_config.dataset_threads",
             str(getattr(self.args, 'bootleg_dataset_threads', 1)),
             "--run_config.dataloader_threads",
-            str(getattr(self.args, 'bootleg_dataloader_threads', 1)),
+            str(getattr(self.args, 'bootleg_dataloader_threads', 2)),
             "--run_config.eval_batch_size",
-            str(getattr(self.args, 'bootleg_batch_size', 32)),
+            str(getattr(self.args, 'bootleg_batch_size', 50)),
             "--run_config.log_level",
             'DEBUG',
             # data configs

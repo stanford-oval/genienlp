@@ -158,7 +158,7 @@ def parse_argv(parser):
         '--bootleg_device', type=int, default=0, help="device to run bootleg predictions on (-1 for cpu or gpu id)"
     )
 
-    parser.add_argument('--bootleg_batch_size', type=int, default=32, help='Batch size used for inference using bootleg')
+    parser.add_argument('--bootleg_batch_size', type=int, default=50, help='Batch size used for inference using bootleg')
     parser.add_argument(
         '--bootleg_prob_threshold',
         type=float,
@@ -174,7 +174,7 @@ def parse_argv(parser):
     parser.add_argument(
         '--bootleg_dataloader_threads',
         type=int,
-        default=1,
+        default=2,
         help='Number of threads for parallel loading of datasets in bootleg',
     )
     parser.add_argument(
