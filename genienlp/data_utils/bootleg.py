@@ -65,6 +65,7 @@ class Bootleg(object):
             self.wikidataqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_wikidataqid.items()}
         with open(f'{self.args.database_dir}/es_material/typeqid2id.json', 'r') as fin:
             self.typeqid2id = ujson.load(fin)
+        self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
 
         ##### almond specific
         with open(f'{self.args.database_dir}/es_material/almond_type_mapping_matching.json', 'r') as fin:
@@ -79,16 +80,13 @@ class Bootleg(object):
             self.type_mapping_match.update(self.almond_type_mapping_match[domain])
             self.type_mapping_include.update(self.almond_type_mapping_match[domain])
 
-        self.TTtype2qid = dict()
+        self.almond_type2qid = dict()
         with open(f'{self.args.database_dir}/es_material/almond_type2qid.json', 'r') as fin:
             almond_type2qid = ujson.load(fin)
         for domain in self.almond_domains:
-            self.TTtype2qid.update(almond_type2qid[domain])
-        self.qid2TTtype = {v: k for k, v in self.TTtype2qid.items()}
+            self.almond_type2qid.update(almond_type2qid[domain])
+        self.qid2almond_type = {v: k for k, v in self.almond_type2qid.items()}
 
-        with open(f'{self.args.database_dir}/es_material/typeqid2id.json', 'r') as fin:
-            self.typeqid2id = ujson.load(fin)
-        self.id2type = {v: k for k, v in self.typeqid2id.items()}
         #####
 
         self.cur_entity_embed_size = 0
@@ -184,9 +182,9 @@ class Bootleg(object):
         typeqids = None
         if types is not None:
             if isinstance(types, str):
-                typeqids = [self.TTtype2qid[types]]
+                typeqids = [self.almond_type2qid[types]]
             elif isinstance(types, (list, tuple)):
-                typeqids = [self.TTtype2qid[type_] for type_ in types]
+                typeqids = [self.almond_type2qid[type_] for type_ in types]
 
         return typeqids
 
@@ -204,11 +202,22 @@ class Bootleg(object):
                     final_token = '<e> '
                     final_types = ''
                     if self.args.add_types_to_text != 'no':
-                        all_types = ' | '.join(
-                            set(
-                                self.qid2TTtype[self.id2type[id]] for id in feat.type_id if self.id2type[id] in self.qid2TTtype
+                        if self.bootleg_post_process_types:
+                            all_types = ' | '.join(
+                                set(
+                                    self.qid2almond_type[self.id2typeqid[id]]
+                                    for id in feat.type_id
+                                    if self.id2typeqid[id] in self.qid2almond_type
+                                )
                             )
-                        )
+                        else:
+                            all_types = ' | '.join(
+                                set(
+                                    self.wikidataqid_to_type_vocab[self.id2typeqid[id]]
+                                    for id in feat.type_id
+                                    if id != self.args.db_unk_id
+                                )
+                            )
                         final_types = '( ' + all_types + ' ) '
                     final_qids = ''
                     if self.args.add_qids_to_text != 'no':
@@ -235,11 +244,22 @@ class Bootleg(object):
                 if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
                     final_types = ''
                     if self.args.add_types_to_text != 'no':
-                        all_types = ' | '.join(
-                            set(
-                                self.qid2TTtype[self.id2type[id]] for id in feat.type_id if self.id2type[id] in self.qid2TTtype
+                        if self.bootleg_post_process_types:
+                            all_types = ' | '.join(
+                                set(
+                                    self.qid2almond_type[self.id2typeqid[id]]
+                                    for id in feat.type_id
+                                    if self.id2typeqid[id] in self.qid2almond_type
+                                )
                             )
-                        )
+                        else:
+                            all_types = ' | '.join(
+                                set(
+                                    self.wikidataqid_to_type_vocab[self.id2typeqid[id]]
+                                    for id in feat.type_id
+                                    if id != self.args.db_unk_id
+                                )
+                            )
                         final_types = ['( ', all_types, ' ) ']
                     final_qids = ''
                     if self.args.add_qids_to_text != 'no':
