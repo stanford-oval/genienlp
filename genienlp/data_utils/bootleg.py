@@ -280,7 +280,6 @@ class Bootleg(object):
         return ' '.join(sentence_plus_types_tokens)
 
     def collect_features_per_line(self, line, threshold):
-
         tokenized = line['sentence'].split(' ')
         tokens_type_ids = [
             [self.args.ned_features_default_val[0]] * self.args.ned_features_size[0] for _ in range(len(tokenized))
@@ -288,7 +287,12 @@ class Bootleg(object):
         tokens_type_probs = [
             [self.args.ned_features_default_val[1]] * self.args.ned_features_size[1] for _ in range(len(tokenized))
         ]
-        tokens_qids = [[self.args.ned_features_default_val[2]] * self.args.ned_features_size[2] for _ in range(len(tokenized))]
+        if 'qid' in self.args.ned_features:
+            tokens_qids = [
+                [self.args.ned_features_default_val[2]] * self.args.ned_features_size[2] for _ in range(len(tokenized))
+            ]
+        else:
+            tokens_qids = [[0] * self.args.ned_features_size[1] for _ in range(len(tokenized))]
 
         for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
             # filter qids with probability lower than a threshold
@@ -340,7 +344,10 @@ class Bootleg(object):
                 padded_type_probs = self.pad_values(
                     type_probs, self.args.ned_features_size[1], self.args.ned_features_default_val[1]
                 )
-                padded_qids = self.pad_values(qids, self.args.ned_features_size[2], self.args.ned_features_default_val[2])
+                if 'qid' in self.args.ned_features:
+                    padded_qids = self.pad_values(qids, self.args.ned_features_size[2], self.args.ned_features_default_val[2])
+                else:
+                    padded_qids = self.pad_values(qids, 0, 0)
 
                 tokens_type_ids[span[0] : span[1]] = [padded_type_ids] * (span[1] - span[0])
                 tokens_type_probs[span[0] : span[1]] = [padded_type_probs] * (span[1] - span[0])
@@ -444,6 +451,8 @@ class BootlegAnnotator(object):
         # instantiate a bootleg object to load config and relevant databases
         if bootleg is None:
             self.bootleg = Bootleg(args)
+        else:
+            self.bootleg = bootleg
         bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
 
         # instantiate the annotator class. we use annotator only in server mode
