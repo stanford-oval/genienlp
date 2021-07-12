@@ -487,18 +487,22 @@ def parse_argv(parser):
         '--ned_features',
         nargs='+',
         type=str,
-        default=[],
-        help='Features that will be extracted for each entity. Order is important',
+        default=['type_id', 'type_prob', 'qid'],
+        help='Features that will be extracted for each entity: "type" and "qid" are supported. Order is important',
     )
     parser.add_argument(
         '--ned_features_size',
         nargs='+',
         type=int,
-        default=[],
+        default=[1, 1, 1],
         help='Max length of each feature vector. All features are padded up to this length',
     )
     parser.add_argument(
-        '--ned_features_default_val', nargs='+', type=float, default=[], help='Default value used for each feature'
+        '--ned_features_default_val',
+        nargs='+',
+        type=float,
+        default=[0, 1.0, 0],
+        help='Max length of each feature vector. All features are padded up to this length',
     )
 
     # translation args

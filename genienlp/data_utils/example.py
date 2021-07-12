@@ -160,7 +160,7 @@ class NumericalizedExamples(NamedTuple):
             all_context_plus_question_features.append(context_plus_question_feature)
 
         features = None
-        if args.add_types_to_text == 'no' and args.add_qids_to_text == 'no':
+        if args.do_ned and args.add_types_to_text == 'no' and args.add_qids_to_text == 'no':
             features = [a for a in all_context_plus_question_features if a]
             if len(features) == 0:
                 features = None

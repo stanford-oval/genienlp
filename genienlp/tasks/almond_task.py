@@ -383,15 +383,19 @@ class BaseAlmondTask(BaseTask):
         new_tokens = new_sentence.split(' ')
         new_sentence_length = len(new_tokens)
 
-        tokens_type_ids, tokens_type_probs = None, None
+        tokens_type_ids, tokens_type_probs, token_qids = None, None, None
 
-        if 'type_id' in self.args.ned_features and field_name != 'answer':
+        if self.args.do_ned and 'type_id' in self.args.ned_features and field_name != 'answer':
             tokens_type_ids = [
                 [self.args.ned_features_default_val[0]] * self.args.ned_features_size[0] for _ in range(new_sentence_length)
             ]
-        if 'type_prob' in self.args.ned_features and field_name != 'answer':
+        if self.args.do_ned and 'type_prob' in self.args.ned_features and field_name != 'answer':
             tokens_type_probs = [
                 [self.args.ned_features_default_val[1]] * self.args.ned_features_size[1] for _ in range(new_sentence_length)
+            ]
+        if self.args.do_ned and 'qid' in self.args.ned_features and field_name != 'answer':
+            token_qids = [
+                [self.args.ned_features_default_val[2]] * self.args.ned_features_size[2] for _ in range(new_sentence_length)
             ]
 
         if self.args.do_ned and self.args.ned_retrieve_method != 'bootleg' and field_name not in self.no_feature_fields:
@@ -409,6 +413,9 @@ class BaseAlmondTask(BaseTask):
         if tokens_type_probs:
             assert len(tokens_type_probs) == new_sentence_length
             zip_list.append(tokens_type_probs)
+        if token_qids:
+            assert len(token_qids) == new_sentence_length
+            zip_list.append(token_qids)
 
         features = [Feature(*tup) for tup in zip(*zip_list)]
 

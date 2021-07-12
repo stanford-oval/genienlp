@@ -188,14 +188,14 @@ class Bootleg(object):
 
         return typeqids
 
-    def add_type_tokens(self, new_sentence, features):
-        new_sentence_tokens = new_sentence.split(' ')
-        assert len(new_sentence_tokens) == len(features)
+    def add_type_tokens(self, sentence, features):
+        sentence_tokens = sentence.split(' ')
+        assert len(sentence_tokens) == len(features)
         sentence_plus_types_tokens = []
         i = 0
         if self.args.add_types_to_text == 'insert' or self.args.add_qids_to_text == 'insert':
-            while i < len(new_sentence_tokens):
-                token = new_sentence_tokens[i]
+            while i < len(sentence_tokens):
+                token = sentence_tokens[i]
                 feat = features[i]
                 # token is an entity
                 if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
@@ -226,8 +226,8 @@ class Bootleg(object):
                     final_token += final_types + final_qids + token
                     # append all entities with same type
                     i += 1
-                    while i < len(new_sentence_tokens) and features[i] == feat:
-                        final_token += ' ' + new_sentence_tokens[i]
+                    while i < len(sentence_tokens) and features[i] == feat:
+                        final_token += ' ' + sentence_tokens[i]
                         i += 1
                     final_token += ' </e>'
                     sentence_plus_types_tokens.append(final_token)
@@ -236,9 +236,9 @@ class Bootleg(object):
                     i += 1
 
         elif self.args.add_types_to_text == 'append' or self.args.add_qids_to_text == 'append':
-            sentence_plus_types_tokens.extend(new_sentence_tokens)
+            sentence_plus_types_tokens.extend(sentence_tokens)
             sentence_plus_types_tokens.append('<e>')
-            while i < len(new_sentence_tokens):
+            while i < len(sentence_tokens):
                 feat = features[i]
                 # token is an entity
                 if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
@@ -267,8 +267,8 @@ class Bootleg(object):
                         final_qids = ['[', all_qids, ']']
                     all_tokens = []
                     # append all entities with same type
-                    while i < len(new_sentence_tokens) and features[i] == feat:
-                        all_tokens.append(new_sentence_tokens[i])
+                    while i < len(sentence_tokens) and features[i] == feat:
+                        all_tokens.append(sentence_tokens[i])
                         i += 1
                     final_token = ' '.join([*all_tokens, *final_types, *final_qids, ';'])
                     sentence_plus_types_tokens.append(final_token)
@@ -277,7 +277,10 @@ class Bootleg(object):
 
             sentence_plus_types_tokens.append('</e>')
 
-        return ' '.join(sentence_plus_types_tokens)
+        if not sentence_plus_types_tokens:
+            return sentence
+        else:
+            return ' '.join(sentence_plus_types_tokens)
 
     def collect_features_per_line(self, line, threshold):
         tokenized = line['sentence'].split(' ')
