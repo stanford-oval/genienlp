@@ -145,7 +145,6 @@ class NumericalizedExamples(NamedTuple):
 
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []
-        all_context_plus_question_with_types = []
         all_context_plus_question_features = []
 
         for ex in examples:
@@ -170,9 +169,8 @@ class NumericalizedExamples(NamedTuple):
 
         # TODO remove double attempts at context tokenization
         if getattr(examples, 'is_classification', False):
-            assert args.add_types_to_text != 'insert'
             tokenized_answers = numericalizer.process_classification_labels(
-                all_context_plus_questions, all_context_plus_question_with_types, [ex.answer for ex in examples]
+                all_context_plus_questions, [ex.answer for ex in examples]
             )
         else:
             tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
