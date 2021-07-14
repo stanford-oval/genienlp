@@ -455,14 +455,18 @@ def dump_bootleg_features(args, logger):
         eval_file_name = args.eval_set_name if args.eval_set_name is not None else 'eval'
 
         train_output_path = f'{args.bootleg_output_dir}/train_bootleg/{bootleg.ckpt_name}'
-        eval_output_path = f'{args.bootleg_output_dir}/{eval_file_name}_bootleg/{bootleg.ckpt_name}'
-        test_output_path = f'{args.bootleg_output_dir}/test_bootleg/{bootleg.ckpt_name}'
         os.makedirs(train_output_path, exist_ok=True)
-        os.makedirs(eval_output_path, exist_ok=True)
-        os.makedirs(test_output_path, exist_ok=True)
         train_output_file = open(os.path.join(train_output_path, 'bootleg_labels.jsonl'), 'w')
+
+        eval_output_path = f'{args.bootleg_output_dir}/{eval_file_name}_bootleg/{bootleg.ckpt_name}'
+        os.makedirs(eval_output_path, exist_ok=True)
         eval_output_file = open(os.path.join(eval_output_path, 'bootleg_labels.jsonl'), 'w')
-        test_output_file = open(os.path.join(test_output_path, 'bootleg_labels.jsonl'), 'w')
+
+        test_output_file = None
+        if test_examples:
+            test_output_path = f'{args.bootleg_output_dir}/test_bootleg/{bootleg.ckpt_name}'
+            os.makedirs(test_output_path, exist_ok=True)
+            test_output_file = open(os.path.join(test_output_path, 'bootleg_labels.jsonl'), 'w')
 
         train_size = len(train_examples)
         eval_size = len(eval_examples)
@@ -481,7 +485,7 @@ def dump_bootleg_features(args, logger):
                     train_output_file.write(line)
                 elif train_size <= i < train_size + eval_size:
                     eval_output_file.write(line)
-                else:
+                elif test_output_file:
                     test_output_file.write(line)
 
         assert i == train_size + eval_size + test_size - 1
@@ -489,7 +493,8 @@ def dump_bootleg_features(args, logger):
         # close output files
         train_output_file.close()
         eval_output_file.close()
-        test_output_file.close()
+        if test_output_file:
+            test_output_file.close()
 
         shutil.rmtree(f'{args.bootleg_output_dir}/combined_bootleg')
 
