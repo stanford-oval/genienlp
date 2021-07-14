@@ -36,7 +36,7 @@ from pprint import pformat
 
 import ujson
 
-from .arguments import post_parse_general, save_args
+from .arguments import post_parse_general
 from .data_utils.bootleg import Bootleg
 from .util import set_seed
 
@@ -67,12 +67,13 @@ def parse_argv(parser):
         'multiple languages for each task should be concatenated with +',
     )
 
+    # we set dest to be train_task_names so we can reuse previous code for arguments processing
     parser.add_argument(
         '--tasks',
         nargs='+',
         type=str,
         dest='train_task_names',
-        help='tasks to use for bootleg; we set dest to be train_task_names so we can resue previous code for arguments processsing',
+        help='tasks to use for bootleg',
         required=True,
     )
 

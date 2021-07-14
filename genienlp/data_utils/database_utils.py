@@ -260,7 +260,7 @@ def has_overlap(start, end, used_aliases):
 
 def reverse_bisect_left(a, x, lo=None, hi=None):
     """
-    Find item x in list a, and keep it reverse-sorted assuming a is reverse-sorted.
+    Locate the insertion point for x in a to maintain its reverse sorted order
     """
     if lo is None:
         lo = 0

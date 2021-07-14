@@ -131,6 +131,10 @@ def main(args):
     if args.remove_duplicates and args.no_duplication_columns is None:
         raise ValueError('You should specify columns that define duplication')
 
+    if args.bootleg_file:
+        with open(args.bootleg_file) as fin:
+            bootleg_lines = fin.readlines()
+
     if args.bootleg_output_file:
         bootleg_output_file = open(args.bootleg_output_file, 'w')
 
@@ -148,10 +152,6 @@ def main(args):
             for q in thingtalk_gold_file_reader:
                 gold_thingtalks.append(q[1].strip())
             gold_thingtalk_count = 0
-
-        if args.bootleg_file:
-            with open(args.bootleg_file) as fin:
-                bootleg_lines = fin.readlines()
 
         duplicate_count = 0
         heuristic_count = 0

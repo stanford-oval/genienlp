@@ -33,7 +33,7 @@ import os
 import numpy as np
 import torch
 import ujson
-from bootleg.end2end.bootleg_annotator import BootlegAnnotator as BootlegClass
+from bootleg.end2end.bootleg_annotator import BootlegAnnotator as Annotator
 from bootleg.end2end.extract_mentions import extract_mentions
 from bootleg.run import run_model
 from bootleg.utils.parser.parser_utils import parse_boot_and_emm_args
@@ -44,6 +44,11 @@ logger = logging.getLogger(__name__)
 
 
 class Bootleg(object):
+    '''
+    A wrapper for all functionalities needed from bootleg. It takes care of data preprocessing,
+    running examples through bootleg, and overriding examples faetures with the extracted ones
+    '''
+
     def __init__(self, args):
         logger.info('Initializing Bootleg class')
 
@@ -449,6 +454,11 @@ class Bootleg(object):
 
 
 class BootlegAnnotator(object):
+    '''
+    BootlegAnnotator is a wrapper for bootleg's native annotator which takes care of bootleg instantiations and
+    extracting required features from annotated examples
+    '''
+
     def __init__(self, args, device, bootleg=None):
         self.args = args
         # instantiate a bootleg object to load config and relevant databases
@@ -456,16 +466,16 @@ class BootlegAnnotator(object):
             self.bootleg = Bootleg(args)
         else:
             self.bootleg = bootleg
-        bootleg_config = bootleg.create_config(bootleg.fixed_overrides)
+        bootleg_config = self.bootleg.create_config(self.bootleg.fixed_overrides)
 
-        # instantiate the annotator class. we use annotator only in server mode
+        # instantiate the annotator class. we use annotator only in server mode.
         # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
-        self.annotator = BootlegClass(
+        self.annotator = Annotator(
             config=bootleg_config,
             device='cpu' if device.type == 'cpu' else 'cuda',
             min_alias_len=args.min_entity_len,
             max_alias_len=args.max_entity_len,
-            cand_map=bootleg.cand_map,
+            cand_map=self.bootleg.cand_map,
             threshold=args.bootleg_prob_threshold,
             model_name=args.bootleg_model,
             verbose=False,
