@@ -68,21 +68,6 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--train_tgt_languages',
-        type=str,
-        default='en',
-        help='Specify dataset target languages used during training for multilingual tasks'
-        'multiple languages for each task should be concatenated with +',
-    )
-    parser.add_argument(
-        '--eval_tgt_languages',
-        type=str,
-        default='en',
-        help='Specify dataset target languages used during validation for multilingual tasks'
-        'multiple languages for each task should be concatenated with +',
-    )
-
-    parser.add_argument(
         '--tasks',
         nargs='+',
         type=str,
@@ -92,21 +77,7 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--val_batch_size',
-        nargs='+',
-        default=[256],
-        type=int,
-        help='Batch size for validation corresponding to tasks in val tasks',
-    )
-
-    parser.add_argument(
         '--sentence_batching', action='store_true', help='Batch same sentences together (used for multilingual tasks)'
-    )
-    parser.add_argument(
-        '--train_batch_size',
-        type=int,
-        default=0,
-        help='Number of samples to use in each batch; will be used instead of train_batch_tokens when sentence_batching is on',
     )
 
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
@@ -195,28 +166,6 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--ned_features',
-        nargs='+',
-        type=str,
-        default=['type_id', 'type_prob', 'qid'],
-        help='Features that will be extracted for each entity: "type" and "qid" are supported. Order is important',
-    )
-    parser.add_argument(
-        '--ned_features_size',
-        nargs='+',
-        type=int,
-        default=[1, 1, 1],
-        help='Max length of each feature vector. All features are padded up to this length',
-    )
-    parser.add_argument(
-        '--ned_features_default_val',
-        nargs='+',
-        type=float,
-        default=[0, 1.0, 0],
-        help='Max length of each feature vector. All features are padded up to this length',
-    )
-
-    parser.add_argument(
         '--almond_lang_as_question',
         action='store_true',
         help='if true will use "Translate from ${language} to ThingTalk" for question',
@@ -246,19 +195,6 @@ def parse_argv(parser):
     parser.add_argument('--skip_cache', action='store_true', help='whether to use existing cached splits or generate new ones')
     parser.add_argument(
         '--cache_input_data', action='store_true', help='Cache examples from input data for faster subsequent trainings'
-    )
-
-    parser.add_argument(
-        "--add_types_to_text",
-        default='no',
-        choices=['no', 'insert', 'append'],
-        help='Method for adding types to input text in text-based NER approach',
-    )
-    parser.add_argument(
-        "--add_qids_to_text",
-        default='no',
-        choices=['no', 'insert', 'append'],
-        help='Method for adding qids to input text in text-based NER approach',
     )
 
     # token classification task args
@@ -316,11 +252,6 @@ def dump_bootleg_features(args, logger):
 
     # run_bootleg does not need special treatment for train vs eval/ test
     for task in args.train_tasks:
-        if task.name.startswith('almond'):
-            args.db_unk_id = int(args.ned_features_default_val[0])
-            args.db_unk_id = 0
-            args.num_db_types = len(bootleg.typeqid2id)
-        save_args(args, force_overwrite=True)
 
         task_all_examples = []
         task_all_paths = []
@@ -395,6 +326,7 @@ def main(args):
     args.override_context = None
     args.override_question = None
     args.val_task_names = None
+    args.ned_features = []
 
     args = post_parse_general(args)
     set_seed(args)
