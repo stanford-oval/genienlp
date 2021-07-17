@@ -52,6 +52,7 @@ setuptools.setup(
         'sacrebleu~=1.0',
         'bert-score~=0.3',
         'requests~=2.22',
+        'num2words>=0.5.10',
         'datasets==1.9.0',
         'seqeval==1.2.2',
         'transformers==4.8.2',

@@ -552,10 +552,8 @@ def return_sentences(text, regex_pattern, src_char_spans, lang):
 def split_text_into_sentences(text, lang, src_char_spans):
     if lang in ['en']:
         sentences = return_sentences(text, '(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.!?])\s', src_char_spans, lang)
-        # sentences = list(filter(None, re.sub('(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.\!\?])\s|(?:。)', '\n', text).split('\n')))
     elif lang in ['zh', 'ja', 'ko']:
         sentences = return_sentences(text, u'([!?。])\s?', src_char_spans, lang)
-        # sentences = list(re.findall(u'([^!?。]+[!?。]*)\s?', text, flags=re.U))
     else:
         import nltk
 
@@ -580,7 +578,7 @@ class Translate(NaturalSeq2Seq):
 
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         assert example_id
-        if field_name != 'answer' and self.args.do_alignment:
+        if field_name != 'answer':
             if field_name + '-' + example_id in self.all_ids:
                 raise ValueError(
                     f'example id: {example_id} is repeated in the dataset. If using alignment, ids have to be unique'

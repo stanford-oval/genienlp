@@ -30,6 +30,7 @@ from collections import OrderedDict
 
 import numpy as np
 import torch
+from num2words import CONVERTER_CLASSES, num2words
 from transformers import SPIECE_UNDERLINE, M2M100Tokenizer
 
 logger = logging.getLogger(__name__)
@@ -125,23 +126,33 @@ def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_
     src_spans = []
     src_matches = []
     for match, spans in src_matches_counter.items():
-        if count_substring(tgt_strings_words, match)[0] != len(spans):
+        # if translation turned digit into words replace it in translation directly
+        if len(match) == 1 and match[0].isdigit() and tokenizer.tgt_lang in CONVERTER_CLASSES:
+            cardinal = num2words(match[0], lang=tokenizer.tgt_lang, to='cardinal')
+            count, beg_indices = count_substring(tgt_strings_words, [cardinal])
+            if count == len(spans):
+                for id_ in beg_indices:
+                    tgt_strings_words[id_] = match[0]
+                continue
+
+        count, beg_indices = count_substring(tgt_strings_words, match)
+        # we found matching spans in target so just update piece_tgt_spans to make sure we don't overwrite them later
+        if count == len(spans):
+            for id_ in beg_indices:
+                beg_word, end_word = id_, id_ + len(match) - 1
+                beg_piece, end_piece = tgt_word2piece_span_mapping[beg_word][0], tgt_word2piece_span_mapping[end_word][1]
+                piece_tgt_spans.append((beg_piece, end_piece))
+
+        # we could not find matching spans in target so try to align using cross-attention
+        else:
             for span in spans:
                 src_matches.append(match)
                 src_spans.append(span)
-        else:
-            all_indices = count_substring(tgt_strings_words, match)[1]
-            for id_ in all_indices:
-                beg_word, end_word = id_, id_ + len(match) - 1
-                beg_piece, end_piece = tgt_word2piece_span_mapping[beg_word][0], tgt_word2piece_span_mapping[end_word][1]
-
-                piece_tgt_spans.append((beg_piece, end_piece))
 
     piece_src_spans = [(src_word2piece_span_mapping[beg][0], src_word2piece_span_mapping[end][1]) for beg, end in src_spans]
 
     src2tgt_mapping = OrderedDict()
     for src_idx, (beg, end) in enumerate(piece_src_spans):
-        topK = 1
         s1 = torch.argmax(sample_layer_attention_pooled[:, beg]).item()
         s2 = torch.argmax(sample_layer_attention_pooled[:, end]).item()
 
@@ -153,18 +164,35 @@ def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_
         if s1 > s2:
             s1, s2 = s2, s1
 
+        # whether to push begin or end of a span
+        direction = 1
+        topK = 1
+
+        # try to find non overlapping spans to avoid overwriting old ones
         while find_overlap(s1, s2, piece_tgt_spans) != -1:
             overlapping_span = piece_tgt_spans[find_overlap(s1, s2, piece_tgt_spans)]
+            # tail overlapping
             if s1 < overlapping_span[0] and s2 < overlapping_span[1]:
                 s2 = overlapping_span[0] - 1
+            # head overlapping
             elif s1 >= overlapping_span[0] and s2 > overlapping_span[1]:
                 s1 = overlapping_span[1] + 1
+            # full span overlapping
             else:
-                topK += 1
+                # find next best match
+                if direction == 1:
+                    topK += 1
+                else:
+                    direction *= -1
                 if topK >= sample_layer_attention_pooled.size(0):
+                    logger.error(
+                        f'Failed to map a span to target using alignment for src_string: {src_strings} and tgt_string: {tgt_strings}'
+                    )
                     break
-                s1 = torch.topk(sample_layer_attention_pooled[:, beg], topK).indices[-1].item()
-                s2 = torch.topk(sample_layer_attention_pooled[:, end], topK).indices[-1].item()
+                if direction == 1:
+                    s1 = torch.topk(sample_layer_attention_pooled[:, beg], topK).indices[-1].item()
+                else:
+                    s2 = torch.topk(sample_layer_attention_pooled[:, end], topK).indices[-1].item()
 
             # switch tgt begin and end indices
             if s1 > s2:
