@@ -44,6 +44,58 @@ from .util import ConfidenceFeatures
 logger = logging.getLogger(__name__)
 
 
+def parse_argv(parser):
+    parser.add_argument(
+        '--confidence_path',
+        required=True,
+        type=str,
+        help='The path to the pickle file where the list of ConfidenceFeatures objects is saved',
+    )
+    parser.add_argument(
+        '--eval_metric',
+        type=str,
+        default='aucpr',
+        choices=['aucpr'],
+        help='An xgboost metric. The metric which will be used to select the best model on the validation set.',
+    )
+    parser.add_argument(
+        '--dev_split',
+        type=float,
+        default=0.2,
+        help='The portion of the dataset to use for validation. The rest is used to train.',
+    )
+    parser.add_argument('--seed', type=int, default=123, help='Random seed to use for reproducibility')
+    parser.add_argument(
+        '--save', required=True, type=str, help='The directory to save the calibrator model and plots after training'
+    )
+    parser.add_argument(
+        '--name_prefix', required=True, type=str, help='A string to prepend to files associated with the calibrator.'
+    )
+    parser.add_argument(
+        '--plot', action='store_true', help='If True, will plot metrics and save them. Requires Matplotlib installation.'
+    )
+    parser.add_argument(
+        '--testing',
+        action='store_true',
+        help='If True, will change labels so that not all of them are equal. This is only used for testing purposes.',
+    )
+    parser.add_argument(
+        '--fast',
+        action='store_true',
+        help='If True, will only train calibrators that don\'t use MC dropout. This substantially increases inference speed.',
+    )
+
+    # Options to normalize scores for a given threshold
+    parser.add_argument(
+        '--threshold',
+        type=float,
+        default=None,
+        help='The threshold above (below) which scores are considered to be positive (negative).',
+    )
+    parser.add_argument('--precision', type=float, default=None, help='Set this if scores should be normalize by precision.')
+    parser.add_argument('--recall', type=float, default=None, help='Set this if scores should be normalize by recall.')
+
+
 # Feature function builders
 # drop means after applying dropout, nodrop means before
 
@@ -270,58 +322,6 @@ def evaluate_raw(dev_confidences: Iterable[ConfidenceFeatures], featurizer: Call
     precision, recall, thresholds = precision_recall_curve(dev_labels, dev_avg_logprobs)
     pass_rate, accuracies = accuracy_at_pass_rate(dev_labels, dev_avg_logprobs)
     return precision, recall, pass_rate, accuracies, thresholds
-
-
-def parse_argv(parser):
-    parser.add_argument(
-        '--confidence_path',
-        required=True,
-        type=str,
-        help='The path to the pickle file where the list of ConfidenceFeatures objects is saved',
-    )
-    parser.add_argument(
-        '--eval_metric',
-        type=str,
-        default='aucpr',
-        choices=['aucpr'],
-        help='An xgboost metric. The metric which will be used to select the best model on the validation set.',
-    )
-    parser.add_argument(
-        '--dev_split',
-        type=float,
-        default=0.2,
-        help='The portion of the dataset to use for validation. The rest is used to train.',
-    )
-    parser.add_argument('--seed', type=int, default=123, help='Random seed to use for reproducibility')
-    parser.add_argument(
-        '--save', required=True, type=str, help='The directory to save the calibrator model and plots after training'
-    )
-    parser.add_argument(
-        '--name_prefix', required=True, type=str, help='A string to prepend to files associated with the calibrator.'
-    )
-    parser.add_argument(
-        '--plot', action='store_true', help='If True, will plot metrics and save them. Requires Matplotlib installation.'
-    )
-    parser.add_argument(
-        '--testing',
-        action='store_true',
-        help='If True, will change labels so that not all of them are equal. This is only used for testing purposes.',
-    )
-    parser.add_argument(
-        '--fast',
-        action='store_true',
-        help='If True, will only train calibrators that don\'t use MC dropout. This substantially increases inference speed.',
-    )
-
-    # Options to normalize scores for a given threshold
-    parser.add_argument(
-        '--threshold',
-        type=float,
-        default=None,
-        help='The threshold above (below) which scores are considered to be positive (negative).',
-    )
-    parser.add_argument('--precision', type=float, default=None, help='Set this if scores should be normalize by precision.')
-    parser.add_argument('--recall', type=float, default=None, help='Set this if scores should be normalize by recall.')
 
 
 class ConfidenceEstimator:

@@ -39,7 +39,7 @@ from pprint import pformat
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
-from .data_utils.bootleg import Bootleg, extract_features_with_annotator, init_bootleg_annotator
+from .data_utils.bootleg import Bootleg, BootlegAnnotator
 from .run_bootleg import bootleg_process_splits
 
 try:
@@ -66,238 +66,6 @@ from .util import (
 from .validate import calculate_and_reduce_metrics, generate_with_model
 
 logger = logging.getLogger(__name__)
-
-
-def prepare_data(args, device, src_lang):
-
-    datasets = []
-    paths = []
-    if len(args.pred_src_languages) == 1 and len(args.tasks) > 1:
-        args.pred_src_languages *= len(args.tasks)
-    for i, task in enumerate(args.tasks):
-        task_languages = args.pred_src_languages[i]
-        logger.info(f'Loading {task}')
-        kwargs = {'train': None, 'validation': None, 'test': None}
-        if args.evaluate == 'train':
-            del kwargs['train']  # deleting keys means use the default file name
-        elif args.evaluate == 'valid':
-            kwargs['validation'] = args.pred_set_name
-        elif args.evaluate == 'test':
-            del kwargs['test']
-        else:
-            raise ValueError('Split used for prediction should be either train, valid or test')
-
-        kwargs.update(
-            {
-                'skip_cache': args.skip_cache,
-                'subsample': args.subsample,
-                'cached_path': os.path.join(args.cache, task.name),
-                'all_dirs': task_languages,
-                'almond_lang_as_question': args.almond_lang_as_question,
-                'num_workers': args.num_workers,
-                'separate_eval': args.separate_eval,
-                'translate_no_answer': args.translate_no_answer,
-                'translate_example_split': args.translate_example_split,
-                'src_lang': src_lang,
-                'ner_domains': args.ner_domains,
-                'hf_test_overfit': args.hf_test_overfit,
-            }
-        )
-
-        task_splits, task_paths = task.get_splits(root=args.data, lower=args.lower, **kwargs)
-        if not isinstance(task_splits, list):
-            task_splits = [task_splits]
-            task_paths = [task_paths]
-        task_data_processed = []
-        task_path_processed = []
-        for split, path in zip(task_splits, task_paths):
-            assert (split.eval or split.test or split.train) and not split.aux
-            if split.train:
-                data = split.train
-                path = path.train
-            elif split.eval:
-                data = split.eval
-                path = path.eval
-            else:
-                data = split.test
-                path = path.test
-            if args.do_ned and args.ned_retrieve_method == 'bootleg':
-                bootleg = Bootleg(args)
-                file_name = os.path.basename(path.rsplit('.', 1)[0])
-                if os.path.exists(f'{args.bootleg_output_dir}/{file_name}_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl'):
-                    bootleg_process_splits(args, data.examples, path, task, bootleg)
-                else:
-                    # no prepped bootleg features are available
-                    # extract features on-the-fly using bootleg annotator
-                    bootleg_annotator = init_bootleg_annotator(args, device, bootleg)
-                    extract_features_with_annotator(data.examples, bootleg_annotator, args, task)
-            task_data_processed.append(data)
-            task_path_processed.append(path)
-            logger.info(f'{task.name} has {len(data.examples)} prediction examples')
-        datasets.append(task_data_processed)
-        paths.append(task_path_processed)
-
-    return datasets
-
-
-def prepare_data_iterators(args, val_sets, numericalizer, device):
-    logger.info('Preparing data iterators')
-    if len(args.val_batch_size) == 1 and len(val_sets) > 1:
-        args.val_batch_size *= len(val_sets)
-    iters = []
-    task_index = 0
-    for task, bs, val_set in zip(args.tasks, args.val_batch_size, val_sets):
-        task_iter = []
-        task_languages = args.pred_src_languages[task_index]
-        if task_languages is not None and args.separate_eval:
-            task_languages = task_languages.split('+')
-            assert len(task_languages) == len(val_set)
-            for index, set_ in enumerate(val_set):
-                loader, original_order = make_data_loader(
-                    set_, numericalizer, bs, device, train=False, return_original_order=True
-                )
-                task_iter.append((task, task_languages[index], loader, original_order))
-        # single language task or no separate eval
-        else:
-            loader, original_order = make_data_loader(
-                val_set[0], numericalizer, bs, device, train=False, return_original_order=True
-            )
-            task_iter.append((task, task_languages, loader, original_order))
-
-        iters.extend(task_iter)
-        task_index += 1
-
-    return iters
-
-
-def run(args, device):
-
-    # TODO handle multiple languages
-    src_lang = args.pred_src_languages[0]
-    tgt_lang = args.pred_tgt_languages[0]
-
-    Model = getattr(models, args.model)
-    model, _ = Model.load(
-        args.path,
-        model_checkpoint_file=args.checkpoint_name,
-        args=args,
-        device=device,
-        tasks=args.tasks,
-        src_lang=src_lang,
-        tgt_lang=tgt_lang,
-    )
-
-    val_sets = prepare_data(args, device, src_lang)
-    model.add_new_vocab_from_data(args.tasks)
-
-    iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
-
-    log_model_size(logger, model, args.model)
-    model.to(device)
-
-    decaScore = []
-    task_scores = defaultdict(list)
-    model.eval()
-
-    eval_dir = os.path.join(args.eval_dir, args.evaluate)
-    os.makedirs(eval_dir, exist_ok=True)
-
-    with torch.no_grad():
-        for task, language, it, original_order in iters:
-            logger.info(task.name)
-            # single language task
-            if language is None or 'multilingual' not in task.name:
-                prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
-                results_file_name = os.path.join(eval_dir, task.name + '.results.json')
-            # multi language task
-            else:
-                prediction_file_name = os.path.join(eval_dir, task.name + '_{}.tsv'.format(language))
-                results_file_name = os.path.join(eval_dir, task.name + '_{}.results.json'.format(language))
-            if os.path.exists(prediction_file_name):
-                if args.overwrite:
-                    logger.warning(f'{prediction_file_name} already exists -- overwriting **')
-                else:
-                    raise OSError(f'{prediction_file_name} already exists')
-            if os.path.exists(results_file_name):
-                if args.overwrite:
-                    logger.warning(f'{results_file_name} already exists -- overwriting **')
-                else:
-                    raise OSError(f'{results_file_name} already exists')
-
-            if args.calibrator_paths is not None:
-                confidence_estimators = []
-                for path in args.calibrator_paths:
-                    estimator = ConfidenceEstimator.load(path)
-                    confidence_estimators.append(estimator)
-                    logger.info('Loading confidence estimator "%s" from %s', estimator.name, path)
-            else:
-                confidence_estimators = None
-            with torch.cuda.amp.autocast(enabled=args.mixed_precision):
-                generation_output = generate_with_model(
-                    model,
-                    it,
-                    model.numericalizer,
-                    task,
-                    args,
-                    original_order=original_order,
-                    output_confidence_features=args.save_confidence_features,
-                    confidence_estimators=confidence_estimators,
-                    disable_progbar=False,
-                )
-
-            if args.save_confidence_features:
-                torch.save(generation_output.confidence_features, args.confidence_feature_path)
-
-            # write into file
-            # TODO change to jsonl format
-            with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
-                for i in range(len(generation_output.example_ids)):
-                    line = (
-                        generation_output.example_ids[i] + '\t' + '\t'.join(generation_output.predictions[i])
-                    )  # all outputs separated by '\t'
-                    if args.calibrator_paths is not None:
-                        for score in generation_output.confidence_scores:
-                            line += '\t' + str(score[i])
-                    prediction_file.write(line + '\n')
-
-            if len(generation_output.answers) > 0:
-                metrics_to_compute = task.metrics
-                metrics_to_compute += args.extra_metrics
-                if args.main_metric_only:
-                    metrics_to_compute = [metrics_to_compute[0]]
-                metrics = calculate_and_reduce_metrics(
-                    generation_output.predictions, generation_output.answers, metrics_to_compute, args.reduce_metrics, tgt_lang
-                )
-
-                with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
-                    results_file.write(json.dumps(metrics) + '\n')
-
-                if not args.silent:
-                    for i, (c, p, a) in enumerate(
-                        zip(generation_output.contexts, generation_output.predictions, generation_output.answers)
-                    ):
-                        log_string = f'\nContext {i+1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
-                        if args.calibrator_paths is not None:
-                            log_string += f'Confidence {i+1} : '
-                            for score in generation_output.confidence_scores:
-                                log_string += f'{score[i]:.3f}, '
-                            log_string += '\n'
-                        logger.info(log_string)
-                    logger.info(metrics)
-
-                task_scores[task].append((len(generation_output.answers), metrics[task.metrics[0]]))
-
-    for task in task_scores.keys():
-        decaScore.append(
-            sum([length * score for length, score in task_scores[task]]) / sum([length for length, score in task_scores[task]])
-        )
-
-    logger.info('Evaluated Tasks:\n')
-    for i, task in enumerate(args.tasks):
-        logger.info(f'{task.name}: {decaScore[i]}')
-    logger.info('-------------------')
-    logger.info(f'DecaScore:  {sum(decaScore)}\n')
-    logger.info(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
 
 
 def parse_argv(parser):
@@ -489,6 +257,237 @@ def check_args(args):
         )
 
 
+def prepare_data(args, device, src_lang):
+
+    datasets = []
+    paths = []
+    if len(args.pred_src_languages) == 1 and len(args.tasks) > 1:
+        args.pred_src_languages *= len(args.tasks)
+    for i, task in enumerate(args.tasks):
+        task_languages = args.pred_src_languages[i]
+        logger.info(f'Loading {task}')
+        kwargs = {'train': None, 'validation': None, 'test': None}
+        if args.evaluate == 'train':
+            del kwargs['train']  # deleting keys means use the default file name
+        elif args.evaluate == 'valid':
+            kwargs['validation'] = args.pred_set_name
+        elif args.evaluate == 'test':
+            del kwargs['test']
+        else:
+            raise ValueError('Split used for prediction should be either train, valid or test')
+
+        kwargs.update(
+            {
+                'skip_cache': args.skip_cache,
+                'subsample': args.subsample,
+                'cached_path': os.path.join(args.cache, task.name),
+                'all_dirs': task_languages,
+                'almond_lang_as_question': args.almond_lang_as_question,
+                'num_workers': args.num_workers,
+                'separate_eval': args.separate_eval,
+                'translate_no_answer': args.translate_no_answer,
+                'translate_example_split': args.translate_example_split,
+                'src_lang': src_lang,
+                'ner_domains': args.ner_domains,
+                'hf_test_overfit': args.hf_test_overfit,
+            }
+        )
+
+        task_splits, task_paths = task.get_splits(root=args.data, lower=args.lower, **kwargs)
+        if not isinstance(task_splits, list):
+            task_splits = [task_splits]
+            task_paths = [task_paths]
+        task_data_processed = []
+        task_path_processed = []
+        for split, path in zip(task_splits, task_paths):
+            assert (split.eval or split.test or split.train) and not split.aux
+            if split.train:
+                data = split.train
+                path = path.train
+            elif split.eval:
+                data = split.eval
+                path = path.eval
+            else:
+                data = split.test
+                path = path.test
+            if args.do_ned and args.ned_retrieve_method == 'bootleg':
+                bootleg = Bootleg(args)
+                file_name = os.path.basename(path.rsplit('.', 1)[0])
+                if os.path.exists(f'{args.bootleg_output_dir}/{file_name}_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl'):
+                    bootleg_process_splits(args, data.examples, path, task, bootleg)
+                else:
+                    # no prepped bootleg features are available
+                    # extract features on-the-fly using bootleg annotator
+                    bootleg_annotator = BootlegAnnotator(args, device, bootleg)
+                    bootleg_annotator.extract_features(data.examples, task.utterance_field)
+            task_data_processed.append(data)
+            task_path_processed.append(path)
+            logger.info(f'{task.name} has {len(data.examples)} prediction examples')
+        datasets.append(task_data_processed)
+        paths.append(task_path_processed)
+
+    return datasets
+
+
+def prepare_data_iterators(args, val_sets, numericalizer, device):
+    logger.info('Preparing data iterators')
+    if len(args.val_batch_size) == 1 and len(val_sets) > 1:
+        args.val_batch_size *= len(val_sets)
+    iters = []
+    task_index = 0
+    for task, bs, val_set in zip(args.tasks, args.val_batch_size, val_sets):
+        task_iter = []
+        task_languages = args.pred_src_languages[task_index]
+        if task_languages is not None and args.separate_eval:
+            task_languages = task_languages.split('+')
+            assert len(task_languages) == len(val_set)
+            for index, set_ in enumerate(val_set):
+                loader, original_order = make_data_loader(
+                    set_, numericalizer, bs, device, train=False, return_original_order=True
+                )
+                task_iter.append((task, task_languages[index], loader, original_order))
+        # single language task or no separate eval
+        else:
+            loader, original_order = make_data_loader(
+                val_set[0], numericalizer, bs, device, train=False, return_original_order=True
+            )
+            task_iter.append((task, task_languages, loader, original_order))
+
+        iters.extend(task_iter)
+        task_index += 1
+
+    return iters
+
+
+def run(args, device):
+    # TODO handle multiple languages
+    src_lang = args.pred_src_languages[0]
+    tgt_lang = args.pred_tgt_languages[0]
+
+    Model = getattr(models, args.model)
+    model, _ = Model.load(
+        args.path,
+        model_checkpoint_file=args.checkpoint_name,
+        args=args,
+        device=device,
+        tasks=args.tasks,
+        src_lang=src_lang,
+        tgt_lang=tgt_lang,
+    )
+
+    val_sets = prepare_data(args, device, src_lang)
+    model.add_new_vocab_from_data(args.tasks)
+
+    iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
+
+    log_model_size(logger, model, args.model)
+    model.to(device)
+
+    decaScore = []
+    task_scores = defaultdict(list)
+    model.eval()
+
+    eval_dir = os.path.join(args.eval_dir, args.evaluate)
+    os.makedirs(eval_dir, exist_ok=True)
+
+    with torch.no_grad():
+        for task, language, it, original_order in iters:
+            logger.info(task.name)
+            # single language task
+            if language is None or 'multilingual' not in task.name:
+                prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
+                results_file_name = os.path.join(eval_dir, task.name + '.results.json')
+            # multi language task
+            else:
+                prediction_file_name = os.path.join(eval_dir, task.name + '_{}.tsv'.format(language))
+                results_file_name = os.path.join(eval_dir, task.name + '_{}.results.json'.format(language))
+            if os.path.exists(prediction_file_name):
+                if args.overwrite:
+                    logger.warning(f'{prediction_file_name} already exists -- overwriting **')
+                else:
+                    raise OSError(f'{prediction_file_name} already exists')
+            if os.path.exists(results_file_name):
+                if args.overwrite:
+                    logger.warning(f'{results_file_name} already exists -- overwriting **')
+                else:
+                    raise OSError(f'{results_file_name} already exists')
+
+            if args.calibrator_paths is not None:
+                confidence_estimators = []
+                for path in args.calibrator_paths:
+                    estimator = ConfidenceEstimator.load(path)
+                    confidence_estimators.append(estimator)
+                    logger.info('Loading confidence estimator "%s" from %s', estimator.name, path)
+            else:
+                confidence_estimators = None
+            with torch.cuda.amp.autocast(enabled=args.mixed_precision):
+                generation_output = generate_with_model(
+                    model,
+                    it,
+                    model.numericalizer,
+                    task,
+                    args,
+                    original_order=original_order,
+                    output_confidence_features=args.save_confidence_features,
+                    confidence_estimators=confidence_estimators,
+                    disable_progbar=False,
+                )
+
+            if args.save_confidence_features:
+                torch.save(generation_output.confidence_features, args.confidence_feature_path)
+
+            # write into file
+            # TODO change to jsonl format
+            with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
+                for i in range(len(generation_output.example_ids)):
+                    line = (
+                        generation_output.example_ids[i] + '\t' + '\t'.join(generation_output.predictions[i])
+                    )  # all outputs separated by '\t'
+                    if args.calibrator_paths is not None:
+                        for score in generation_output.confidence_scores:
+                            line += '\t' + str(score[i])
+                    prediction_file.write(line + '\n')
+
+            if len(generation_output.answers) > 0:
+                metrics_to_compute = task.metrics
+                metrics_to_compute += args.extra_metrics
+                if args.main_metric_only:
+                    metrics_to_compute = [metrics_to_compute[0]]
+                metrics = calculate_and_reduce_metrics(
+                    generation_output.predictions, generation_output.answers, metrics_to_compute, args.reduce_metrics, tgt_lang
+                )
+
+                with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
+                    results_file.write(json.dumps(metrics) + '\n')
+
+                if not args.silent:
+                    for i, (c, p, a) in enumerate(
+                        zip(generation_output.contexts, generation_output.predictions, generation_output.answers)
+                    ):
+                        log_string = f'\nContext {i+1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
+                        if args.calibrator_paths is not None:
+                            log_string += f'Confidence {i+1} : '
+                            for score in generation_output.confidence_scores:
+                                log_string += f'{score[i]:.3f}, '
+                            log_string += '\n'
+                        logger.info(log_string)
+                    logger.info(metrics)
+
+                task_scores[task].append((len(generation_output.answers), metrics[task.metrics[0]]))
+
+    for task in task_scores.keys():
+        decaScore.append(
+            sum([length * score for length, score in task_scores[task]]) / sum([length for length, score in task_scores[task]])
+        )
+
+    logger.info('Evaluated Tasks:\n')
+    for i, task in enumerate(args.tasks):
+        logger.info(f'{task.name}: {decaScore[i]}')
+    logger.info('-------------------')
+    logger.info(f'DecaScore:  {sum(decaScore)}\n')
+    logger.info(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
+
+
 def main(args):
     load_config_json(args)
     check_and_update_generation_args(args)
@@ -512,10 +511,14 @@ def main(args):
         logger.info(f'Independent multi-GPU generation on following devices: {devices}')
         all_processes = []
         all_data_folders = split_folder_on_disk(args.data, len(devices))
+        if args.do_ned and args.ned_retrieve_method == 'bootleg':
+            all_bootleg_data_folders = split_folder_on_disk(args.bootleg_output_dir, len(devices))
 
         for device_id in range(len(devices)):
             copy_args = copy.copy(args)
             copy_args.data = all_data_folders[device_id]
+            if args.do_ned and args.ned_retrieve_method == 'bootleg':
+                copy_args.bootleg_output_dir = all_bootleg_data_folders[device_id]
             copy_args.eval_dir = get_part_path(args.eval_dir, device_id)
 
             p = Process(target=run, args=(copy_args, devices[device_id]))

@@ -80,14 +80,7 @@ class BaseAlmondTask(BaseTask):
         self.almond_domains = args.almond_domains
         self.all_schema_types = set()
 
-        if args.do_ned:
-            self.unk_id = args.ned_features_default_val[0]
-            self.TTtype2qid = dict()
-            with open(os.path.join(self.args.database_dir, 'es_material/almond_type2qid.json'), 'r') as fin:
-                almond_type2qid = ujson.load(fin)
-            for domain in self.almond_domains:
-                self.TTtype2qid.update(almond_type2qid[domain])
-            self.qid2TTtype = {v: k for k, v in self.TTtype2qid.items()}
+        if args.do_ned and self.args.ned_retrieve_method != 'bootleg':
             self._init_db()
 
     def _init_db(self):
@@ -310,69 +303,6 @@ class BaseAlmondTask(BaseTask):
         new_prediction = ' '.join(new_tokens)
         return new_prediction
 
-    def add_type_tokens(self, new_sentence, features, add_types_to_text):
-        new_sentence_tokens = new_sentence.split(' ')
-        assert len(new_sentence_tokens) == len(features)
-        sentence_plus_types_tokens = []
-        i = 0
-        if add_types_to_text == 'insert':
-            while i < len(new_sentence_tokens):
-                token = new_sentence_tokens[i]
-                feat = features[i]
-                # token is an entity
-                if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
-                    final_token = '<e> '
-                    all_types = ' | '.join(
-                        set(
-                            [
-                                self.qid2TTtype[self.db.id2type[id]]
-                                for id in feat.type_id
-                                if self.db.id2type[id] in self.qid2TTtype
-                            ]
-                        )
-                    )
-                    final_token += '( ' + all_types + ' ) ' + token
-                    # append all entities with same type
-                    i += 1
-                    while i < len(new_sentence_tokens) and features[i] == feat:
-                        final_token += ' ' + new_sentence_tokens[i]
-                        i += 1
-                    final_token += ' </e>'
-                    sentence_plus_types_tokens.append(final_token)
-                else:
-                    sentence_plus_types_tokens.append(token)
-                    i += 1
-
-        elif add_types_to_text == 'append':
-            sentence_plus_types_tokens.extend(new_sentence_tokens)
-            sentence_plus_types_tokens.append('<e>')
-            while i < len(new_sentence_tokens):
-                feat = features[i]
-                # token is an entity
-                if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
-                    all_types = ' | '.join(
-                        set(
-                            [
-                                self.qid2TTtype[self.db.id2type[id]]
-                                for id in feat.type_id
-                                if self.db.id2type[id] in self.qid2TTtype
-                            ]
-                        )
-                    )
-                    all_tokens = []
-                    # append all entities with same type
-                    while i < len(new_sentence_tokens) and features[i] == feat:
-                        all_tokens.append(new_sentence_tokens[i])
-                        i += 1
-                    final_token = ' '.join([*all_tokens, '(', all_types, ')', ';'])
-                    sentence_plus_types_tokens.append(final_token)
-                else:
-                    i += 1
-
-            sentence_plus_types_tokens.append('</e>')
-
-        return ' '.join(sentence_plus_types_tokens)
-
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         if self.override_context is not None and field_name == 'context':
             pad_feature = get_pad_feature(
@@ -381,7 +311,6 @@ class BaseAlmondTask(BaseTask):
             return (
                 self.override_context,
                 [pad_feature] * len(self.override_context.split(' ')) if pad_feature else [],
-                self.override_context,
             )
         if self.override_question is not None and field_name == 'question':
             pad_feature = get_pad_feature(
@@ -390,10 +319,9 @@ class BaseAlmondTask(BaseTask):
             return (
                 self.override_question,
                 [pad_feature] * len(self.override_question.split(' ')) if pad_feature else [],
-                self.override_question,
             )
         if not sentence:
-            return '', [], ''
+            return '', []
 
         tokens = sentence.split(' ')
         is_program = self._is_program_field(field_name)
@@ -455,15 +383,19 @@ class BaseAlmondTask(BaseTask):
         new_tokens = new_sentence.split(' ')
         new_sentence_length = len(new_tokens)
 
-        tokens_type_ids, tokens_type_probs = None, None
+        tokens_type_ids, tokens_type_probs, token_qids = None, None, None
 
-        if 'type_id' in self.args.ned_features and field_name != 'answer':
+        if self.args.do_ned and 'type_id' in self.args.ned_features and field_name != 'answer':
             tokens_type_ids = [
                 [self.args.ned_features_default_val[0]] * self.args.ned_features_size[0] for _ in range(new_sentence_length)
             ]
-        if 'type_prob' in self.args.ned_features and field_name != 'answer':
+        if self.args.do_ned and 'type_prob' in self.args.ned_features and field_name != 'answer':
             tokens_type_probs = [
                 [self.args.ned_features_default_val[1]] * self.args.ned_features_size[1] for _ in range(new_sentence_length)
+            ]
+        if self.args.do_ned and 'qid' in self.args.ned_features and field_name != 'answer':
+            token_qids = [
+                [self.args.ned_features_default_val[2]] * self.args.ned_features_size[2] for _ in range(new_sentence_length)
             ]
 
         if self.args.do_ned and self.args.ned_retrieve_method != 'bootleg' and field_name not in self.no_feature_fields:
@@ -474,13 +406,6 @@ class BaseAlmondTask(BaseTask):
                     new_tokens, self.args.ned_features_default_val[1], self.args.ned_features_size[1]
                 )
 
-            if self.args.verbose and self.args.do_ned:
-                print()
-                print(
-                    *[f'token: {token}\ttype: {token_type}' for token, token_type in zip(new_tokens, tokens_type_ids)],
-                    sep='\n',
-                )
-
         zip_list = []
         if tokens_type_ids:
             assert len(tokens_type_ids) == new_sentence_length
@@ -488,14 +413,13 @@ class BaseAlmondTask(BaseTask):
         if tokens_type_probs:
             assert len(tokens_type_probs) == new_sentence_length
             zip_list.append(tokens_type_probs)
+        if token_qids:
+            assert len(token_qids) == new_sentence_length
+            zip_list.append(token_qids)
 
         features = [Feature(*tup) for tup in zip(*zip_list)]
 
-        sentence_plus_types = new_sentence
-        if self.args.do_ned and self.args.add_types_to_text != 'no' and len(features) and field_name == self.utterance_field:
-            sentence_plus_types = self.add_type_tokens(new_sentence, features, self.args.add_types_to_text)
-
-        return new_sentence, features, sentence_plus_types
+        return new_sentence, features
 
 
 @register_task('almond')
@@ -664,9 +588,9 @@ class Translate(NaturalSeq2Seq):
             else:
                 self.input_spans[example_id] = src_spans_flatten
 
-        sentence, features, sentence_plus_types = super().preprocess_field(sentence, field_name, answer, preprocess_entities)
+        sentence, features = super().preprocess_field(sentence, field_name, answer, preprocess_entities)
 
-        return sentence, features, sentence_plus_types
+        return sentence, features
 
     def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, batch_tgt_ids, **kwargs):
 

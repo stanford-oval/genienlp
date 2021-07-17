@@ -267,7 +267,7 @@ class TransformerNumericalizer(object):
             self._tokenizer.add_tokens(special_tokens)
 
         # add entity boundary special tokens
-        if self.args.add_types_to_text != 'no':
+        if self.args.add_types_to_text != 'no' or self.args.add_qids_to_text != 'no':
             self._tokenizer.add_tokens(['<e>', '</e>'])
 
         # add special tokens for ambig_qa task
@@ -463,34 +463,32 @@ class TransformerNumericalizer(object):
 
         return num_prefix_special_tokens, num_suffix_special_tokens
 
-    def process_classification_labels(self, all_context_plus_questions, all_context_plus_question_with_types, all_answers):
-        def tokenize_and_align_labels(all_sequences, all_sequences_with_types, all_labels, label_all_tokens=True):
+    def process_classification_labels(self, all_context_plus_questions, all_answers):
+        def tokenize_and_align_labels(all_sequences, all_sequences_wo_types, all_labels):
             tokenized_inputs = self._tokenizer.batch_encode_plus(
                 all_sequences,
                 padding=False,
                 truncation=True,
-                # We use this argument because the texts in our dataset are lists of words (with a label for each word).
                 is_split_into_words=True,
             )
-            tokenized_inputs_with_types = self._tokenizer.batch_encode_plus(
-                all_sequences_with_types,
+            tokenized_inputs_wo_types = self._tokenizer.batch_encode_plus(
+                all_sequences_wo_types,
                 padding=False,
                 truncation=True,
-                # We use this argument because the texts in our dataset are lists of words (with a label for each word).
                 is_split_into_words=True,
             )
 
             all_processed_labels = []
             for i, label in enumerate(all_labels):
                 word_ids = tokenized_inputs.word_ids(batch_index=i)
-                word_ids_with_types = tokenized_inputs_with_types.word_ids(batch_index=i)
+                word_ids_wo_types = tokenized_inputs_wo_types.word_ids(batch_index=i)
 
-                # find types size
-                size_diff = len(word_ids_with_types) - len(word_ids)
+                # find feature size
+                size_diff = len(word_ids) - len(word_ids_wo_types)
 
                 previous_word_idx = None
                 label_ids = []
-                for word_id in word_ids:
+                for word_id in word_ids_wo_types:
                     # special tokens's word_id is None
                     if word_id is None:
                         label_ids.append(self.answer_pad_id)
@@ -499,24 +497,34 @@ class TransformerNumericalizer(object):
                         label_ids.append(label[word_id])
                     # process next subwords
                     else:
-                        label_ids.append(label[word_id] if label_all_tokens else self.answer_pad_id)
+                        label_ids.append(label[word_id])
                     previous_word_idx = word_id
 
-                # extend labels for types
+                # extend labels for features
                 label_ids.extend([self.answer_pad_id] * size_diff)
 
                 all_processed_labels.append(label_ids)
 
             return all_processed_labels
 
-        # align labels
+        if self.args.add_types_to_text == 'insert':
+            raise ValueError('Insert option for add_types_to_text argument is not supported for token_classification tasks')
+        elif self.args.add_types_to_text == 'append':
+            all_context_plus_questions_wo_types = [example[: example.index(' <e>')] for example in all_context_plus_questions]
+        else:
+            all_context_plus_questions_wo_types = all_context_plus_questions
+
         assert all(
-            [len(cpq.split(" ")) == len(answer.split(" ")) for cpq, answer in zip(all_context_plus_questions, all_answers)]
+            [
+                len(cpq.split(" ")) == len(answer.split(" "))
+                for cpq, answer in zip(all_context_plus_questions_wo_types, all_answers)
+            ]
         )
 
+        # align labels
         tokenized_answers = tokenize_and_align_labels(
             [cpq.split(" ") for cpq in all_context_plus_questions],
-            [cpqt.split(" ") for cpqt in all_context_plus_question_with_types],
+            [cpq.split(" ") for cpq in all_context_plus_questions_wo_types],
             [list(map(lambda token: int(token), ans.split(" "))) for ans in all_answers],
         )
 

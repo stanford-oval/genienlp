@@ -256,3 +256,20 @@ def has_overlap(start, end, used_aliases):
         if start < alias_end and end > alias_start:
             return True
     return False
+
+
+def reverse_bisect_left(a, x, lo=None, hi=None):
+    """
+    Locate the insertion point for x in a to maintain its reverse sorted order
+    """
+    if lo is None:
+        lo = 0
+    if hi is None:
+        hi = len(a)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if x > a[mid]:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo

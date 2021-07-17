@@ -133,14 +133,6 @@ def prepare_data(args, logger):
             else:
                 assert splits.train
 
-            if bootleg:
-                bootleg_process_splits(args, splits.train.examples, paths.train, task, bootleg)
-
-            train_sets.append(splits.train)
-            logger.info(f'{task.name} has {len(splits.train)} training examples')
-
-            logger.info(f"train all_schema_types: {getattr(task, 'all_schema_types', None)}")
-
             if task.name.startswith('almond'):
                 if args.ned_features_default_val:
                     args.db_unk_id = int(args.ned_features_default_val[0])
@@ -157,6 +149,14 @@ def prepare_data(args, logger):
                 args.db_unk_id = 0
                 args.num_db_types = 0
             save_args(args, force_overwrite=True)
+
+            if bootleg:
+                bootleg_process_splits(args, splits.train.examples, paths.train, task, bootleg)
+
+            train_sets.append(splits.train)
+            logger.info(f'{task.name} has {len(splits.train)} training examples')
+
+            logger.info(f"train all_schema_types: {getattr(task, 'all_schema_types', None)}")
 
         for task in args.val_tasks:
             logger.info(f'Loading {task.name}')

@@ -454,6 +454,14 @@ def parse_argv(parser):
         choices=['no', 'insert', 'append'],
         help='Method for adding types to input text in text-based NER approach',
     )
+
+    parser.add_argument(
+        "--add_qids_to_text",
+        default='no',
+        choices=['no', 'insert', 'append'],
+        help='Method for adding qids to input text in text-based NER approach',
+    )
+
     parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
     parser.add_argument(
         '--ned_retrieve_method',
@@ -472,7 +480,6 @@ def parse_argv(parser):
         'ngrams: lookup all ngrams in the text and see if there is a match',
     )
 
-    parser.add_argument('--verbose', action='store_true', help='Print detected types for each token')
     parser.add_argument(
         '--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...'
     )
@@ -480,18 +487,22 @@ def parse_argv(parser):
         '--ned_features',
         nargs='+',
         type=str,
-        default=[],
-        help='Features that will be extracted for each entity. Order is important',
+        default=['type_id', 'type_prob', 'qid'],
+        help='Features that will be extracted for each entity: "type" and "qid" are supported. Order is important',
     )
     parser.add_argument(
         '--ned_features_size',
         nargs='+',
         type=int,
-        default=[],
+        default=[1, 1, 1],
         help='Max length of each feature vector. All features are padded up to this length',
     )
     parser.add_argument(
-        '--ned_features_default_val', nargs='+', type=float, default=[], help='Default value used for each feature'
+        '--ned_features_default_val',
+        nargs='+',
+        type=float,
+        default=[0, 1.0, 0],
+        help='Max length of each feature vector. All features are padded up to this length',
     )
 
     # translation args
@@ -547,13 +558,6 @@ def check_and_update_generation_args(args):
 
 
 def post_parse_general(args):
-
-    for feat in args.ned_features:
-        if feat not in VALID_FEATURE_FIELDS:
-            raise ValueError(
-                'Feature {} is not supported. Please provide valid features from {} list'.format(feat, VALID_FEATURE_FIELDS)
-            )
-
     if args.val_task_names is None:
         args.val_task_names = []
         for t in args.train_task_names:
@@ -574,9 +578,6 @@ def post_parse_general(args):
             'Your val_batch_size should be divisible by number of eval_src_languages when using sentence batching.'
         )
 
-    if len(args.ned_features) != len(args.ned_features_size):
-        raise ValueError('You should specify max feature size for each feature you provided')
-
     if len(args.train_task_names) > 1:
         if args.train_iterations is None:
             args.train_iterations = [1]
@@ -585,9 +586,6 @@ def post_parse_general(args):
         if len(args.train_batch_tokens) < len(args.train_task_names):
 
             args.train_batch_tokens = len(args.train_task_names) * args.train_batch_tokens
-
-    if len(args.val_batch_size) < len(args.val_task_names):
-        args.val_batch_size = len(args.val_task_names) * args.val_batch_size
 
     # postprocess arguments
     if args.commit:
@@ -604,8 +602,6 @@ def post_parse_general(args):
     for x in ['data', 'save', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
 
-    args.num_features = len(args.ned_features)
-
     # tasks with the same name share the same task object
     train_tasks_dict = get_tasks(args.train_task_names, args)
     args.train_tasks = list(train_tasks_dict.values())
@@ -618,6 +614,23 @@ def post_parse_general(args):
 
 
 def post_parse_train_specific(args):
+    if args.add_types_to_text != 'no' and args.add_qids_to_text != 'no' and args.add_types_to_text != args.add_qids_to_text:
+        raise ValueError('Method for adding types and qids should be the same')
+
+    for feat in args.ned_features:
+        if feat not in VALID_FEATURE_FIELDS:
+            raise ValueError(
+                'Feature {} is not supported. Please provide valid features from {} list'.format(feat, VALID_FEATURE_FIELDS)
+            )
+
+    if len(args.ned_features) != len(args.ned_features_size):
+        raise ValueError('You should specify max feature size for each feature you provided')
+
+    args.num_features = len(args.ned_features)
+
+    if len(args.val_batch_size) < len(args.val_task_names):
+        args.val_batch_size = len(args.val_task_names) * args.val_batch_size
+
     if args.no_fast_tokenizer and args.force_fast_tokenizer:
         raise ValueError('Both no_fast_tokenizer and force_fast_tokenizer flags are on')
 

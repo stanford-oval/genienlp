@@ -394,6 +394,9 @@ def split_folder_on_disk(folder_path, num_splits):
     new_folder_paths = [get_part_path(folder_path, part_idx) for part_idx in range(num_splits)]
     for subdir, dirs, files in os.walk(folder_path):
         for file in files:
+            # ignore system files
+            if file.startswith('.'):
+                continue
             new_file_paths = [
                 os.path.join(subdir.replace(folder_path, new_folder_paths[part_idx]), file) for part_idx in range(num_splits)
             ]
@@ -569,7 +572,7 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
-    all_features = NumericalizedExamples.from_examples(dataset, numericalizer=numericalizer)
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
@@ -609,7 +612,7 @@ def ned_dump_entity_type_pairs(dataset, path, name, utterance_field):
 
     with open(os.path.join(path, f'{name}_labels.jsonl'), 'w') as fout:
         for ex in dataset.examples:
-            text = ex.question_plus_types if utterance_field == 'question' else ex.context_plus_types
+            text = ex.question if utterance_field == 'question' else ex.context
 
             span_beg = text.index('<e>')
             sentence = text[:span_beg].strip()
@@ -770,6 +773,7 @@ def load_config_json(args):
             'no_fast_tokenizer',
             'force_fast_tokenizer',
             'add_types_to_text',
+            'add_qids_to_text',
             'do_ned',
             'database_type',
             'min_entity_len',
@@ -849,7 +853,7 @@ def load_config_json(args):
                 setattr(args, r, [0])
             elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val', 'override_valid_metrics']:
                 setattr(args, r, [])
-            elif r == 'add_types_to_text':
+            elif r in ('add_types_to_text', 'add_qids_to_text'):
                 setattr(args, r, 'no')
             elif r == 'database_type':
                 setattr(args, r, 'json')
