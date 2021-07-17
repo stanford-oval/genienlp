@@ -603,6 +603,9 @@ class Translate(NaturalSeq2Seq):
                     for i in range(0, len(src_spans_ind), 2)
                 ]
 
+            # remove illegal src_spans (caused by inputs such as " ")
+            src_spans = [span for span in src_spans if span[0] <= span[1]]
+
             sentence = " ".join(src_tokens)
             src_spans_flatten = [val for tup in src_spans for val in tup]
 

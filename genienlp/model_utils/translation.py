@@ -49,7 +49,7 @@ def count_substring(words, substring_words):
     for i in range(len(words)):
         if words[i] == substring_words[0]:
             k = 0
-            while k < len(substring_words):
+            while k < len(substring_words) and i + k < len(words):
                 if words[i + k] == substring_words[k]:
                     k += 1
                 else:
