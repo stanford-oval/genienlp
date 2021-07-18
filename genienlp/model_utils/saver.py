@@ -73,11 +73,12 @@ class Saver(object):
             self._all_checkpoints = []
             self._latest_checkpoint = None
 
-    def save(self, save_model_state_dict, save_opt_state_dict, global_step):
+    def save(self, save_model_state_dict, save_opt_state_dict, save_scaler_state_dict, global_step):
         self._maybe_load_last_checkpoints()
 
         model_name = 'iteration_' + str(global_step) + '.pth'
         opt_name = 'iteration_' + str(global_step) + '_optim.pth'
+        scaler_name = 'iteration_' + str(global_step) + '_scaler.pth'
 
         self._latest_checkpoint = model_name
         self._all_checkpoints.append(model_name)
@@ -91,5 +92,6 @@ class Saver(object):
                 logging.warning('Failed to delete old checkpoint: %s', e)
         torch.save(save_model_state_dict, os.path.join(self._savedir, model_name))
         torch.save(save_opt_state_dict, os.path.join(self._savedir, opt_name))
+        torch.save(save_scaler_state_dict, os.path.join(self._savedir, scaler_name))
         with open(os.path.join(self._savedir, 'checkpoint.json'), 'w') as fp:
             json.dump(dict(all=self._all_checkpoints, latest=self._latest_checkpoint), fp)

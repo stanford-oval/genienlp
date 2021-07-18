@@ -40,6 +40,7 @@ from pprint import pformat
 
 import numpy as np
 import torch
+from torch.cuda import amp
 from torch.utils.tensorboard import SummaryWriter
 from transformers import (
     AdamW,
@@ -189,14 +190,17 @@ def prepare_data(args, logger):
 accumulated_batch_lengths = 0
 
 
-def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_clip=None, gradient_accumulation_steps=1):
+def train_step(
+    model, batch, iteration, opt, devices, lr_scheduler=None, scaler=None, grad_clip=None, gradient_accumulation_steps=1
+):
     # Since the batch size is different in each call to this function due to dynamic batching, we need to keep track of
     # the total batch size
     global accumulated_batch_lengths
     model.train()
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
-    loss = model(batch).loss
+
+    loss = model(batch, mixed_precision=True if scaler else False).loss
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
     if len(devices) > 1:
@@ -204,8 +208,10 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
     non_accumulated_loss = loss.item()
     loss = loss * len(batch[0])
     accumulated_batch_lengths += len(batch[0])
-
-    loss.backward()
+    if scaler:
+        scaler.scale(loss).backward()
+    else:
+        loss.backward()
     grad_norm = None
     if (iteration + 1) % gradient_accumulation_steps == 0:
         for p in model.parameters():
@@ -214,8 +220,15 @@ def train_step(model, batch, iteration, opt, devices, lr_scheduler=None, grad_cl
             p.grad /= accumulated_batch_lengths
         accumulated_batch_lengths = 0
         if grad_clip > 0.0:
+            # Unscale gradients before clipping
+            if scaler:
+                scaler.unscale_(opt)
             grad_norm = torch.nn.utils.clip_grad_norm_(model.params, grad_clip)
-        opt.step()
+        if scaler:
+            scaler.step(opt)
+            scaler.update()
+        else:
+            opt.step()
         lr_scheduler.step()
 
     return non_accumulated_loss, grad_norm
@@ -255,7 +268,7 @@ def do_validate(
 ):
     deca_score = 0
     for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-        output, metric_dict = validate(val_task, val_iter, model, numericalizer, args, num_print=args.num_print)
+        output, metric_dict = validate(val_task, val_iter, model, numericalizer, args)
         val_loss = output.loss
         if val_loss is not None:
             log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss{val_loss.item():.4f}:'
@@ -288,6 +301,7 @@ def maybe_save(
     iteration,
     model,
     opt,
+    scaler,
     deca_score,
     best_decascore,
     *,
@@ -318,14 +332,18 @@ def maybe_save(
     save_model_state_dict = {'model_state_dict': model_state_dict, 'best_decascore': best_decascore}
     save_opt_state_dict = opt.state_dict()
     save_opt_state_dict.update({'start_iteration': iteration})
+    save_scaler_state_dict = None
+    if scaler:
+        save_scaler_state_dict = scaler.state_dict()
 
-    saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
+    saver.save(save_model_state_dict, save_opt_state_dict, save_scaler_state_dict, global_step=iteration)
     if should_save_best:
         logger.info(
             f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress} saving new best model'
         )
         torch.save(save_model_state_dict, os.path.join(log_dir, 'best.pth'))
         torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
+        torch.save(save_scaler_state_dict, os.path.join(log_dir, 'best_scaler.pth'))
 
         if model_parallel:
             model.numericalizer.save(saver._savedir)
@@ -393,6 +411,7 @@ def train(
     model,
     opt,
     lr_scheduler,
+    scaler,
     train_sets,
     train_iterations,
     numericalizer,
@@ -519,6 +538,7 @@ def train(
                     opt,
                     devices,
                     lr_scheduler=lr_scheduler,
+                    scaler=scaler,
                     grad_clip=args.grad_clip,
                     gradient_accumulation_steps=args.gradient_accumulation_steps,
                 )
@@ -604,6 +624,7 @@ def train(
                             iteration,
                             model,
                             opt,
+                            scaler,
                             deca_score,
                             best_decascore,
                             saver=saver,
@@ -634,6 +655,7 @@ def train(
                 0,
                 model,
                 opt,
+                scaler,
                 deca_score=0,
                 best_decascore=-1,
                 saver=saver,
@@ -803,6 +825,11 @@ def main(args):
     ##########
 
     opt, lr_scheduler = init_opt(args, model, logger)
+
+    scaler = None
+    if args.mixed_precision:
+        scaler = amp.GradScaler()
+
     start_iteration = 1
 
     if args.resume:
@@ -812,6 +839,11 @@ def main(args):
         start_iteration = opt_state_dict.pop('start_iteration')
         logger.info(f'Starting iteration is {start_iteration}')
         opt.load_state_dict(opt_state_dict)
+        if scaler:
+            scaler_state_dict = torch.load(
+                os.path.join(args.save, f'{os.path.splitext(args.load)[0]}_scaler.pth'), map_location='cpu'
+            )
+            scaler.load_state_dict(scaler_state_dict)
 
     if hasattr(args, 'tensorboard') and args.tensorboard:
         logger.info('Initializing Writer')
@@ -825,6 +857,7 @@ def main(args):
         model,
         opt,
         lr_scheduler,
+        scaler,
         train_sets,
         args.train_iterations,
         model.module.numericalizer if not args.model_parallel else model.numericalizer,

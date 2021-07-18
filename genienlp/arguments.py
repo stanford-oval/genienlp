@@ -481,6 +481,14 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
+        "--mixed_precision",
+        action='store_true',
+        help='If True, will use mixed precision for prediction.'
+        'This reduces memory consumption and is especially faster on GPUs like NVIDIA V100 and T4.'
+        ' Use with caution for training as it migh change accuracy',
+    )
+
+    parser.add_argument(
         '--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...'
     )
     parser.add_argument(

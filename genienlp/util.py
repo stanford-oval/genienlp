@@ -817,12 +817,13 @@ def load_config_json(args):
             'database_dir',
         ]
         # these are true/ false arguments
-        overwrite_actions = [
-            'do_alignment',
-        ]
+        overwrite_actions = ['do_alignment', 'mixed_precision']
+
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
+
+        # overwrite these args only if they were set to True during training
         for o in overwrite_actions:
             if not getattr(args, o, False):
                 retrieve.append(o)
@@ -834,6 +835,7 @@ def load_config_json(args):
             elif r in (
                 'do_ned',
                 'do_alignment',
+                'mixed_precision',
                 'use_encoder_loss',
                 'almond_has_multiple_programs',
                 'almond_lang_as_question',

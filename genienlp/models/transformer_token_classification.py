@@ -29,6 +29,7 @@
 
 import logging
 
+from torch.cuda import amp
 from transformers import AutoConfig, AutoModelForTokenClassification
 
 from ..data_utils.numericalizer import TransformerNumericalizer
@@ -53,7 +54,7 @@ class TransformerForTokenClassification(GenieModel):
         config = AutoConfig.from_pretrained(
             args.pretrained_model, cache_dir=args.embeddings, num_labels=num_labels, finetuning_task='ned'
         )
-        GenieModel.__init__(self, config)
+        super().__init__(self, config)
         self.args = args
         if hasattr(config, 'd_model'):
             args.dimension = config.d_model
@@ -92,13 +93,14 @@ class TransformerForTokenClassification(GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
     def forward(self, *input, **kwargs):
-        if self.training:
-            batch = input[0]
-            outputs = self.model(
-                batch.context.value,
-                labels=batch.answer.value,
-                attention_mask=(batch.context.value != self.numericalizer.pad_id),
-            )
-            return outputs
-        else:
-            return self.model(**kwargs)
+        with amp.autocast(enabled=kwargs['mixed_precision']):
+            if self.training:
+                batch = input[0]
+                outputs = self.model(
+                    batch.context.value,
+                    labels=batch.answer.value,
+                    attention_mask=(batch.context.value != self.numericalizer.pad_id),
+                )
+                return outputs
+            else:
+                return self.model(**kwargs)

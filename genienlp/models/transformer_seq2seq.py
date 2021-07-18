@@ -31,6 +31,7 @@ import logging
 from typing import List
 
 import torch
+from torch.cuda import amp
 from transformers import AutoConfig, AutoModelForSeq2SeqLM, MBartTokenizer, MBartTokenizerFast
 
 from ..data_utils.numericalizer import TransformerNumericalizer
@@ -109,50 +110,52 @@ class TransformerSeq2Seq(GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
     def forward(self, *input, **kwargs):
-        if self.training:
-            batch = input[0]
+        with amp.autocast(enabled=kwargs['mixed_precision']):
+            if self.training:
+                batch = input[0]
 
-            answer = batch.answer.value
-            answer_length = batch.answer.length
-            if self._is_bart_large:
-                # remove BOS from the answer to BART-Large because BART-Large was not trained to predict BOS
-                # (unlike BART-Base or mBART)
-                #
-                # NOTE: various people at Huggingface and elsewhere have tried to conclusively ascertain
-                # whether BOS should be there or not, and the answer seems to be that BOS should not be there
-                # at all, either in input or in the output
-                # but empirically, BOS in the input works slightly better, perhaps because our sentences start
-                # with a lowercase letter, so we leave it
-                answer = answer[:, 1:].contiguous()
-                answer_length = answer_length - 1
+                answer = batch.answer.value
+                answer_length = batch.answer.length
+                if self._is_bart_large:
+                    # remove BOS from the answer to BART-Large because BART-Large was not trained to predict BOS
+                    # (unlike BART-Base or mBART)
+                    #
+                    # NOTE: various people at Huggingface and elsewhere have tried to conclusively ascertain
+                    # whether BOS should be there or not, and the answer seems to be that BOS should not be there
+                    # at all, either in input or in the output
+                    # but empirically, BOS in the input works slightly better, perhaps because our sentences start
+                    # with a lowercase letter, so we leave it
+                    answer = answer[:, 1:].contiguous()
+                    answer_length = answer_length - 1
 
-            # this has several differences compared to what `transformers` Seq2Seq models do:
-            # (1) pad tokens are ignored in all loss calculations
-            # (2) loss is averaged over sequence lengths first, then over the batch size. This way,
-            # longer sequences in the batch do not drown shorter sequences.
-            # (3) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
-            # (4) if `args.label_smoothing > 0.0`, will add label smoothing term to loss
-            outputs = self.model(
-                batch.context.value, labels=answer, attention_mask=(batch.context.value != self.numericalizer.pad_id)
-            )
-            batch_size, vocab_size = outputs.logits.shape[0], outputs.logits.shape[2]
-            loss = self.criterion(
-                outputs.logits.view(-1, vocab_size), target=answer.view(-1), ignore_index=self.numericalizer.pad_id
-            )
-            loss = loss.view(batch_size, -1)  # (batch_size, sequence_length)
-            loss = loss.sum(dim=1) / answer_length  # accounts for the case where BOS is removed
-            if self.dropper is not None:
-                dropper_mask = self.dropper(loss)
-                loss = loss * dropper_mask
-            loss = loss.mean()  # average over the batch size
-            outputs.loss = loss  # replace the loss calculated by `transformers` with the new loss
-            return outputs
-        else:
-            return self.model(**kwargs)
+                # this has several differences compared to what `transformers` Seq2Seq models do:
+                # (1) pad tokens are ignored in all loss calculations
+                # (2) loss is averaged over sequence lengths first, then over the batch size. This way,
+                # longer sequences in the batch do not drown shorter sequences.
+                # (3) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
+                # (4) if `args.label_smoothing > 0.0`, will add label smoothing term to loss
+                outputs = self.model(
+                    batch.context.value, labels=answer, attention_mask=(batch.context.value != self.numericalizer.pad_id)
+                )
+                batch_size, vocab_size = outputs.logits.shape[0], outputs.logits.shape[2]
+                loss = self.criterion(
+                    outputs.logits.view(-1, vocab_size), target=answer.view(-1), ignore_index=self.numericalizer.pad_id
+                )
+                loss = loss.view(batch_size, -1)  # (batch_size, sequence_length)
+                loss = loss.sum(dim=1) / answer_length  # accounts for the case where BOS is removed
+                if self.dropper is not None:
+                    dropper_mask = self.dropper(loss)
+                    loss = loss * dropper_mask
+                loss = loss.mean()  # average over the batch size
+                outputs.loss = loss  # replace the loss calculated by `transformers` with the new loss
+                return outputs
+            else:
+                return self.model(**kwargs)
 
     def generate(
         self,
         batch,
+        mixed_precision,
         max_output_length,
         num_outputs,
         temperature,
@@ -165,33 +168,33 @@ class TransformerSeq2Seq(GenieModel):
         no_repeat_ngram_size,
         do_sample,
     ):
-
         input_ids = batch.context.value
 
-        # when attention_mask is not provided to generate(), it will default to masking pad tokens, which is the correct thing
-        generated = self.model.generate(
-            input_ids=input_ids,
-            max_length=max_output_length,
-            min_length=3,  # generate at least one token after BOS and language code
-            bos_token_id=self.numericalizer.init_id,
-            pad_token_id=self.numericalizer.pad_id,
-            early_stopping=False,
-            num_return_sequences=num_outputs,
-            repetition_penalty=repetition_penalty,
-            temperature=temperature,
-            eos_token_id=self.numericalizer.eos_id,
-            top_k=top_k,
-            top_p=top_p,
-            num_beams=num_beams,
-            num_beam_groups=num_beam_groups,
-            diversity_penalty=diversity_penalty,
-            no_repeat_ngram_size=no_repeat_ngram_size,
-            do_sample=do_sample,
-            output_scores=False,
-            output_attentions=True,
-            output_hidden_states=False,
-            return_dict_in_generate=True,
-        )
+        with amp.autocast(enabled=mixed_precision):
+            # when attention_mask is not provided to generate(), it will default to masking pad tokens, which is the correct thing
+            generated = self.model.generate(
+                input_ids=input_ids,
+                max_length=max_output_length,
+                min_length=3,  # generate at least one token after BOS and language code
+                bos_token_id=self.numericalizer.init_id,
+                pad_token_id=self.numericalizer.pad_id,
+                early_stopping=False,
+                num_return_sequences=num_outputs,
+                repetition_penalty=repetition_penalty,
+                temperature=temperature,
+                eos_token_id=self.numericalizer.eos_id,
+                top_k=top_k,
+                top_p=top_p,
+                num_beams=num_beams,
+                num_beam_groups=num_beam_groups,
+                diversity_penalty=diversity_penalty,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                do_sample=do_sample,
+                output_scores=False,
+                output_attentions=True,
+                output_hidden_states=False,
+                return_dict_in_generate=True,
+            )
 
         return generated
 

@@ -134,6 +134,7 @@ def generate_with_seq2seq_model(
                 diversity_penalty=args.diversity_penalty[hyperparameter_idx],
                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                 do_sample=args.temperature[hyperparameter_idx] != 0,  # if temperature==0, we do not sample
+                mixed_precision=args.mixed_precision,
             )
             partial_batch_prediction_ids = generated.sequences
             cross_attentions = getattr(generated, 'cross_attentions', None)
@@ -310,7 +311,7 @@ def print_results(keys, values, num_print=1):
     sys.stdout.flush()
 
 
-def validate(task, val_iter, model, numericalizer, args, num_print=10):
+def validate(task, val_iter, model, numericalizer, args):
     with torch.no_grad():
         model.eval()
         if isinstance(model, torch.nn.DataParallel):
@@ -325,6 +326,6 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
             output.predictions, output.answers, task.metrics, args.reduce_metrics, model.tgt_lang
         )
         results = [output.predictions, output.answers, output.contexts]
-        print_results(names, results, num_print=num_print)
+        print_results(names, results, num_print=args.num_print)
 
         return output, metrics

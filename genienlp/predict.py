@@ -36,7 +36,7 @@ import shutil
 from collections import defaultdict
 from pprint import pformat
 
-# multiprocessing with CUDA
+from torch.cuda import amp
 from torch.multiprocessing import Process, set_start_method
 
 from .data_utils.bootleg import Bootleg, BootlegAnnotator
@@ -420,7 +420,7 @@ def run(args, device):
                     logger.info('Loading confidence estimator "%s" from %s', estimator.name, path)
             else:
                 confidence_estimators = None
-            with torch.cuda.amp.autocast(enabled=args.mixed_precision):
+            with amp.autocast(enabled=args.mixed_precision):
                 generation_output = generate_with_model(
                     model,
                     it,
