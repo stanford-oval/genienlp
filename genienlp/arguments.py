@@ -312,6 +312,18 @@ def parse_argv(parser):
         'default is None meaning we distribute evenly on all available gpus',
     )
 
+    parser.add_argument(
+        '--model_parallel_hf',
+        action='store_true',
+        help='Use model parallelization by spliting model weights across available gpus',
+    )
+
+    parser.add_argument(
+        '--fp16',
+        action='store_true',
+        help='Use floating point with 16 bits',
+    )
+
     parser.add_argument('--warmup', default=40, type=int, help='warmup for learning rate. setting it to 1 disables warmup.')
     parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
     parser.add_argument(

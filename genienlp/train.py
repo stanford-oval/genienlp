@@ -39,6 +39,7 @@ from pprint import pformat
 
 import numpy as np
 import torch
+from parallelformers import parallelize
 from torch.utils.tensorboard import SummaryWriter
 
 from . import arguments, models
@@ -290,6 +291,7 @@ def maybe_save(
     iteration,
     model,
     opt,
+    args,
     deca_score,
     best_decascore,
     *,
@@ -298,9 +300,6 @@ def maybe_save(
     train_task,
     round_progress,
     task_progress,
-    timestamp,
-    log_dir,
-    model_parallel,
 ):
     save_wo_finetuning = bool(best_decascore == -1)
     should_save_best = False
@@ -309,7 +308,7 @@ def maybe_save(
         should_save_best = True
 
     # DataParallel and ModelParallel are mutually exclusive
-    if model_parallel:
+    if args.model_parallel or args.model_parallel_hf:
         model_state_dict = model.state_dict()
     else:
         # punch through the nn.DataParallel to access the real model, otherwise we won't be able
@@ -324,13 +323,13 @@ def maybe_save(
         saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
     if should_save_best:
         logger.info(
-            f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress} saving new best model'
+            f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress} saving new best model'
         )
-        torch.save(save_model_state_dict, os.path.join(log_dir, 'best.pth'))
+        torch.save(save_model_state_dict, os.path.join(args.log_dir, 'best.pth'))
         if not save_wo_finetuning:
-            torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
+            torch.save(save_opt_state_dict, os.path.join(args.log_dir, 'best_optim.pth'))
 
-        if model_parallel:
+        if args.model_parallel or args.model_parallel_hf:
             model.numericalizer.save(saver._savedir)
         else:
             model.module.numericalizer.save(saver._savedir)
@@ -356,6 +355,7 @@ def do_log_training_loss(
     writer,
     log_prefix,
 ):
+
     avg_batch_size = f'avbatch_{num_examples:.0f}_{len_contexts:.0f}_{len_answers:.0f}:'
     logger.info(
         f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:epoch_{epochs:.2f}:{round_progress}train_{train_task.name}:{task_progress}{avg_batch_size}{log_prefix}/loss_{loss:.4f}'
@@ -556,6 +556,10 @@ def train(
                     num_examples /= log_every
                     len_contexts /= log_every
                     len_answers /= log_every
+                    if args.model_parallel_hf:
+                        model.memory_allocated()
+                        model.memory_reserved()
+                        model.memory_chached()
                     do_log_training_loss(
                         iteration,
                         local_loss,
@@ -608,6 +612,7 @@ def train(
                             iteration,
                             model,
                             opt,
+                            args,
                             deca_score,
                             best_decascore,
                             saver=saver,
@@ -615,9 +620,6 @@ def train(
                             train_task=task,
                             round_progress=round_progress,
                             task_progress=task_progress,
-                            timestamp=args.timestamp,
-                            log_dir=args.log_dir,
-                            model_parallel=args.model_parallel,
                         )
 
                 # book keeping
@@ -638,6 +640,7 @@ def train(
                 0,
                 model,
                 opt,
+                args,
                 deca_score=0,
                 best_decascore=-1,
                 saver=saver,
@@ -645,9 +648,6 @@ def train(
                 train_task=task,
                 round_progress=0,
                 task_progress=0,
-                timestamp=args.timestamp,
-                log_dir=args.log_dir,
-                model_parallel=args.model_parallel,
             )
 
         logger.info(f'{args.pretrained_model} model is saved to {args.save} without any fine-tuning')
@@ -740,6 +740,12 @@ def main(args):
         device_map = dict(zip(args.devices, layers_list))
         model.model.parallelize(device_map)
         logger.info(f'Model parallel is used with following device map: {model.model.device_map}')
+    elif args.model_parallel_hf:
+        if devices[0] == torch.device('cpu'):
+            num_gpus = 0
+        else:
+            num_gpus = len(devices)
+        parallelize(model.model, num_gpus=num_gpus, fp16=args.fp16, verbose='detail')
     else:
         model.to(devices[0])
         model = NamedTupleCompatibleDataParallel(model, device_ids=devices)
@@ -771,7 +777,7 @@ def main(args):
         lr_scheduler,
         train_sets,
         args.train_iterations,
-        model.module.numericalizer if not args.model_parallel else model.numericalizer,
+        model.module.numericalizer if not (args.model_parallel or args.model_parallel_hf) else model.numericalizer,
         val_sets=val_sets,
         aux_sets=aux_sets,
         logger=logger,

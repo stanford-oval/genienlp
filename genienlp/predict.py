@@ -36,6 +36,7 @@ import shutil
 from collections import defaultdict
 from pprint import pformat
 
+# multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
 try:
@@ -45,6 +46,7 @@ except RuntimeError:
 
 
 import torch
+from parallelformers import parallelize
 
 from . import models
 from .arguments import check_and_update_generation_args
@@ -276,6 +278,12 @@ def parse_argv(parser):
         help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
 
+    parser.add_argument(
+        '--model_parallel_hf',
+        action='store_true',
+        help='Use model parallelization by spliting model weights across available gpus',
+    )
+
 
 def set_default_values(args):
     """
@@ -431,7 +439,8 @@ def get_metrics_to_compute(args, task):
     return metrics_to_compute
 
 
-def run(args, device):
+def run(args, devices):
+    device = devices[0]
 
     # TODO handle multiple languages
     Model = getattr(models, args.model)
@@ -444,14 +453,18 @@ def run(args, device):
         src_lang=args.pred_src_languages[0],
         tgt_lang=args.pred_tgt_languages[0],
     )
-
     val_sets = prepare_data(args)
+
     model.add_new_vocab_from_data(args.tasks)
+
+    # model.to(device)
+    if args.model_parallel_hf:
+        model.to('cpu')
+        parallelize(model.model, num_gpus=len(devices), fp16=args.mixed_precision)
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
 
     log_model_size(logger, model, args.model)
-    model.to(device)
 
     model.eval()
     task_scores = defaultdict(list)
@@ -580,30 +593,34 @@ def main(args):
     devices = get_devices(args.devices)
 
     if len(devices) > 1:
-        logger.info(f'Independent multi-GPU generation on following devices: {devices}')
-        all_processes = []
-        all_data_folders = split_folder_on_disk(args.data, len(devices))
-        if args.do_ned and args.ned_retrieve_method == 'bootleg':
-            all_bootleg_data_folders = split_folder_on_disk(args.bootleg_output_dir, len(devices))
-
-        for device_id in range(len(devices)):
-            copy_args = copy.copy(args)
-            copy_args.data = all_data_folders[device_id]
+        if args.model_parallel_hf:
+            logger.info(f'Multi device generation on: {devices}')
+            run(args, devices)
+        else:
+            logger.info(f'Independent multi-GPU generation on following devices: {devices}')
+            all_processes = []
+            all_data_folders = split_folder_on_disk(args.data, len(devices))
             if args.do_ned and args.ned_retrieve_method == 'bootleg':
-                copy_args.bootleg_output_dir = all_bootleg_data_folders[device_id]
-            copy_args.eval_dir = get_part_path(args.eval_dir, device_id)
+                all_bootleg_data_folders = split_folder_on_disk(args.bootleg_output_dir, len(devices))
 
-            p = Process(target=run, args=(copy_args, devices[device_id]))
-            all_processes.append(p)
-            p.start()
+            for device_id in range(len(devices)):
+                copy_args = copy.copy(args)
+                copy_args.data = all_data_folders[device_id]
+                if args.do_ned and args.ned_retrieve_method == 'bootleg':
+                    copy_args.bootleg_output_dir = all_bootleg_data_folders[device_id]
+                copy_args.eval_dir = get_part_path(args.eval_dir, device_id)
 
-        for p in all_processes:
-            p.join()
+                p = Process(target=run, args=(copy_args, devices[device_id]))
+                all_processes.append(p)
+                p.start()
 
-        for folder in all_data_folders:
-            shutil.rmtree(folder)
-        combine_folders_on_disk(args.eval_dir, len(devices), line_group_size=1, delete=True)
+            for p in all_processes:
+                p.join()
+
+            for folder in all_data_folders:
+                shutil.rmtree(folder)
+            combine_folders_on_disk(args.eval_dir, len(devices), line_group_size=1, delete=True)
 
     else:
         logger.info(f'Single device generation on: {devices[0]}')
-        run(args, devices[0])
+        run(args, [devices[0]])
