@@ -93,7 +93,7 @@ class TransformerForTokenClassification(GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
     def forward(self, *input, **kwargs):
-        with amp.autocast(enabled=kwargs['mixed_precision']):
+        with amp.autocast(enabled=kwargs['fp16']):
             if self.training:
                 batch = input[0]
                 outputs = self.model(

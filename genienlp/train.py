@@ -200,7 +200,7 @@ def train_step(
     if (iteration) % gradient_accumulation_steps == 0:
         opt.zero_grad()
 
-    loss = model(batch, mixed_precision=True if scaler else False).loss
+    loss = model(batch, fp16=True if scaler else False).loss
     if torch.isnan(loss).any():
         raise RuntimeError('Got NaN loss %s', str(loss))
     if len(devices) > 1:
@@ -827,7 +827,7 @@ def main(args):
     opt, lr_scheduler = init_opt(args, model, logger)
 
     scaler = None
-    if args.mixed_precision:
+    if args.fp16:
         scaler = amp.GradScaler()
 
     start_iteration = 1

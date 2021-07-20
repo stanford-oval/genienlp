@@ -110,7 +110,7 @@ class TransformerSeq2Seq(GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
     def forward(self, *input, **kwargs):
-        with amp.autocast(enabled=kwargs['mixed_precision']):
+        with amp.autocast(enabled=kwargs['fp16']):
             if self.training:
                 batch = input[0]
 
@@ -155,7 +155,7 @@ class TransformerSeq2Seq(GenieModel):
     def generate(
         self,
         batch,
-        mixed_precision,
+        fp16,
         max_output_length,
         num_outputs,
         temperature,
@@ -170,7 +170,7 @@ class TransformerSeq2Seq(GenieModel):
     ):
         input_ids = batch.context.value
 
-        with amp.autocast(enabled=mixed_precision):
+        with amp.autocast(enabled=fp16):
             # when attention_mask is not provided to generate(), it will default to masking pad tokens, which is the correct thing
             generated = self.model.generate(
                 input_ids=input_ids,

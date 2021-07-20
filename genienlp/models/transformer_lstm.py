@@ -128,7 +128,7 @@ class TransformerLSTM(GenieModel):
         generation_dict=None,
         **kwargs,
     ):
-        with amp.autocast(enabled=kwargs['mixed_precision']):
+        with amp.autocast(enabled=kwargs['fp16']):
             if encoder_output is None:
                 final_context, context_rnn_state = self.encoder(batch)
             else:
@@ -211,9 +211,9 @@ class TransformerLSTM(GenieModel):
         diversity_penalty,
         no_repeat_ngram_size,
         do_sample,
-        mixed_precision,
+        fp16,
     ):
-        with amp.autocast(enabled=mixed_precision):
+        with amp.autocast(enabled=fp16):
             encoder_output = self.encoder(batch)
             self.config.vocab_size = len(self.numericalizer.decoder_vocab)
             self.config.is_encoder_decoder = False  # in order to make it work with `transformers` generation code, we should treat this as a decoder-only model

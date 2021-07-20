@@ -481,7 +481,7 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        "--mixed_precision",
+        "--fp16",
         action='store_true',
         help='If True, will use mixed precision for prediction.'
         'This reduces memory consumption and is especially faster on GPUs like NVIDIA V100 and T4.'

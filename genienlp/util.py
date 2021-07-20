@@ -817,7 +817,7 @@ def load_config_json(args):
             'database_dir',
         ]
         # these are true/ false arguments
-        overwrite_actions = ['do_alignment', 'mixed_precision']
+        overwrite_actions = ['do_alignment', 'fp16']
 
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
@@ -835,7 +835,7 @@ def load_config_json(args):
             elif r in (
                 'do_ned',
                 'do_alignment',
-                'mixed_precision',
+                'fp16',
                 'use_encoder_loss',
                 'almond_has_multiple_programs',
                 'almond_lang_as_question',

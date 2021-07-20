@@ -134,7 +134,7 @@ def generate_with_seq2seq_model(
                 diversity_penalty=args.diversity_penalty[hyperparameter_idx],
                 no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
                 do_sample=args.temperature[hyperparameter_idx] != 0,  # if temperature==0, we do not sample
-                mixed_precision=args.mixed_precision,
+                fp16=args.fp16,
             )
             partial_batch_prediction_ids = generated.sequences
             cross_attentions = getattr(generated, 'cross_attentions', None)
