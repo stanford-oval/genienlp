@@ -142,6 +142,19 @@ def prob_first_mistake(i):
 
     return f
 
+def nodrop_prob_first_mistake(i):
+    """
+    probability that this is the first mistake
+    """
+    def f(x):
+        probs = nodrop_prob(i)(x)
+        ret = torch.zeros_like(probs)
+        for j in range(len(probs)):
+            ret[j] = torch.prod(probs[:j])*(1-probs[j])
+        return ret
+
+    return f
+
 def mean_drop_prob(i):
     return lambda x: torch.mean(x[i].drop_probs, dim=0).view(-1)
 

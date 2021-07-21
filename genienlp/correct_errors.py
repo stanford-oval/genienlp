@@ -1,6 +1,6 @@
 from typing import Iterable
 from .util import ConfidenceFeatures
-from .calibrate import TreeConfidenceEstimator, mean_drop_prob, neg_of, nodrop_prob, prob_first_mistake
+from .calibrate import TreeConfidenceEstimator, mean_drop_prob, neg_of, nodrop_prob, nodrop_prob_first_mistake, prob_first_mistake
 import numpy as np
 import pickle
 import math
@@ -145,8 +145,8 @@ def main(args):
     
     all_features = NumericalizedExamples.from_examples(all_examples, model.numericalizer)
     all_ems = []
-    detection_accuracy = 0
-    all_second_predictions = []
+    all_predictions = []
+    detection_accuracy = [0]*args.top_mistakes
         
     with torch.no_grad():
         for batch_idx in range(math.ceil(len(all_examples)/args.batch_size)):
@@ -154,10 +154,15 @@ def main(args):
             batch_answers = all_answers[batch_idx*args.batch_size : min((batch_idx+1)*args.batch_size, len(all_features))]
             batch_size = len(batch_answers)
             batch = NumericalizedExamples.collate_batches(batch_features, model.numericalizer, device=device)
-            position_estimator = PositionEstimator(name='prob_first_mistake', featurizers=[prob_first_mistake(0)], eval_metric=None, mc_dropout_num=0) # mc_dropout_num is not used
+            if args.mc_dropout_num > 0:
+                name, featurizers = 'prob_first_mistake', [prob_first_mistake(0)]
+            else:
+                name, featurizers = 'nodrop_prob_first_mistake', [nodrop_prob_first_mistake(0)]
+            position_estimator = PositionEstimator(name=name , featurizers=featurizers, eval_metric=None, mc_dropout_num=0) # mc_dropout_num is not used
             batch_ems = [[] for _ in range(batch_size)]
             output = generate_with_seq2seq_model(model, [batch], model.numericalizer, task, args, output_predictions_only=True, output_confidence_features=True, error=None)
             prediction = [p[0] for p in output.predictions]
+            batch_predictions = [[prediction[i]] for i in range(batch_size)]
             is_correct = [prediction[i]==batch_answers[i] for i in range(batch_size)]
             for i in range(batch_size):
                 batch_ems[i].append(is_correct[i])
@@ -168,7 +173,8 @@ def main(args):
             features = position_estimator.convert_to_features(confidences)
             features[features==0] = -np.inf # do not select pad tokens
             detected_error = np.argsort(-features, axis=1)[:, 0:args.top_mistakes] # take the max
-            detection_accuracy += sum([first_mistake[i]==detected_error[i][0] for i in range(batch_size)])
+            for idx in range(args.top_mistakes):
+                detection_accuracy[idx] += sum([first_mistake[i]==detected_error[i][idx] for i in range(batch_size)])
             print('detected_error = ', [i[0] for i in detected_error])
             for idx in range(args.top_mistakes):
                 de = [[detected_error[i][idx]+1] for i in range(batch_size)]
@@ -181,19 +187,23 @@ def main(args):
                     # print('is_correct = ', is_correct)
                     for i in range(batch_size):
                         batch_ems[i].append(is_correct[i])
-                    all_second_predictions.extend(prediction)
+                        batch_predictions[i].append(prediction[i])
             # print('-'*20)
             all_ems.extend(batch_ems)
+            all_predictions.extend(batch_predictions)
 
     np.set_printoptions(suppress=True)
     np.set_printoptions(threshold=1000000)
+    # print('all_predictions = ', all_predictions)
+    # print('all_features = ', all_features)
     
     all_ems = np.array(all_ems).astype(np.int)
+    detection_accuracy = np.array(detection_accuracy).astype(np.float)
     num_examples = all_ems.shape[0]
     print('all_ems = ', all_ems)
     with open(args.output_file, 'w') as output:
-        for idx, p in enumerate(all_second_predictions):
-            output.write(all_features[idx].example_id[0]+'\t'+p+'\n')
+        for idx, p in enumerate(all_predictions):
+            output.write(all_features[idx].example_id[0] + '\t' + '\t'.join(p) + '\n')
 
     # remove duplicate correct answers
     for i in range(all_ems.shape[0]):
@@ -207,5 +217,5 @@ def main(args):
     acc = np.sum(all_ems, axis=0) / num_examples
     print('parse accuracy = ', acc)
     print('top-k parse accuracy = ', np.cumsum(acc))
-    print('detection_accuracy = ', detection_accuracy/num_examples)
+    print('top-k detection accuracy = ', np.cumsum(detection_accuracy)/num_examples)
     
