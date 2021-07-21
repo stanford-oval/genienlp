@@ -791,7 +791,7 @@ class ReverseAlmond(BaseAlmondTask):
 class BaseAlmondDialogueNLUTask(BaseAlmondTask):
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         if not sentence:
-            return sentence, [], sentence
+            return sentence, []
 
         # remove the $dialogue at the start of the dialogue
         # this is safe because we know we're processing dialogues, so the answer
