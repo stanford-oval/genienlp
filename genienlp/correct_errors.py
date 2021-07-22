@@ -4,6 +4,7 @@ from .calibrate import TreeConfidenceEstimator, mean_drop_prob, neg_of, nodrop_p
 import numpy as np
 import pickle
 import math
+from tqdm import trange
 
 class PositionEstimator(TreeConfidenceEstimator):
     @staticmethod
@@ -116,6 +117,15 @@ def get_error_locations(model, batch: NumericalizedExamples, position_estimator,
     sorted_list_of_detected_error = np.argsort(-error_detection_features, axis=1)[:, :] # take the max
     return model_predictions, gold_first_mistakes, sorted_list_of_detected_error
 
+def remove_items_lower_than_threshold(array, thresholds):
+    copy_sorted_list_of_detected_error = sorted_list_of_detected_error
+    sorted_list_of_detected_error = []
+    for i in range(len(array)):
+        if len(array[i]) > thresholds[i]:
+            sorted_list_of_detected_error.append([a for a in second_sorted_list_of_detected_error[i] if a > copy_sorted_list_of_detected_error[i][mistake_idx]])
+        else:
+            sorted_list_of_detected_error.append([])
+
 def parse_argv(parser):
     parser.add_argument('--path', type=str, required=True, help='Folder to load the model from')
     parser.add_argument('--input_file', type=str, required=True, help='Input file to read from')
@@ -168,7 +178,7 @@ def main(args):
         name, featurizers = 'nodrop_prob_first_mistake', [nodrop_prob_first_mistake(0)]
     position_estimator = PositionEstimator(name=name , featurizers=featurizers, eval_metric=None, mc_dropout_num=0) # mc_dropout_num is not used
     with torch.no_grad():
-        for batch_idx in range(math.ceil(len(all_examples)/args.batch_size)):
+        for batch_idx in trange(math.ceil(len(all_examples)/args.batch_size)):
             batch_features = all_features[batch_idx*args.batch_size : min((batch_idx+1)*args.batch_size, len(all_features))]
             batch_answers = all_answers[batch_idx*args.batch_size : min((batch_idx+1)*args.batch_size, len(all_features))]
             batch_size = len(batch_answers)
@@ -179,13 +189,31 @@ def main(args):
             # print('initial parse = ', prediction)
             for idx in range(args.top_mistakes):
                 detection_accuracy[idx] += sum([gold_first_mistakes[i]==sorted_list_of_detected_error[i][idx] for i in range(batch_size)])
-            # print('sorted_list_of_detected_error = ', sorted_list_of_detected_error)
-            for mistake_idx in range(args.top_mistakes):
-                de = [[sorted_list_of_detected_error[i][mistake_idx]+1] for i in range(batch_size)]
+            # print('first sorted_list_of_detected_error = ', sorted_list_of_detected_error)
+            first_sorted_list_of_detected_error = sorted_list_of_detected_error
+            for m_idx in range(args.top_mistakes):
+                sorted_list_of_detected_error = first_sorted_list_of_detected_error # reset
+                mistake_idx = m_idx
                 for token_idx in range(1, args.top_tokens+1):
-                    for _ in range(args.num_iterations):
-                        model_predictions, gold_first_mistakes, sorted_list_of_detected_error = get_error_locations(model, batch, position_estimator, de, token_idx, args=args)
+                    de = [[] for _ in range(batch_size)]
+                    for iterations in range(args.num_iterations):
+                        if iterations > 0:
+                            mistake_idx = 0
+                        for i in range(batch_size):
+                            if len(sorted_list_of_detected_error[i]) > mistake_idx:
+                                de[i].append(sorted_list_of_detected_error[i][mistake_idx]+1)
+                        # print('de = ', de)
+                        model_predictions, gold_first_mistakes, second_sorted_list_of_detected_error = get_error_locations(model, batch, position_estimator, de, token_idx, args=args)
+                        copy_sorted_list_of_detected_error = sorted_list_of_detected_error
+                        sorted_list_of_detected_error = []
+                        for i in range(len(copy_sorted_list_of_detected_error)):
+                            # print('lower bound = ', copy_sorted_list_of_detected_error[i][mistake_idx])
+                            if len(copy_sorted_list_of_detected_error[i]) > mistake_idx:
+                                sorted_list_of_detected_error.append([a for a in second_sorted_list_of_detected_error[i] if a > copy_sorted_list_of_detected_error[i][mistake_idx]])
+                            else:
+                                sorted_list_of_detected_error.append([])
                         # print('reparse = ', model_predictions)
+                        # print('second sorted_list_of_detected_error = ', sorted_list_of_detected_error)
                         for i in range(batch_size):
                             all_batch_predictions[i].append(model_predictions[i])
             # print('-'*20)
@@ -198,7 +226,7 @@ def main(args):
 
     np.set_printoptions(suppress=True)
     np.set_printoptions(threshold=1000000)
-    print('all_predictions = ', all_predictions)
+    # print('all_predictions = ', all_predictions)
     # print('all_features = ', all_features)
     
     all_ems = np.array(all_ems).astype(np.int)
