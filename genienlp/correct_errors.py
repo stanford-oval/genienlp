@@ -103,6 +103,18 @@ from genienlp.tasks.registry import get_tasks
 from genienlp.data_utils.example import Example, NumericalizedExamples
 from .calibrate import prob_first_mistake, mean_drop_seq_prob, neg_of
 
+def get_error_locations(model, batch: NumericalizedExamples, position_estimator, decoding_error_locations, decoding_top_token, args):
+    output = generate_with_seq2seq_model(model, [batch], model.numericalizer, args.tasks, args,
+                                         output_predictions_only=True,
+                                         output_confidence_features=True,
+                                         error=decoding_error_locations,
+                                         top_token=decoding_top_token)
+    model_predictions = [p[0] for p in output.predictions]
+    gold_first_mistakes = [output.confidence_features[i][0].first_mistake for i in range(len(output.confidence_features))]
+    error_detection_features = position_estimator.convert_to_features(output.confidence_features)
+    error_detection_features[error_detection_features==0] = -np.inf # so that we do not select pad tokens
+    sorted_list_of_detected_error = np.argsort(-error_detection_features, axis=1)[:, :] # take the max
+    return model_predictions, gold_first_mistakes, sorted_list_of_detected_error
 
 def parse_argv(parser):
     parser.add_argument('--path', type=str, required=True, help='Folder to load the model from')
@@ -110,6 +122,8 @@ def parse_argv(parser):
     parser.add_argument('--output_file', type=str, required=True, help='Output file')
     parser.add_argument('--top_tokens', type=int, required=True, help='Number of tokens to consider')
     parser.add_argument('--top_mistakes', type=int, required=True, help='Number of mistakes to consider')
+    parser.add_argument('--num_iterations', type=int, default=1,
+                        help='Number of iterations to fix mistakes. Each iteration is applied on the output of the previous one.')
     parser.add_argument("--mc_dropout_num", type=int, default=0, help='Number of samples to use for Monte Carlo (MC) dropout. 0 disables MC dropout.')
     parser.add_argument('--batch_size', default=1, type=int, help='Batch size')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
@@ -132,14 +146,14 @@ def main(args):
     model.to(device)
     model.eval()
 
-    task = list(get_tasks(['almond_dialogue_nlu'], args).values())[0]
+    args.tasks = list(get_tasks(['almond_dialogue_nlu'], args).values())[0]
 
     all_examples = []
     all_answers = []
     with open(args.input_file) as file:
         for line in file:
             example_id, context, question, answer = tuple([a.strip() for a in line.split('\t')])
-            ex = Example.from_raw(str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=args.lower)
+            ex = Example.from_raw(str(example_id), context, question, answer, preprocess=args.tasks.preprocess_field, lower=args.lower)
             all_examples.append(ex)
             all_answers.append(answer)
     
@@ -148,53 +162,43 @@ def main(args):
     all_predictions = []
     detection_accuracy = [0]*args.top_mistakes
         
+    if args.mc_dropout_num > 0:
+        name, featurizers = 'prob_first_mistake', [prob_first_mistake(0)]
+    else:
+        name, featurizers = 'nodrop_prob_first_mistake', [nodrop_prob_first_mistake(0)]
+    position_estimator = PositionEstimator(name=name , featurizers=featurizers, eval_metric=None, mc_dropout_num=0) # mc_dropout_num is not used
     with torch.no_grad():
         for batch_idx in range(math.ceil(len(all_examples)/args.batch_size)):
             batch_features = all_features[batch_idx*args.batch_size : min((batch_idx+1)*args.batch_size, len(all_features))]
             batch_answers = all_answers[batch_idx*args.batch_size : min((batch_idx+1)*args.batch_size, len(all_features))]
             batch_size = len(batch_answers)
             batch = NumericalizedExamples.collate_batches(batch_features, model.numericalizer, device=device)
-            if args.mc_dropout_num > 0:
-                name, featurizers = 'prob_first_mistake', [prob_first_mistake(0)]
-            else:
-                name, featurizers = 'nodrop_prob_first_mistake', [nodrop_prob_first_mistake(0)]
-            position_estimator = PositionEstimator(name=name , featurizers=featurizers, eval_metric=None, mc_dropout_num=0) # mc_dropout_num is not used
-            batch_ems = [[] for _ in range(batch_size)]
-            output = generate_with_seq2seq_model(model, [batch], model.numericalizer, task, args, output_predictions_only=True, output_confidence_features=True, error=None)
-            prediction = [p[0] for p in output.predictions]
-            batch_predictions = [[prediction[i]] for i in range(batch_size)]
-            is_correct = [prediction[i]==batch_answers[i] for i in range(batch_size)]
-            for i in range(batch_size):
-                batch_ems[i].append(is_correct[i])
+            batch_previous_error_locations = [-1] * batch_size
+            model_predictions, gold_first_mistakes, sorted_list_of_detected_error = get_error_locations(model, batch, position_estimator, None, 1, args=args)
+            all_batch_predictions = [[model_predictions[i]] for i in range(batch_size)]
             # print('initial parse = ', prediction)
-            # print('is_correct = ', is_correct)
-            first_mistake = [output.confidence_features[i][0].first_mistake for i in range(batch_size)]
-            confidences = output.confidence_features
-            features = position_estimator.convert_to_features(confidences)
-            features[features==0] = -np.inf # do not select pad tokens
-            detected_error = np.argsort(-features, axis=1)[:, 0:args.top_mistakes] # take the max
             for idx in range(args.top_mistakes):
-                detection_accuracy[idx] += sum([first_mistake[i]==detected_error[i][idx] for i in range(batch_size)])
-            print('detected_error = ', [i[0] for i in detected_error])
-            for idx in range(args.top_mistakes):
-                de = [[detected_error[i][idx]+1] for i in range(batch_size)]
-                for token_id in range(1, args.top_tokens+1):
-                    output = generate_with_seq2seq_model(model, [batch], model.numericalizer, task, args, output_predictions_only=True, output_confidence_features=True,
-                                                error=de, top_token=token_id)
-                    prediction =  [p[0] for p in output.predictions]
-                    # print('reparse = ', prediction)
-                    is_correct = [prediction[i]==batch_answers[i] for i in range(batch_size)]
-                    # print('is_correct = ', is_correct)
-                    for i in range(batch_size):
-                        batch_ems[i].append(is_correct[i])
-                        batch_predictions[i].append(prediction[i])
+                detection_accuracy[idx] += sum([gold_first_mistakes[i]==sorted_list_of_detected_error[i][idx] for i in range(batch_size)])
+            # print('sorted_list_of_detected_error = ', sorted_list_of_detected_error)
+            for mistake_idx in range(args.top_mistakes):
+                de = [[sorted_list_of_detected_error[i][mistake_idx]+1] for i in range(batch_size)]
+                for token_idx in range(1, args.top_tokens+1):
+                    for _ in range(args.num_iterations):
+                        model_predictions, gold_first_mistakes, sorted_list_of_detected_error = get_error_locations(model, batch, position_estimator, de, token_idx, args=args)
+                        # print('reparse = ', model_predictions)
+                        for i in range(batch_size):
+                            all_batch_predictions[i].append(model_predictions[i])
             # print('-'*20)
+            batch_ems = [[] for _ in range(batch_size)]
+            for i in range(batch_size):
+                for prediction in all_batch_predictions[i]:
+                    batch_ems[i].append(batch_answers[i]==prediction)
             all_ems.extend(batch_ems)
-            all_predictions.extend(batch_predictions)
+            all_predictions.extend(all_batch_predictions)
 
     np.set_printoptions(suppress=True)
     np.set_printoptions(threshold=1000000)
-    # print('all_predictions = ', all_predictions)
+    print('all_predictions = ', all_predictions)
     # print('all_features = ', all_features)
     
     all_ems = np.array(all_ems).astype(np.int)
