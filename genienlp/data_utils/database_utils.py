@@ -251,7 +251,7 @@ def normalize_text(text):
 
 
 def has_overlap(start, end, used_aliases):
-    for i, alias in enumerate(used_aliases):
+    for alias in used_aliases:
         alias_start, alias_end = alias[1], alias[2]
         if start < alias_end and end > alias_start:
             return True

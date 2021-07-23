@@ -239,7 +239,6 @@ def parse_argv(parser):
     )
 
 
-
 def set_default_values(args):
     """
     sets default values that depend on other input arguments
@@ -445,7 +444,7 @@ def run(args, device):
 
             # write into file
             # TODO change to jsonl format
-            with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
+            with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                 for i in range(len(generation_output.example_ids)):
                     line = (
                         generation_output.example_ids[i] + '\t' + '\t'.join(generation_output.predictions[i])
