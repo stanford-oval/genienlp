@@ -580,9 +580,11 @@ class Translate(NaturalSeq2Seq):
         assert example_id
         if field_name != 'answer':
             if field_name + '-' + example_id in self.all_ids:
-                raise ValueError(
-                    f'example id: {example_id} is repeated in the dataset. If using alignment, ids have to be unique'
+                logger.warning(
+                    f'example id: {example_id} is repeated in the dataset. If using alignment, ids between all data splits have to be unique'
                 )
+                example_id += '+'
+
             self.all_ids.add(field_name + '-' + example_id)
 
             src_quotation_symbol = '"'

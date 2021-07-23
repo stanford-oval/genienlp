@@ -48,10 +48,10 @@ def count_substring(words, substring_words):
     count = 0
     beg_indices = []
     for i in range(len(words)):
-        if words[i] == substring_words[0]:
+        if words[i].lower() == substring_words[0].lower():
             k = 0
             while k < len(substring_words) and i + k < len(words):
-                if words[i + k] == substring_words[k]:
+                if words[i + k].lower() == substring_words[k].lower():
                     k += 1
                 else:
                     break
@@ -72,6 +72,19 @@ def compute_attention(sample_layer_attention, att_pooling, dim=0):
     return sample_layer_attention_pooled
 
 
+def return_token_word_mapping(tokens, tokenizer):
+    is_not_piece = [int(not tokenizer.is_piece_fn(token)) for token in tokens]
+    token2word_mapping = list(np.cumsum(is_not_piece) - 1)
+    word2token_span_mapping = OrderedDict()
+    for i, j in enumerate(token2word_mapping):
+        if j not in word2token_span_mapping:
+            word2token_span_mapping[j] = [i, i]
+        else:
+            word2token_span_mapping[j][1] = i
+
+    return token2word_mapping, word2token_span_mapping
+
+
 def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, src_spans, remove_output_quotation):
     src_quotation_symbol = '"'
 
@@ -80,103 +93,82 @@ def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_
     if isinstance(tokenizer, M2M100Tokenizer):
         src_tokens = [token if token != tokenizer.unk_token else SPIECE_UNDERLINE + token for token in src_tokens]
 
-    # remove padding
-    if len(src_spans) % 2 != 0:
-        raise ValueError(f'Corrupted span in src string: [{tokenizer.convert_tokens_to_string(src_tokens)}]')
-
-    tgt_is_not_piece = [int(not tokenizer.is_piece_fn(token)) for token in tgt_tokens]
-    tgt_piece2word_mapping = list(np.cumsum(tgt_is_not_piece) - 1)
-
-    src_is_not_piece = [int(not tokenizer.is_piece_fn(token)) for token in src_tokens]
-    src_piece2word_mapping = list(np.cumsum(src_is_not_piece) - 1)
-
-    src_word2piece_span_mapping = OrderedDict()
-    for i, j in enumerate(src_piece2word_mapping):
-        if j not in src_word2piece_span_mapping:
-            src_word2piece_span_mapping[j] = [i, i]
-        else:
-            src_word2piece_span_mapping[j][1] = i
-
-    tgt_word2piece_span_mapping = OrderedDict()
-    for i, j in enumerate(tgt_piece2word_mapping):
-        if j not in tgt_word2piece_span_mapping:
-            tgt_word2piece_span_mapping[j] = [i, i]
-        else:
-            tgt_word2piece_span_mapping[j][1] = i
-
     tokenizer._decode_use_source_tokenizer = True
-    src_strings = tokenizer.convert_tokens_to_string(src_tokens)
+    src_string = tokenizer.convert_tokens_to_string(src_tokens)
     tokenizer._decode_use_source_tokenizer = False
-    tgt_strings = tokenizer.convert_tokens_to_string(tgt_tokens)
+    tgt_string = tokenizer.convert_tokens_to_string(tgt_tokens)
 
-    src_strings_words = src_strings.split(' ')
-    tgt_strings_words = tgt_strings.split(' ')
+    src_words = src_string.split(' ')
+    tgt_words = tgt_string.split(' ')
 
+    if len(src_spans) % 2 != 0:
+        raise ValueError(f'Corrupted span in src string: [{src_string}]')
     src_spans = [(src_spans[i], src_spans[i + 1]) for i in range(0, len(src_spans), 2)]
-
-    src_matches = [tuple(src_strings_words[beg : end + 1]) for beg, end in src_spans]
-
+    src_matches = [tuple(src_words[beg : end + 1]) for beg, end in src_spans]
     src_matches_counter = OrderedDict()
     for match, spans in zip(src_matches, src_spans):
         src_matches_counter.setdefault(match, []).append(spans)
 
-    piece_tgt_spans = []
+    src_token2word_mapping, src_word2token_span_mapping = return_token_word_mapping(src_tokens, tokenizer)
+    tgt_token2word_mapping, tgt_word2token_span_mapping = return_token_word_mapping(tgt_tokens, tokenizer)
+
+    src_token_spans = [(src_word2token_span_mapping[beg][0], src_word2token_span_mapping[end][1]) for beg, end in src_spans]
+    src2tgt_token_mapping = {}
 
     # if translation preserved input entities we won't align them anymore
-    src_spans = []
-    src_matches = []
-    for match, spans in src_matches_counter.items():
-        # if translation turned digit into words replace it in translation directly
-        if len(match) == 1 and match[0].isdigit() and tokenizer.tgt_lang in CONVERTER_CLASSES:
-            cardinal = num2words(match[0], lang=tokenizer.tgt_lang, to='cardinal')
-            count, beg_indices = count_substring(tgt_strings_words, [cardinal])
+    for cur_match, spans in src_matches_counter.items():
+        # expanded_matches keep current match and any possible known transformation of current match
+        expanded_matches = [cur_match]
+
+        # translation turned digit into words
+        if (
+            len(cur_match) == 1
+            and cur_match[0].isdigit()
+            and (tokenizer.tgt_lang in CONVERTER_CLASSES or tokenizer.tgt_lang[:2] in CONVERTER_CLASSES)
+        ):
+            expanded_matches.append([num2words(cur_match[0], lang=tokenizer.tgt_lang, to='cardinal')])
+
+        for match in expanded_matches:
+            count, beg_indices = count_substring(tgt_words, match)
+            # we found matching spans in target so just update tgt_token_spans to make sure we don't overwrite them later
             if count == len(spans):
-                for id_ in beg_indices:
-                    tgt_strings_words[id_] = match[0]
-                continue
+                for span, id_ in zip(spans, beg_indices):
+                    beg_word, end_word = id_, id_ + len(match) - 1
+                    beg_tgt_token, end_tgt_token = (
+                        tgt_word2token_span_mapping[beg_word][0],
+                        tgt_word2token_span_mapping[end_word][1],
+                    )
+                    beg_src_token, end_sc_token = (
+                        src_word2token_span_mapping[span[0]][0],
+                        src_word2token_span_mapping[span[1]][1],
+                    )
+                    src2tgt_token_mapping[(beg_src_token, end_sc_token)] = (beg_tgt_token, end_tgt_token)
+                    break
 
-        count, beg_indices = count_substring(tgt_strings_words, match)
-        # we found matching spans in target so just update piece_tgt_spans to make sure we don't overwrite them later
-        if count == len(spans):
-            for id_ in beg_indices:
-                beg_word, end_word = id_, id_ + len(match) - 1
-                beg_piece, end_piece = tgt_word2piece_span_mapping[beg_word][0], tgt_word2piece_span_mapping[end_word][1]
-                piece_tgt_spans.append((beg_piece, end_piece))
-
-        # we could not find matching spans in target so try to align using cross-attention
-        else:
-            for span in spans:
-                src_matches.append(match)
-                src_spans.append(span)
-
-    piece_src_spans = [(src_word2piece_span_mapping[beg][0], src_word2piece_span_mapping[end][1]) for beg, end in src_spans]
-
-    src2tgt_mapping = OrderedDict()
-    for src_idx, (beg, end) in enumerate(piece_src_spans):
-        s1 = torch.argmax(sample_layer_attention_pooled[:, beg]).item()
-        s2 = torch.argmax(sample_layer_attention_pooled[:, end]).item()
-
-        # clamp values to max tgt_tokens length
-        s1 = min(s1, len(tgt_tokens) - 1)
-        s2 = min(s2, len(tgt_tokens) - 1)
+    for src_beg, src_end in src_token_spans:
+        if (src_beg, src_end) in src2tgt_token_mapping:
+            continue
+        tgt_beg = torch.argmax(sample_layer_attention_pooled[:, src_beg]).item()
+        tgt_end = torch.argmax(sample_layer_attention_pooled[:, src_end]).item()
 
         # switch tgt begin and end indices
-        if s1 > s2:
-            s1, s2 = s2, s1
+        if tgt_beg > tgt_end:
+            tgt_beg, tgt_end = tgt_end, tgt_beg
 
         # whether to push begin or end of a span
         direction = 1
         topK = 1
 
         # try to find non overlapping spans to avoid overwriting old ones
-        while find_overlap(s1, s2, piece_tgt_spans) != -1:
-            overlapping_span = piece_tgt_spans[find_overlap(s1, s2, piece_tgt_spans)]
+        tgt_token_spans = list(src2tgt_token_mapping.values())
+        while find_overlap(tgt_beg, tgt_end, tgt_token_spans) != -1:
+            overlapping_span = tgt_token_spans[find_overlap(tgt_beg, tgt_end, tgt_token_spans)]
             # tail overlapping
-            if s1 < overlapping_span[0] and s2 < overlapping_span[1]:
-                s2 = overlapping_span[0] - 1
+            if tgt_beg < overlapping_span[0] and tgt_end < overlapping_span[1]:
+                tgt_end = overlapping_span[0] - 1
             # head overlapping
-            elif s1 >= overlapping_span[0] and s2 > overlapping_span[1]:
-                s1 = overlapping_span[1] + 1
+            elif tgt_beg >= overlapping_span[0] and tgt_end > overlapping_span[1]:
+                tgt_beg = overlapping_span[1] + 1
             # full span overlapping
             else:
                 # find next best match
@@ -186,47 +178,48 @@ def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_
                     direction *= -1
                 if topK >= sample_layer_attention_pooled.size(0):
                     logger.error(
-                        f'Failed to map a span to target using alignment for src_string: {src_strings} and tgt_string: {tgt_strings}'
+                        f'Failed to map a span to target using alignment for src_string: [{src_string}] and tgt_string: [{tgt_string}]'
                     )
                     break
                 if direction == 1:
-                    s1 = torch.topk(sample_layer_attention_pooled[:, beg], topK).indices[-1].item()
+                    tgt_beg = torch.topk(sample_layer_attention_pooled[:, src_beg], topK).indices[-1].item()
                 else:
-                    s2 = torch.topk(sample_layer_attention_pooled[:, end], topK).indices[-1].item()
+                    tgt_end = torch.topk(sample_layer_attention_pooled[:, src_end], topK).indices[-1].item()
 
             # switch tgt begin and end indices
-            if s1 > s2:
-                s1, s2 = s2, s1
+            if tgt_beg > tgt_end:
+                tgt_beg, tgt_end = tgt_end, tgt_beg
 
-        piece_tgt_spans.append((s1, s2))
+        src2tgt_token_mapping[(src_beg, src_end)] = (tgt_beg, tgt_end)
 
-        src2tgt_mapping[(beg, end)] = (s1, s2)
+    # create word mapping from token mapping between source and target sentences
+    src2tgt_word_mapping = OrderedDict()
+    for key, value in src2tgt_token_mapping.items():
+        src_beg, src_end = src_token2word_mapping[key[0]], src_token2word_mapping[key[1]]
+        tgt_beg, tgt_end = tgt_token2word_mapping[value[0]], tgt_token2word_mapping[value[1]]
+        src2tgt_word_mapping[(src_beg, src_end)] = (tgt_beg, tgt_end)
 
-    # update src2tgt_mapping to map to word indices in response
-    for key, value in src2tgt_mapping.items():
-        s1, s2 = value
-        src2tgt_mapping[key] = (
-            max(0, tgt_piece2word_mapping[s1]),
-            min(tgt_piece2word_mapping[s2], len(tgt_tokens)),
-        )
+    # sort src2tgt_word_mapping based on start of target spans
+    src2tgt_word_mapping = dict(sorted(src2tgt_word_mapping.items(), key=lambda kv: kv[1][0]))
 
-    # move through words
-    tokens = []
+    output_tokens = []
     curr = 0
-    for i, (key, value) in enumerate(src2tgt_mapping.items()):
-        start, end = value
-        if start > curr:
-            tokens.extend(tgt_strings_words[curr:start])
-        replace_match = ' '.join(src_matches[i])
-        if remove_output_quotation:
-            tokens.append(replace_match)
-        else:
-            tokens.append(src_quotation_symbol + ' ' + replace_match + ' ' + src_quotation_symbol)
+    for src_span, tgt_span in src2tgt_word_mapping.items():
+        src_start, src_end = src_span
+        tgt_start, tgt_end = tgt_span
+        if tgt_start > curr:
+            output_tokens.extend(tgt_words[curr:tgt_start])
         # +1 since it's inclusive
-        curr = end + 1
-    if curr < len(tgt_strings_words):
-        tokens.extend(tgt_strings_words[curr:])
+        replacement = ' '.join(src_words[src_start : src_end + 1])
+        if remove_output_quotation:
+            output_tokens.append(replacement)
+        else:
+            output_tokens.append(src_quotation_symbol + ' ' + replacement + ' ' + src_quotation_symbol)
+        # +1 since it's inclusive
+        curr = tgt_end + 1
+    if curr < len(tgt_words):
+        output_tokens.extend(tgt_words[curr:])
 
-    text = ' '.join(tokens)
+    output_string = ' '.join(output_tokens)
 
-    return text
+    return output_string
