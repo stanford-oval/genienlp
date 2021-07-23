@@ -111,7 +111,7 @@ def parse_argv(parser):
     parser.add_argument(
         '--train_batch_tokens',
         nargs='+',
-        default=[400],
+        default=[2000],
         type=int,
         help='Number of tokens to use for dynamic batching, corresponding to tasks in train tasks.'
         'If sentence_batching is used, this will be interpreted as number of examples.',
@@ -151,7 +151,7 @@ def parse_argv(parser):
     parser.add_argument(
         '--val_batch_size',
         nargs='+',
-        default=[3000],
+        default=[4000],
         type=int,
         help='Number of tokens in each batch for validation, corresponding to tasks in --val_tasks',
     )
@@ -218,7 +218,7 @@ def parse_argv(parser):
         '--model',
         type=str,
         choices=['TransformerLSTM', 'TransformerSeq2Seq', 'TransformerForTokenClassification'],
-        default='TransformerLSTM',
+        default='TransformerSeq2Seq',
         help='which model to import',
     )
     parser.add_argument(
@@ -318,6 +318,7 @@ def parse_argv(parser):
     )
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
     parser.add_argument(
+        '-gas',
         '--gradient_accumulation_steps',
         default=1,
         type=int,
