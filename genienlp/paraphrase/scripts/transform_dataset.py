@@ -144,7 +144,7 @@ def main(args):
             new_queries = []  # list of lists
             query_file = open(args.query_file, 'r')
             for line in query_file:
-                queries = line.split('\t')[1:]  # 0 is example id
+                queries = line.split('\t')[1:-1]  # 0 is example id, -1 is gold answer
                 new_queries.append([lower_case(tokenize(q.strip())) for q in queries])
         if args.transformation in ['remove_wrong_thingtalk', 'get_wrong_thingtalk']:
             gold_thingtalks = []

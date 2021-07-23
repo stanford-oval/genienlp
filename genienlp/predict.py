@@ -447,7 +447,11 @@ def run(args, device):
             with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                 for i in range(len(generation_output.example_ids)):
                     line = (
-                        generation_output.example_ids[i] + '\t' + '\t'.join(generation_output.predictions[i])
+                        generation_output.example_ids[i]
+                        + '\t'
+                        + '\t'.join(generation_output.predictions[i])
+                        + '\t'
+                        + generation_output.answers[i]
                     )  # all outputs separated by '\t'
                     if args.calibrator_paths is not None:
                         for score in generation_output.confidence_scores:
