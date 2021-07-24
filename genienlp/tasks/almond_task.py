@@ -47,7 +47,6 @@ from ..data_utils.almond_utils import (
     tokenize_cjk_chars,
 )
 from ..data_utils.database import Database
-from ..data_utils.database_utils import has_overlap
 from ..data_utils.example import Example, Feature, get_pad_feature
 from ..data_utils.remote_database import RemoteElasticDatabase
 from ..model_utils.translation import align_and_replace, compute_attention
