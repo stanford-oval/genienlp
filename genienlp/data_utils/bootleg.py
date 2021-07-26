@@ -373,24 +373,7 @@ class Bootleg(object):
         all_tokens_type_probs = all_tokens_type_probs[: self.args.subsample]
         all_tokens_qids = all_tokens_qids[: self.args.subsample]
 
-        assert len(examples) == len(all_token_type_ids) == len(all_tokens_type_probs) == len(all_tokens_qids)
-        for n, (ex, tokens_type_ids, tokens_type_probs, tokens_qids) in enumerate(
-            zip(examples, all_token_type_ids, all_tokens_type_probs, all_tokens_qids)
-        ):
-            if utterance_field == 'question':
-                for i in range(len(tokens_type_ids)):
-                    examples[n].question_feature[i].type_id = tokens_type_ids[i]
-                    examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].question_feature[i].qid = tokens_qids[i]
-                examples[n].question = self.add_type_tokens(ex.question, ex.question_feature)
-
-            else:
-                # context is the utterance field
-                for i in range(len(tokens_type_ids)):
-                    examples[n].context_feature[i].type_id = tokens_type_ids[i]
-                    examples[n].context_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].context_feature[i].qid = tokens_qids[i]
-                examples[n].context = self.add_type_tokens(ex.context, ex.context_feature)
+        self.replace_features_inplace(examples, all_token_type_ids, all_tokens_type_probs, all_tokens_qids, utterance_field)
 
     def collect_features(self, file_name):
         all_tokens_type_ids = []

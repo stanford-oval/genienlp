@@ -53,9 +53,9 @@ setuptools.setup(
         'bert-score~=0.3',
         'requests~=2.22',
         'num2words>=0.5.10',
-        'datasets==1.9.0',
+        'datasets==1.10.2',
         'seqeval==1.2.2',
-        'transformers==4.8.2',
+        'transformers==4.9.1',
         'sentencepiece==0.1.*',
         'sentence-transformers==2.0.0',
         'mosestokenizer~=1.1',
@@ -67,7 +67,7 @@ setuptools.setup(
         # for NED
         'bootleg @ git+https://github.com/Mehrad0711/bootleg@b6c207259a83c21c77aeaf8088ee85f24ec7e708',
         'marisa_trie_m==0.7.6',
-        'elasticsearch==7.13.3',
+        'elasticsearch==7.13.4',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',
