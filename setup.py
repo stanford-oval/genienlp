@@ -52,7 +52,7 @@ setuptools.setup(
         'sacrebleu~=1.0',
         'bert-score~=0.3',
         'requests~=2.22',
-        'datasets==1.9.0',
+        'datasets==1.10.2',
         'seqeval==1.2.2',
         'transformers==4.8.2',
         'sentencepiece==0.1.*',
