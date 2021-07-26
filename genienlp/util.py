@@ -817,9 +817,7 @@ def load_config_json(args):
             'database_dir',
         ]
         # these are true/ false arguments
-        overwrite_actions = [
-            'do_alignment',
-        ]
+        overwrite_actions = ['do_alignment', 'align_preserve_input_quotation', 'align_remove_output_quotation']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
@@ -834,6 +832,7 @@ def load_config_json(args):
             elif r in (
                 'do_ned',
                 'do_alignment',
+                'align_preserve_input_quotation' 'align_remove_output_quotation',
                 'use_encoder_loss',
                 'almond_has_multiple_programs',
                 'almond_lang_as_question',

@@ -99,8 +99,6 @@ def prepare_data(args, logger):
         'subsample': args.subsample,
         'skip_cache': args.skip_cache,
         'cache_input_data': args.cache_input_data,
-        'sentence_batching': args.sentence_batching,
-        'almond_lang_as_question': args.almond_lang_as_question,
         'num_workers': args.num_workers,
     }
 
@@ -118,10 +116,6 @@ def prepare_data(args, logger):
             logger.info(f'Adding {task.name} to training datasets')
             t0 = time.time()
             splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
-
-            # reset all_ids before iterating over validation data
-            if hasattr(task, 'all_ids'):
-                task.all_ids = set()
 
             t1 = time.time()
             logger.info('Data loading took {:.2f} seconds'.format(t1 - t0))

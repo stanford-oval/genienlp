@@ -11,7 +11,7 @@ for model in "Helsinki-NLP/opus-mt-en-de" "sshleifer/tiny-mbart" ; do
 
     if [[ $model == Helsinki-NLP* ]] ; then
       base_model="marian"
-      expected_result='{"casedbleu": 90.68606917875469}'
+      expected_result='{"casedbleu": 95.12283373900253}'
     elif [[ $model == *mbart* ]] ; then
       base_model="mbart"
       expected_result='{"casedbleu": 4.200510937048206}'

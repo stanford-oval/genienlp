@@ -29,6 +29,7 @@
 
 import logging
 import os
+import re
 from collections import defaultdict
 
 import marisa_trie
@@ -528,19 +529,35 @@ class Paraphrase(NaturalSeq2Seq):
         return Example.from_raw(example_id, context, question, answer, preprocess=self.preprocess_field, lower=False)
 
 
-def split_text_into_sentences(text, lang):
-    import re
+def inside_spans(start, spans):
+    for span in spans:
+        if span[0] <= start < span[1]:
+            return True
+    return False
 
-    if lang in ['zh', 'ja', 'ko']:
-        sentences = list(re.findall(u'([^!?。]+[!?。]*)\s?', text, flags=re.U))
-    elif lang in ['en']:
-        sentences = list(filter(None, re.sub('(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.\!\?])\s|(?:。)', '\n', text).split('\n')))
+
+def return_sentences(text, regex_pattern, src_char_spans, lang):
+    sentences = []
+    cur = 0
+    for m in re.finditer(regex_pattern, text, flags=re.U):
+        if src_char_spans and not inside_spans(m.start(0), src_char_spans):
+            sentences.append(text[cur : m.start(0) + (1 if lang in ['zh', 'ja', 'ko'] else 0)])
+            cur = m.end(0)
+    if cur != len(text):
+        sentences.append(text[cur:])
+    return sentences
+
+
+def split_text_into_sentences(text, lang, src_char_spans):
+    if lang in ['en']:
+        sentences = return_sentences(text, '(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.!?])\s', src_char_spans, lang)
+    elif lang in ['zh', 'ja', 'ko']:
+        sentences = return_sentences(text, u'([!?。])\s?', src_char_spans, lang)
     else:
         import nltk
 
-        nltk.tokenize.PunktSentenceTokenizer()
         nltk.download('punkt', quiet=True)
-        sentences = nltk.sent_tokenize(text)
+        sentences = nltk.sent_tokenize(text, language=ISO_to_LANG[lang])
 
     return sentences
 
@@ -562,9 +579,11 @@ class Translate(NaturalSeq2Seq):
         assert example_id
         if field_name != 'answer':
             if field_name + '-' + example_id in self.all_ids:
-                raise ValueError(
-                    f'example id: {example_id} is repeated in the dataset. If using alignment, ids have to be unique'
+                logger.warning(
+                    f'example id: {example_id} is repeated in the dataset. If using alignment, ids between all data splits have to be unique'
                 )
+                example_id += '+'
+
             self.all_ids.add(field_name + '-' + example_id)
 
             src_quotation_symbol = '"'
@@ -574,12 +593,19 @@ class Translate(NaturalSeq2Seq):
             if len(src_spans_ind) % 2 != 0:
                 raise ValueError(f'Corrupted span in sentence: [{sentence}]')
 
-            src_tokens = [token for token in src_tokens if token != src_quotation_symbol]
-            sentence = " ".join(src_tokens)
+            if self.args.align_preserve_input_quotation:
+                src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
+            else:
+                src_tokens = [token for token in src_tokens if token != src_quotation_symbol]
+                src_spans = [
+                    (src_spans_ind[i] + 1 - (i + 1), src_spans_ind[i + 1] - 1 - (i + 1))
+                    for i in range(0, len(src_spans_ind), 2)
+                ]
 
-            src_spans = [
-                (src_spans_ind[i] + 1 - (i + 1), src_spans_ind[i + 1] - 1 - (i + 1)) for i in range(0, len(src_spans_ind), 2)
-            ]
+            # remove illegal src_spans (caused by inputs such as " ")
+            src_spans = [span for span in src_spans if span[0] <= span[1]]
+
+            sentence = " ".join(src_tokens)
             src_spans_flatten = [val for tup in src_spans for val in tup]
 
             # append question spans to context spans
@@ -617,7 +643,6 @@ class Translate(NaturalSeq2Seq):
 
             src_tokens = all_src_tokens[i // num_outputs]
             example_id = batch_example_ids[i // num_outputs]
-            src_spans = self.input_spans[example_id]
 
             # shift target tokens left to match the attention positions (since eos_token is prepended not generated)
             if tgt_tokens[0] in tokenizer.all_special_tokens:
@@ -662,7 +687,10 @@ class Translate(NaturalSeq2Seq):
                 plt.show()
 
             if self.args.do_alignment:
-                text = align_and_replace(src_tokens, tgt_tokens, tokenizer, cross_att, src_spans)
+                src_spans = self.input_spans[example_id]
+                text = align_and_replace(
+                    src_tokens, tgt_tokens, tokenizer, cross_att, src_spans, self.args.align_remove_output_quotation
+                )
             else:
                 text = tokenizer.convert_tokens_to_string(tgt_tokens)
 
@@ -677,43 +705,46 @@ class Translate(NaturalSeq2Seq):
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # answer has to be provided by default unless doing prediction
-        no_answer = kwargs.get('translate_no_answer', False)
-        split_sentence = kwargs.get('translate_example_split', False)
+        no_answer = getattr(self.args, 'translate_no_answer', False)
+        split_sentence = getattr(self.args, 'translate_example_split', False)
         src_lang = kwargs.get('src_lang', 'en')
-        example_id = 'id-null'
-        if not no_answer:
-            if len(parts) == 2:
-                sentence, answer = parts
-            elif len(parts) == 3:
-                example_id, sentence, answer = parts
-            elif len(parts) == 4:
-                example_id, sentence, answer, thingtalk = parts
-            elif len(parts) == 5:
-                example_id, _, sentence, answer, thingtalk = parts  # ignore dialogue context
-            else:
-                raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
-        else:
-            if len(parts) == 1:
-                sentence = parts
-            elif len(parts) == 2:
-                example_id, sentence = parts
-            elif len(parts) == 3:
-                example_id, sentence, thingtalk = parts
-            elif len(parts) == 4:
-                example_id, _, sentence, thingtalk = parts  # ignore dialogue context
-            else:
-                raise ValueError(f'Input file contains line with {len(parts)} parts: {str(parts)}')
 
+        example_id = 'id-null'
         question = 'translate from input to output'
-        context = sentence
+
+        if no_answer:
+            if len(parts) == 1:
+                context = parts
+            elif len(parts) == 2:
+                example_id, context = parts
+            elif len(parts) == 3:
+                example_id, context, question = parts
+            elif len(parts) == 4:
+                raise ValueError(f'Input file contains a line with {len(parts)} parts: {str(parts)}')
+        else:
+            if len(parts) == 2:
+                context, answer = parts
+            elif len(parts) == 3:
+                example_id, context, answer = parts
+            elif len(parts) == 4:
+                example_id, context, question, answer = parts
+            else:
+                raise ValueError(f'Input file contains a line with {len(parts)} parts: {str(parts)}')
 
         # no answer is provided
         if no_answer:
             answer = '.'
 
         contexts = []
+        src_char_spans = None
         if split_sentence:
-            contexts = split_text_into_sentences(context, src_lang)
+            if self.args.do_alignment:
+                src_quotation_symbol = '"'
+                src_char_spans_ind = [index for index, char in enumerate(context) if char == src_quotation_symbol]
+                src_char_spans = [
+                    (src_char_spans_ind[i], src_char_spans_ind[i + 1]) for i in range(0, len(src_char_spans_ind), 2)
+                ]
+            contexts = split_text_into_sentences(context, src_lang, src_char_spans)
 
         if len(contexts) > 1:
             examples = []
@@ -971,7 +1002,7 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
         used_fields = [field for field in all_datasets[0]._fields if getattr(all_datasets[0], field) is not None]
 
         assert len(all_datasets) >= 1
-        if kwargs.get('sentence_batching'):
+        if getattr(self.args, 'sentence_batching', False):
             for field in used_fields:
                 lengths = list(map(lambda dataset: len(getattr(dataset, field)), all_datasets))
                 assert len(set(lengths)) == 1, 'When using sentence batching your datasets should have the same size.'
@@ -988,9 +1019,9 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
             sort_key_fn = input_then_output_len
             batch_size_fn = all_tokens_fn
 
-        groups = len(all_datasets) if kwargs.get('sentence_batching') else None
+        groups = len(all_datasets) if getattr(self.args, 'sentence_batching', False) else None
 
-        if kwargs.get('separate_eval') and (all_datasets[0].eval or all_datasets[0].test):
+        if getattr(self.args, 'separate_eval', False) and (all_datasets[0].eval or all_datasets[0].test):
             return all_datasets, all_paths
         # TODO fix handling paths for multilingual
         else:
@@ -1004,7 +1035,6 @@ class BaseAlmondMultiLingualTask(BaseAlmondTask):
 class AlmondMultiLingual(BaseAlmondMultiLingualTask):
     def __init__(self, name, args):
         super().__init__(name, args)
-        self.lang_as_question = args.almond_lang_as_question
         self._metrics = ['em', 'sm', 'bleu']
 
     def _is_program_field(self, field_name):
@@ -1020,7 +1050,7 @@ class AlmondMultiLingual(BaseAlmondMultiLingualTask):
         else:
             example_id, sentence, target_code = parts
         language = ISO_to_LANG.get(dir_name, 'English').lower()
-        if self.lang_as_question:
+        if self.args.almond_lang_as_question:
             question = 'translate from {} to thingtalk'.format(language)
         else:
             question = 'translate from english to thingtalk'

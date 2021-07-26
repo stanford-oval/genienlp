@@ -227,6 +227,16 @@ def parse_argv(parser):
         action='store_true',
         help='whether to replace tokens between quotation marks after translation with source values',
     )
+    parser.add_argument(
+        '--align_preserve_input_quotation',
+        action='store_true',
+        help='preserve quotation marks in the input. Useful if using alignment for semantic parsing or NLG',
+    )
+    parser.add_argument(
+        '--align_remove_output_quotation',
+        action='store_true',
+        help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
+    )
 
 
 def set_default_values(args):
@@ -282,11 +292,7 @@ def prepare_data(args, device, src_lang):
                 'subsample': args.subsample,
                 'cached_path': os.path.join(args.cache, task.name),
                 'all_dirs': task_languages,
-                'almond_lang_as_question': args.almond_lang_as_question,
                 'num_workers': args.num_workers,
-                'separate_eval': args.separate_eval,
-                'translate_no_answer': args.translate_no_answer,
-                'translate_example_split': args.translate_example_split,
                 'src_lang': src_lang,
                 'ner_domains': args.ner_domains,
                 'hf_test_overfit': args.hf_test_overfit,
@@ -438,10 +444,14 @@ def run(args, device):
 
             # write into file
             # TODO change to jsonl format
-            with open(prediction_file_name, 'w' + ('' if args.overwrite else 'x')) as prediction_file:
+            with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                 for i in range(len(generation_output.example_ids)):
                     line = (
-                        generation_output.example_ids[i] + '\t' + '\t'.join(generation_output.predictions[i])
+                        generation_output.example_ids[i]
+                        + '\t'
+                        + '\t'.join(generation_output.predictions[i])
+                        + '\t'
+                        + generation_output.answers[i]
                     )  # all outputs separated by '\t'
                     if args.calibrator_paths is not None:
                         for score in generation_output.confidence_scores:
@@ -505,6 +515,8 @@ def main(args):
     if args.override_valid_metrics:
         assert len(args.override_valid_metrics) == len(args.tasks)
         for task, metrics in zip(args.tasks, args.override_valid_metrics):
+            # backward compatibility for models validated on sacrebleu (now casedbleu)
+            metrics = [m if m != 'sacrebleu' else 'casedbleu' for m in metrics]
             task.metrics = metrics
 
     if len(devices) > 1:

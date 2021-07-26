@@ -244,8 +244,6 @@ def dump_bootleg_features(args, logger):
         'subsample': args.subsample,
         'skip_cache': args.skip_cache,
         'cache_input_data': args.cache_input_data,
-        'sentence_batching': args.sentence_batching,
-        'almond_lang_as_question': args.almond_lang_as_question,
         'num_workers': args.num_workers,
         'all_dirs': args.train_src_languages,
         'ner_domains': args.ner_domains,
