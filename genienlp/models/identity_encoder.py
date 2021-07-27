@@ -139,7 +139,7 @@ class IdentityEncoder(nn.Module):
             context_entity_ids = batch.context.feature[:, :, : self.args.ned_features_size[0]].long()
 
             # indicates position of entities
-            context_entity_masking = (context_entity_ids != self.args.ned_features_default_val[0]).int()
+            context_entity_masking = (context_entity_ids != 0).int()
 
             if self.args.entity_type_agg_method == 'weighted':
                 context_entity_probs = batch.context.feature[

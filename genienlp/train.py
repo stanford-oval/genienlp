@@ -128,10 +128,7 @@ def prepare_data(args, logger):
                 assert splits.train
 
             if task.name.startswith('almond'):
-                if args.ned_features_default_val:
-                    args.db_unk_id = int(args.ned_features_default_val[0])
-                else:
-                    args.db_unk_id = 0
+                args.db_unk_id = 0
                 if args.do_ned:
                     if bootleg:
                         args.num_db_types = len(bootleg.typeqid2id)

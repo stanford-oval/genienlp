@@ -54,13 +54,12 @@ class XPackClientMPCompatible(XPackClient):
 
 
 class RemoteElasticDatabase(object):
-    def __init__(self, config, typeqid2id, ned_features_default_val, ned_features_size):
+    def __init__(self, config, typeqid2id, ned_features_size):
         self.typeqid2id = typeqid2id
         self.id2type = {v: k for k, v in self.typeqid2id.items()}
-        self.unk_id = ned_features_default_val[0]
+        self.unk_id = 0
         self.unk_type = self.id2type[self.unk_id]
 
-        self.ned_features_default_val = ned_features_default_val
         self.ned_features_size = ned_features_size
 
         self.canonical2type = defaultdict(list)
