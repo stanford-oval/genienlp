@@ -267,7 +267,7 @@ class TransformerNumericalizer(object):
             self._tokenizer.add_tokens(special_tokens)
 
         # add entity boundary special tokens
-        if self.args.add_types_to_text != 'no' or self.args.add_qids_to_text != 'no':
+        if self.args.add_entities_to_text != 'no':
             self._tokenizer.add_tokens(['<e>', '</e>'])
 
         # add special tokens for ambig_qa task
@@ -507,9 +507,9 @@ class TransformerNumericalizer(object):
 
             return all_processed_labels
 
-        if self.args.add_types_to_text == 'insert':
-            raise ValueError('Insert option for add_types_to_text argument is not supported for token_classification tasks')
-        elif self.args.add_types_to_text == 'append':
+        if self.args.add_entities_to_text == 'insert':
+            raise ValueError('Insert option for add_entities_to_text argument is not supported for token_classification tasks')
+        elif self.args.add_entities_to_text == 'append':
             all_context_plus_questions_wo_types = [example[: example.index(' <e>')] for example in all_context_plus_questions]
         else:
             all_context_plus_questions_wo_types = all_context_plus_questions
