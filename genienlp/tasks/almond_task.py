@@ -96,14 +96,14 @@ class BaseAlmondTask(BaseTask):
             with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
                 typeqid2id = ujson.load(fin)
 
-            self.db = Database(canonical2type, typeqid2id, all_canonicals, self.args.ned_features_size)
+            self.db = Database(canonical2type, typeqid2id, all_canonicals, self.args.max_features_size)
 
         elif self.args.database_type == 'remote-elastic':
             with open(os.path.join(self.args.database_dir, 'es_material/elastic_config.json'), 'r') as fin:
                 es_config = ujson.load(fin)
             with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
                 typeqid2id = ujson.load(fin)
-            self.db = RemoteElasticDatabase(es_config, typeqid2id, self.args.ned_features_size)
+            self.db = RemoteElasticDatabase(es_config, typeqid2id, self.args.max_features_size)
 
     @property
     def utterance_field(self):
@@ -236,7 +236,7 @@ class BaseAlmondTask(BaseTask):
         return features
 
     def oracle_type_ids(self, tokens, entity2type):
-        tokens_type_ids = [[0] * self.args.ned_features_size[0] for _ in range(len(tokens))]
+        tokens_type_ids = [[0] * self.args.max_features_size for _ in range(len(tokens))]
         tokens_text = " ".join(tokens)
 
         for ent, type in entity2type.items():
@@ -250,7 +250,7 @@ class BaseAlmondTask(BaseTask):
             token_pos = len(tokens_text[:idx].split())
 
             type_id = self.db.typeqid2id[type]
-            type_id = self.pad_features([type_id], self.args.ned_features_size[0], 0)
+            type_id = self.pad_features([type_id], self.args.max_features_size, 0)
 
             tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
 
@@ -300,13 +300,13 @@ class BaseAlmondTask(BaseTask):
 
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         if self.override_context is not None and field_name == 'context':
-            pad_feature = Feature.get_pad_feature(self.args.ned_features_size)
+            pad_feature = Feature.get_pad_feature(self.args.max_features_size)
             return (
                 self.override_context,
                 [pad_feature] * len(self.override_context.split(' ')) if pad_feature else [],
             )
         if self.override_question is not None and field_name == 'question':
-            pad_feature = Feature.get_pad_feature(self.args.ned_features_size)
+            pad_feature = Feature.get_pad_feature(self.args.max_features_size)
             return (
                 self.override_question,
                 [pad_feature] * len(self.override_question.split(' ')) if pad_feature else [],
@@ -377,17 +377,17 @@ class BaseAlmondTask(BaseTask):
         tokens_type_ids, tokens_type_probs, token_qids = None, None, None
 
         if self.args.do_ned and field_name != 'answer':
-            tokens_type_ids = [[0] * self.args.ned_features_size[0] for _ in range(new_sentence_length)]
+            tokens_type_ids = [[0] * self.args.max_features_size for _ in range(new_sentence_length)]
         if self.args.do_ned and field_name != 'answer':
-            tokens_type_probs = [[0] * self.args.ned_features_size[1] for _ in range(new_sentence_length)]
+            tokens_type_probs = [[0] * self.args.max_features_size for _ in range(new_sentence_length)]
         if self.args.do_ned and field_name != 'answer':
-            token_qids = [[0] * self.args.ned_features_size[2] for _ in range(new_sentence_length)]
+            token_qids = [[0] * self.args.max_features_size for _ in range(new_sentence_length)]
 
         if self.args.do_ned and self.args.ned_retrieve_method != 'bootleg' and field_name not in self.no_feature_fields:
             if 'type_id' in self.args.ned_features:
                 tokens_type_ids = self.find_type_ids(new_tokens, answer)
             if 'type_prob' in self.args.ned_features:
-                tokens_type_probs = self.find_type_probs(new_tokens, 0, self.args.ned_features_size[1])
+                tokens_type_probs = self.find_type_probs(new_tokens, 0, self.args.max_features_size)
 
         zip_list = []
         if tokens_type_ids:
