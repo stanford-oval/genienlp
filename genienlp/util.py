@@ -785,7 +785,7 @@ def load_config_json(args):
             'ned_retrieve_method',
             'database_lookup_method',
             'almond_domains',
-            'ned_features_size',
+            'max_features_size',
             'bootleg_output_dir',
             'bootleg_model',
             'bootleg_prob_threshold',
@@ -840,7 +840,7 @@ def load_config_json(args):
                 'force_fast_tokenizer',
             ):
                 setattr(args, r, False)
-            elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
+            elif r in ('num_db_types', 'db_unk_id', 'num_workers', 'max_features_size'):
                 setattr(args, r, 0)
             elif r in ('entity_word_embeds_dropout'):
                 setattr(args, r, 0.0)
@@ -848,7 +848,7 @@ def load_config_json(args):
                 setattr(args, r, [1])
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
-            elif r in ['ned_features_size', 'override_valid_metrics']:
+            elif r in ['override_valid_metrics']:
                 setattr(args, r, [])
             elif r in ('add_types_to_text', 'add_qids_to_text'):
                 setattr(args, r, 'no')

@@ -54,13 +54,13 @@ class XPackClientMPCompatible(XPackClient):
 
 
 class RemoteElasticDatabase(object):
-    def __init__(self, config, typeqid2id, ned_features_size):
+    def __init__(self, config, typeqid2id, max_features_size):
         self.typeqid2id = typeqid2id
         self.id2type = {v: k for k, v in self.typeqid2id.items()}
         self.unk_id = 0
         self.unk_type = self.id2type[self.unk_id]
 
-        self.ned_features_size = ned_features_size
+        self.max_features_size = max_features_size
 
         self.canonical2type = defaultdict(list)
         self.auth = (config['username'], config['password'])
@@ -88,7 +88,7 @@ class RemoteElasticDatabase(object):
         return tokens_type_ids
 
     def lookup_entities(self, tokens, entities, allow_fuzzy=False):
-        tokens_type_ids = [[self.unk_id] * self.ned_features_size[0]] * len(tokens)
+        tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
         tokens_text = " ".join(tokens)
 
         all_matches = self.batch_find_matches(entities, allow_fuzzy)
@@ -112,7 +112,7 @@ class RemoteElasticDatabase(object):
                 idx = tokens_text.index(ent)
                 token_pos = len(tokens_text[:idx].strip().split(' '))
 
-                tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [[type] * self.ned_features_size[0]] * ent_num_tokens
+                tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [[type] * self.max_features_size] * ent_num_tokens
 
         return tokens_type_ids
 
@@ -162,7 +162,7 @@ class RemoteElasticDatabase(object):
 
         nltk.download('averaged_perceptron_tagger', quiet=True)
 
-        tokens_type_ids = [[self.typeqid2id['unk']] * self.ned_features_size[0]] * len(tokens)
+        tokens_type_ids = [[self.typeqid2id['unk']] * self.max_features_size] * len(tokens)
 
         max_entity_len = min(max_entity_len, len(tokens))
         min_entity_len = min(min_entity_len, len(tokens))
@@ -202,7 +202,7 @@ class RemoteElasticDatabase(object):
                     used_aliases.append([self.typeqid2id.get(type, self.unk_id), start, end])
 
         for type_id, beg, end in used_aliases:
-            tokens_type_ids[beg:end] = [[type_id] * self.ned_features_size[0]] * (end - beg)
+            tokens_type_ids[beg:end] = [[type_id] * self.max_features_size] * (end - beg)
 
         return tokens_type_ids
 
