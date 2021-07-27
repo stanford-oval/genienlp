@@ -36,7 +36,6 @@ import subprocess
 
 from genienlp.model_utils.transformers_utils import MODEL_PARALLEL_SUPPORTED_MODELS
 
-from .data_utils.example import VALID_FEATURE_FIELDS
 from .tasks.registry import get_tasks
 from .util import have_multilingual
 
@@ -102,6 +101,9 @@ def parse_argv(parser):
         help='Specify dataset target languages used during validation for multilingual tasks'
         'multiple languages for each task should be concatenated with +',
     )
+
+    parser.add_argument('--max_qids_per_entity', type=int)
+    parser.add_argument('--max_types_per_qid', type=int)
 
     parser.add_argument(
         '--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training', required=True
@@ -484,27 +486,6 @@ def parse_argv(parser):
     parser.add_argument(
         '--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...'
     )
-    parser.add_argument(
-        '--ned_features',
-        nargs='+',
-        type=str,
-        default=['type_id', 'type_prob', 'qid'],
-        help='Features that will be extracted for each entity: "type" and "qid" are supported. Order is important',
-    )
-    parser.add_argument(
-        '--ned_features_size',
-        nargs='+',
-        type=int,
-        default=[1, 1, 1],
-        help='Max length of each feature vector. All features are padded up to this length',
-    )
-    parser.add_argument(
-        '--ned_features_default_val',
-        nargs='+',
-        type=float,
-        default=[0, 1.0, 0],
-        help='Max length of each feature vector. All features are padded up to this length',
-    )
 
     # translation args
     parser.add_argument(
@@ -628,17 +609,6 @@ def post_parse_train_specific(args):
     if args.add_types_to_text != 'no' and args.add_qids_to_text != 'no' and args.add_types_to_text != args.add_qids_to_text:
         raise ValueError('Method for adding types and qids should be the same')
 
-    for feat in args.ned_features:
-        if feat not in VALID_FEATURE_FIELDS:
-            raise ValueError(
-                'Feature {} is not supported. Please provide valid features from {} list'.format(feat, VALID_FEATURE_FIELDS)
-            )
-
-    if len(args.ned_features) != len(args.ned_features_size):
-        raise ValueError('You should specify max feature size for each feature you provided')
-
-    args.num_features = len(args.ned_features)
-
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
 
@@ -668,9 +638,6 @@ def post_parse_train_specific(args):
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_src_languages.split('+')) > 1):
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
 
-    if not (len(args.ned_features) == len(args.ned_features_size) == len(args.ned_features_default_val)):
-        raise ValueError('You should specify size and default value for each feature you provided')
-
     if args.preprocess_special_tokens and args.model == 'TransformerLSTM':
         raise ValueError('Preprocessing special tokens should not be used for TransformerLSTM models')
 
@@ -686,14 +653,14 @@ def post_parse_train_specific(args):
             train_task.metrics = metrics
             val_task.metrics = metrics
 
+    args.max_features_size = args.max_types_per_qid * args.max_qids_per_entity
+
     args.log_dir = args.save
     if args.tensorboard_dir is None:
         args.tensorboard_dir = args.log_dir
 
     for x in ['embeddings']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
-
-    args.num_features = len(args.ned_features)
 
     save_args(args, force_overwrite=True)
 

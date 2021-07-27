@@ -325,7 +325,6 @@ def main(args):
     args.override_context = None
     args.override_question = None
     args.val_task_names = None
-    args.ned_features = []
 
     args = post_parse_general(args)
     set_seed(args)

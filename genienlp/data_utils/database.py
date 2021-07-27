@@ -38,16 +38,15 @@ logger = logging.getLogger(__name__)
 
 
 class Database(object):
-    def __init__(self, canonical2type, typeqid2id, all_canonicals, ned_features_default_val, ned_features_size):
+    def __init__(self, canonical2type, typeqid2id, all_canonicals, ned_features_size):
         self.canonical2type = canonical2type
         self.typeqid2id = typeqid2id
         self.id2type = {v: k for k, v in self.typeqid2id.items()}
         self.all_canonicals = all_canonicals
 
-        self.unk_id = ned_features_default_val[0]
+        self.unk_id = 0
         self.unk_type = self.id2type[self.unk_id]
 
-        self.ned_features_default_val = ned_features_default_val
         self.ned_features_size = ned_features_size
 
     def lookup_ngrams(self, tokens, min_entity_len, max_entity_len):
