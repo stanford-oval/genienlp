@@ -63,17 +63,17 @@ class Bootleg(object):
         self.almond_domains = args.almond_domains
         self.bootleg_post_process_types = args.bootleg_post_process_types
 
-        with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json', 'r') as fin:
+        with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json') as fin:
             self.qid2typenames = ujson.load(fin)
-        with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json', 'r') as fin:
+        with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json') as fin:
             self.type_vocab_to_wikidataqid = ujson.load(fin)
             self.wikidataqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_wikidataqid.items()}
-        with open(f'{self.args.database_dir}/es_material/typeqid2id.json', 'r') as fin:
+        with open(f'{self.args.database_dir}/es_material/typeqid2id.json') as fin:
             self.typeqid2id = ujson.load(fin)
         self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
 
         ##### almond specific
-        with open(f'{self.args.root}/genienlp/data_utils/database_files/almond_type_mapping.json', 'r') as fin:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')) as fin:
             self.almond_type_mapping = ujson.load(fin)
         # with open(f'{self.args.database_dir}/es_material/almond_type_mapping_inclusion.json', 'r') as fin:
         #     self.almond_type_mapping_include = ujson.load(fin)
