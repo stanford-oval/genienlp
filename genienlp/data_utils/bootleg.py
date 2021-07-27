@@ -194,7 +194,7 @@ class Bootleg(object):
                 token = sentence_tokens[i]
                 feat = features[i]
                 # token is an entity
-                if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
+                if any([val != 0 for val in feat.type_id]):
                     final_token = '<e> '
                     final_types = ''
                     if self.args.add_types_to_text != 'no':
@@ -237,7 +237,7 @@ class Bootleg(object):
             while i < len(sentence_tokens):
                 feat = features[i]
                 # token is an entity
-                if any([val != self.args.ned_features_default_val[0] for val in feat.type_id]):
+                if any([val != 0 for val in feat.type_id]):
                     final_types = ''
                     if self.args.add_types_to_text != 'no':
                         if self.bootleg_post_process_types:
@@ -280,18 +280,9 @@ class Bootleg(object):
 
     def collect_features_per_line(self, line, threshold):
         tokenized = line['sentence'].split(' ')
-        tokens_type_ids = [
-            [self.args.ned_features_default_val[0]] * self.args.ned_features_size[0] for _ in range(len(tokenized))
-        ]
-        tokens_type_probs = [
-            [self.args.ned_features_default_val[1]] * self.args.ned_features_size[1] for _ in range(len(tokenized))
-        ]
-        if 'qid' in self.args.ned_features:
-            tokens_qids = [
-                [self.args.ned_features_default_val[2]] * self.args.ned_features_size[2] for _ in range(len(tokenized))
-            ]
-        else:
-            tokens_qids = [[0] * self.args.ned_features_size[1] for _ in range(len(tokenized))]
+        tokens_type_ids = [[0] * self.args.ned_features_size[0] for _ in range(len(tokenized))]
+        tokens_type_probs = [[0] * self.args.ned_features_size[1] for _ in range(len(tokenized))]
+        tokens_qids = [[0] * self.args.ned_features_size[2] for _ in range(len(tokenized))]
 
         for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
             # filter qids with probability lower than a threshold
@@ -299,12 +290,19 @@ class Bootleg(object):
             all_qids = all_qids[:idx]
             all_probs = all_probs[:idx]
 
+            if len(all_qids) > self.args.max_qids_per_entity:
+                all_qids = all_qids[: self.args.max_qids_per_entity]
+                all_probs = all_probs[: self.args.max_qids_per_entity]
+
             type_ids = []
             type_probs = []
             qids = []
 
             if not is_banned(alias):
                 for qid, prob in zip(all_qids, all_probs):
+                    # to map qids to unique ids we just need to remove the Q character as qids are distinct
+                    qids.append(qid[1:])
+
                     # get all type for a qid
                     all_types = []
                     if qid in self.qid2typenames and self.qid2typenames[qid]:
@@ -329,24 +327,16 @@ class Bootleg(object):
                                 else:
                                     typeqids = [typeqid]
 
-                                for typeqid_ in typeqids:
+                                for count, typeqid_ in enumerate(typeqids):
+                                    if count >= self.args.max_types_per_qid:
+                                        break
                                     type_id = self.typeqid2id[typeqid_]
                                     type_ids.append(type_id)
                                     type_probs.append(prob)
 
-                                # to map qids to unique ids we just need to remove the Q character as qids are distinct
-                                qids.append(qid[1:])
-
-                padded_type_ids = self.pad_values(
-                    type_ids, self.args.ned_features_size[0], self.args.ned_features_default_val[0]
-                )
-                padded_type_probs = self.pad_values(
-                    type_probs, self.args.ned_features_size[1], self.args.ned_features_default_val[1]
-                )
-                if 'qid' in self.args.ned_features:
-                    padded_qids = self.pad_values(qids, self.args.ned_features_size[2], self.args.ned_features_default_val[2])
-                else:
-                    padded_qids = self.pad_values(qids, 0, 0)
+                padded_type_ids = self.pad_values(type_ids, self.args.max_features_size, 0)
+                padded_type_probs = self.pad_values(type_probs, self.args.max_features_size, 0)
+                padded_qids = self.pad_values(qids, self.args.max_features_size, 0)
 
                 tokens_type_ids[span[0] : span[1]] = [padded_type_ids] * (span[1] - span[0])
                 tokens_type_probs[span[0] : span[1]] = [padded_type_probs] * (span[1] - span[0])

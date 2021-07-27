@@ -785,9 +785,7 @@ def load_config_json(args):
             'ned_retrieve_method',
             'database_lookup_method',
             'almond_domains',
-            'ned_features',
             'ned_features_size',
-            'ned_features_default_val',
             'bootleg_output_dir',
             'bootleg_model',
             'bootleg_prob_threshold',
@@ -850,7 +848,7 @@ def load_config_json(args):
                 setattr(args, r, [1])
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
-            elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val', 'override_valid_metrics']:
+            elif r in ['ned_features_size', 'override_valid_metrics']:
                 setattr(args, r, [])
             elif r in ('add_types_to_text', 'add_qids_to_text'):
                 setattr(args, r, 'no')
