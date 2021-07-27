@@ -45,12 +45,12 @@ class SequentialField(NamedTuple):
     feature: Union[torch.tensor, List[List[int]], None]
 
 
-# Feature is defined per token
+# Entity is defined per token
 # Each field contains a list of possible values for that feature
 # @dataclass
 
 
-class Feature(object):
+class Entity(object):
     def __init__(
         self,
         type_id: List[int] = None,
@@ -73,18 +73,18 @@ class Feature(object):
         return result
 
     @staticmethod
-    def get_pad_feature(max_features_size):
+    def get_pad_entity(max_features_size):
         # return None if not using NED
-        pad_feature = Feature()
+        pad_feature = Entity()
         for i, field in enumerate(VALID_FEATURE_FIELDS):
             setattr(pad_feature, field, [0] * max_features_size)
         return pad_feature
 
 
-# VALID_FEATURE_FIELDS = tuple(Feature.__annotations__.keys())
+# VALID_FEATURE_FIELDS = tuple(Entity.__annotations__.keys())
 
 # 1: to remove self
-signature = inspect.signature(Feature.__init__)
+signature = inspect.signature(Entity.__init__)
 VALID_FEATURE_FIELDS = tuple(signature.parameters.keys())[1:]
 
 
@@ -97,9 +97,9 @@ class Example(object):
         self,
         example_id: str,
         context: str,
-        context_feature: List[Feature],
+        context_feature: List[Entity],
         question: str,
-        question_feature: List[Feature],
+        question_feature: List[Entity],
         answer: str,
     ):
 
@@ -150,7 +150,7 @@ class NumericalizedExamples(NamedTuple):
             pad_feature = []
         else:
             sep_token = ' ' + numericalizer.sep_token + ' '
-            pad_feature = [Feature.get_pad_feature(args.max_features_size)]
+            pad_feature = [Entity.get_pad_entity(args.max_features_size)]
 
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []

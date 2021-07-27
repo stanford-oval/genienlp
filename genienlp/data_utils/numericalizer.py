@@ -59,7 +59,7 @@ from transformers import (
 
 from ..util import get_devices
 from .decoder_vocab import DecoderVocabulary
-from .example import Feature, SequentialField
+from .example import Entity, SequentialField
 
 logger = logging.getLogger(__name__)
 
@@ -717,7 +717,7 @@ class TransformerNumericalizer(object):
                 special_tokens_mask = batch_special_tokens_mask[i]
                 num_prefix_special_tokens, num_suffix_special_tokens = self.get_num_special_tokens(special_tokens_mask)
 
-                pad_feat = Feature.get_pad_feature(self.args.max_features_size)
+                pad_feat = Entity.get_pad_entity(self.args.max_features_size)
                 feat = [pad_feat] * num_prefix_special_tokens + feat + [pad_feat] * num_suffix_special_tokens
 
                 batch_features.append(feat)
