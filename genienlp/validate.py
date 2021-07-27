@@ -245,7 +245,9 @@ def generate_with_classification_model(
         labels = batch.answer.value.tolist()
 
         logits = output.logits
-        predictions = torch.argmax(logits, dim=2).tolist()
+        predictions = torch.argmax(logits, dim=-1).tolist()
+        if logits.dim() == 2:
+            predictions = [[p] for p in predictions]
 
         # Remove ignored index (special tokens)
         processed_preds = []
