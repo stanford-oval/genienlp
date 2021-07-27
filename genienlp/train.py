@@ -257,6 +257,9 @@ def do_validate(
         else:
             log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:'
 
+        # free up gpu memory
+        del output
+
         metric_entry = ''
         for metric_key, metric_value in metric_dict.items():
             metric_entry += f'{metric_key}_{metric_value:.2f}:'
