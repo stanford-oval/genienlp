@@ -111,7 +111,7 @@ class SpecialTokenMap:
         return s
 
 
-class ConfidenceFeatures:
+class ConfidenceEntitys:
     """
     Contains all necessary features that are useful for calculating confidence of a single generated output
     """
@@ -175,7 +175,7 @@ class ConfidenceFeatures:
 
         self.prediction = prediction
         self.gold_answer = gold_answer
-        self.first_mistake = ConfidenceFeatures.find_first_mistake(gold_answer, prediction)
+        self.first_mistake = ConfidenceEntitys.find_first_mistake(gold_answer, prediction)
         self.label = self.first_mistake == -1
         self.context = context
 

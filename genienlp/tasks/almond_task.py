@@ -47,7 +47,7 @@ from ..data_utils.almond_utils import (
     tokenize_cjk_chars,
 )
 from ..data_utils.database import Database
-from ..data_utils.example import Example, Feature
+from ..data_utils.example import Entity, Example
 from ..data_utils.remote_database import RemoteElasticDatabase
 from ..model_utils.translation import align_and_replace, compute_attention
 from ..paraphrase.data_utils import input_heuristics, output_heuristics
@@ -300,13 +300,13 @@ class BaseAlmondTask(BaseTask):
 
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         if self.override_context is not None and field_name == 'context':
-            pad_feature = Feature.get_pad_feature(self.args.max_features_size)
+            pad_feature = Entity.get_pad_feature(self.args.max_features_size)
             return (
                 self.override_context,
                 [pad_feature] * len(self.override_context.split(' ')) if pad_feature else [],
             )
         if self.override_question is not None and field_name == 'question':
-            pad_feature = Feature.get_pad_feature(self.args.max_features_size)
+            pad_feature = Entity.get_pad_feature(self.args.max_features_size)
             return (
                 self.override_question,
                 [pad_feature] * len(self.override_question.split(' ')) if pad_feature else [],
@@ -400,7 +400,7 @@ class BaseAlmondTask(BaseTask):
             assert len(token_qids) == new_sentence_length
             zip_list.append(token_qids)
 
-        features = [Feature(*tup) for tup in zip(*zip_list)]
+        features = [Entity(*tup) for tup in zip(*zip_list)]
 
         return new_sentence, features
 

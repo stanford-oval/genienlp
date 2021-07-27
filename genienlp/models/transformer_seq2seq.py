@@ -35,7 +35,7 @@ from transformers import AutoConfig, AutoModelForSeq2SeqLM, MBartTokenizer, MBar
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..model_utils.transformers_utils import MULTILINGUAL_TOKENIZERS
-from ..util import ConfidenceFeatures, adjust_language_code
+from ..util import ConfidenceEntitys, adjust_language_code
 from .base import GenieModel
 from .common import LabelSmoothingCrossEntropy
 
@@ -195,7 +195,7 @@ class TransformerSeq2Seq(GenieModel):
 
         return generated
 
-    def confidence_features(self, batch, predictions, mc_dropout_num=0) -> List[ConfidenceFeatures]:
+    def confidence_features(self, batch, predictions, mc_dropout_num=0) -> List[ConfidenceEntitys]:
         """
         predictions: Tensor of shape (batch_size, output_length)
         mc_droput_num: number of Monte Carlo samples used for the MC Dropout method. 0 disables MC dropout.
@@ -286,7 +286,7 @@ class TransformerSeq2Seq(GenieModel):
             else:
                 prediction = predictions[i][1 : prediction_lengths[i] + 1]  # remove token before BOS, +1 to include EOS
             confidence_features.append(
-                ConfidenceFeatures(
+                ConfidenceEntitys(
                     drop_logits=batch_drop_logits[i] if mc_dropout_num > 0 else None,
                     drop_probs=batch_drop_probs[i] if mc_dropout_num > 0 else None,
                     #  drop_top1_probs=batch_drop_top1_probs[i] if mc_dropout_num > 0 else None,
