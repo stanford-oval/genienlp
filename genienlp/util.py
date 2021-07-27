@@ -772,8 +772,8 @@ def load_config_json(args):
             'num_workers',
             'no_fast_tokenizer',
             'force_fast_tokenizer',
-            'add_types_to_text',
-            'add_qids_to_text',
+            'add_entities_to_text',
+            'entity_attributes',
             'do_ned',
             'database_type',
             'min_entity_len',
@@ -848,9 +848,9 @@ def load_config_json(args):
                 setattr(args, r, [1])
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
-            elif r in ['override_valid_metrics']:
+            elif r in ['override_valid_metrics', 'entity_attributes']:
                 setattr(args, r, [])
-            elif r in ('add_types_to_text', 'add_qids_to_text'):
+            elif r in ('add_entities_to_text',):
                 setattr(args, r, 'no')
             elif r == 'database_type':
                 setattr(args, r, 'json')

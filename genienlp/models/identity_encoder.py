@@ -135,7 +135,7 @@ class IdentityEncoder(nn.Module):
 
         context_entity_ids, context_entity_probs, context_entity_masking = None, None, None
 
-        if self.args.num_db_types > 0 and self.args.add_types_to_text == 'no':
+        if self.args.num_db_types > 0 and self.args.add_entities_to_text == 'no':
             context_entity_ids = batch.context.feature[:, :, : self.args.max_features_size].long()
 
             # indicates position of entities
