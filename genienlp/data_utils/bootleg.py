@@ -297,9 +297,9 @@ class Bootleg(object):
 
     def collect_features_per_line(self, line, threshold):
         tokenized = line['sentence'].split(' ')
-        tokens_type_ids = [[0] * self.args.ned_features_size[0] for _ in range(len(tokenized))]
-        tokens_type_probs = [[0] * self.args.ned_features_size[1] for _ in range(len(tokenized))]
-        tokens_qids = [[0] * self.args.ned_features_size[2] for _ in range(len(tokenized))]
+        tokens_type_ids = [[0] * self.args.max_features_size for _ in range(len(tokenized))]
+        tokens_type_probs = [[0] * self.args.max_features_size for _ in range(len(tokenized))]
+        tokens_qids = [[0] * self.args.max_features_size for _ in range(len(tokenized))]
 
         for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
             # filter qids with probability lower than a threshold

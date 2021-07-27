@@ -77,11 +77,11 @@ class Feature(object):
         return result
 
     @staticmethod
-    def get_pad_feature(ned_features_size):
+    def get_pad_feature(max_features_size):
         # return None if not using NED
         pad_feature = Feature()
         for i, field in enumerate(VALID_FEATURE_FIELDS):
-            setattr(pad_feature, field, [0] * ned_features_size[i])
+            setattr(pad_feature, field, [0] * max_features_size)
         return pad_feature
 
 
@@ -154,7 +154,7 @@ class NumericalizedExamples(NamedTuple):
             pad_feature = []
         else:
             sep_token = ' ' + numericalizer.sep_token + ' '
-            pad_feature = [Feature.get_pad_feature(args.ned_features_size)]
+            pad_feature = [Feature.get_pad_feature(args.max_features_size)]
 
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []
