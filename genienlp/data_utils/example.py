@@ -27,8 +27,8 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import inspect
 import unicodedata
-from dataclasses import dataclass
 from typing import Iterable, List, NamedTuple, Union
 
 import torch
@@ -47,14 +47,22 @@ class SequentialField(NamedTuple):
 
 # Feature is defined per token
 # Each field contains a list of possible values for that feature
-@dataclass
-class Feature:
-    type_id: List[int] = None
-    type_prob: List[float] = None
-    qid: List[int] = None
+# @dataclass
 
-    def __mul__(self, n):
-        return [self for _ in range(n)]
+
+class Feature(object):
+    def __init__(
+        self,
+        type_id: List[int] = None,
+        type_prob: List[float] = None,
+        qid: List[int] = None,
+    ):
+        self.type_id = type_id
+        self.type_prob = type_prob
+        self.qid = qid
+
+    # def __mul__(self, n):
+    #     return [self for _ in range(n)]
 
     def flatten(self):
         result = []
@@ -64,19 +72,23 @@ class Feature:
                 result += field_val
         return result
 
+    @staticmethod
+    def get_pad_feature(feature_fields, ned_features_default_val, ned_features_size):
+        # return None if not using NED
+        pad_feature = None
+        if len(feature_fields):
+            pad_feature = Feature()
+            for i, field in enumerate(feature_fields):
+                assert field in VALID_FEATURE_FIELDS
+                setattr(pad_feature, field, [ned_features_default_val[i]] * ned_features_size[i])
+        return pad_feature
 
-VALID_FEATURE_FIELDS = tuple(Feature.__annotations__.keys())
 
+# VALID_FEATURE_FIELDS = tuple(Feature.__annotations__.keys())
 
-def get_pad_feature(feature_fields, ned_features_default_val, ned_features_size):
-    # return None if not using NED
-    pad_feature = None
-    if len(feature_fields):
-        pad_feature = Feature()
-        for i, field in enumerate(feature_fields):
-            assert field in VALID_FEATURE_FIELDS
-            setattr(pad_feature, field, [ned_features_default_val[i]] * ned_features_size[i])
-    return pad_feature
+# 1: to remove self
+signature = inspect.signature(Feature.__init__)
+VALID_FEATURE_FIELDS = tuple(signature.parameters.keys())[1:]
 
 
 class Example(object):
@@ -141,7 +153,7 @@ class NumericalizedExamples(NamedTuple):
             pad_feature = []
         else:
             sep_token = ' ' + numericalizer.sep_token + ' '
-            pad_feature = [get_pad_feature(args.ned_features, args.ned_features_default_val, args.ned_features_size)]
+            pad_feature = [Feature.get_pad_feature(args.ned_features, args.ned_features_default_val, args.ned_features_size)]
 
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []

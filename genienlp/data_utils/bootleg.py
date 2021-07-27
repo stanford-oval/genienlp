@@ -73,25 +73,31 @@ class Bootleg(object):
         self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
 
         ##### almond specific
-        with open(f'{self.args.database_dir}/es_material/almond_type_mapping_matching.json', 'r') as fin:
-            self.almond_type_mapping_match = ujson.load(fin)
-        with open(f'{self.args.database_dir}/es_material/almond_type_mapping_inclusion.json', 'r') as fin:
-            self.almond_type_mapping_include = ujson.load(fin)
+        with open('data_utils/database_files/almond_type_mapping.json', 'r') as fin:
+            self.almond_type_mapping = ujson.load(fin)
+        # with open(f'{self.args.database_dir}/es_material/almond_type_mapping_inclusion.json', 'r') as fin:
+        #     self.almond_type_mapping_include = ujson.load(fin)
 
         # only keep subset for provided domains
-        self.type_mapping_match = dict()
-        self.type_mapping_include = dict()
+        self.wiki2normalized_type_include = dict()
+        self.wiki2normalized_type_match = dict()
         for domain in self.almond_domains:
-            self.type_mapping_match.update(self.almond_type_mapping_match[domain])
-            self.type_mapping_include.update(self.almond_type_mapping_match[domain])
+            mapping = self.almond_type_mapping[domain]
+            for normalized_type, titles in mapping.items():
+                for title in titles:
+                    if title[0] == title[-1] == '@':
+                        self.wiki2normalized_type_include[title.strip('@')] = normalized_type
+                    else:
+                        self.wiki2normalized_type_match[title] = normalized_type
+            # self.type_mapping_match.update(self.almond_type_mapping_match[domain])
+            # self.type_mapping_include.update(self.almond_type_mapping_match[domain])
 
-        self.almond_type2qid = dict()
-        with open(f'{self.args.database_dir}/es_material/almond_type2qid.json', 'r') as fin:
-            almond_type2qid = ujson.load(fin)
-        for domain in self.almond_domains:
-            self.almond_type2qid.update(almond_type2qid[domain])
-        self.qid2almond_type = {v: k for k, v in self.almond_type2qid.items()}
-
+        # self.almond_type2qid = dict()
+        # with open(f'{self.args.database_dir}/es_material/almond_type2qid.json', 'r') as fin:
+        #     almond_type2qid = ujson.load(fin)
+        # for domain in self.almond_domains:
+        #     self.almond_type2qid.update(almond_type2qid[domain])
+        # self.qid2almond_type = {v: k for k, v in self.almond_type2qid.items()}
         #####
 
         self.cur_entity_embed_size = 0
@@ -177,19 +183,21 @@ class Bootleg(object):
 
     def post_process_bootleg_types(self, title):
         types = None
-        if title in self.type_mapping_match:
-            types = self.type_mapping_match[title]
+        if title in self.wiki2normalized_type_match:
+            types = self.wiki2normalized_type_match[title]
         else:
-            for key in self.type_mapping_include.keys():
+            for key in self.wiki2normalized_type_include.keys():
                 if key in title:
-                    types = self.type_mapping_include[key]
+                    types = self.wiki2normalized_type_include[key]
 
         typeqids = None
         if types is not None:
             if isinstance(types, str):
-                typeqids = [self.almond_type2qid[types]]
+                # typeqids = [self.almond_type2qid[types]]
+                typeqids = [self.type_vocab_to_wikidataqid[types]]
             elif isinstance(types, (list, tuple)):
-                typeqids = [self.almond_type2qid[type_] for type_ in types]
+                typeqids = [self.type_vocab_to_wikidataqid[type_] for type_ in types]
+                # typeqids = [self.almond_type2qid[type_] for type_ in types]
 
         return typeqids
 
@@ -210,9 +218,9 @@ class Bootleg(object):
                         if self.bootleg_post_process_types:
                             all_types = ' | '.join(
                                 set(
-                                    self.qid2almond_type[self.id2typeqid[id]]
+                                    self.wikidataqid_to_type_vocab[self.id2typeqid[id]]
                                     for id in feat.type_id
-                                    if self.id2typeqid[id] in self.qid2almond_type
+                                    if self.id2typeqid[id] in self.wikidataqid_to_type_vocab
                                 )
                             )
                         else:
@@ -252,9 +260,9 @@ class Bootleg(object):
                         if self.bootleg_post_process_types:
                             all_types = ' | '.join(
                                 set(
-                                    self.qid2almond_type[self.id2typeqid[id]]
+                                    self.wikidataqid_to_type_vocab[self.id2typeqid[id]]
                                     for id in feat.type_id
-                                    if self.id2typeqid[id] in self.qid2almond_type
+                                    if self.id2typeqid[id] in self.wikidataqid_to_type_vocab
                                 )
                             )
                         else:
