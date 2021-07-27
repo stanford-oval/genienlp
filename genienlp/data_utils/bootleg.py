@@ -189,7 +189,7 @@ class Bootleg(object):
         assert len(sentence_tokens) == len(features)
         sentence_plus_types_tokens = []
         i = 0
-        if self.args.add_types_to_text == 'insert' or self.args.add_qids_to_text == 'insert':
+        if self.args.add_entities_to_text == 'insert':
             while i < len(sentence_tokens):
                 token = sentence_tokens[i]
                 feat = features[i]
@@ -197,7 +197,7 @@ class Bootleg(object):
                 if any([val != 0 for val in feat.type_id]):
                     final_token = '<e> '
                     final_types = ''
-                    if self.args.add_types_to_text != 'no':
+                    if 'type_id' in self.args.entity_attributes:
                         if self.bootleg_post_process_types:
                             all_types = ' | '.join(
                                 set(
@@ -216,7 +216,7 @@ class Bootleg(object):
                             )
                         final_types = '( ' + all_types + ' ) '
                     final_qids = ''
-                    if self.args.add_qids_to_text != 'no':
+                    if 'qid' in self.args.entity_attributes:
                         all_qids = ' | '.join(set('Q' + str(id) for id in feat.qid))
                         final_qids = '[' + all_qids + ']'
                     final_token += final_types + final_qids + token
@@ -231,7 +231,7 @@ class Bootleg(object):
                     sentence_plus_types_tokens.append(token)
                     i += 1
 
-        elif self.args.add_types_to_text == 'append' or self.args.add_qids_to_text == 'append':
+        elif self.args.add_entities_to_text == 'append':
             sentence_plus_types_tokens.extend(sentence_tokens)
             sentence_plus_types_tokens.append('<e>')
             while i < len(sentence_tokens):
@@ -239,8 +239,8 @@ class Bootleg(object):
                 # token is an entity
                 if any([val != 0 for val in feat.type_id]):
                     final_types = ''
-                    if self.args.add_types_to_text != 'no':
-                        if self.bootleg_post_process_types:
+                    if self.args.add_entities_to_text != 'no':
+                        if 'type_id' in self.args.entity_attributes:
                             all_types = ' | '.join(
                                 set(
                                     self.entityqid_to_type_vocab[self.id2typeqid[id]]
@@ -258,7 +258,7 @@ class Bootleg(object):
                             )
                         final_types = ['( ', all_types, ' ) ']
                     final_qids = ''
-                    if self.args.add_qids_to_text != 'no':
+                    if 'qid' in self.args.entity_attributes:
                         all_qids = ' | '.join(set('Q' + str(id) for id in feat.qid))
                         final_qids = ['[', all_qids, ']']
                     all_tokens = []

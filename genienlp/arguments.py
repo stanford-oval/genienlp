@@ -452,17 +452,17 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        "--add_types_to_text",
+        "--add_entities_to_text",
         default='no',
         choices=['no', 'insert', 'append'],
         help='Method for adding types to input text in text-based NER approach',
     )
 
     parser.add_argument(
-        "--add_qids_to_text",
-        default='no',
-        choices=['no', 'insert', 'append'],
-        help='Method for adding qids to input text in text-based NER approach',
+        "--entity_attributes",
+        nargs='+',
+        default=['type_id', 'qid'],
+        help='',
     )
 
     parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
@@ -606,9 +606,6 @@ def post_parse_general(args):
 
 
 def post_parse_train_specific(args):
-    if args.add_types_to_text != 'no' and args.add_qids_to_text != 'no' and args.add_types_to_text != args.add_qids_to_text:
-        raise ValueError('Method for adding types and qids should be the same')
-
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
 
