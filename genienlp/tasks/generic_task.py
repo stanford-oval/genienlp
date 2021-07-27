@@ -33,7 +33,7 @@ from ..data_utils.example import Example
 from . import generic_dataset
 from .almond_task import BaseAlmondTask
 from .base_task import BaseTask
-from .generic_dataset import CrossNERDataset
+from .generic_dataset import CrossNERDataset, OODDataset
 from .registry import register_task
 
 
@@ -378,3 +378,13 @@ class CrossNERTask(BaseAlmondTask):
 
     def get_splits(self, root, **kwargs):
         return CrossNERDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
+
+
+@register_task('ood_task')
+class OODTask(BaseTask):
+    def __init__(self, name, args):
+        self.num_labels = 2
+        super().__init__(name, args)
+
+    def get_splits(self, root, **kwargs):
+        return OODDataset.splits(root=root, **kwargs)

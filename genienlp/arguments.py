@@ -217,7 +217,12 @@ def parse_argv(parser):
     parser.add_argument(
         '--model',
         type=str,
-        choices=['TransformerLSTM', 'TransformerSeq2Seq', 'TransformerForTokenClassification'],
+        choices=[
+            'TransformerLSTM',
+            'TransformerSeq2Seq',
+            'TransformerForTokenClassification',
+            'TransformerForSequenceClassification',
+        ],
         default='TransformerSeq2Seq',
         help='which model to import',
     )

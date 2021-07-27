@@ -172,6 +172,33 @@ class NumericalizedExamples(NamedTuple):
             tokenized_answers = numericalizer.process_classification_labels(
                 all_context_plus_questions, [ex.answer for ex in examples]
             )
+        elif getattr(examples, 'is_sequence_classification', False):
+            # align labels
+            answers = [
+                [
+                    int(ex.answer),
+                ]
+                for ex in examples
+            ]
+
+            batch_decoder_numerical = []
+            if numericalizer.decoder_vocab:
+                for i in range(len(answers)):
+                    batch_decoder_numerical.append(numericalizer.decoder_vocab.encode(answers[i]))
+            else:
+                batch_decoder_numerical = [[]] * len(answers)
+
+            tokenized_answers = []
+            for i in range(len(answers)):
+                tokenized_answers.append(
+                    SequentialField(
+                        value=answers[i],
+                        length=len(answers[i]),
+                        limited=batch_decoder_numerical[i],
+                        feature=None,
+                    )
+                )
+
         else:
             tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
 

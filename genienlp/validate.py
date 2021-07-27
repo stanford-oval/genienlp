@@ -35,7 +35,7 @@ import torch
 
 from .data_utils.progbar import progress_bar
 from .metrics import compute_metrics
-from .models import TransformerForTokenClassification
+from .models import TransformerForSequenceClassification, TransformerForTokenClassification
 from .util import GenerationOutput, merge_translated_sentences
 
 
@@ -52,7 +52,7 @@ def generate_with_model(
     disable_progbar=True,
 ):
 
-    if isinstance(model, TransformerForTokenClassification):
+    if isinstance(model, TransformerForTokenClassification) or isinstance(model, TransformerForSequenceClassification):
         return generate_with_classification_model(
             model, data_iterator, numericalizer, task, original_order=original_order, disable_progbar=disable_progbar
         )
