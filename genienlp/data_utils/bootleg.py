@@ -73,7 +73,7 @@ class Bootleg(object):
         self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
 
         ##### almond specific
-        with open('data_utils/database_files/almond_type_mapping.json', 'r') as fin:
+        with open(f'{self.args.root}/genienlp/data_utils/database_files/almond_type_mapping.json', 'r') as fin:
             self.almond_type_mapping = ujson.load(fin)
         # with open(f'{self.args.database_dir}/es_material/almond_type_mapping_inclusion.json', 'r') as fin:
         #     self.almond_type_mapping_include = ujson.load(fin)
