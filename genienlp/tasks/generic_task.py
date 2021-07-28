@@ -383,6 +383,7 @@ class CrossNERTask(BaseAlmondTask):
 @register_task('ood_task')
 class OODTask(BaseTask):
     def __init__(self, name, args):
+        self.id2label = ['0', '1']
         self.num_labels = 2
         super().__init__(name, args)
 
