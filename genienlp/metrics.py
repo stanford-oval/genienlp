@@ -210,6 +210,28 @@ def normalize_text(s):
     return white_space_fix(remove_articles(remove_punc(lower(s))))
 
 
+def precision(prediction, ground_truth):
+    prediction_tokens = prediction.split()
+    ground_truth_tokens = ground_truth.split()
+    common = collections.Counter(prediction_tokens) & collections.Counter(ground_truth_tokens)
+    num_same = sum(common.values())
+    if num_same == 0:
+        return 0
+    precision = 1.0 * num_same / len(prediction_tokens)
+    return precision
+
+
+def recall(prediction, ground_truth):
+    prediction_tokens = prediction.split()
+    ground_truth_tokens = ground_truth.split()
+    common = collections.Counter(prediction_tokens) & collections.Counter(ground_truth_tokens)
+    num_same = sum(common.values())
+    if num_same == 0:
+        return 0
+    recall = 1.0 * num_same / len(ground_truth_tokens)
+    return recall
+
+
 def f1_score(prediction, ground_truth):
     prediction_tokens = prediction.split()
     ground_truth_tokens = ground_truth.split()
@@ -245,6 +267,16 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
         score = metric_fn(prediction, ground_truth)
         scores_for_ground_truths.append(score)
     return max(scores_for_ground_truths)
+
+
+def computePrecision(outputs, targets):
+    outs = [metric_max_over_ground_truths(precision, o, t) for o, t in zip(outputs, targets)]
+    return sum(outs) / len(outputs) * 100
+
+
+def computeRecall(outputs, targets):
+    outs = [metric_max_over_ground_truths(recall, o, t) for o, t in zip(outputs, targets)]
+    return sum(outs) / len(outputs) * 100
 
 
 def computeF1(outputs, targets):
@@ -561,6 +593,14 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
         metric_keys += ['rouge1', 'rouge2', 'rougeL', 'avg_rouge']
         avg_rouge = (rouge['rouge_1_f_score'] + rouge['rouge_2_f_score'] + rouge['rouge_l_f_score']) / 3
         metric_values += [rouge['rouge_1_f_score'], rouge['rouge_2_f_score'], rouge['rouge_l_f_score'], avg_rouge]
+    if 'precision' in requested_metrics:
+        precision = computePrecision(greedy, answer)
+        metric_keys.append('precision')
+        metric_values.append(precision)
+    if 'recall' in requested_metrics:
+        recall = computeRecall(greedy, answer)
+        metric_keys.append('recall')
+        metric_values.append(recall)
     if 'f1' in requested_metrics:
         f1 = computeF1(greedy, answer)
         metric_keys.append('f1')

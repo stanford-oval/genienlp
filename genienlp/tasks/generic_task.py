@@ -387,5 +387,9 @@ class OODTask(BaseTask):
         self.num_labels = 2
         super().__init__(name, args)
 
+    @property
+    def metrics(self):
+        return ['recall', 'precision']
+
     def get_splits(self, root, **kwargs):
         return OODDataset.splits(root=root, **kwargs)
