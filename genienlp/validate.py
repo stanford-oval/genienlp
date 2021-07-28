@@ -246,6 +246,8 @@ def generate_with_classification_model(
 
         logits = output.logits
         predictions = torch.argmax(logits, dim=-1).tolist()
+
+        # logits for sequence classification is 2 dimensional
         if logits.dim() == 2:
             predictions = [[p] for p in predictions]
 
