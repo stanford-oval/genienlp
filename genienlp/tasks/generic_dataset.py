@@ -41,6 +41,7 @@ import xml.etree.ElementTree as ET
 from typing import Iterable
 
 import torch
+from datasets import load_dataset
 
 from ..data_utils.example import Example, NumericalizedExamples
 from .base_dataset import Dataset, Split, interleave_keys
@@ -1935,36 +1936,27 @@ class OODDataset(CQA):
     name = 'ood'
     is_sequence_classification = True
 
-    def __init__(self, path, lower=False, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, split, lower=False, cached_path=None, skip_cache=False, **kwargs):
         examples = []
         question = 'Is this sentence in-domain or out-domain?'
 
-        cache_name = os.path.join(cached_path, os.path.basename(path))
-        if os.path.exists(cache_name) and not skip_cache:
-            logger.info(f'Loading cached data from {cache_name}')
-            examples = torch.load(cache_name)
-        else:
-            for fname in glob.iglob(os.path.join(path, '*.tsv')):
-                with open(fname, 'r') as f:
-                    line = f.readline()
-                    while line:
-                        context = line.split('\t')[2].strip()
-                        answer = '1' if line.split('\t')[3].strip() == '$ood ;' else '0'
-                        examples.append(
-                            Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
-                        )
-                        line = f.readline()
+        data_file = os.path.join(path, 'data.tsv')
+        dataset = load_dataset('csv', data_files=data_file, delimiter='\t', column_names=['tmp1', 'tmp2', 'sentence', 'label'])
+        dataset = dataset['train'].train_test_split(test_size=0.2, seed=42)
+        dataset = dataset[split]
 
-            os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            logger.info(f'Caching data to {cache_name}')
-            torch.save(examples, cache_name)
+        for data in dataset:
+            context = data['sentence']
+            answer = '1' if data['label'].strip() == '$ood ;' else '0'
+            examples.append(Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower))
+
         super().__init__(examples, **kwargs)
 
     @classmethod
-    def splits(cls, root='.data', train='train', validation='dev', test='test', **kwargs):
-        train_data = None if train is None else cls(os.path.join(root, f'{train}'), **kwargs)
-        validation_data = None if validation is None else cls(os.path.join(root, f'{validation}'), **kwargs)
-        test_data = None if test is None else cls(os.path.join(root, f'{test}'), **kwargs)
+    def splits(cls, root='.data', train='train', validation='test', test='test', **kwargs):
+        train_data = None if train is None else cls(root, train, **kwargs)
+        validation_data = None if validation is None else cls(root, validation, **kwargs)
+        test_data = None if test is None else cls(root, test, **kwargs)
 
         return (
             Split(
