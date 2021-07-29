@@ -389,7 +389,7 @@ class OODTask(BaseTask):
 
     @property
     def metrics(self):
-        return ['f1', 'precision', 'recall']
+        return ['sc_f1', 'sc_precision', 'sc_recall']
 
     def get_splits(self, root, **kwargs):
         return OODDataset.splits(root=root, **kwargs)
