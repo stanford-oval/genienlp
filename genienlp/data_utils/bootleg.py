@@ -73,17 +73,23 @@ class Bootleg(object):
         self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
 
         ##### almond specific
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')) as fin:
-            self.almond_type_mapping = ujson.load(fin)
-
-        # only keep subset for provided domains
         self.wiki2normalized_type = dict()
-        # self.wiki2normalized_type_match = dict()
-        for domain in self.almond_domains:
-            mapping = self.almond_type_mapping[domain]
-            for normalized_type, titles in mapping.items():
+        if self.args.almond_type_mapping_path:
+            with open(os.path.join(self.args.root, self.args.almond_type_mapping_path)) as fin:
+                almond_type_mapping = ujson.load(fin)
+            for normalized_type, titles in almond_type_mapping.items():
                 for title in titles:
                     self.wiki2normalized_type[title] = normalized_type
+        else:
+            with open(
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')
+            ) as fin:
+                almond_type_mapping = ujson.load(fin)
+            # only keep subset for provided domains
+            for domain in self.almond_domains:
+                for normalized_type, titles in almond_type_mapping[domain].items():
+                    for title in titles:
+                        self.wiki2normalized_type[title] = normalized_type
         #####
 
         self.cur_entity_embed_size = 0
@@ -176,11 +182,9 @@ class Bootleg(object):
         typeqids = None
         if types is not None:
             if isinstance(types, str):
-                # typeqids = [self.almond_type2qid[types]]
                 typeqids = [self.type_vocab_to_entityqid[types]]
             elif isinstance(types, (list, tuple)):
                 typeqids = [self.type_vocab_to_entityqid[type_] for type_ in types]
-                # typeqids = [self.almond_type2qid[type_] for type_ in types]
 
         return typeqids
 
@@ -217,7 +221,7 @@ class Bootleg(object):
                         final_types = '( ' + all_types + ' ) '
                     final_qids = ''
                     if 'qid' in self.args.entity_attributes:
-                        all_qids = ' | '.join(set('Q' + str(id) for id in feat.qid))
+                        all_qids = ' | '.join(sorted('Q' + str(id) for id in feat.qid if id != -1))
                         final_qids = '[' + all_qids + ']'
                     final_token += final_types + final_qids + token
                     # append all entities with same type
@@ -259,7 +263,7 @@ class Bootleg(object):
                         final_types = ['( ', all_types, ' ) ']
                     final_qids = ''
                     if 'qid' in self.args.entity_attributes:
-                        all_qids = ' | '.join(set('Q' + str(id) for id in feat.qid))
+                        all_qids = ' | '.join(sorted('Q' + str(id) for id in feat.qid if id != -1))
                         final_qids = ['[', all_qids, ']']
                     all_tokens = []
                     # append all entities with same type
@@ -303,18 +307,18 @@ class Bootleg(object):
                     # to map qids to unique ids we just need to remove the Q character as qids are distinct
                     qids.append(qid[1:])
 
-                    # get all type for a qid
-                    all_types = []
+                    # get all types for a qid
+                    all_typeqids = []
                     if qid in self.qid2typenames and self.qid2typenames[qid]:
                         # map entity qid to its type titles on wikidata ; then map titles to their wikidata qids
                         for typename in self.qid2typenames[qid]:
                             if typename in self.type_vocab_to_entityqid:
-                                all_types.append(self.type_vocab_to_entityqid[typename])
+                                all_typeqids.append(self.type_vocab_to_entityqid[typename])
 
-                    if len(all_types):
+                    if len(all_typeqids):
                         count = 0
                         # go through all types
-                        for typeqid in all_types:
+                        for typeqid in all_typeqids:
                             if typeqid in self.typeqid2id:
                                 # map wikidata types to thingtalk types
                                 if self.bootleg_post_process_types:
@@ -322,6 +326,8 @@ class Bootleg(object):
                                     title = self.entityqid_to_type_vocab[typeqid]
                                     # process may return multiple types for a single type when it's ambiguous
                                     typeqids = self.post_process_bootleg_types(title)
+
+                                    # attempt to normalize qids failed; just use the original type
                                     if typeqids is None:
                                         typeqids = [typeqid]
 
@@ -332,7 +338,7 @@ class Bootleg(object):
                                     if count >= self.args.max_types_per_qid:
                                         break
                                     type_id = self.typeqid2id[typeqid_]
-                                    if type_id in type_id:
+                                    if type_id in type_ids:
                                         continue
                                     type_ids.append(type_id)
                                     type_probs.append(prob)
@@ -340,7 +346,7 @@ class Bootleg(object):
 
                 padded_type_ids = self.pad_values(type_ids, self.args.max_features_size, 0)
                 padded_type_probs = self.pad_values(type_probs, self.args.max_features_size, 0)
-                padded_qids = self.pad_values(qids, self.args.max_features_size, 0)
+                padded_qids = self.pad_values(qids, self.args.max_features_size, -1)
 
                 tokens_type_ids[span[0] : span[1]] = [padded_type_ids] * (span[1] - span[0])
                 tokens_type_probs[span[0] : span[1]] = [padded_type_probs] * (span[1] - span[0])

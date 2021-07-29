@@ -381,7 +381,7 @@ class BaseAlmondTask(BaseTask):
         if self.args.do_ned and field_name != 'answer':
             tokens_type_probs = [[0] * self.args.max_features_size for _ in range(new_sentence_length)]
         if self.args.do_ned and field_name != 'answer':
-            token_qids = [[0] * self.args.max_features_size for _ in range(new_sentence_length)]
+            token_qids = [[-1] * self.args.max_features_size for _ in range(new_sentence_length)]
 
         if self.args.do_ned and self.args.ned_retrieve_method != 'bootleg' and field_name not in self.no_feature_fields:
             if 'type_id' in self.args.ned_features:

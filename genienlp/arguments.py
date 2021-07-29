@@ -102,8 +102,8 @@ def parse_argv(parser):
         'multiple languages for each task should be concatenated with +',
     )
 
-    parser.add_argument('--max_qids_per_entity', type=int)
-    parser.add_argument('--max_types_per_qid', type=int)
+    parser.add_argument('--max_qids_per_entity', type=int, default=1)
+    parser.add_argument('--max_types_per_qid', type=int, default=2)
 
     parser.add_argument(
         '--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training', required=True
@@ -463,6 +463,14 @@ def parse_argv(parser):
         nargs='+',
         default=['type_id', 'qid'],
         help='',
+    )
+
+    parser.add_argument(
+        "--almond_type_mapping_path",
+        default=None,
+        type=str,
+        help='If provided, will override the usual almond type mapping in data_utils/database_file/'
+        'Path should be relative to --root',
     )
 
     parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')

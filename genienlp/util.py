@@ -785,6 +785,7 @@ def load_config_json(args):
             'ned_retrieve_method',
             'database_lookup_method',
             'almond_domains',
+            'almond_type_mapping_path',
             'max_features_size',
             'bootleg_output_dir',
             'bootleg_model',
@@ -860,8 +861,6 @@ def load_config_json(args):
                 setattr(args, r, 2)
             elif r == 'max_entity_len':
                 setattr(args, r, 4)
-            elif r == 'database_dir':
-                setattr(args, r, None)
             elif r == 'ned_retrieve_method':
                 setattr(args, r, 'naive')
             elif r == 'database_lookup_method':

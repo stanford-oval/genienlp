@@ -46,10 +46,7 @@ class SequentialField(NamedTuple):
 
 
 # Entity is defined per token
-# Each field contains a list of possible values for that feature
-# @dataclass
-
-
+# Each attribute contains a list of possible values for that entity
 class Entity(object):
     def __init__(
         self,
@@ -65,8 +62,8 @@ class Entity(object):
         self.type_prob_default_val = 1.0
         self.qid_default_val = 0
 
-    # def __mul__(self, n):
-    #     return [self for _ in range(n)]
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
     def flatten(self):
         result = []
