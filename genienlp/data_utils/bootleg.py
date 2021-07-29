@@ -75,8 +75,6 @@ class Bootleg(object):
         ##### almond specific
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')) as fin:
             self.almond_type_mapping = ujson.load(fin)
-        # with open(f'{self.args.database_dir}/es_material/almond_type_mapping_inclusion.json', 'r') as fin:
-        #     self.almond_type_mapping_include = ujson.load(fin)
 
         # only keep subset for provided domains
         self.wiki2normalized_type = dict()
@@ -85,19 +83,7 @@ class Bootleg(object):
             mapping = self.almond_type_mapping[domain]
             for normalized_type, titles in mapping.items():
                 for title in titles:
-                    # if title[0] == title[-1] == '*':
-                    #     self.wiki2normalized_type_include[title.strip('*')] = normalized_type
-                    # else:
                     self.wiki2normalized_type[title] = normalized_type
-            # self.type_mapping_match.update(self.almond_type_mapping_match[domain])
-            # self.type_mapping_include.update(self.almond_type_mapping_match[domain])
-
-        # self.almond_type2qid = dict()
-        # with open(f'{self.args.database_dir}/es_material/almond_type2qid.json', 'r') as fin:
-        #     almond_type2qid = ujson.load(fin)
-        # for domain in self.almond_domains:
-        #     self.almond_type2qid.update(almond_type2qid[domain])
-        # self.qid2almond_type = {v: k for k, v in self.almond_type2qid.items()}
         #####
 
         self.cur_entity_embed_size = 0
@@ -186,12 +172,6 @@ class Bootleg(object):
         for key in self.wiki2normalized_type.keys():
             if fnmatch.fnmatch(title, key):
                 types = self.wiki2normalized_type[key]
-        # if title in self.wiki2normalized_type_match:
-        #     types = self.wiki2normalized_type_match[title]
-        # else:
-        #     for key in self.wiki2normalized_type_include.keys():
-        #         if key in title:
-        #             types = self.wiki2normalized_type_include[key]
 
         typeqids = None
         if types is not None:
