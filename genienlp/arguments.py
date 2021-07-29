@@ -102,8 +102,13 @@ def parse_argv(parser):
         'multiple languages for each task should be concatenated with +',
     )
 
-    parser.add_argument('--max_qids_per_entity', type=int)
-    parser.add_argument('--max_types_per_qid', type=int)
+    parser.add_argument('--max_qids_per_entity', type=int, default=1, help='maximum number of qids to keep for each entity')
+    parser.add_argument(
+        '--max_types_per_qid',
+        type=int,
+        default=2,
+        help='maximum number of types to keep for each qid associated with an entity',
+    )
 
     parser.add_argument(
         '--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training', required=True
@@ -455,14 +460,22 @@ def parse_argv(parser):
         "--add_entities_to_text",
         default='no',
         choices=['no', 'insert', 'append'],
-        help='Method for adding types to input text in text-based NER approach',
+        help='Method for adding entities to input text in text-based NER approach',
     )
 
     parser.add_argument(
         "--entity_attributes",
         nargs='+',
-        default=['type_id', 'qid'],
-        help='',
+        default=['type_id', 'type_prob', 'qid'],
+        help='Process only these entity attributes for adding them to text. Defaults to type and qid',
+    )
+
+    parser.add_argument(
+        "--almond_type_mapping_path",
+        default=None,
+        type=str,
+        help='If provided, will override the usual almond type mapping in data_utils/database_file/'
+        'Path should be relative to --root',
     )
 
     parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
@@ -594,6 +607,8 @@ def post_parse_general(args):
     for x in ['data', 'save', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
 
+    args.max_features_size = args.max_types_per_qid * args.max_qids_per_entity
+
     # tasks with the same name share the same task object
     train_tasks_dict = get_tasks(args.train_task_names, args)
     args.train_tasks = list(train_tasks_dict.values())
@@ -649,8 +664,6 @@ def post_parse_train_specific(args):
         for train_task, val_task, metrics in zip(args.train_tasks, args.val_tasks, args.override_valid_metrics):
             train_task.metrics = metrics
             val_task.metrics = metrics
-
-    args.max_features_size = args.max_types_per_qid * args.max_qids_per_entity
 
     args.log_dir = args.save
     if args.tensorboard_dir is None:

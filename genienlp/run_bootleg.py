@@ -324,8 +324,11 @@ def main(args):
     args.ned_retrieve_method = 'bootleg'
     args.override_context = None
     args.override_question = None
+
+    # set these so we can use post_parse_general for train and run_bootleg
     args.val_task_names = None
-    args.max_features_size = 0
+    args.max_types_per_qid = 0
+    args.max_qids_per_entity = 0
 
     args = post_parse_general(args)
     set_seed(args)

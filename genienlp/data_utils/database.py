@@ -55,7 +55,7 @@ class Database(object):
 
         nltk.download('averaged_perceptron_tagger', quiet=True)
 
-        tokens_type_ids = [[self.unk_id] * self.max_features_size * len(tokens)]
+        tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
 
         max_entity_len = min(max_entity_len, len(tokens))
         min_entity_len = min(min_entity_len, len(tokens))
