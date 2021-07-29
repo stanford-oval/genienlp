@@ -46,10 +46,7 @@ class SequentialField(NamedTuple):
 
 
 # Entity is defined per token
-# Each field contains a list of possible values for that feature
-# @dataclass
-
-
+# Each attribute contains a list of possible values for that entity
 class Entity(object):
     def __init__(
         self,
@@ -61,8 +58,8 @@ class Entity(object):
         self.type_prob = type_prob
         self.qid = qid
 
-    # def __mul__(self, n):
-    #     return [self for _ in range(n)]
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
     def flatten(self):
         result = []
@@ -80,8 +77,6 @@ class Entity(object):
             setattr(pad_feature, field, [0] * max_features_size)
         return pad_feature
 
-
-# VALID_FEATURE_FIELDS = tuple(Entity.__annotations__.keys())
 
 # 1: to remove self
 signature = inspect.signature(Entity.__init__)
