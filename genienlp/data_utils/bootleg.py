@@ -66,8 +66,8 @@ class Bootleg(object):
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json') as fin:
             self.qid2typenames = ujson.load(fin)
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json') as fin:
-            self.type_vocab_to_wikidataqid = ujson.load(fin)
-            self.wikidataqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_wikidataqid.items()}
+            self.type_vocab_to_entityqid = ujson.load(fin)
+            self.entityqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_entityqid.items()}
         with open(f'{self.args.database_dir}/es_material/typeqid2id.json') as fin:
             self.typeqid2id = ujson.load(fin)
         self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
@@ -194,9 +194,9 @@ class Bootleg(object):
         if types is not None:
             if isinstance(types, str):
                 # typeqids = [self.almond_type2qid[types]]
-                typeqids = [self.type_vocab_to_wikidataqid[types]]
+                typeqids = [self.type_vocab_to_entityqid[types]]
             elif isinstance(types, (list, tuple)):
-                typeqids = [self.type_vocab_to_wikidataqid[type_] for type_ in types]
+                typeqids = [self.type_vocab_to_entityqid[type_] for type_ in types]
                 # typeqids = [self.almond_type2qid[type_] for type_ in types]
 
         return typeqids
@@ -218,15 +218,15 @@ class Bootleg(object):
                         if self.bootleg_post_process_types:
                             all_types = ' | '.join(
                                 set(
-                                    self.wikidataqid_to_type_vocab[self.id2typeqid[id]]
+                                    self.entityqid_to_type_vocab[self.id2typeqid[id]]
                                     for id in feat.type_id
-                                    if self.id2typeqid[id] in self.wikidataqid_to_type_vocab
+                                    if self.id2typeqid[id] in self.entityqid_to_type_vocab
                                 )
                             )
                         else:
                             all_types = ' | '.join(
                                 set(
-                                    self.wikidataqid_to_type_vocab[self.id2typeqid[id]]
+                                    self.entityqid_to_type_vocab[self.id2typeqid[id]]
                                     for id in feat.type_id
                                     if id != self.args.db_unk_id
                                 )
@@ -260,15 +260,15 @@ class Bootleg(object):
                         if 'type_id' in self.args.entity_attributes:
                             all_types = ' | '.join(
                                 set(
-                                    self.wikidataqid_to_type_vocab[self.id2typeqid[id]]
+                                    self.entityqid_to_type_vocab[self.id2typeqid[id]]
                                     for id in feat.type_id
-                                    if self.id2typeqid[id] in self.wikidataqid_to_type_vocab
+                                    if self.id2typeqid[id] in self.entityqid_to_type_vocab
                                 )
                             )
                         else:
                             all_types = ' | '.join(
                                 set(
-                                    self.wikidataqid_to_type_vocab[self.id2typeqid[id]]
+                                    self.entityqid_to_type_vocab[self.id2typeqid[id]]
                                     for id in feat.type_id
                                     if id != self.args.db_unk_id
                                 )
@@ -325,8 +325,8 @@ class Bootleg(object):
                     if qid in self.qid2typenames and self.qid2typenames[qid]:
                         # map entity qid to its type titles on wikidata ; then map titles to their wikidata qids
                         for typename in self.qid2typenames[qid]:
-                            if typename in self.type_vocab_to_wikidataqid:
-                                all_types.append(self.type_vocab_to_wikidataqid[typename])
+                            if typename in self.type_vocab_to_entityqid:
+                                all_types.append(self.type_vocab_to_entityqid[typename])
 
                     if len(all_types):
                         # go through all types
@@ -335,7 +335,7 @@ class Bootleg(object):
                                 # map wikidata types to thingtalk types
                                 if self.bootleg_post_process_types:
                                     # map qid to title
-                                    title = self.wikidataqid_to_type_vocab[typeqid]
+                                    title = self.entityqid_to_type_vocab[typeqid]
                                     # process may return multiple types for a single type when it's ambiguous
                                     typeqids = self.post_process_bootleg_types(title)
                                     if typeqids is None:
