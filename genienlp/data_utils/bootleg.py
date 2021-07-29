@@ -26,7 +26,7 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import fnmatch
 import logging
 import os
 
@@ -79,16 +79,16 @@ class Bootleg(object):
         #     self.almond_type_mapping_include = ujson.load(fin)
 
         # only keep subset for provided domains
-        self.wiki2normalized_type_include = dict()
-        self.wiki2normalized_type_match = dict()
+        self.wiki2normalized_type = dict()
+        # self.wiki2normalized_type_match = dict()
         for domain in self.almond_domains:
             mapping = self.almond_type_mapping[domain]
             for normalized_type, titles in mapping.items():
                 for title in titles:
-                    if title[0] == title[-1] == '@':
-                        self.wiki2normalized_type_include[title.strip('@')] = normalized_type
-                    else:
-                        self.wiki2normalized_type_match[title] = normalized_type
+                    # if title[0] == title[-1] == '*':
+                    #     self.wiki2normalized_type_include[title.strip('*')] = normalized_type
+                    # else:
+                    self.wiki2normalized_type[title] = normalized_type
             # self.type_mapping_match.update(self.almond_type_mapping_match[domain])
             # self.type_mapping_include.update(self.almond_type_mapping_match[domain])
 
@@ -183,12 +183,15 @@ class Bootleg(object):
 
     def post_process_bootleg_types(self, title):
         types = None
-        if title in self.wiki2normalized_type_match:
-            types = self.wiki2normalized_type_match[title]
-        else:
-            for key in self.wiki2normalized_type_include.keys():
-                if key in title:
-                    types = self.wiki2normalized_type_include[key]
+        for key in self.wiki2normalized_type.keys():
+            if fnmatch.fnmatch(title, key):
+                types = self.wiki2normalized_type[key]
+        # if title in self.wiki2normalized_type_match:
+        #     types = self.wiki2normalized_type_match[title]
+        # else:
+        #     for key in self.wiki2normalized_type_include.keys():
+        #         if key in title:
+        #             types = self.wiki2normalized_type_include[key]
 
         typeqids = None
         if types is not None:
