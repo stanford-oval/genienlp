@@ -200,7 +200,7 @@ class Bootleg(object):
                     if 'type_id' in self.args.entity_attributes:
                         if self.bootleg_post_process_types:
                             all_types = ' | '.join(
-                                set(
+                                sorted(
                                     self.entityqid_to_type_vocab[self.id2typeqid[id]]
                                     for id in feat.type_id
                                     if self.id2typeqid[id] in self.entityqid_to_type_vocab
@@ -208,7 +208,7 @@ class Bootleg(object):
                             )
                         else:
                             all_types = ' | '.join(
-                                set(
+                                sorted(
                                     self.entityqid_to_type_vocab[self.id2typeqid[id]]
                                     for id in feat.type_id
                                     if id != self.args.db_unk_id
@@ -242,7 +242,7 @@ class Bootleg(object):
                     if self.args.add_entities_to_text != 'no':
                         if 'type_id' in self.args.entity_attributes:
                             all_types = ' | '.join(
-                                set(
+                                sorted(
                                     self.entityqid_to_type_vocab[self.id2typeqid[id]]
                                     for id in feat.type_id
                                     if self.id2typeqid[id] in self.entityqid_to_type_vocab
@@ -250,7 +250,7 @@ class Bootleg(object):
                             )
                         else:
                             all_types = ' | '.join(
-                                set(
+                                sorted(
                                     self.entityqid_to_type_vocab[self.id2typeqid[id]]
                                     for id in feat.type_id
                                     if id != self.args.db_unk_id
@@ -312,6 +312,7 @@ class Bootleg(object):
                                 all_types.append(self.type_vocab_to_entityqid[typename])
 
                     if len(all_types):
+                        count = 0
                         # go through all types
                         for typeqid in all_types:
                             if typeqid in self.typeqid2id:
@@ -327,12 +328,15 @@ class Bootleg(object):
                                 else:
                                     typeqids = [typeqid]
 
-                                for count, typeqid_ in enumerate(typeqids):
+                                for typeqid_ in typeqids:
                                     if count >= self.args.max_types_per_qid:
                                         break
                                     type_id = self.typeqid2id[typeqid_]
+                                    if type_id in type_id:
+                                        continue
                                     type_ids.append(type_id)
                                     type_probs.append(prob)
+                                    count += 1
 
                 padded_type_ids = self.pad_values(type_ids, self.args.max_features_size, 0)
                 padded_type_probs = self.pad_values(type_probs, self.args.max_features_size, 0)
