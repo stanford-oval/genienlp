@@ -229,7 +229,7 @@ BANNED_PHRASES = set(
         'home address',
         'home assistant',
         'price',
-        'opening hours'
+        'opening hours',
     ]
 )
 

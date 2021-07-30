@@ -1,13 +1,12 @@
 import argparse
-from collections import defaultdict, Counter
+from collections import Counter, defaultdict
 
 import jsonlines
 import ujson
 
-from genienlp.data_utils.bootleg import reverse_bisect_left, post_process_bootleg_types
-
 from genienlp import run_bootleg
-from genienlp.data_utils.database_utils import is_banned, DOMAIN_TYPE_MAPPING
+from genienlp.data_utils.bootleg import post_process_bootleg_types, reverse_bisect_left
+from genienlp.data_utils.database_utils import DOMAIN_TYPE_MAPPING, is_banned
 
 parser = argparse.ArgumentParser()
 
@@ -44,23 +43,25 @@ not_correct = Counter()
 for oracle_line, bootleg_line in zip(oracle_lines, bootleg_lines):
 
     assert len(oracle_line['sentence'].split(' ')) == len(bootleg_line['sentence'].split(' '))
-    
+
     entity2types_oracle = defaultdict(str)
     # oracle
     for entity, type in zip(oracle_line['aliases'], oracle_line['thingtalk_types']):
         assert len(type) == 1
         entity2types_oracle[entity.strip()] = type[0]
-    
+
     # bootleg
 
     entity2types_bootleg = defaultdict(list)
     tokenized = bootleg_line['sentence'].split(' ')
-    for alias, all_qids, all_probs, span in zip(bootleg_line['aliases'], bootleg_line['cands'], bootleg_line['cand_probs'], bootleg_line['spans']):
+    for alias, all_qids, all_probs, span in zip(
+        bootleg_line['aliases'], bootleg_line['cands'], bootleg_line['cand_probs'], bootleg_line['spans']
+    ):
         # filter qids with confidence lower than a threshold
         idx = reverse_bisect_left(all_probs, args.bootleg_prob_threshold)
         all_qids = all_qids[:idx]
         all_probs = all_probs[:idx]
-        
+
         TTtypes = []
         if not is_banned(alias):
             for qid, prob in zip(all_qids, all_probs):
@@ -69,21 +70,21 @@ for oracle_line, bootleg_line in zip(oracle_lines, bootleg_lines):
                     all_types = qid2type[qid]
                 else:
                     all_types = []
-            
+
                 if isinstance(all_types, str):
                     all_types = [all_types]
-            
+
                 if len(all_types):
                     # update
                     # go through all types
                     for type in all_types:
                         if type in type2id:
                             title = typeid2title.get(type, '?')
-                        
+
                             ## map wikidata types to thingtalk types
                             if args.bootleg_post_process_types:
                                 type = post_process_bootleg_types(qid, type, title, args.almond_domains)
-                            
+
                             if type in DBtype2TTtype:
                                 TTtypes.append(DBtype2TTtype[type])
 
