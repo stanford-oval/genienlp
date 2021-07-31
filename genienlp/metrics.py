@@ -210,28 +210,6 @@ def normalize_text(s):
     return white_space_fix(remove_articles(remove_punc(lower(s))))
 
 
-def precision(prediction, ground_truth):
-    prediction_tokens = prediction.split()
-    ground_truth_tokens = ground_truth.split()
-    common = collections.Counter(prediction_tokens) & collections.Counter(ground_truth_tokens)
-    num_same = sum(common.values())
-    if num_same == 0:
-        return 0
-    precision = 1.0 * num_same / len(prediction_tokens)
-    return precision
-
-
-def recall(prediction, ground_truth):
-    prediction_tokens = prediction.split()
-    ground_truth_tokens = ground_truth.split()
-    common = collections.Counter(prediction_tokens) & collections.Counter(ground_truth_tokens)
-    num_same = sum(common.values())
-    if num_same == 0:
-        return 0
-    recall = 1.0 * num_same / len(ground_truth_tokens)
-    return recall
-
-
 def f1_score(prediction, ground_truth):
     prediction_tokens = prediction.split()
     ground_truth_tokens = ground_truth.split()
