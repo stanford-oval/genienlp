@@ -1940,10 +1940,10 @@ class OODDataset(CQA):
         examples = []
         question = 'Is this sentence in-domain or out-domain?'
 
-        data_file = os.path.join(path, 'data.tsv')
+        data_file = os.path.join(path, f'{split}.tsv')
         dataset = load_dataset('csv', data_files=data_file, delimiter='\t', column_names=['tmp1', 'tmp2', 'sentence', 'label'])
-        dataset = dataset['train'].train_test_split(test_size=0.2, seed=42)
-        dataset = dataset[split]
+        # dataset = dataset['train'].train_test_split(test_size=0.2, seed=42)
+        dataset = dataset['train']
 
         for data in dataset:
             context = data['sentence']
@@ -1953,7 +1953,7 @@ class OODDataset(CQA):
         super().__init__(examples, **kwargs)
 
     @classmethod
-    def splits(cls, root='.data', train='train', validation='test', test='test', **kwargs):
+    def splits(cls, root='.data', train='train', validation='eval', test='test', **kwargs):
         train_data = None if train is None else cls(root, train, **kwargs)
         validation_data = None if validation is None else cls(root, validation, **kwargs)
         test_data = None if test is None else cls(root, test, **kwargs)

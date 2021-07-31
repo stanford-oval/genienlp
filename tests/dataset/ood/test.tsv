@@ -1,0 +1,10 @@
+Elog/59109/0	null	turn off fireplace	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.iot.switch ( name = " fireplace " ) . set_power ( power = enum off ) ;
+Esnips-nlu/spotify-2079/0	null	i want to hear music from the top 50 by yasuhiko fukuda	$dialogue @org.thingpedia.dialogue.transaction . execute ; sort ( popularity desc of @org.thingpedia.media-source . playable ( ) filter contains ( artists , null ^^org.thingpedia.media-source:artist ( " yasuhiko fukuda " ) ) ) [ 1 : 50 ] => @org.thingpedia.media-player . play ( playable = id ) ;
+Eschemaorg/sf126/0	null	can you find the highest rated thai restaurant , please .	$dialogue @org.thingpedia.dialogue.transaction . execute ; sort ( rating desc of @com.yelp . restaurant ( ) filter contains ( cuisines , null ^^com.yelp:restaurant_cuisine ( " thai " ) ) ) [ 1 ] ;
+Estaging/log/118467/0	null	translate bonjour to chinese	$ood ;
+Esnips-nlu/spotify-17/0	null	play the song gangsta ? by siavash ghomayshi	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.media-source . song ( ) filter contains ( artists , null ^^org.thingpedia.media-source:artist ( " siavash ghomayshi " ) ) && id =~ " gangsta " => @org.thingpedia.media-player . play ( playable = id ) ;
+Elog/50614/0	null	hey !	$dialogue @org.thingpedia.dialogue.transaction . greet ;
+Estaging/online/1688865/0	null	get my tweets	$ood ;
+Eonline/1473568/0	null	get weather in boston	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.weather . current ( location = new Location ( " boston " ) ) ;
+Elog/39622/0	null	almond where am i	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.builtin.thingengine.builtin . get_gps ( ) ;
+log/158432	null	speaker	$ood ;
