@@ -73,23 +73,26 @@ class Bootleg(object):
         self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
 
         ##### almond specific
+        self.almond_type_mapping = dict()
         self.wiki2normalized_type = dict()
-        if self.args.almond_type_mapping_path:
+
+        if getattr(self.args, 'almond_type_mapping_path', None):
             with open(os.path.join(self.args.root, self.args.almond_type_mapping_path)) as fin:
-                almond_type_mapping = ujson.load(fin)
-            for normalized_type, titles in almond_type_mapping.items():
+                self.almond_type_mapping = ujson.load(fin)
+            for normalized_type, titles in self.almond_type_mapping.items():
                 for title in titles:
                     self.wiki2normalized_type[title] = normalized_type
         else:
             with open(
                 os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')
             ) as fin:
-                almond_type_mapping = ujson.load(fin)
+                almond_type_mapping_all_domains = ujson.load(fin)
             # only keep subset for provided domains
             for domain in self.almond_domains:
-                for normalized_type, titles in almond_type_mapping[domain].items():
-                    for title in titles:
-                        self.wiki2normalized_type[title] = normalized_type
+                self.almond_type_mapping.update(almond_type_mapping_all_domains[domain])
+            for normalized_type, titles in self.almond_type_mapping.items():
+                for title in titles:
+                    self.wiki2normalized_type[title] = normalized_type
         #####
 
         self.cur_entity_embed_size = 0
@@ -324,6 +327,7 @@ class Bootleg(object):
                                 if self.bootleg_post_process_types:
                                     # map qid to title
                                     title = self.entityqid_to_type_vocab[typeqid]
+
                                     # process may return multiple types for a single type when it's ambiguous
                                     typeqids = self.post_process_bootleg_types(title)
 

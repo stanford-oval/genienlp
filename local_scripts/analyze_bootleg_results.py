@@ -6,29 +6,30 @@ import jsonlines
 import ujson
 from termcolor import colored
 
+from genienlp.data_utils.bootleg import Bootleg
 from genienlp.data_utils.database_utils import is_banned
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--input_file', type=str)
-parser.add_argument('--output_file', type=str)
 parser.add_argument('--database_dir', type=str)
 parser.add_argument('--threshold', type=int, default=0.1)
-parser.add_argument('--domain', type=str)
+parser.add_argument('--almond_domains', type=str, nargs='+')
+parser.add_argument('--subsample', type=int, default='1000000000')
+
 
 args = parser.parse_args()
 
 if __name__ == '__main__':
 
-    with open(f'{args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json', 'r') as fin:
-        qid2typenames = ujson.load(fin)
-    with open(f'{args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json', 'r') as fin:
-        type_vocab_to_wikidataqid = ujson.load(fin)
-        wikidataqid_to_type_vocab = {v: k for k, v in type_vocab_to_wikidataqid.items()}
-    with open(f'{args.database_dir}/es_material/typeqid2id.json', 'r') as fin:
-        typeqid2id = ujson.load(fin)
+    args.bootleg_model = 'bootleg_uncased_mini'
+    args.bootleg_post_process_types = True
+    args.bootleg_output_dir = 'results_temp'
+    args.embeddings = ' embeddings'
 
-    all_types = []
+    bootleg = Bootleg(args)
+
+    all_typeqids = []
     all_aliases = []
     all_qids = []
     all_probs = []
@@ -36,7 +37,9 @@ if __name__ == '__main__':
 
     lines = jsonlines.open(args.input_file, 'r')
 
-    for line in lines:
+    for count, line in enumerate(lines):
+        if count >= args.subsample:
+            break
         qids = line['qids']
         aliases = line['aliases']
         probs = line['probs']
@@ -44,30 +47,30 @@ if __name__ == '__main__':
             if prob < args.threshold or is_banned(alias):
                 continue
 
-            types = []
-            if qid in qid2typenames and qid2typenames[qid]:
+            typeqids = []
+            if qid in bootleg.qid2typenames and bootleg.qid2typenames[qid]:
                 # map entity qid to its type titles on wikidata ; then map titles to their wikidata qids
-                for typename in qid2typenames[qid]:
-                    if typename in type_vocab_to_wikidataqid:
-                        types.append(type_vocab_to_wikidataqid[typename])
+                for typename in bootleg.qid2typenames[qid]:
+                    if typename in bootleg.type_vocab_to_entityqid:
+                        typeqids.append(bootleg.type_vocab_to_entityqid[typename])
 
             all_aliases.append(alias)
             all_qids.append(qid)
-            all_types.append(types)
+            all_typeqids.append(typeqids)
             all_probs.append(prob)
 
-    assert len(all_qids) == len(all_aliases) == len(all_types) == len(all_probs)
+    assert len(all_qids) == len(all_aliases) == len(all_typeqids) == len(all_probs)
 
     all_titles = Counter()
     all_new_types = Counter()
-    for qid, alias, types, prob in zip(all_qids, all_aliases, all_types, all_probs):
+    for qid, alias, types, prob in zip(all_qids, all_aliases, all_typeqids, all_probs):
         # assert type in type2id
         for typeqid in types:
-            if typeqid in wikidataqid_to_type_vocab:
-                title = wikidataqid_to_type_vocab[typeqid]
+            if typeqid in bootleg.entityqid_to_type_vocab:
+                title = bootleg.entityqid_to_type_vocab[typeqid]
                 all_titles[title] += 1
 
-                print(f'{alias}, {prob}, {qid}, {typeqid}: {title}')
+                print(f'{alias}, {prob:.3f}, {qid}, {typeqid}: {title}')
 
                 ######
                 ## copy this code block to database_utils.post_process_bootleg_types when done with your analysis
@@ -75,32 +78,25 @@ if __name__ == '__main__':
                 ########################################################################
                 ########################################################################
 
-                if (
-                    'country' in title
-                    or 'countries' in title
-                    or 'city' in title
-                    or 'town' in title
-                    or title
-                    in [
-                        'sovereign state',
-                        'republic',
-                        'federal state',
-                        'social state',
-                        'unitary state',
-                        'constitutional republic',
-                        'democratic republic',
-                        'island nation',
-                        'Commonwealth realm',
-                        'secular state',
-                        'geographic region',
-                    ]
-                ):
-                    typeqid = 'Q6256'
+                # do type mapping
+
+                if True:
+                    # map qid to title
+                    title = bootleg.entityqid_to_type_vocab[typeqid]
+                    # process may return multiple types for a single type when it's ambiguous
+                    mapped_typeqid = bootleg.post_process_bootleg_types(title)
+
+                    # attempt to normalize qids failed; just use the original type
+                    if mapped_typeqid is not None:
+                        typeqid = mapped_typeqid
 
                 ########################################################################
                 ########################################################################
-
-                all_new_types[typeqid] += 1
+                if isinstance(typeqid, str):
+                    all_new_types[typeqid] += 1
+                else:
+                    for item in typeqid:
+                        all_new_types[item] += 1
 
                 print(f'{alias}, {prob}, {qid}, {typeqid}: {title}')
 
@@ -114,12 +110,10 @@ if __name__ == '__main__':
     main_types = []
     extra_types = []
 
-    values = almond_type2qid[args.domain].values()
-
     for tup in all_new_types.most_common():
-        if tup[0] in values:
+        if bootleg.entityqid_to_type_vocab[tup[0]] in bootleg.almond_type_mapping:
             main_types.append(tup)
         else:
             extra_types.append(tup)
 
-    print('all_new_types:', *[colored(tup, "red") for tup in main_types], *[extra_types])
+    print('all_new_types:', *[colored(tup, "red") for tup in main_types], *extra_types)
