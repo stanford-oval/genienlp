@@ -1936,13 +1936,11 @@ class OODDataset(CQA):
     name = 'ood'
     is_sequence_classification = True
 
-    def __init__(self, path, split, lower=False, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, lower=False, cached_path=None, skip_cache=False, **kwargs):
         examples = []
         question = 'Is this sentence in-domain or out-domain?'
 
-        data_file = os.path.join(path, f'{split}.tsv')
-        dataset = load_dataset('csv', data_files=data_file, delimiter='\t', column_names=['tmp1', 'tmp2', 'sentence', 'label'])
-        # dataset = dataset['train'].train_test_split(test_size=0.2, seed=42)
+        dataset = load_dataset('csv', data_files=path, delimiter='\t', column_names=['tmp1', 'tmp2', 'sentence', 'label'])
         dataset = dataset['train']
 
         for data in dataset:
@@ -1954,9 +1952,13 @@ class OODDataset(CQA):
 
     @classmethod
     def splits(cls, root='.data', train='train', validation='eval', test='test', **kwargs):
-        train_data = None if train is None else cls(root, train, **kwargs)
-        validation_data = None if validation is None else cls(root, validation, **kwargs)
-        test_data = None if test is None else cls(root, test, **kwargs)
+        train_path = None if train is None else os.path.join(root, f'{train}.tsv')
+        validation_path = None if validation is None else os.path.join(root, f'{validation}.tsv')
+        test_path = None if test is None else os.path.join(root, f'{test}.tsv')
+
+        train_data = None if train is None else cls(train_path, **kwargs)
+        validation_data = None if validation is None else cls(validation_path, **kwargs)
+        test_data = None if test is None else cls(test_path, **kwargs)
 
         return (
             Split(
@@ -1964,5 +1966,5 @@ class OODDataset(CQA):
                 eval=validation_data,
                 test=test_data,
             ),
-            None,
+            Split(train=train_path, eval=validation_path, test=test_path),
         )
