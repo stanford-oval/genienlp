@@ -308,7 +308,7 @@ class Bootleg(object):
             if not is_banned(alias):
                 for qid, prob in zip(all_qids, all_probs):
                     # to map qids to unique ids we just need to remove the Q character as qids are distinct
-                    qids.append(qid[1:])
+                    qids.append(int(qid[1:]))
 
                     # get all types for a qid
                     all_typeqids = []

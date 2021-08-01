@@ -607,6 +607,8 @@ def post_parse_general(args):
     for x in ['data', 'save', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
 
+    args.max_features_size = args.max_types_per_qid * args.max_qids_per_entity
+
     # tasks with the same name share the same task object
     train_tasks_dict = get_tasks(args.train_task_names, args)
     args.train_tasks = list(train_tasks_dict.values())
@@ -662,8 +664,6 @@ def post_parse_train_specific(args):
         for train_task, val_task, metrics in zip(args.train_tasks, args.val_tasks, args.override_valid_metrics):
             train_task.metrics = metrics
             val_task.metrics = metrics
-
-    args.max_features_size = args.max_types_per_qid * args.max_qids_per_entity
 
     args.log_dir = args.save
     if args.tensorboard_dir is None:
