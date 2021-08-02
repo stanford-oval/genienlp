@@ -843,7 +843,7 @@ def load_config_json(args):
                 'force_fast_tokenizer',
             ):
                 setattr(args, r, False)
-            elif r in ('num_db_types', 'db_unk_id', 'num_workers', 'max_features_size'):
+            elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
                 setattr(args, r, 0)
             elif r in ('entity_word_embeds_dropout'):
                 setattr(args, r, 0.0)
@@ -851,10 +851,8 @@ def load_config_json(args):
                 setattr(args, r, [1])
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
-            elif r in ['override_valid_metrics', 'entity_attributes']:
+            elif r in ['override_valid_metrics']:
                 setattr(args, r, [])
-            elif r in ('add_entities_to_text',):
-                setattr(args, r, 'no')
             elif r == 'database_type':
                 setattr(args, r, 'json')
             elif r == 'att_pooling':
@@ -867,8 +865,6 @@ def load_config_json(args):
                 setattr(args, r, 'naive')
             elif r == 'database_lookup_method':
                 setattr(args, r, 'ngrams')
-            elif r == 'ned_domains':
-                setattr(args, r, [])
             elif r == 'locale':
                 setattr(args, r, 'en')
             elif r == 'num_beam_groups':
@@ -886,6 +882,28 @@ def load_config_json(args):
             else:
                 # use default value
                 setattr(args, r, None)
+
+        # backward compatibility for models trained with genienlp before NED Refactoring (2)
+        if args.max_features_size is None:
+            if hasattr(args, 'ned_features_size'):
+                setattr(args, 'max_features_size', args.ned_features_size)
+            else:
+                setattr(args, 'max_features_size', 0)
+        if args.ned_domains is None:
+            if hasattr(args, 'almond_domains'):
+                setattr(args, 'ned_domains', args.almond_domains)
+            else:
+                setattr(args, 'ned_domains', [])
+        if args.add_entities_to_text is None:
+            if hasattr(args, 'add_types_to_text'):
+                setattr(args, 'add_entities_to_text', args.add_types_to_text)
+            else:
+                setattr(args, 'add_entities_to_text', 'no')
+        if args.entity_attributes is None:
+            if hasattr(args, 'ned_features'):
+                setattr(args, 'entity_attributes', args.ned_features)
+            else:
+                setattr(args, 'entity_attributes', [])
 
         args.dropout_ratio = 0.0
         args.verbose = False
