@@ -572,7 +572,7 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
-    all_features = NumericalizedExamples.from_examples(dataset, numericalizer)
+    all_features = NumericalizedExamples.from_examples(dataset, numericalizer, train=train)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]

@@ -26,7 +26,7 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import re
 import unicodedata
 from dataclasses import dataclass
 from typing import Iterable, List, NamedTuple, Union
@@ -131,7 +131,7 @@ class NumericalizedExamples(NamedTuple):
     answer: SequentialField
 
     @staticmethod
-    def from_examples(examples: Iterable[Example], numericalizer):
+    def from_examples(examples: Iterable[Example], numericalizer, train):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
         args = numericalizer.args
@@ -149,6 +149,11 @@ class NumericalizedExamples(NamedTuple):
 
         for ex in examples:
             context_plus_question = ex.context + sep_token + ex.question if len(ex.question) else ex.context
+            if args.filter_wrong_qids and train:
+                all_input_qids = re.findall('Q[1-9]*', context_plus_question)
+                all_answer_qids = re.findall('Q[1-9]*', ex.answer)
+                if set(all_input_qids) != set(all_answer_qids):
+                    continue
             all_context_plus_questions.append(context_plus_question)
 
             # concatenate question and context features with a separator, but no need for a separator if there are no features to begin with

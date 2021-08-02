@@ -115,7 +115,7 @@ class Server(object):
 
     def numericalize_examples(self, ex):
 
-        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer)
+        all_features = NumericalizedExamples.from_examples(ex, self.numericalizer, train=False)
         # make a single batch with all examples
         return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
 

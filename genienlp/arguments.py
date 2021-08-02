@@ -463,6 +463,12 @@ def parse_argv(parser):
         help='Method for adding qids to input text in text-based NER approach',
     )
 
+    parser.add_argument(
+        "--filter_wrong_qids",
+        action='store_true',
+        help='Remove examples from train set where bootleg qid does not match output qid',
+    )
+
     parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
     parser.add_argument(
         '--ned_retrieve_method',
