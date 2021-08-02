@@ -73,7 +73,28 @@ class Bootleg(object):
         self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
 
         ##### get mapping between wiki types and normalized almond property names
-        self.create_wiki2normalized_type_mapping()
+        # keys are normalized types for each thingtalk property, values are a list of wiki types
+        self.almond_type_mapping = dict()
+
+        # a list of tuples: each pair includes a wiki type and their normalized type
+        self.wiki2normalized_type = list()
+
+        if self.args.almond_type_mapping_path:
+            # read mapping from user-provided file
+            with open(os.path.join(self.args.root, self.args.almond_type_mapping_path)) as fin:
+                self.almond_type_mapping = ujson.load(fin)
+            self.update_wiki2normalized_type()
+        else:
+            # this file contains mapping between normalized types and wiki types *per domain*
+            # we will choose the subset of domains we want via ned_domains
+            with open(
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')
+            ) as fin:
+                almond_type_mapping_all_domains = ujson.load(fin)
+            # only keep subset for provided domains
+            for domain in self.ned_domains:
+                self.almond_type_mapping.update(almond_type_mapping_all_domains[domain])
+            self.update_wiki2normalized_type()
         #####
 
         self.cur_entity_embed_size = 0
@@ -122,33 +143,10 @@ class Bootleg(object):
             'False',
         ]
 
-    def create_wiki2normalized_type_mapping(self):
-        # keys are normalized types for each thingtalk property, values are a list of wiki types
-        self.almond_type_mapping = dict()
-
-        # a list of tuples: each pair includes a wiki type and their normalized type
-        self.wiki2normalized_type = list()
-
-        if self.args.almond_type_mapping_path:
-            # read mapping from user-provided file
-            with open(os.path.join(self.args.root, self.args.almond_type_mapping_path)) as fin:
-                self.almond_type_mapping = ujson.load(fin)
-            for normalized_type, titles in self.almond_type_mapping.items():
-                for title in titles:
-                    self.wiki2normalized_type.append((title, normalized_type))
-        else:
-            # this file contains mapping between normalized types and wiki types *per domain*
-            # we will choose the subset of domains we want via ned_domains
-            with open(
-                os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')
-            ) as fin:
-                almond_type_mapping_all_domains = ujson.load(fin)
-            # only keep subset for provided domains
-            for domain in self.ned_domains:
-                self.almond_type_mapping.update(almond_type_mapping_all_domains[domain])
-            for normalized_type, titles in self.almond_type_mapping.items():
-                for title in titles:
-                    self.wiki2normalized_type.append((title, normalized_type))
+    def update_wiki2normalized_type(self):
+        for normalized_type, titles in self.almond_type_mapping.items():
+            for title in titles:
+                self.wiki2normalized_type.append((title, normalized_type))
 
     def create_config(self, overrides):
         config_args = parse_boot_and_emm_args(self.config_path, overrides)
