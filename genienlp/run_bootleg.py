@@ -194,7 +194,7 @@ def parse_argv(parser):
 
     # token classification task args
     parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')
-    parser.add_argument('--ner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
+    parser.add_argument('--crossner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
     parser.add_argument(
         '--hf_test_overfit',
         action='store_true',
@@ -240,7 +240,7 @@ def dump_bootleg_features(args, logger):
         'cache_input_data': args.cache_input_data,
         'num_workers': args.num_workers,
         'all_dirs': args.train_src_languages,
-        'ner_domains': args.ner_domains,
+        'crossner_domains': args.crossner_domains,
     }
 
     # run_bootleg does not need special treatment for train vs eval/ test

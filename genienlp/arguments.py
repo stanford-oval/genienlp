@@ -521,7 +521,7 @@ def parse_argv(parser):
 
     # token classification task args
     parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')
-    parser.add_argument('--ner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
+    parser.add_argument('--crossner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
     parser.add_argument(
         '--hf_test_overfit',
         action='store_true',

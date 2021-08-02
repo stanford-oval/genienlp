@@ -109,7 +109,7 @@ def prepare_data(args, logger):
             kwargs.update(train_eval_shared_kwargs)
             kwargs['all_dirs'] = args.train_src_languages
             kwargs['cached_path'] = os.path.join(args.cache, task.name)
-            kwargs['ner_domains'] = args.ner_domains
+            kwargs['crossner_domains'] = args.crossner_domains
             if args.use_curriculum:
                 kwargs['curriculum'] = True
 
@@ -158,7 +158,7 @@ def prepare_data(args, logger):
             kwargs.update(train_eval_shared_kwargs)
             kwargs['all_dirs'] = args.eval_src_languages
             kwargs['cached_path'] = os.path.join(args.cache, task.name)
-            kwargs['ner_domains'] = args.ner_domains
+            kwargs['crossner_domains'] = args.crossner_domains
             kwargs['hf_test_overfit'] = args.hf_test_overfit
 
             logger.info(f'Adding {task.name} to validation datasets')

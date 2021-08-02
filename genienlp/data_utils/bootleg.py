@@ -48,7 +48,7 @@ class Bootleg(object):
     A wrapper for all functionalities needed from bootleg. It takes care of data preprocessing,
     running examples through bootleg, and overriding examples faetures with the extracted ones
     '''
-    
+
     def __init__(self, args):
         logger.info('Initializing Bootleg class')
 
@@ -125,10 +125,10 @@ class Bootleg(object):
     def create_wiki2normalized_type_mapping(self):
         # keys are normalized types for each thingtalk property, values are a list of wiki types
         self.almond_type_mapping = dict()
-    
+
         # a list of tuples: each pair includes a wiki type and their normalized type
         self.wiki2normalized_type = list()
-    
+
         if self.args.almond_type_mapping_path:
             # read mapping from user-provided file
             with open(os.path.join(self.args.root, self.args.almond_type_mapping_path)) as fin:
@@ -140,7 +140,7 @@ class Bootleg(object):
             # this file contains mapping between normalized types and wiki types *per domain*
             # we will choose the subset of domains we want via ned_domains
             with open(
-                    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')
             ) as fin:
                 almond_type_mapping_all_domains = ujson.load(fin)
             # only keep subset for provided domains
@@ -199,33 +199,19 @@ class Bootleg(object):
                 typeqids = [self.type_vocab_to_typeqid[type_] for type_ in types]
 
         return typeqids
-    
-    def textualize_features(self, feat):
+
+    def entities_to_text(self, feat):
+        final_types = ''
         if 'type_id' in self.args.entity_attributes:
-            if self.bootleg_post_process_types:
-                all_types = ' | '.join(
-                    sorted(
-                        self.typeqid_to_type_vocab[self.id2typeqid[id]]
-                        for id in feat.type_id
-                        if self.id2typeqid[id] in self.typeqid_to_type_vocab
-                    )
-                )
-            else:
-                all_types = ' | '.join(
-                    sorted(
-                        self.typeqid_to_type_vocab[self.id2typeqid[id]]
-                        for id in feat.type_id
-                        if id != self.args.db_unk_id
-                    )
-                )
+            all_types = ' | '.join(sorted(self.typeqid_to_type_vocab[self.id2typeqid[id]] for id in feat.type_id if id != 0))
             final_types = '( ' + all_types + ' ) '
         final_qids = ''
         if 'qid' in self.args.entity_attributes:
             all_qids = ' | '.join(sorted('Q' + str(id) for id in feat.qid if id != -1))
             final_qids = '[ ' + all_qids + ' ]'
-            
+
         return final_types, final_qids
-    
+
     def add_type_tokens(self, sentence, features):
         sentence_tokens = sentence.split(' ')
         assert len(sentence_tokens) == len(features)
@@ -238,8 +224,7 @@ class Bootleg(object):
                 # token is an entity
                 if any([val != 0 for val in feat.type_id]):
                     final_token = '<e> '
-                    final_types = ''
-                    final_types, final_qids = self.textualize_features(feat)
+                    final_types, final_qids = self.entities_to_text(feat)
                     final_token += final_types + final_qids + token
                     # append all entities with same type
                     i += 1
@@ -259,14 +244,13 @@ class Bootleg(object):
                 feat = features[i]
                 # token is an entity
                 if any([val != 0 for val in feat.type_id]):
-                    final_types = ''
-                    final_types, final_qids = self.textualize_features(feat)
+                    final_types, final_qids = self.entities_to_text(feat)
                     all_tokens = []
                     # append all entities with same type
                     while i < len(sentence_tokens) and features[i] == feat:
                         all_tokens.append(sentence_tokens[i])
                         i += 1
-                    final_token = ' '.join([*all_tokens, final_types, *[final_qids], ';'])
+                    final_token = ' '.join([*all_tokens, final_types, final_qids, ';'])
                     sentence_plus_types_tokens.append(final_token)
                 else:
                     i += 1

@@ -796,7 +796,7 @@ def load_config_json(args):
             'att_pooling',
             'no_separator',
             'num_labels',
-            'ner_domains',
+            'crossner_domains',
             'hf_test_overfit',
             'override_valid_metrics',
         ]
