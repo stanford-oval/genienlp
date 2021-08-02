@@ -247,6 +247,24 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
     return max(scores_for_ground_truths)
 
 
+def computeSequenceClassificationPrecision(outputs, targets):
+    targets = [target[0] for target in targets]
+    precision_metric = load_metric('precision')
+    return precision_metric.compute(references=targets, predictions=outputs)['precision']
+
+
+def computeSequenceClassificationRecall(outputs, targets):
+    targets = [target[0] for target in targets]
+    recall_metric = load_metric('recall')
+    return recall_metric.compute(references=targets, predictions=outputs)['recall']
+
+
+def computeSequenceClassificationF1(outputs, targets):
+    targets = [target[0] for target in targets]
+    f1_metric = load_metric('f1')
+    return f1_metric.compute(references=targets, predictions=outputs)['f1']
+
+
 def computeF1(outputs, targets):
     outs = [metric_max_over_ground_truths(f1_score, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
@@ -561,6 +579,18 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
         metric_keys += ['rouge1', 'rouge2', 'rougeL', 'avg_rouge']
         avg_rouge = (rouge['rouge_1_f_score'] + rouge['rouge_2_f_score'] + rouge['rouge_l_f_score']) / 3
         metric_values += [rouge['rouge_1_f_score'], rouge['rouge_2_f_score'], rouge['rouge_l_f_score'], avg_rouge]
+    if 'sc_precision' in requested_metrics:
+        precision = computeSequenceClassificationPrecision(greedy, answer)
+        metric_keys.append('sc_precision')
+        metric_values.append(precision)
+    if 'sc_recall' in requested_metrics:
+        recall = computeSequenceClassificationRecall(greedy, answer)
+        metric_keys.append('sc_recall')
+        metric_values.append(recall)
+    if 'sc_f1' in requested_metrics:
+        f1 = computeSequenceClassificationF1(greedy, answer)
+        metric_keys.append('sc_f1')
+        metric_values.append(f1)
     if 'f1' in requested_metrics:
         f1 = computeF1(greedy, answer)
         metric_keys.append('f1')

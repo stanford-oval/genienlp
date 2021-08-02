@@ -41,6 +41,7 @@ import xml.etree.ElementTree as ET
 from typing import Iterable
 
 import torch
+from datasets import load_dataset
 
 from ..data_utils.example import Example, NumericalizedExamples
 from .base_dataset import Dataset, Split, interleave_keys
@@ -1928,4 +1929,42 @@ class CrossNERDataset(CQA):
 
         return Split(train=all_train_data, eval=all_validation_data, test=all_test_data), Split(
             train=train_path, eval=validation_path, test=test_path
+        )
+
+
+class OODDataset(CQA):
+    name = 'ood'
+    is_sequence_classification = True
+
+    def __init__(self, path, lower=False, cached_path=None, skip_cache=False, **kwargs):
+        examples = []
+        question = 'Is this sentence in-domain or out-domain?'
+
+        dataset = load_dataset('csv', data_files=path, delimiter='\t', column_names=['tmp1', 'tmp2', 'sentence', 'label'])
+        dataset = dataset['train']
+
+        for data in dataset:
+            context = data['sentence']
+            answer = '1' if data['label'].strip() == '$ood ;' else '0'
+            examples.append(Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower))
+
+        super().__init__(examples, **kwargs)
+
+    @classmethod
+    def splits(cls, root='.data', train='train', validation='eval', test='test', **kwargs):
+        train_path = None if train is None else os.path.join(root, f'{train}.tsv')
+        validation_path = None if validation is None else os.path.join(root, f'{validation}.tsv')
+        test_path = None if test is None else os.path.join(root, f'{test}.tsv')
+
+        train_data = None if train is None else cls(train_path, **kwargs)
+        validation_data = None if validation is None else cls(validation_path, **kwargs)
+        test_data = None if test is None else cls(test_path, **kwargs)
+
+        return (
+            Split(
+                train=train_data,
+                eval=validation_data,
+                test=test_data,
+            ),
+            Split(train=train_path, eval=validation_path, test=test_path),
         )

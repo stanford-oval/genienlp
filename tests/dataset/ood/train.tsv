@@ -1,0 +1,10 @@
+Elog/57168/0	null	are my lights on ?	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.iot.light-bulb . power ( ) ;
+Estaging/online/32513072/0	null	get microsoft stock	$ood ;
+Estaging/log/64130/0	null	front page of hacker news	$ood ;
+Esnips-nlu/spotify-948/0	null	play songs by gamble rogers	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.media-source . song ( ) filter contains ( artists , null ^^org.thingpedia.media-source:artist ( " gamble rogers " ) ) => @org.thingpedia.media-player . play ( playable = id ) ;
+Esnips-nlu/spotify-1007/0	null	play music by don cherry .	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.media-source . playable ( ) filter contains ( artists , null ^^org.thingpedia.media-source:artist ( " don cherry " ) ) => @org.thingpedia.media-player . play ( playable = id ) ;
+Eonline/123080/0	null	what 's the temperature ?	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.iot.temperature . temperature ( ) ;
+Estaging/online/120693/0	null	get memes	$ood ;
+Elog-dev/6712/0	null	which is my door value	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.iot.door . state ( ) ;
+log/94501	null	esszimmer licht ausmachen	$ood ;
+Eonline/55592559/0	null	tell me when my front door is open or closed	$dialogue @org.thingpedia.dialogue.transaction . execute ; monitor ( @org.thingpedia.iot.door ( name = " front " ) . state ( ) ) ;

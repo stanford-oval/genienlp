@@ -35,7 +35,7 @@ import torch
 
 from .data_utils.progbar import progress_bar
 from .metrics import compute_metrics
-from .models import TransformerForTokenClassification
+from .models import TransformerForSequenceClassification, TransformerForTokenClassification
 from .util import GenerationOutput, merge_translated_sentences
 
 
@@ -52,7 +52,7 @@ def generate_with_model(
     disable_progbar=True,
 ):
 
-    if isinstance(model, TransformerForTokenClassification):
+    if isinstance(model, TransformerForTokenClassification) or isinstance(model, TransformerForSequenceClassification):
         return generate_with_classification_model(
             model, data_iterator, numericalizer, task, original_order=original_order, disable_progbar=disable_progbar
         )
@@ -245,7 +245,11 @@ def generate_with_classification_model(
         labels = batch.answer.value.tolist()
 
         logits = output.logits
-        predictions = torch.argmax(logits, dim=2).tolist()
+        predictions = torch.argmax(logits, dim=-1).tolist()
+
+        # logits for sequence classification is 2 dimensional
+        if logits.dim() == 2:
+            predictions = [[p] for p in predictions]
 
         # Remove ignored index (special tokens)
         processed_preds = []
