@@ -148,8 +148,8 @@ class NumericalizedExamples(NamedTuple):
             for ex in examples:
                 context_plus_question = ex.context + sep_token + ex.question if len(ex.question) else ex.context
                 if args.filter_wrong_qids:
-                    all_input_qids = re.findall('Q[1-9]*', context_plus_question)
-                    all_answer_qids = re.findall('Q[1-9]*', ex.answer)
+                    all_input_qids = re.findall('Q\d*', context_plus_question)
+                    all_answer_qids = re.findall('Q\d*', ex.answer)
                     mismatch = False
                     for qid in all_answer_qids:
                         if qid not in all_input_qids:
