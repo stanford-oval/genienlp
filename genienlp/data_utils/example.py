@@ -152,7 +152,11 @@ class NumericalizedExamples(NamedTuple):
             if args.filter_wrong_qids and train:
                 all_input_qids = re.findall('Q[1-9]*', context_plus_question)
                 all_answer_qids = re.findall('Q[1-9]*', ex.answer)
-                if set(all_input_qids) != set(all_answer_qids):
+                mismatch = False
+                for qid in all_answer_qids:
+                    if qid not in all_input_qids:
+                        mismatch = True
+                if mismatch:
                     continue
             all_context_plus_questions.append(context_plus_question)
 
