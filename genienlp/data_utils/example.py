@@ -143,21 +143,27 @@ class NumericalizedExamples(NamedTuple):
             sep_token = ' ' + numericalizer.sep_token + ' '
             pad_feature = [get_pad_feature(args.ned_features, args.ned_features_default_val, args.ned_features_size)]
 
+        if train:
+            good_examples = []
+            for ex in examples:
+                context_plus_question = ex.context + sep_token + ex.question if len(ex.question) else ex.context
+                if args.filter_wrong_qids:
+                    all_input_qids = re.findall('Q[1-9]*', context_plus_question)
+                    all_answer_qids = re.findall('Q[1-9]*', ex.answer)
+                    mismatch = False
+                    for qid in all_answer_qids:
+                        if qid not in all_input_qids:
+                            mismatch = True
+                    if not mismatch:
+                        good_examples.append(ex)
+            examples = good_examples.copy()
+
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []
         all_context_plus_question_features = []
 
         for ex in examples:
             context_plus_question = ex.context + sep_token + ex.question if len(ex.question) else ex.context
-            if args.filter_wrong_qids and train:
-                all_input_qids = re.findall('Q[1-9]*', context_plus_question)
-                all_answer_qids = re.findall('Q[1-9]*', ex.answer)
-                mismatch = False
-                for qid in all_answer_qids:
-                    if qid not in all_input_qids:
-                        mismatch = True
-                if mismatch:
-                    continue
             all_context_plus_questions.append(context_plus_question)
 
             # concatenate question and context features with a separator, but no need for a separator if there are no features to begin with
