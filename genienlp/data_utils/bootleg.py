@@ -48,7 +48,7 @@ class Bootleg(object):
     A wrapper for all functionalities needed from bootleg. It takes care of data preprocessing,
     running examples through bootleg, and overriding examples faetures with the extracted ones
     '''
-
+    
     def __init__(self, args):
         logger.info('Initializing Bootleg class')
 
@@ -60,39 +60,20 @@ class Bootleg(object):
         self.entity_dir = f'{self.args.database_dir}/wiki_entity_data'
         self.embed_dir = f'{self.args.database_dir}/wiki_entity_data'
 
-        self.almond_domains = args.almond_domains
+        self.ned_domains = args.ned_domains
         self.bootleg_post_process_types = args.bootleg_post_process_types
 
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json') as fin:
-            self.qid2typenames = ujson.load(fin)
+            self.entityqid2typenames = ujson.load(fin)
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json') as fin:
-            self.type_vocab_to_entityqid = ujson.load(fin)
-            self.entityqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_entityqid.items()}
+            self.type_vocab_to_typeqid = ujson.load(fin)
+            self.typeqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_typeqid.items()}
         with open(f'{self.args.database_dir}/es_material/typeqid2id.json') as fin:
             self.typeqid2id = ujson.load(fin)
         self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
 
-        ##### almond specific
-        self.almond_type_mapping = dict()
-        self.wiki2normalized_type = dict()
-
-        if getattr(self.args, 'almond_type_mapping_path', None):
-            with open(os.path.join(self.args.root, self.args.almond_type_mapping_path)) as fin:
-                self.almond_type_mapping = ujson.load(fin)
-            for normalized_type, titles in self.almond_type_mapping.items():
-                for title in titles:
-                    self.wiki2normalized_type[title] = normalized_type
-        else:
-            with open(
-                os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')
-            ) as fin:
-                almond_type_mapping_all_domains = ujson.load(fin)
-            # only keep subset for provided domains
-            for domain in self.almond_domains:
-                self.almond_type_mapping.update(almond_type_mapping_all_domains[domain])
-            for normalized_type, titles in self.almond_type_mapping.items():
-                for title in titles:
-                    self.wiki2normalized_type[title] = normalized_type
+        ##### get mapping between wiki types and normalized almond property names
+        self.create_wiki2normalized_type_mapping()
         #####
 
         self.cur_entity_embed_size = 0
@@ -141,6 +122,34 @@ class Bootleg(object):
             'False',
         ]
 
+    def create_wiki2normalized_type_mapping(self):
+        # keys are normalized types for each thingtalk property, values are a list of wiki types
+        self.almond_type_mapping = dict()
+    
+        # a list of tuples: each pair includes a wiki type and their normalized type
+        self.wiki2normalized_type = list()
+    
+        if self.args.almond_type_mapping_path:
+            # read mapping from user-provided file
+            with open(os.path.join(self.args.root, self.args.almond_type_mapping_path)) as fin:
+                self.almond_type_mapping = ujson.load(fin)
+            for normalized_type, titles in self.almond_type_mapping.items():
+                for title in titles:
+                    self.wiki2normalized_type.append((title, normalized_type))
+        else:
+            # this file contains mapping between normalized types and wiki types *per domain*
+            # we will choose the subset of domains we want via ned_domains
+            with open(
+                    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')
+            ) as fin:
+                almond_type_mapping_all_domains = ujson.load(fin)
+            # only keep subset for provided domains
+            for domain in self.ned_domains:
+                self.almond_type_mapping.update(almond_type_mapping_all_domains[domain])
+            for normalized_type, titles in self.almond_type_mapping.items():
+                for title in titles:
+                    self.wiki2normalized_type.append((title, normalized_type))
+
     def create_config(self, overrides):
         config_args = parse_boot_and_emm_args(self.config_path, overrides)
         return config_args
@@ -178,19 +187,45 @@ class Bootleg(object):
 
     def post_process_bootleg_types(self, title):
         types = None
-        for key in self.wiki2normalized_type.keys():
-            if fnmatch.fnmatch(title, key):
-                types = self.wiki2normalized_type[key]
+        for pair in self.wiki2normalized_type:
+            if fnmatch.fnmatch(title, pair[0]):
+                types = pair[1]
 
         typeqids = None
         if types is not None:
             if isinstance(types, str):
-                typeqids = [self.type_vocab_to_entityqid[types]]
+                typeqids = [self.type_vocab_to_typeqid[types]]
             elif isinstance(types, (list, tuple)):
-                typeqids = [self.type_vocab_to_entityqid[type_] for type_ in types]
+                typeqids = [self.type_vocab_to_typeqid[type_] for type_ in types]
 
         return typeqids
-
+    
+    def textualize_features(self, feat):
+        if 'type_id' in self.args.entity_attributes:
+            if self.bootleg_post_process_types:
+                all_types = ' | '.join(
+                    sorted(
+                        self.typeqid_to_type_vocab[self.id2typeqid[id]]
+                        for id in feat.type_id
+                        if self.id2typeqid[id] in self.typeqid_to_type_vocab
+                    )
+                )
+            else:
+                all_types = ' | '.join(
+                    sorted(
+                        self.typeqid_to_type_vocab[self.id2typeqid[id]]
+                        for id in feat.type_id
+                        if id != self.args.db_unk_id
+                    )
+                )
+            final_types = '( ' + all_types + ' ) '
+        final_qids = ''
+        if 'qid' in self.args.entity_attributes:
+            all_qids = ' | '.join(sorted('Q' + str(id) for id in feat.qid if id != -1))
+            final_qids = '[ ' + all_qids + ' ]'
+            
+        return final_types, final_qids
+    
     def add_type_tokens(self, sentence, features):
         sentence_tokens = sentence.split(' ')
         assert len(sentence_tokens) == len(features)
@@ -204,28 +239,7 @@ class Bootleg(object):
                 if any([val != 0 for val in feat.type_id]):
                     final_token = '<e> '
                     final_types = ''
-                    if 'type_id' in self.args.entity_attributes:
-                        if self.bootleg_post_process_types:
-                            all_types = ' | '.join(
-                                sorted(
-                                    self.entityqid_to_type_vocab[self.id2typeqid[id]]
-                                    for id in feat.type_id
-                                    if self.id2typeqid[id] in self.entityqid_to_type_vocab
-                                )
-                            )
-                        else:
-                            all_types = ' | '.join(
-                                sorted(
-                                    self.entityqid_to_type_vocab[self.id2typeqid[id]]
-                                    for id in feat.type_id
-                                    if id != self.args.db_unk_id
-                                )
-                            )
-                        final_types = '( ' + all_types + ' ) '
-                    final_qids = ''
-                    if 'qid' in self.args.entity_attributes:
-                        all_qids = ' | '.join(sorted('Q' + str(id) for id in feat.qid if id != -1))
-                        final_qids = '[' + all_qids + ']'
+                    final_types, final_qids = self.textualize_features(feat)
                     final_token += final_types + final_qids + token
                     # append all entities with same type
                     i += 1
@@ -246,34 +260,13 @@ class Bootleg(object):
                 # token is an entity
                 if any([val != 0 for val in feat.type_id]):
                     final_types = ''
-                    if self.args.add_entities_to_text != 'no':
-                        if 'type_id' in self.args.entity_attributes:
-                            all_types = ' | '.join(
-                                sorted(
-                                    self.entityqid_to_type_vocab[self.id2typeqid[id]]
-                                    for id in feat.type_id
-                                    if self.id2typeqid[id] in self.entityqid_to_type_vocab
-                                )
-                            )
-                        else:
-                            all_types = ' | '.join(
-                                sorted(
-                                    self.entityqid_to_type_vocab[self.id2typeqid[id]]
-                                    for id in feat.type_id
-                                    if id != self.args.db_unk_id
-                                )
-                            )
-                        final_types = ['( ', all_types, ' ) ']
-                    final_qids = ''
-                    if 'qid' in self.args.entity_attributes:
-                        all_qids = ' | '.join(sorted('Q' + str(id) for id in feat.qid if id != -1))
-                        final_qids = ['[', all_qids, ']']
+                    final_types, final_qids = self.textualize_features(feat)
                     all_tokens = []
                     # append all entities with same type
                     while i < len(sentence_tokens) and features[i] == feat:
                         all_tokens.append(sentence_tokens[i])
                         i += 1
-                    final_token = ' '.join([*all_tokens, *final_types, *final_qids, ';'])
+                    final_token = ' '.join([*all_tokens, final_types, *[final_qids], ';'])
                     sentence_plus_types_tokens.append(final_token)
                 else:
                     i += 1
@@ -312,11 +305,11 @@ class Bootleg(object):
 
                     # get all types for a qid
                     all_typeqids = []
-                    if qid in self.qid2typenames and self.qid2typenames[qid]:
+                    if qid in self.entityqid2typenames and self.entityqid2typenames[qid]:
                         # map entity qid to its type titles on wikidata ; then map titles to their wikidata qids
-                        for typename in self.qid2typenames[qid]:
-                            if typename in self.type_vocab_to_entityqid:
-                                all_typeqids.append(self.type_vocab_to_entityqid[typename])
+                        for typename in self.entityqid2typenames[qid]:
+                            if typename in self.type_vocab_to_typeqid:
+                                all_typeqids.append(self.type_vocab_to_typeqid[typename])
 
                     if len(all_typeqids):
                         count = 0
@@ -326,7 +319,7 @@ class Bootleg(object):
                                 # map wikidata types to thingtalk types
                                 if self.bootleg_post_process_types:
                                     # map qid to title
-                                    title = self.entityqid_to_type_vocab[typeqid]
+                                    title = self.typeqid_to_type_vocab[typeqid]
 
                                     # process may return multiple types for a single type when it's ambiguous
                                     typeqids = self.post_process_bootleg_types(title)

@@ -786,7 +786,7 @@ def load_config_json(args):
             'db_unk_id',
             'ned_retrieve_method',
             'database_lookup_method',
-            'almond_domains',
+            'ned_domains',
             'almond_type_mapping_path',
             'max_features_size',
             'bootleg_output_dir',
@@ -867,7 +867,7 @@ def load_config_json(args):
                 setattr(args, r, 'naive')
             elif r == 'database_lookup_method':
                 setattr(args, r, 'ngrams')
-            elif r == 'almond_domains':
+            elif r == 'ned_domains':
                 setattr(args, r, [])
             elif r == 'locale':
                 setattr(args, r, 'en')

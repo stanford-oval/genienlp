@@ -27,7 +27,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import inspect
 import unicodedata
 from typing import Iterable, List, NamedTuple, Union
 
@@ -43,6 +42,9 @@ class SequentialField(NamedTuple):
     length: Union[torch.tensor, int]
     limited: Union[torch.tensor, List[int]]
     feature: Union[torch.tensor, List[List[int]], None]
+
+
+VALID_ENTITY_ATTRIBUTES = ('type_id', 'type_prob', 'qid')
 
 
 # Entity is defined per token
@@ -63,7 +65,7 @@ class Entity(object):
 
     def flatten(self):
         result = []
-        for field in VALID_FEATURE_FIELDS:
+        for field in VALID_ENTITY_ATTRIBUTES:
             field_val = getattr(self, field)
             if field_val:
                 result += field_val
@@ -71,16 +73,10 @@ class Entity(object):
 
     @staticmethod
     def get_pad_entity(max_features_size):
-        # return None if not using NED
         pad_feature = Entity()
-        for i, field in enumerate(VALID_FEATURE_FIELDS):
+        for i, field in enumerate(VALID_ENTITY_ATTRIBUTES):
             setattr(pad_feature, field, [0] * max_features_size)
         return pad_feature
-
-
-# 1: to remove self
-signature = inspect.signature(Entity.__init__)
-VALID_FEATURE_FIELDS = tuple(signature.parameters.keys())[1:]
 
 
 class Example(object):
@@ -163,11 +159,11 @@ class NumericalizedExamples(NamedTuple):
             )
             all_context_plus_question_features.append(context_plus_question_feature)
 
-        features = None
         if args.do_ned and args.add_entities_to_text == 'no':
-            features = [a for a in all_context_plus_question_features if a]
-            if len(features) == 0:
-                features = None
+            features = all_context_plus_question_features
+        else:
+            # features are already processed and added to input as text
+            features = None
 
         tokenized_contexts = numericalizer.encode_batch(all_context_plus_questions, field_name='context', features=features)
 

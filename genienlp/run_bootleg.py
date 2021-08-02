@@ -154,9 +154,7 @@ def parse_argv(parser):
     )
     parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
 
-    parser.add_argument(
-        '--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...'
-    )
+    parser.add_argument('--ned_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
 
     parser.add_argument(
         '--bootleg_data_splits',

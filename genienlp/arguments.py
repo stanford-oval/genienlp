@@ -466,8 +466,8 @@ def parse_argv(parser):
     parser.add_argument(
         "--entity_attributes",
         nargs='+',
-        default=['type_id', 'type_prob', 'qid'],
-        help='Process only these entity attributes for adding them to text. Defaults to type and qid',
+        default=['type_id'],
+        help='Process only these entity attributes for adding them to text. Options are type_id, type_prob, and qid',
     )
 
     parser.add_argument(
@@ -496,9 +496,7 @@ def parse_argv(parser):
         'ngrams: lookup all ngrams in the text and see if there is a match',
     )
 
-    parser.add_argument(
-        '--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...'
-    )
+    parser.add_argument('--ned_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
 
     # translation args
     parser.add_argument(

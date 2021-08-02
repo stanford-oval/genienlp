@@ -78,7 +78,7 @@ class BaseAlmondTask(BaseTask):
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
         self._almond_thingtalk_version = args.almond_thingtalk_version
 
-        self.almond_domains = args.almond_domains
+        self.ned_domains = args.ned_domains
         self.all_schema_types = set()
 
         if args.do_ned and self.args.ned_retrieve_method != 'bootleg':
@@ -378,9 +378,7 @@ class BaseAlmondTask(BaseTask):
 
         if self.args.do_ned and field_name != 'answer':
             tokens_type_ids = [[0] * self.args.max_features_size for _ in range(new_sentence_length)]
-        if self.args.do_ned and field_name != 'answer':
             tokens_type_probs = [[0] * self.args.max_features_size for _ in range(new_sentence_length)]
-        if self.args.do_ned and field_name != 'answer':
             token_qids = [[-1] * self.args.max_features_size for _ in range(new_sentence_length)]
 
         if self.args.do_ned and self.args.ned_retrieve_method != 'bootleg' and field_name not in self.no_feature_fields:
