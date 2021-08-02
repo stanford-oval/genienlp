@@ -67,7 +67,6 @@ setuptools.setup(
         # for NED
         'bootleg @ git+https://github.com/Mehrad0711/bootleg@b6c207259a83c21c77aeaf8088ee85f24ec7e708',
         'marisa_trie_m==0.7.6',
-        'elasticsearch==7.13.4',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',

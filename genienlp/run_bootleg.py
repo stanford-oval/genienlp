@@ -96,10 +96,6 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--database_type', default='json', choices=['json', 'remote-elastic'], help='database to interact with for NER'
-    )
-
-    parser.add_argument(
         '--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams database_lookup_method is used '
     )
     parser.add_argument(

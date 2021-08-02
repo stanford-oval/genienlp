@@ -31,9 +31,6 @@ import logging
 
 from .database_utils import has_overlap, is_banned, normalize_text
 
-tracer = logging.getLogger('elasticsearch')
-tracer.setLevel(logging.CRITICAL)
-
 logger = logging.getLogger(__name__)
 
 

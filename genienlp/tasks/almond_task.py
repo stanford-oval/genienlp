@@ -48,7 +48,6 @@ from ..data_utils.almond_utils import (
 )
 from ..data_utils.database import Database
 from ..data_utils.example import Entity, Example
-from ..data_utils.remote_database import RemoteElasticDatabase
 from ..model_utils.translation import align_and_replace, compute_attention
 from ..paraphrase.data_utils import input_heuristics, output_heuristics
 from .almond_dataset import AlmondDataset
@@ -85,25 +84,17 @@ class BaseAlmondTask(BaseTask):
             self._init_db()
 
     def _init_db(self):
-        if self.args.database_type == 'json':
-            canonical2type = {}
-            all_canonicals = marisa_trie.Trie()
-            # canonical2type.json is a big file (>4G); load it only when necessary
-            if self.args.ned_retrieve_method not in ['bootleg', 'type-oracle']:
-                with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
-                    canonical2type = ujson.load(fin)
-                    all_canonicals = marisa_trie.Trie(canonical2type.keys())
-            with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
-                typeqid2id = ujson.load(fin)
+        canonical2type = {}
+        all_canonicals = marisa_trie.Trie()
+        # canonical2type.json is a big file (>4G); load it only when necessary
+        if self.args.ned_retrieve_method not in ['bootleg', 'type-oracle']:
+            with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
+                canonical2type = ujson.load(fin)
+                all_canonicals = marisa_trie.Trie(canonical2type.keys())
+        with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
+            typeqid2id = ujson.load(fin)
 
-            self.db = Database(canonical2type, typeqid2id, all_canonicals, self.args.max_features_size)
-
-        elif self.args.database_type == 'remote-elastic':
-            with open(os.path.join(self.args.database_dir, 'es_material/elastic_config.json'), 'r') as fin:
-                es_config = ujson.load(fin)
-            with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
-                typeqid2id = ujson.load(fin)
-            self.db = RemoteElasticDatabase(es_config, typeqid2id, self.args.max_features_size)
+        self.db = Database(canonical2type, typeqid2id, all_canonicals, self.args.max_features_size)
 
     @property
     def utterance_field(self):
@@ -259,17 +250,16 @@ class BaseAlmondTask(BaseTask):
     def find_type_ids(self, tokens, answer):
         tokens_type_ids = []
 
-        if self.args.database_type == 'json':
-            if self.args.ned_retrieve_method == 'naive':
-                tokens_type_ids = self.db.lookup(
-                    tokens, self.args.database_lookup_method, self.args.min_entity_len, self.args.max_entity_len
-                )
-            elif self.args.ned_retrieve_method == 'entity-oracle':
-                answer_entities = quoted_pattern_with_space.findall(answer)
-                tokens_type_ids = self.db.lookup(tokens, answer_entities=answer_entities)
-            elif self.args.ned_retrieve_method == 'type-oracle':
-                entity2type = self.collect_answer_entity_types(answer)
-                tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
+        if self.args.ned_retrieve_method == 'naive':
+            tokens_type_ids = self.db.lookup(
+                tokens, self.args.database_lookup_method, self.args.min_entity_len, self.args.max_entity_len
+            )
+        elif self.args.ned_retrieve_method == 'entity-oracle':
+            answer_entities = quoted_pattern_with_space.findall(answer)
+            tokens_type_ids = self.db.lookup(tokens, answer_entities=answer_entities)
+        elif self.args.ned_retrieve_method == 'type-oracle':
+            entity2type = self.collect_answer_entity_types(answer)
+            tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
 
         return tokens_type_ids
 
