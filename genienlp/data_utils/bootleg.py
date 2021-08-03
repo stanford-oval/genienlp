@@ -202,7 +202,7 @@ class Bootleg(object):
         final_types = ''
         if 'type_id' in self.args.entity_attributes:
             all_types = ' | '.join(sorted(self.typeqid_to_type_vocab[self.id2typeqid[id]] for id in feat.type_id if id != 0))
-            final_types = '( ' + all_types + ' ) '
+            final_types = '( ' + all_types + ' )'
         final_qids = ''
         if 'qid' in self.args.entity_attributes:
             all_qids = ' | '.join(sorted('Q' + str(id) for id in feat.qid if id != -1))
@@ -224,7 +224,7 @@ class Bootleg(object):
                     final_token = '<e> '
                     final_types, final_qids = self.entities_to_text(feat)
                     final_token += final_types + final_qids + token
-                    # append all entities with same type
+                    # concat all entities with the same type
                     i += 1
                     while i < len(sentence_tokens) and features[i] == feat:
                         final_token += ' ' + sentence_tokens[i]
@@ -244,11 +244,11 @@ class Bootleg(object):
                 if any([val != 0 for val in feat.type_id]):
                     final_types, final_qids = self.entities_to_text(feat)
                     all_tokens = []
-                    # append all entities with same type
+                    # concat all entities with the same type
                     while i < len(sentence_tokens) and features[i] == feat:
                         all_tokens.append(sentence_tokens[i])
                         i += 1
-                    final_token = ' '.join([*all_tokens, final_types, final_qids, ';'])
+                    final_token = ' '.join(filter(lambda token: token != '', [*all_tokens, final_types, final_qids, ';']))
                     sentence_plus_types_tokens.append(final_token)
                 else:
                     i += 1
