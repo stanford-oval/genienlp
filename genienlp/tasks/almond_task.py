@@ -26,7 +26,6 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-import fnmatch
 import logging
 import os
 import re
@@ -41,11 +40,10 @@ from ..data_utils.almond_utils import (
     is_entity,
     is_entity_marker,
     process_id,
-    quoted_pattern_with_space,
     tokenize_cjk_chars,
 )
 from ..data_utils.database import Database
-from ..data_utils.example import Entity, Example
+from ..data_utils.example import Example
 from ..model_utils.translation import align_and_replace, compute_attention
 from ..paraphrase.data_utils import input_heuristics, output_heuristics
 from .almond_dataset import AlmondDataset
@@ -73,10 +71,6 @@ class BaseAlmondTask(BaseTask):
 
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
-        self._almond_thingtalk_version = args.almond_thingtalk_version
-
-        self.ned_domains = args.ned_domains
-        self.all_schema_types = set()
 
         if args.do_ned and self.args.ned_retrieve_method != 'bootleg':
             self._init_db()
@@ -105,172 +99,6 @@ class BaseAlmondTask(BaseTask):
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
-    def collect_answer_entity_types(self, tokens, answer):
-        entity2type = dict()
-        sentence = ' '.join(tokens)
-
-        answer_entities = quoted_pattern_with_space.findall(answer)
-        for ent in answer_entities:
-            # skip examples with sentence-annotation entity mismatch. hopefully there's not a lot of them.
-            # this is usually caused by paraphrasing where it adds "-" after entity name: "korean-style restaurants"
-            # or add "'" before or after an entity
-            if not re.search(rf'(^|\s){ent}($|\s)', sentence):
-                # print(f'***ent: {ent} {tokens} {answer}')
-                continue
-
-            if self._almond_thingtalk_version == 1:
-                #  ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ...
-                # ... param:artists contains " XXX " ^^com.spotify:artist and param:id =~ " XXX " ...
-                # ... filter param:geo:Location == location: " XXXX " and ...
-
-                # assume first syntax
-                idx = answer.index('" ' + ent + ' "')
-
-                type = None
-
-                answer_tokens_after_entity = answer[idx + len('" ' + ent + ' "') :].split()
-                if answer_tokens_after_entity[0].startswith('^^'):
-                    type = answer_tokens_after_entity[0].rsplit(':', 1)[1]
-
-                if type is None:
-
-                    answer_tokens_before_entity = answer[:idx].split()
-
-                    # check last three tokens to find one that starts with param
-                    for i in range(3):
-                        if answer_tokens_before_entity[-i].startswith('param:'):
-                            type = answer_tokens_before_entity[-i]
-                            break
-
-                    if type:
-                        type = type.strip('()').rsplit(':', 1)[1]
-
-                assert type in self.db.type_vocab_to_typeqid
-
-                entity2type[ent] = type
-
-            else:
-
-                # ** this should change if thingtalk syntax changes **
-
-                # ( ... [Book|Music|...] ( ) filter id =~ " position and affirm " ) ...'
-                # ... ^^org.schema.Book:Person ( " james clavell " ) ...
-                # ... contains~ ( [award|genre|...] , " booker " ) ...
-                # ... inLanguage =~ " persian " ...
-
-                # missing syntax from current code
-                #  ... @com.spotify . song ( ) filter in_array~ ( id , [ " piano man " , " uptown girl " ] ) ) [ 1 : 2 ]  ...
-
-                # assume first syntax
-                idx = answer.index('" ' + ent + ' "')
-
-                type = None
-                tokens_before_entity = answer[:idx].split()
-
-                if tokens_before_entity[-2] == 'Location':
-                    type = 'Location'
-
-                elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in [
-                    'ratingValue',
-                    'reviewCount',
-                    'checkoutTime',
-                    'checkinTime',
-                ]:
-                    type = tokens_before_entity[-2]
-
-                elif tokens_before_entity[-1] == '=~':
-                    if tokens_before_entity[-2] in ['id', 'value']:
-                        # travers previous tokens until find filter
-                        i = -3
-                        while tokens_before_entity[i] != 'filter' and i - 3 > -len(tokens_before_entity):
-                            i -= 1
-                        type = tokens_before_entity[i - 3]
-                    else:
-                        type = tokens_before_entity[-2]
-
-                elif tokens_before_entity[-4] == 'contains~':
-                    type = tokens_before_entity[-2]
-
-                elif tokens_before_entity[-2].startswith('^^'):
-                    type = tokens_before_entity[-2].rsplit(':', 1)[1]
-                    if (
-                        type == 'Person'
-                        and tokens_before_entity[-3] == 'null'
-                        and tokens_before_entity[-5] in ['director', 'creator', 'actor']
-                    ):
-                        type = tokens_before_entity[-5]
-
-                elif tokens_before_entity[-1] in [',', '[']:
-                    type = 'keywords'
-
-                if type:
-                    if self.args.bootleg_post_process_types:
-                        type = type.lower()
-                        for pair in self.db.wiki2normalized_type:
-                            if fnmatch.fnmatch(type, pair[0]):
-                                type = pair[1]
-                                break
-
-                    assert type in self.db.type_vocab_to_typeqid, f'{type}, {answer}'
-                else:
-                    print(f'{type}, {answer}')
-                    continue
-
-                entity2type[ent] = type
-
-            self.all_schema_types.add(type)
-
-        return entity2type
-
-    def pad_features(self, features, max_size, pad_id):
-        if len(features) > max_size:
-            features = features[:max_size]
-        else:
-            features += [pad_id] * (max_size - len(features))
-        return features
-
-    def oracle_type_ids(self, tokens, entity2type):
-        tokens_type_ids = [[0] * self.args.max_features_size for _ in range(len(tokens))]
-        tokens_text = " ".join(tokens)
-
-        for ent, type in entity2type.items():
-            ent_num_tokens = len(ent.split(' '))
-            if ent in tokens_text:
-                idx = tokens_text.index(ent)
-            else:
-                logger.warning('Found a mismatch between sentence and annotation entities')
-                logger.info(f'sentence: {tokens_text}, entity2type: {entity2type}')
-                continue
-            token_pos = len(tokens_text[:idx].split())
-
-            typeqid = self.db.type_vocab_to_typeqid[type]
-            type_id = self.db.typeqid2id[typeqid]
-            type_id = self.pad_features([type_id], self.args.max_features_size, 0)
-
-            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
-
-        return tokens_type_ids
-
-    def find_type_ids(self, tokens, answer):
-        tokens_type_ids = []
-
-        if self.args.ned_retrieve_method == 'naive':
-            tokens_type_ids = self.db.lookup(
-                tokens, self.args.database_lookup_method, self.args.min_entity_len, self.args.max_entity_len
-            )
-        elif self.args.ned_retrieve_method == 'entity-oracle':
-            answer_entities = quoted_pattern_with_space.findall(answer)
-            tokens_type_ids = self.db.lookup(tokens, answer_entities=answer_entities)
-        elif self.args.ned_retrieve_method == 'type-oracle':
-            entity2type = self.collect_answer_entity_types(tokens, answer)
-            tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
-
-        return tokens_type_ids
-
-    def find_type_probs(self, tokens, default_val, default_size):
-        token_freqs = [[default_val] * default_size] * len(tokens)
-        return token_freqs
-
     def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, batch_tgt_ids, **kwargs):
         return batch_tgt_ids
 
@@ -294,19 +122,21 @@ class BaseAlmondTask(BaseTask):
 
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         if self.override_context is not None and field_name == 'context':
-            pad_feature = Entity.get_pad_entity(self.args.max_features_size)
-            return (
-                self.override_context,
-                [pad_feature] * len(self.override_context.split(' ')) if pad_feature else [],
-            )
+            # pad_feature = Entity.get_pad_entity(self.args.max_features_size)
+            # return (
+            #     self.override_context,
+            #     [pad_feature] * len(self.override_context.split(' ')) if pad_feature else [],
+            # )
+            return self.override_context
         if self.override_question is not None and field_name == 'question':
-            pad_feature = Entity.get_pad_entity(self.args.max_features_size)
-            return (
-                self.override_question,
-                [pad_feature] * len(self.override_question.split(' ')) if pad_feature else [],
-            )
+            # pad_feature = Entity.get_pad_entity(self.args.max_features_size)
+            # return (
+            #     self.override_question,
+            #     [pad_feature] * len(self.override_question.split(' ')) if pad_feature else [],
+            # )
+            return self.override_question
         if not sentence:
-            return '', []
+            return ''
 
         tokens = sentence.split(' ')
         is_program = self._is_program_field(field_name)
@@ -365,39 +195,8 @@ class BaseAlmondTask(BaseTask):
             new_sentence = ' '.join(new_tokens)
 
         new_sentence = new_sentence.strip()
-        new_tokens = new_sentence.split(' ')
-        new_sentence_length = len(new_tokens)
 
-        tokens_type_ids, tokens_type_probs, token_qids = None, None, None
-
-        if self.args.do_ned and field_name != 'answer':
-            tokens_type_ids = [[0] * self.args.max_features_size for _ in range(new_sentence_length)]
-            tokens_type_probs = [[0] * self.args.max_features_size for _ in range(new_sentence_length)]
-            token_qids = [[-1] * self.args.max_features_size for _ in range(new_sentence_length)]
-
-        if self.args.do_ned and self.args.ned_retrieve_method != 'bootleg' and field_name not in self.no_feature_fields:
-            if 'type_id' in self.args.entity_attributes:
-                tokens_type_ids = self.find_type_ids(new_tokens, answer)
-            if 'type_prob' in self.args.entity_attributes:
-                tokens_type_probs = self.find_type_probs(new_tokens, 0, self.args.max_features_size)
-
-        zip_list = []
-        if tokens_type_ids:
-            if len(tokens_type_ids) != new_sentence_length:
-                import pdb
-
-                pdb.set_trace()
-            zip_list.append(tokens_type_ids)
-        if tokens_type_probs:
-            assert len(tokens_type_probs) == new_sentence_length
-            zip_list.append(tokens_type_probs)
-        if token_qids:
-            assert len(token_qids) == new_sentence_length
-            zip_list.append(token_qids)
-
-        features = [Entity(*tup) for tup in zip(*zip_list)]
-
-        return new_sentence, features
+        return new_sentence
 
 
 @register_task('almond')
@@ -591,9 +390,9 @@ class Translate(NaturalSeq2Seq):
             else:
                 self.input_spans[example_id] = src_spans_flatten
 
-        sentence, features = super().preprocess_field(sentence, field_name, answer, preprocess_entities)
+        sentence = super().preprocess_field(sentence, field_name, answer, preprocess_entities)
 
-        return sentence, features
+        return sentence
 
     def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, batch_tgt_ids, **kwargs):
 
@@ -799,7 +598,7 @@ class ReverseAlmond(BaseAlmondTask):
 class BaseAlmondDialogueNLUTask(BaseAlmondTask):
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         if not sentence:
-            return sentence, []
+            return sentence
 
         # remove the $dialogue at the start of the dialogue
         # this is safe because we know we're processing dialogues, so the answer

@@ -111,12 +111,12 @@ class Example(object):
             if lower:
                 arg = arg.lower()
 
-            sentence, features = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer, example_id=example_id)
+            sentence = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer, example_id=example_id)
 
             args.append(sentence)
 
             if argname != 'answer':
-                args.append(features)
+                args.append([])
 
         return Example(*args)
 

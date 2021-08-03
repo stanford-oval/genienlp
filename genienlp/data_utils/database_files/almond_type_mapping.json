@@ -322,7 +322,8 @@
             "literary work",
             "television series",
             "film",
-            "play"
+            "play",
+            "musicrecording"
         ],
         "album": [
             "*album*"

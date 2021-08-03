@@ -202,7 +202,7 @@ def parse_argv(parser):
     )
 
 
-def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
+def bootleg_process_splits(bootleg, examples, path, utterance_field, mode='train'):
     config_overrides = bootleg.fixed_overrides
 
     input_file_dir = os.path.dirname(path)
@@ -217,7 +217,7 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
     if mode == 'dump':
         # create jsonl files from input examples
         # jsonl is the input format bootleg expects
-        bootleg.create_jsonl(path, examples, task.utterance_field)
+        bootleg.create_jsonl(path, examples, utterance_field)
 
         # extract mentions and mention spans in the sentence and write them to output jsonl files
         bootleg.extract_mentions(path)
@@ -227,7 +227,7 @@ def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
 
     # override examples features with bootleg features
     else:
-        bootleg.process_examples(examples, input_file_name, task.utterance_field)
+        bootleg.process_examples(examples, input_file_name, utterance_field)
 
 
 def dump_bootleg_features(args, logger):
@@ -282,7 +282,7 @@ def dump_bootleg_features(args, logger):
         extension = task_all_paths[0].rsplit('.', 1)[1]
         all_paths = os.path.join(dir_name, 'combined' + '.' + extension)
 
-        bootleg_process_splits(args, all_examples, all_paths, task, bootleg, mode='dump')
+        bootleg_process_splits(bootleg, all_examples, all_paths, task.utterance_field, mode='dump')
 
         # unmerge bootleg dumped labels
         line_number = 0

@@ -26,14 +26,17 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import fnmatch
 import logging
 import os
+import re
 
 import marisa_trie
 import ujson
 
+from .almond_utils import quoted_pattern_with_space
 from .database_utils import has_overlap, is_banned, normalize_text
+from .example import Entity
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,8 @@ class Database(object):
     def __init__(self, args):
 
         self.args = args
+
+        self.all_schema_types = set()
 
         # keys are normalized types for each thingtalk property, values are a list of wiki types
         self.almond_type_mapping = dict()
@@ -73,27 +78,293 @@ class Database(object):
             with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
                 canonical2type = ujson.load(fin)
                 all_canonicals = marisa_trie.Trie(canonical2type.keys())
-        with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
-            typeqid2id = ujson.load(fin)
+        with open(f'{self.args.database_dir}/es_material/typeqid2id.json') as fin:
+            self.typeqid2id = ujson.load(fin)
+            self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
 
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json') as fin:
             self.type_vocab_to_typeqid = ujson.load(fin)
             self.typeqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_typeqid.items()}
 
         self.canonical2type = canonical2type
-        self.typeqid2id = typeqid2id
-        self.id2type = {v: k for k, v in self.typeqid2id.items()}
         self.all_canonicals = all_canonicals
 
         self.unk_id = 0
-        self.unk_type = self.id2type[self.unk_id]
+        self.unk_type = self.id2typeqid[self.unk_id]
 
         self.max_features_size = self.args.max_features_size
+
+    def db_process_examples(self, examples, utterance_field):
+        for n, ex in enumerate(examples):
+            if utterance_field == 'question':
+                sentence = ex.question
+            else:
+                sentence = ex.context
+            answer = ex.answer
+            tokens = sentence.split(' ')
+            length = len(tokens)
+
+            tokens_type_ids = [[0] * self.args.max_features_size for _ in range(length)]
+            tokens_type_probs = [[0] * self.args.max_features_size for _ in range(length)]
+            token_qids = [[-1] * self.args.max_features_size for _ in range(length)]
+
+            if 'type_id' in self.args.entity_attributes:
+                tokens_type_ids = self.find_type_ids(tokens, answer)
+            if 'type_prob' in self.args.entity_attributes:
+                tokens_type_probs = self.find_type_probs(tokens, 0, self.args.max_features_size)
+
+            zip_list = []
+            if 'type_id' in self.args.entity_attributes:
+                assert len(tokens_type_ids) == length
+                zip_list.append(tokens_type_ids)
+            if 'type_prob' in self.args.entity_attributes:
+                assert len(tokens_type_probs) == length
+                zip_list.append(tokens_type_probs)
+            if 'qid' in self.args.entity_attributes:
+                assert len(token_qids) == length
+                zip_list.append(token_qids)
+
+            features = [Entity(*tup) for tup in zip(*zip_list)]
+
+            if utterance_field == 'question':
+                examples[n].question_feature = features
+                examples[n].question = self.add_entities_to_text(ex.question, features)
+            else:
+                examples[n].context_feature = features
+                examples[n].context = self.add_entities_to_text(ex.context, features)
 
     def update_wiki2normalized_type(self):
         for normalized_type, titles in self.almond_type_mapping.items():
             for title in titles:
                 self.wiki2normalized_type.append((title, normalized_type))
+
+    def collect_answer_entity_types(self, tokens, answer):
+        entity2type = dict()
+        sentence = ' '.join(tokens)
+
+        answer_entities = quoted_pattern_with_space.findall(answer)
+        for ent in answer_entities:
+            # skip examples with sentence-annotation entity mismatch. hopefully there's not a lot of them.
+            # this is usually caused by paraphrasing where it adds "-" after entity name: "korean-style restaurants"
+            # or add "'" before or after an entity
+            if not re.search(rf'(^|\s){ent}($|\s)', sentence):
+                # print(f'***ent: {ent} {tokens} {answer}')
+                continue
+
+            if self.args.almond_thingtalk_version == 1:
+                #  ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ...
+                # ... param:artists contains " XXX " ^^com.spotify:artist and param:id =~ " XXX " ...
+                # ... filter param:geo:Location == location: " XXXX " and ...
+
+                # assume first syntax
+                idx = answer.index('" ' + ent + ' "')
+
+                type = None
+
+                answer_tokens_after_entity = answer[idx + len('" ' + ent + ' "') :].split()
+                if answer_tokens_after_entity[0].startswith('^^'):
+                    type = answer_tokens_after_entity[0].rsplit(':', 1)[1]
+
+                if type is None:
+
+                    answer_tokens_before_entity = answer[:idx].split()
+
+                    # check last three tokens to find one that starts with param
+                    for i in range(3):
+                        if answer_tokens_before_entity[-i].startswith('param:'):
+                            type = answer_tokens_before_entity[-i]
+                            break
+
+                    if type:
+                        type = type.strip('()').rsplit(':', 1)[1]
+
+                assert type in self.type_vocab_to_typeqid
+
+                entity2type[ent] = type
+
+            else:
+
+                # ** this should change if thingtalk syntax changes **
+
+                # ( ... [Book|Music|...] ( ) filter id =~ " position and affirm " ) ...'
+                # ... ^^org.schema.Book:Person ( " james clavell " ) ...
+                # ... contains~ ( [award|genre|...] , " booker " ) ...
+                # ... inLanguage =~ " persian " ...
+
+                # missing syntax from current code
+                #  ... @com.spotify . song ( ) filter in_array~ ( id , [ " piano man " , " uptown girl " ] ) ) [ 1 : 2 ]  ...
+
+                # assume first syntax
+                idx = answer.index('" ' + ent + ' "')
+
+                type = None
+                tokens_before_entity = answer[:idx].split()
+
+                if tokens_before_entity[-2] == 'Location':
+                    type = 'Location'
+
+                elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in [
+                    'ratingValue',
+                    'reviewCount',
+                    'checkoutTime',
+                    'checkinTime',
+                ]:
+                    type = tokens_before_entity[-2]
+
+                elif tokens_before_entity[-1] == '=~':
+                    if tokens_before_entity[-2] in ['id', 'value']:
+                        # travers previous tokens until find filter
+                        i = -3
+                        while tokens_before_entity[i] != 'filter' and i - 3 > -len(tokens_before_entity):
+                            i -= 1
+                        type = tokens_before_entity[i - 3]
+                    else:
+                        type = tokens_before_entity[-2]
+
+                elif tokens_before_entity[-4] == 'contains~':
+                    type = tokens_before_entity[-2]
+
+                elif tokens_before_entity[-2].startswith('^^'):
+                    type = tokens_before_entity[-2].rsplit(':', 1)[1]
+                    if (
+                        type == 'Person'
+                        and tokens_before_entity[-3] == 'null'
+                        and tokens_before_entity[-5] in ['director', 'creator', 'actor']
+                    ):
+                        type = tokens_before_entity[-5]
+
+                elif tokens_before_entity[-1] in [',', '[']:
+                    type = 'keywords'
+
+                if type:
+                    if self.args.bootleg_post_process_types:
+                        type = type.lower()
+                        for pair in self.wiki2normalized_type:
+                            if fnmatch.fnmatch(type, pair[0]):
+                                type = pair[1]
+                                break
+
+                    assert type in self.type_vocab_to_typeqid, f'{type}, {answer}'
+                else:
+                    print(f'{type}, {answer}')
+                    continue
+
+                entity2type[ent] = type
+
+            self.all_schema_types.add(type)
+
+        return entity2type
+
+    def pad_features(self, features, max_size, pad_id):
+        if len(features) > max_size:
+            features = features[:max_size]
+        else:
+            features += [pad_id] * (max_size - len(features))
+        return features
+
+    def oracle_type_ids(self, tokens, entity2type):
+        tokens_type_ids = [[0] * self.args.max_features_size for _ in range(len(tokens))]
+        tokens_text = " ".join(tokens)
+
+        for ent, type in entity2type.items():
+            ent_num_tokens = len(ent.split(' '))
+            if ent in tokens_text:
+                idx = tokens_text.index(ent)
+            else:
+                logger.warning('Found a mismatch between sentence and annotation entities')
+                logger.info(f'sentence: {tokens_text}, entity2type: {entity2type}')
+                continue
+            token_pos = len(tokens_text[:idx].split())
+
+            typeqid = self.type_vocab_to_typeqid[type]
+            type_id = self.typeqid2id[typeqid]
+            type_id = self.pad_features([type_id], self.args.max_features_size, 0)
+
+            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
+
+        return tokens_type_ids
+
+    def convert_entities_to_strings(self, feat):
+        final_types = ''
+        if 'type_id' in self.args.entity_attributes:
+            all_types = ' | '.join(sorted(self.typeqid_to_type_vocab[self.id2typeqid[id]] for id in feat.type_id if id != 0))
+            final_types = '( ' + all_types + ' ) '
+        final_qids = ''
+        if 'qid' in self.args.entity_attributes:
+            all_qids = ' | '.join(sorted('Q' + str(id) for id in feat.qid if id != -1))
+            final_qids = '[ ' + all_qids + ' ]'
+
+        return final_types, final_qids
+
+    def add_entities_to_text(self, sentence, features):
+        sentence_tokens = sentence.split(' ')
+        assert len(sentence_tokens) == len(features)
+        sentence_plus_types_tokens = []
+        i = 0
+        if self.args.add_entities_to_text == 'insert':
+            while i < len(sentence_tokens):
+                token = sentence_tokens[i]
+                feat = features[i]
+                # token is an entity
+                if any([val != 0 for val in feat.type_id]):
+                    final_token = '<e> '
+                    final_types, final_qids = self.convert_entities_to_strings(feat)
+                    final_token += final_types + final_qids + token
+                    # append all entities with same type
+                    i += 1
+                    while i < len(sentence_tokens) and features[i] == feat:
+                        final_token += ' ' + sentence_tokens[i]
+                        i += 1
+                    final_token += ' </e>'
+                    sentence_plus_types_tokens.append(final_token)
+                else:
+                    sentence_plus_types_tokens.append(token)
+                    i += 1
+
+        elif self.args.add_entities_to_text == 'append':
+            sentence_plus_types_tokens.extend(sentence_tokens)
+            sentence_plus_types_tokens.append('<e>')
+            while i < len(sentence_tokens):
+                feat = features[i]
+                # token is an entity
+                if any([val != 0 for val in feat.type_id]):
+                    final_types, final_qids = self.convert_entities_to_strings(feat)
+                    all_tokens = []
+                    # append all entities with same type
+                    while i < len(sentence_tokens) and features[i] == feat:
+                        all_tokens.append(sentence_tokens[i])
+                        i += 1
+                    final_token = ' '.join([*all_tokens, final_types, final_qids, ';'])
+                    sentence_plus_types_tokens.append(final_token)
+                else:
+                    i += 1
+
+            sentence_plus_types_tokens.append('</e>')
+
+        if not sentence_plus_types_tokens:
+            return sentence
+        else:
+            return ' '.join(sentence_plus_types_tokens)
+
+    def find_type_probs(self, tokens, default_val, default_size):
+        token_freqs = [[default_val] * default_size] * len(tokens)
+        return token_freqs
+
+    def find_type_ids(self, tokens, answer):
+        tokens_type_ids = []
+
+        if self.args.ned_retrieve_method == 'naive':
+            tokens_type_ids = self.lookup(
+                tokens, self.args.database_lookup_method, self.args.min_entity_len, self.args.max_entity_len
+            )
+        elif self.args.ned_retrieve_method == 'entity-oracle':
+            answer_entities = quoted_pattern_with_space.findall(answer)
+            tokens_type_ids = self.lookup(tokens, answer_entities=answer_entities)
+        elif self.args.ned_retrieve_method == 'type-oracle':
+            entity2type = self.collect_answer_entity_types(tokens, answer)
+            tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
+
+        return tokens_type_ids
 
     def lookup_ngrams(self, tokens, min_entity_len, max_entity_len):
         # load nltk lazily
@@ -214,7 +485,6 @@ class Database(object):
         return tokens_type_ids
 
     def lookup(self, tokens, database_lookup_method=None, min_entity_len=2, max_entity_len=4, answer_entities=None):
-
         tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
 
         if answer_entities is not None:

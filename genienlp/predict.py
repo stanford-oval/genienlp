@@ -320,7 +320,7 @@ def prepare_data(args, device, src_lang):
                 bootleg = Bootleg(args)
                 file_name = os.path.basename(path.rsplit('.', 1)[0])
                 if os.path.exists(f'{args.bootleg_output_dir}/{file_name}_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl'):
-                    bootleg_process_splits(args, data.examples, path, task, bootleg)
+                    bootleg_process_splits(bootleg, data.examples, path, task.utterance_field)
                 else:
                     # no prepped bootleg features are available
                     # extract features on-the-fly using bootleg annotator

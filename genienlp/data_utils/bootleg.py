@@ -39,6 +39,7 @@ from bootleg.run import run_model
 from bootleg.utils.parser.parser_utils import parse_boot_and_emm_args
 
 from .database_utils import is_banned, reverse_bisect_left
+from .example import Entity
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ class Bootleg(object):
             self.typeqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_typeqid.items()}
         with open(f'{self.args.database_dir}/es_material/typeqid2id.json') as fin:
             self.typeqid2id = ujson.load(fin)
-        self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
+            self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
 
         ##### get mapping between wiki types and normalized almond property names
         # keys are normalized types for each thingtalk property, values are a list of wiki types
@@ -197,7 +198,7 @@ class Bootleg(object):
 
         return typeqids
 
-    def entities_to_text(self, feat):
+    def convert_entities_to_strings(self, feat):
         final_types = ''
         if 'type_id' in self.args.entity_attributes:
             all_types = ' | '.join(sorted(self.typeqid_to_type_vocab[self.id2typeqid[id]] for id in feat.type_id if id != 0))
@@ -209,7 +210,7 @@ class Bootleg(object):
 
         return final_types, final_qids
 
-    def add_type_tokens(self, sentence, features):
+    def add_entities_to_text(self, sentence, features):
         sentence_tokens = sentence.split(' ')
         assert len(sentence_tokens) == len(features)
         sentence_plus_types_tokens = []
@@ -221,7 +222,7 @@ class Bootleg(object):
                 # token is an entity
                 if any([val != 0 for val in feat.type_id]):
                     final_token = '<e> '
-                    final_types, final_qids = self.entities_to_text(feat)
+                    final_types, final_qids = self.convert_entities_to_strings(feat)
                     final_token += final_types + final_qids + token
                     # concat all entities with the same type
                     i += 1
@@ -241,7 +242,7 @@ class Bootleg(object):
                 feat = features[i]
                 # token is an entity
                 if any([val != 0 for val in feat.type_id]):
-                    final_types, final_qids = self.entities_to_text(feat)
+                    final_types, final_qids = self.convert_entities_to_strings(feat)
                     all_tokens = []
                     # concat all entities with the same type
                     while i < len(sentence_tokens) and features[i] == feat:
@@ -373,20 +374,18 @@ class Bootleg(object):
         for n, (ex, tokens_type_ids, tokens_type_probs, tokens_qids) in enumerate(
             zip(examples, all_token_type_ids, all_tokens_type_probs, all_tokens_qids)
         ):
+            features = [Entity(*tup) for tup in zip(*[tokens_type_ids, tokens_type_probs, tokens_qids])]
             if utterance_field == 'question':
-                for i in range(len(tokens_type_ids)):
-                    examples[n].question_feature[i].type_id = tokens_type_ids[i]
-                    examples[n].question_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].question_feature[i].qid = tokens_qids[i]
-                examples[n].question = self.add_type_tokens(ex.question, ex.question_feature)
+                assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.question.split(' '))
+                examples[n].question_feature = features
+                # override original question with entities added to it
+                examples[n].question = self.add_entities_to_text(ex.question, features)
 
             else:
-                # context is the utterance field
-                for i in range(len(tokens_type_ids)):
-                    examples[n].context_feature[i].type_id = tokens_type_ids[i]
-                    examples[n].context_feature[i].type_prob = tokens_type_probs[i]
-                    examples[n].context_feature[i].qid = tokens_qids[i]
-                examples[n].context = self.add_type_tokens(ex.context, ex.context_feature)
+                assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.context.split(' '))
+                examples[n].context_feature = features
+                # override original question with entities added to it
+                examples[n].context = self.add_entities_to_text(ex.context, features)
 
     def merge_embeds(self, file_list):
         all_emb_data = []

@@ -51,6 +51,7 @@ from transformers import (
 from . import arguments, models
 from .arguments import save_args
 from .data_utils.bootleg import Bootleg
+from .data_utils.database import Database
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
 from .run_bootleg import bootleg_process_splits
@@ -87,11 +88,13 @@ def initialize_logger(args):
 
 
 def prepare_data(args, logger):
-
-    # initialize bootleg
-    bootleg = None
-    if args.do_ned and args.ned_retrieve_method == 'bootleg':
-        bootleg = Bootleg(args)
+    # initialize bootleg/ database
+    bootleg, db = None, None
+    if args.do_ned:
+        if args.ned_retrieve_method == 'bootleg':
+            bootleg = Bootleg(args)
+        else:
+            db = Database(args)
 
     train_sets, val_sets, aux_sets = [], [], []
 
@@ -132,8 +135,8 @@ def prepare_data(args, logger):
                 if args.do_ned:
                     if bootleg:
                         args.num_db_types = len(bootleg.typeqid2id)
-                    elif getattr(task, 'db', None):
-                        args.num_db_types = len(task.db.typeqid2id)
+                    elif db:
+                        args.num_db_types = len(db.typeqid2id)
                 else:
                     args.num_db_types = 0
             else:
@@ -142,7 +145,9 @@ def prepare_data(args, logger):
             save_args(args, force_overwrite=True)
 
             if bootleg:
-                bootleg_process_splits(args, splits.train.examples, paths.train, task, bootleg)
+                bootleg_process_splits(bootleg, splits.train.examples, paths.train, task.utterance_field)
+            elif db:
+                db.db_process_examples(splits.train.examples, task.utterance_field)
 
             train_sets.append(splits.train)
             logger.info(f'{task.name} has {len(splits.train)} training examples')
@@ -168,7 +173,9 @@ def prepare_data(args, logger):
             logger.info(f'{task.name} has {len(splits.eval)} validation examples')
 
             if bootleg:
-                bootleg_process_splits(args, splits.eval.examples, paths.eval, task, bootleg)
+                bootleg_process_splits(bootleg, splits.eval.examples, paths.eval, task.utterance_field)
+            elif db:
+                db.db_process_examples(splits.eval.examples, task.utterance_field)
 
             val_sets.append(splits.eval)
 
