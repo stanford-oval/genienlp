@@ -159,18 +159,24 @@
             "city with millions of inhabitants",
             "commune of France",
             "city",
-            "human settlement"
+            "human settlement",
+            "us_state"
         ],
         "postal code": [
             "*postal code*",
+            "*postalcode*",
             "administrative territorial entity identifier",
             "nominal number",
             "unique identifier"
+        ],
+        "word": [
+            "keywords"
         ]
     },
     "movies": {
         "film": [
             "*film*",
+            "*movie*",
             "song",
             "single",
             "media franchise",
@@ -197,6 +203,113 @@
         "language": [
             "*language*",
             "cinema of country or region"
+        ],
+        "word": [
+          "keywords"
+        ]
+    },
+    "hotels": {
+        "location": [
+            "*city*",
+            "location",
+            "lake",
+            "sovereign state"
+        ],
+        "feature": [
+            "locationfeaturespecification"
+        ],
+        "hotel": [
+            "hotel"
+        ],
+        "postal code": [
+            "*postal code*",
+            "*postalcode*",
+            "administrative territorial entity identifier",
+            "nominal number",
+            "unique identifier"
+        ],
+        "word": [
+            "keywords"
+        ]
+    },
+      "people": {
+        "organization": [
+            "*organization*",
+            "business",
+            "association football club",
+            "national association football team"
+        ],
+        "person": [
+            "*person*",
+            "*actor*",
+            "*musician",
+            "singer",
+            "musician",
+            "songwriter",
+            "composer",
+            "producer",
+            "singer-songwriter",
+            "musical group",
+            "drummer",
+            "writer",
+            "philanthropist",
+            "public figure",
+            "poet",
+            "guitarist",
+            "rapper",
+            "painter",
+            "film director",
+            "dancer",
+            "screenwriter",
+            "rock band",
+            "university teacher",
+            "journalist",
+            "television presenter",
+            "film producer",
+            "saxophonist",
+            "music pedagogue",
+            "association football player",
+            "film score composer",
+            "disc jockey",
+            "record producer",
+            "engineer",
+            "human biblical figure",
+            "big band",
+            "musical duo",
+            "girl group",
+            "entrepreneur",
+            "boy band",
+            "musical ensemble",
+            "artist",
+            "vocal group",
+            "heavy metal band",
+            "literary character",
+            "lawyer",
+            "lyricist",
+            "baseball player",
+            "pianist",
+            "recording artist",
+            "autobiographer",
+            "fashion designer"
+        ],
+        "award": [
+            "*award*"
+        ],
+        "job title": [
+            "jobtitle"
+        ],
+        "location": [
+            "*city*",
+            "location",
+            "lake",
+            "sovereign state",
+            "addresslocality"
+        ],
+        "language": [
+            "iso_lang_code"
+        ],
+        "word": [
+            "keywords"
         ]
     },
     "music": {
@@ -351,7 +464,14 @@
         "version, edition, or translation": [
             "*publisher*",
             "editorial collection",
-            "version, edition, or translation"
+            "version, edition, or translation",
+            "isbn"
+        ],
+        "language": [
+          "iso_lang_code"
+        ],
+        "word": [
+          "keywords"
         ]
     },
     "thingpedia": {

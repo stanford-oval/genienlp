@@ -60,9 +60,6 @@ class Bootleg(object):
         self.entity_dir = f'{self.args.database_dir}/wiki_entity_data'
         self.embed_dir = f'{self.args.database_dir}/wiki_entity_data'
 
-        self.ned_domains = args.ned_domains
-        self.bootleg_post_process_types = args.bootleg_post_process_types
-
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json') as fin:
             self.entityqid2typenames = ujson.load(fin)
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json') as fin:
@@ -92,7 +89,7 @@ class Bootleg(object):
             ) as fin:
                 almond_type_mapping_all_domains = ujson.load(fin)
             # only keep subset for provided domains
-            for domain in self.ned_domains:
+            for domain in self.args.ned_domains:
                 self.almond_type_mapping.update(almond_type_mapping_all_domains[domain])
             self.update_wiki2normalized_type()
         #####
@@ -185,9 +182,11 @@ class Bootleg(object):
 
     def post_process_bootleg_types(self, title):
         types = None
+        title = title.lower()
         for pair in self.wiki2normalized_type:
             if fnmatch.fnmatch(title, pair[0]):
                 types = pair[1]
+                break
 
         typeqids = None
         if types is not None:
@@ -299,7 +298,7 @@ class Bootleg(object):
                         for typeqid in all_typeqids:
                             if typeqid in self.typeqid2id:
                                 # map wikidata types to thingtalk types
-                                if self.bootleg_post_process_types:
+                                if self.args.bootleg_post_process_types:
                                     # map qid to title
                                     title = self.typeqid_to_type_vocab[typeqid]
 

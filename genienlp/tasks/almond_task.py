@@ -26,15 +26,13 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import fnmatch
 import logging
 import os
 import re
 from collections import defaultdict
 
-import marisa_trie
 import torch
-import ujson
 
 from ..data_utils.almond_utils import (
     ISO_to_LANG,
@@ -84,17 +82,7 @@ class BaseAlmondTask(BaseTask):
             self._init_db()
 
     def _init_db(self):
-        canonical2type = {}
-        all_canonicals = marisa_trie.Trie()
-        # canonical2type.json is a big file (>4G); load it only when necessary
-        if self.args.ned_retrieve_method not in ['bootleg', 'type-oracle']:
-            with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
-                canonical2type = ujson.load(fin)
-                all_canonicals = marisa_trie.Trie(canonical2type.keys())
-        with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
-            typeqid2id = ujson.load(fin)
-
-        self.db = Database(canonical2type, typeqid2id, all_canonicals, self.args.max_features_size)
+        self.db = Database(self.args)
 
     @property
     def utterance_field(self):
@@ -117,11 +105,18 @@ class BaseAlmondTask(BaseTask):
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
-    def collect_answer_entity_types(self, answer):
+    def collect_answer_entity_types(self, tokens, answer):
         entity2type = dict()
+        sentence = ' '.join(tokens)
 
         answer_entities = quoted_pattern_with_space.findall(answer)
         for ent in answer_entities:
+            # skip examples with sentence-annotation entity mismatch. hopefully there's not a lot of them.
+            # this is usually caused by paraphrasing where it adds "-" after entity name: "korean-style restaurants"
+            # or add "'" before or after an entity
+            if not re.search(rf'(^|\s){ent}($|\s)', sentence):
+                # print(f'***ent: {ent} {tokens} {answer}')
+                continue
 
             if self._almond_thingtalk_version == 1:
                 #  ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ...
@@ -131,31 +126,28 @@ class BaseAlmondTask(BaseTask):
                 # assume first syntax
                 idx = answer.index('" ' + ent + ' "')
 
-                schema_entity_type = None
+                type = None
 
                 answer_tokens_after_entity = answer[idx + len('" ' + ent + ' "') :].split()
                 if answer_tokens_after_entity[0].startswith('^^'):
-                    schema_entity_type = answer_tokens_after_entity[0].rsplit(':', 1)[1]
+                    type = answer_tokens_after_entity[0].rsplit(':', 1)[1]
 
-                if schema_entity_type is None:
+                if type is None:
 
                     answer_tokens_before_entity = answer[:idx].split()
 
                     # check last three tokens to find one that starts with param
                     for i in range(3):
                         if answer_tokens_before_entity[-i].startswith('param:'):
-                            schema_entity_type = answer_tokens_before_entity[-i]
+                            type = answer_tokens_before_entity[-i]
                             break
 
-                    if schema_entity_type:
-                        schema_entity_type = schema_entity_type.strip('()').rsplit(':', 1)[1]
+                    if type:
+                        type = type.strip('()').rsplit(':', 1)[1]
 
-                if schema_entity_type is None or schema_entity_type not in self.TTtype2qid.keys():
-                    schema_type = self.db.unk_type
-                else:
-                    schema_type = self.TTtype2qid[schema_entity_type]
+                assert type in self.db.type_vocab_to_typeqid
 
-                entity2type[ent] = schema_type
+                entity2type[ent] = type
 
             else:
 
@@ -172,11 +164,11 @@ class BaseAlmondTask(BaseTask):
                 # assume first syntax
                 idx = answer.index('" ' + ent + ' "')
 
-                schema_entity_type = None
+                type = None
                 tokens_before_entity = answer[:idx].split()
 
                 if tokens_before_entity[-2] == 'Location':
-                    schema_entity_type = 'Location'
+                    type = 'Location'
 
                 elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in [
                     'ratingValue',
@@ -184,38 +176,49 @@ class BaseAlmondTask(BaseTask):
                     'checkoutTime',
                     'checkinTime',
                 ]:
-                    schema_entity_type = tokens_before_entity[-2]
+                    type = tokens_before_entity[-2]
 
                 elif tokens_before_entity[-1] == '=~':
-                    if tokens_before_entity[-2] == 'id':
+                    if tokens_before_entity[-2] in ['id', 'value']:
                         # travers previous tokens until find filter
                         i = -3
-                        while tokens_before_entity[i] != 'filter' and i > 3 - len(tokens_before_entity):
+                        while tokens_before_entity[i] != 'filter' and i - 3 > -len(tokens_before_entity):
                             i -= 1
-                        schema_entity_type = tokens_before_entity[i - 3]
+                        type = tokens_before_entity[i - 3]
                     else:
-                        schema_entity_type = tokens_before_entity[-2]
+                        type = tokens_before_entity[-2]
 
                 elif tokens_before_entity[-4] == 'contains~':
-                    schema_entity_type = tokens_before_entity[-2]
+                    type = tokens_before_entity[-2]
 
                 elif tokens_before_entity[-2].startswith('^^'):
-                    schema_entity_type = tokens_before_entity[-2].rsplit(':', 1)[1]
+                    type = tokens_before_entity[-2].rsplit(':', 1)[1]
                     if (
-                        schema_entity_type == 'Person'
+                        type == 'Person'
                         and tokens_before_entity[-3] == 'null'
                         and tokens_before_entity[-5] in ['director', 'creator', 'actor']
                     ):
-                        schema_entity_type = 'Person.' + tokens_before_entity[-5]
+                        type = tokens_before_entity[-5]
 
-                if schema_entity_type is None or schema_entity_type not in self.TTtype2qid.keys():
-                    schema_type = self.db.unk_type
+                elif tokens_before_entity[-1] in [',', '[']:
+                    type = 'keywords'
+
+                if type:
+                    if self.args.bootleg_post_process_types:
+                        type = type.lower()
+                        for pair in self.db.wiki2normalized_type:
+                            if fnmatch.fnmatch(type, pair[0]):
+                                type = pair[1]
+                                break
+
+                    assert type in self.db.type_vocab_to_typeqid, f'{type}, {answer}'
                 else:
-                    schema_type = self.TTtype2qid[schema_entity_type]
+                    print(f'{type}, {answer}')
+                    continue
 
-                entity2type[ent] = schema_type
+                entity2type[ent] = type
 
-            self.all_schema_types.add(schema_entity_type)
+            self.all_schema_types.add(type)
 
         return entity2type
 
@@ -240,7 +243,8 @@ class BaseAlmondTask(BaseTask):
                 continue
             token_pos = len(tokens_text[:idx].split())
 
-            type_id = self.db.typeqid2id[type]
+            typeqid = self.db.type_vocab_to_typeqid[type]
+            type_id = self.db.typeqid2id[typeqid]
             type_id = self.pad_features([type_id], self.args.max_features_size, 0)
 
             tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
@@ -258,7 +262,7 @@ class BaseAlmondTask(BaseTask):
             answer_entities = quoted_pattern_with_space.findall(answer)
             tokens_type_ids = self.db.lookup(tokens, answer_entities=answer_entities)
         elif self.args.ned_retrieve_method == 'type-oracle':
-            entity2type = self.collect_answer_entity_types(answer)
+            entity2type = self.collect_answer_entity_types(tokens, answer)
             tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
 
         return tokens_type_ids
@@ -379,7 +383,10 @@ class BaseAlmondTask(BaseTask):
 
         zip_list = []
         if tokens_type_ids:
-            assert len(tokens_type_ids) == new_sentence_length
+            if len(tokens_type_ids) != new_sentence_length:
+                import pdb
+
+                pdb.set_trace()
             zip_list.append(tokens_type_ids)
         if tokens_type_probs:
             assert len(tokens_type_probs) == new_sentence_length

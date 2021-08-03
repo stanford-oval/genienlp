@@ -28,6 +28,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+import os
+
+import marisa_trie
+import ujson
 
 from .database_utils import has_overlap, is_banned, normalize_text
 
@@ -35,7 +39,47 @@ logger = logging.getLogger(__name__)
 
 
 class Database(object):
-    def __init__(self, canonical2type, typeqid2id, all_canonicals, max_features_size):
+    def __init__(self, args):
+
+        self.args = args
+
+        # keys are normalized types for each thingtalk property, values are a list of wiki types
+        self.almond_type_mapping = dict()
+
+        # a list of tuples: each pair includes a wiki type and their normalized type
+        self.wiki2normalized_type = list()
+
+        if self.args.almond_type_mapping_path:
+            # read mapping from user-provided file
+            with open(os.path.join(self.args.root, self.args.almond_type_mapping_path)) as fin:
+                self.almond_type_mapping = ujson.load(fin)
+            self.update_wiki2normalized_type()
+        else:
+            # this file contains mapping between normalized types and wiki types *per domain*
+            # we will choose the subset of domains we want via ned_domains
+            with open(
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database_files/almond_type_mapping.json')
+            ) as fin:
+                almond_type_mapping_all_domains = ujson.load(fin)
+            # only keep subset for provided domains
+            for domain in self.args.ned_domains:
+                self.almond_type_mapping.update(almond_type_mapping_all_domains[domain])
+            self.update_wiki2normalized_type()
+
+        canonical2type = {}
+        all_canonicals = marisa_trie.Trie()
+        # canonical2type.json is a big file (>4G); load it only when necessary
+        if self.args.ned_retrieve_method not in ['bootleg', 'type-oracle']:
+            with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
+                canonical2type = ujson.load(fin)
+                all_canonicals = marisa_trie.Trie(canonical2type.keys())
+        with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
+            typeqid2id = ujson.load(fin)
+
+        with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json') as fin:
+            self.type_vocab_to_typeqid = ujson.load(fin)
+            self.typeqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_typeqid.items()}
+
         self.canonical2type = canonical2type
         self.typeqid2id = typeqid2id
         self.id2type = {v: k for k, v in self.typeqid2id.items()}
@@ -44,7 +88,12 @@ class Database(object):
         self.unk_id = 0
         self.unk_type = self.id2type[self.unk_id]
 
-        self.max_features_size = max_features_size
+        self.max_features_size = self.args.max_features_size
+
+    def update_wiki2normalized_type(self):
+        for normalized_type, titles in self.almond_type_mapping.items():
+            for title in titles:
+                self.wiki2normalized_type.append((title, normalized_type))
 
     def lookup_ngrams(self, tokens, min_entity_len, max_entity_len):
         # load nltk lazily
