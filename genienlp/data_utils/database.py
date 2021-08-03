@@ -43,9 +43,25 @@ logger = logging.getLogger(__name__)
 
 class Database(object):
     def __init__(self, args):
-
         self.args = args
+        self.max_features_size = self.args.max_features_size
 
+        ### general attributes
+        # alias2type.json is a big file (>4G); load it only when necessary
+        if self.args.ned_retrieve_method not in ['bootleg', 'type-oracle']:
+            with open(os.path.join(self.args.database_dir, 'es_material/alias2type.json'), 'r') as fin:
+                self.alias2type = ujson.load(fin)
+                all_aliases = marisa_trie.Trie(self.alias2type.keys())
+                self.all_aliases = all_aliases
+
+        with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json') as fin:
+            self.type_vocab_to_typeqid = ujson.load(fin)
+            self.typeqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_typeqid.items()}
+        with open(f'{self.args.database_dir}/es_material/typeqid2id.json') as fin:
+            self.typeqid2id = ujson.load(fin)
+            self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
+
+        #### almond specific attributes
         self.all_schema_types = set()
 
         # keys are normalized types for each thingtalk property, values are a list of wiki types
@@ -70,31 +86,18 @@ class Database(object):
             for domain in self.args.ned_domains:
                 self.almond_type_mapping.update(almond_type_mapping_all_domains[domain])
             self.update_wiki2normalized_type()
-
-        canonical2type = {}
-        all_canonicals = marisa_trie.Trie()
-        # canonical2type.json is a big file (>4G); load it only when necessary
-        if self.args.ned_retrieve_method not in ['bootleg', 'type-oracle']:
-            with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
-                canonical2type = ujson.load(fin)
-                all_canonicals = marisa_trie.Trie(canonical2type.keys())
-        with open(f'{self.args.database_dir}/es_material/typeqid2id.json') as fin:
-            self.typeqid2id = ujson.load(fin)
-            self.id2typeqid = {v: k for k, v in self.typeqid2id.items()}
-
-        with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json') as fin:
-            self.type_vocab_to_typeqid = ujson.load(fin)
-            self.typeqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_typeqid.items()}
-
-        self.canonical2type = canonical2type
-        self.all_canonicals = all_canonicals
+        ####
 
         self.unk_id = 0
         self.unk_type = self.id2typeqid[self.unk_id]
 
-        self.max_features_size = self.args.max_features_size
+    def update_wiki2normalized_type(self):
+        for normalized_type, titles in self.almond_type_mapping.items():
+            for title in titles:
+                self.wiki2normalized_type.append((title, normalized_type))
 
     def db_process_examples(self, examples, utterance_field):
+        all_token_type_ids, all_token_type_probs, all_token_qids = [], [], []
         for n, ex in enumerate(examples):
             if utterance_field == 'question':
                 sentence = ex.question
@@ -113,30 +116,11 @@ class Database(object):
             if 'type_prob' in self.args.entity_attributes:
                 tokens_type_probs = self.find_type_probs(tokens, 0, self.args.max_features_size)
 
-            zip_list = []
-            if 'type_id' in self.args.entity_attributes:
-                assert len(tokens_type_ids) == length
-                zip_list.append(tokens_type_ids)
-            if 'type_prob' in self.args.entity_attributes:
-                assert len(tokens_type_probs) == length
-                zip_list.append(tokens_type_probs)
-            if 'qid' in self.args.entity_attributes:
-                assert len(token_qids) == length
-                zip_list.append(token_qids)
+            all_token_type_ids.append(tokens_type_ids)
+            all_token_type_probs.append(tokens_type_probs)
+            all_token_qids.append(token_qids)
 
-            features = [Entity(*tup) for tup in zip(*zip_list)]
-
-            if utterance_field == 'question':
-                examples[n].question_feature = features
-                examples[n].question = self.add_entities_to_text(ex.question, features)
-            else:
-                examples[n].context_feature = features
-                examples[n].context = self.add_entities_to_text(ex.context, features)
-
-    def update_wiki2normalized_type(self):
-        for normalized_type, titles in self.almond_type_mapping.items():
-            for title in titles:
-                self.wiki2normalized_type.append((title, normalized_type))
+        self.replace_features_inplace(examples, all_token_type_ids, all_token_type_probs, all_token_qids, utterance_field)
 
     def collect_answer_entity_types(self, tokens, answer):
         entity2type = dict()
@@ -183,7 +167,6 @@ class Database(object):
                 entity2type[ent] = type
 
             else:
-
                 # ** this should change if thingtalk syntax changes **
 
                 # ( ... [Book|Music|...] ( ) filter id =~ " position and affirm " ) ...'
@@ -288,7 +271,7 @@ class Database(object):
         final_types = ''
         if 'type_id' in self.args.entity_attributes:
             all_types = ' | '.join(sorted(self.typeqid_to_type_vocab[self.id2typeqid[id]] for id in feat.type_id if id != 0))
-            final_types = '( ' + all_types + ' ) '
+            final_types = '( ' + all_types + ' )'
         final_qids = ''
         if 'qid' in self.args.entity_attributes:
             all_qids = ' | '.join(sorted('Q' + str(id) for id in feat.qid if id != -1))
@@ -310,7 +293,7 @@ class Database(object):
                     final_token = '<e> '
                     final_types, final_qids = self.convert_entities_to_strings(feat)
                     final_token += final_types + final_qids + token
-                    # append all entities with same type
+                    # concat all entities with the same type
                     i += 1
                     while i < len(sentence_tokens) and features[i] == feat:
                         final_token += ' ' + sentence_tokens[i]
@@ -330,11 +313,11 @@ class Database(object):
                 if any([val != 0 for val in feat.type_id]):
                     final_types, final_qids = self.convert_entities_to_strings(feat)
                     all_tokens = []
-                    # append all entities with same type
+                    # concat all entities with the same type
                     while i < len(sentence_tokens) and features[i] == feat:
                         all_tokens.append(sentence_tokens[i])
                         i += 1
-                    final_token = ' '.join([*all_tokens, final_types, final_qids, ';'])
+                    final_token = ' '.join(filter(lambda token: token != '', [*all_tokens, final_types, final_qids, ';']))
                     sentence_plus_types_tokens.append(final_token)
                 else:
                     i += 1
@@ -345,6 +328,24 @@ class Database(object):
             return sentence
         else:
             return ' '.join(sentence_plus_types_tokens)
+
+    def replace_features_inplace(self, examples, all_token_type_ids, all_token_type_probs, all_token_qids, utterance_field):
+        assert len(examples) == len(all_token_type_ids) == len(all_token_type_probs) == len(all_token_qids)
+        for n, (ex, tokens_type_ids, tokens_type_probs, tokens_qids) in enumerate(
+            zip(examples, all_token_type_ids, all_token_type_probs, all_token_qids)
+        ):
+            features = [Entity(*tup) for tup in zip(*[tokens_type_ids, tokens_type_probs, tokens_qids])]
+            if utterance_field == 'question':
+                assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.question.split(' '))
+                examples[n].question_feature = features
+                # override original question with entities added to it
+                examples[n].question = self.add_entities_to_text(ex.question, features)
+
+            else:
+                assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.context.split(' '))
+                examples[n].context_feature = features
+                # override original question with entities added to it
+                examples[n].context = self.add_entities_to_text(ex.context, features)
 
     def find_type_probs(self, tokens, default_val, default_size):
         token_freqs = [[default_val] * default_size] * len(tokens)
@@ -390,11 +391,11 @@ class Database(object):
                 end += 1
                 gram_text = normalize_text(" ".join(gram))
 
-                if not is_banned(gram_text) and gram_text not in verbs and gram_text in self.all_canonicals:
+                if not is_banned(gram_text) and gram_text not in verbs and gram_text in self.all_aliases:
                     if has_overlap(start, end, used_aliases):
                         continue
 
-                    used_aliases.append([self.typeqid2id.get(self.canonical2type[gram_text], self.unk_id), start, end])
+                    used_aliases.append([self.typeqid2id.get(self.alias2type[gram_text], self.unk_id), start, end])
 
         for type_id, beg, end in used_aliases:
             tokens_type_ids[beg:end] = [[type_id] * self.max_features_size] * (end - beg)
@@ -402,16 +403,15 @@ class Database(object):
         return tokens_type_ids
 
     def lookup_smaller(self, tokens):
-
         tokens_type_ids = []
         i = 0
         while i < len(tokens):
             token = tokens[i]
             # sort by number of tokens so longer keys get matched first
-            matched_items = sorted(self.all_canonicals.keys(token), key=lambda item: len(item), reverse=True)
+            matched_items = sorted(self.all_aliases.keys(token), key=lambda item: len(item), reverse=True)
             found = False
             for key in matched_items:
-                type = self.canonical2type[key]
+                type = self.alias2type[key]
                 key_tokenized = key.split()
                 cur = i
                 j = 0
@@ -449,11 +449,11 @@ class Database(object):
             end = length
             while end > i:
                 tokens_str = ' '.join(tokens[i:end])
-                if tokens_str in self.all_canonicals:
+                if tokens_str in self.all_aliases:
                     # match found
                     found = True
                     tokens_type_ids.extend(
-                        [[self.typeqid2id[self.canonical2type[tokens_str]] * self.max_features_size] for _ in range(i, end)]
+                        [[self.typeqid2id[self.alias2type[tokens_str]] * self.max_features_size] for _ in range(i, end)]
                     )
                     # move i to current unprocessed position
                     i = end
@@ -472,21 +472,18 @@ class Database(object):
         tokens_text = " ".join(tokens)
 
         for ent in entities:
-            if ent not in self.all_canonicals:
+            if ent not in self.all_aliases:
                 continue
             ent_num_tokens = len(ent.split(' '))
             idx = tokens_text.index(ent)
             token_pos = len(tokens_text[:idx].strip().split(' '))
-
-            type = self.typeqid2id.get(self.canonical2type[ent], self.unk_id)
-
+            type = self.typeqid2id.get(self.alias2type[ent], self.unk_id)
             tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [[type] * self.max_features_size] * ent_num_tokens
 
         return tokens_type_ids
 
     def lookup(self, tokens, database_lookup_method=None, min_entity_len=2, max_entity_len=4, answer_entities=None):
         tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
-
         if answer_entities is not None:
             tokens_type_ids = self.lookup_entities(tokens, answer_entities)
         else:
@@ -496,5 +493,4 @@ class Database(object):
                 tokens_type_ids = self.lookup_longer(tokens)
             elif database_lookup_method == 'ngrams':
                 tokens_type_ids = self.lookup_ngrams(tokens, min_entity_len, max_entity_len)
-
         return tokens_type_ids

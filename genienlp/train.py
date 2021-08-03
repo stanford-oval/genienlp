@@ -152,8 +152,6 @@ def prepare_data(args, logger):
             train_sets.append(splits.train)
             logger.info(f'{task.name} has {len(splits.train)} training examples')
 
-            logger.info(f"train all_schema_types: {getattr(task, 'all_schema_types', None)}")
-
         for task in args.val_tasks:
             logger.info(f'Loading {task.name}')
             kwargs = {'train': None, 'test': None}
@@ -179,7 +177,8 @@ def prepare_data(args, logger):
 
             val_sets.append(splits.eval)
 
-            logger.info(f"validation all_schema_types: {getattr(task, 'all_schema_types', None)}")
+    if db:
+        logger.info(f"train all_schema_types: {db.all_schema_types}")
 
     return train_sets, val_sets, aux_sets
 

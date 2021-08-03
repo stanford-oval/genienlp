@@ -412,7 +412,7 @@ def parse_argv(parser):
         help='This will create the "type to id" mapping for all entities available in ES database',
     )
     parser.add_argument(
-        '--database_dump_canonical2type',
+        '--database_dump_alias2type',
         action='store_true',
         help='This will create the "canonical to type" mapping for all entities available in ES database',
     )

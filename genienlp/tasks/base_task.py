@@ -81,7 +81,7 @@ class BaseTask(object):
             return self.override_context
         if self.override_question is not None and field_name == 'question':
             return self.override_question
-        return sentence, []
+        return sentence
 
     @property
     def metrics(self):

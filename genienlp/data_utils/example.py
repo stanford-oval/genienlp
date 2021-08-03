@@ -34,7 +34,7 @@ import torch
 
 
 def identity(x, **kw):
-    return x, []
+    return x
 
 
 class SequentialField(NamedTuple):
@@ -116,6 +116,8 @@ class Example(object):
             args.append(sentence)
 
             if argname != 'answer':
+                # we use a placeholder for features here
+                # the features will be produced and overridden via bootleg or database
                 args.append([])
 
         return Example(*args)
