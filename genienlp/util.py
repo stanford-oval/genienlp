@@ -772,8 +772,10 @@ def load_config_json(args):
             'num_workers',
             'no_fast_tokenizer',
             'force_fast_tokenizer',
-            'add_types_to_text',
-            'add_qids_to_text',
+            'add_entities_to_text',
+            'entity_attributes',
+            'max_qids_per_entity',
+            'max_types_per_qid',
             'do_ned',
             'database_type',
             'min_entity_len',
@@ -784,10 +786,9 @@ def load_config_json(args):
             'db_unk_id',
             'ned_retrieve_method',
             'database_lookup_method',
-            'almond_domains',
-            'ned_features',
-            'ned_features_size',
-            'ned_features_default_val',
+            'ned_domains',
+            'almond_type_mapping_path',
+            'max_features_size',
             'bootleg_output_dir',
             'bootleg_model',
             'bootleg_prob_threshold',
@@ -795,7 +796,7 @@ def load_config_json(args):
             'att_pooling',
             'no_separator',
             'num_labels',
-            'ner_domains',
+            'crossner_domains',
             'hf_test_overfit',
             'override_valid_metrics',
         ]
@@ -850,10 +851,8 @@ def load_config_json(args):
                 setattr(args, r, [1])
             elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
                 setattr(args, r, [0])
-            elif r in ['ned_features', 'ned_features_size', 'ned_features_default_val', 'override_valid_metrics']:
+            elif r in ['override_valid_metrics']:
                 setattr(args, r, [])
-            elif r in ('add_types_to_text', 'add_qids_to_text'):
-                setattr(args, r, 'no')
             elif r == 'database_type':
                 setattr(args, r, 'json')
             elif r == 'att_pooling':
@@ -862,14 +861,10 @@ def load_config_json(args):
                 setattr(args, r, 2)
             elif r == 'max_entity_len':
                 setattr(args, r, 4)
-            elif r == 'database_dir':
-                setattr(args, r, None)
             elif r == 'ned_retrieve_method':
                 setattr(args, r, 'naive')
             elif r == 'database_lookup_method':
                 setattr(args, r, 'ngrams')
-            elif r == 'almond_domains':
-                setattr(args, r, [])
             elif r == 'locale':
                 setattr(args, r, 'en')
             elif r == 'num_beam_groups':
@@ -887,6 +882,28 @@ def load_config_json(args):
             else:
                 # use default value
                 setattr(args, r, None)
+
+        # backward compatibility for models trained with genienlp before NED Refactoring (2)
+        if args.max_features_size is None:
+            if hasattr(args, 'ned_features_size'):
+                setattr(args, 'max_features_size', args.ned_features_size)
+            else:
+                setattr(args, 'max_features_size', 0)
+        if args.ned_domains is None:
+            if hasattr(args, 'almond_domains'):
+                setattr(args, 'ned_domains', args.almond_domains)
+            else:
+                setattr(args, 'ned_domains', [])
+        if args.add_entities_to_text is None:
+            if hasattr(args, 'add_types_to_text'):
+                setattr(args, 'add_entities_to_text', args.add_types_to_text)
+            else:
+                setattr(args, 'add_entities_to_text', 'no')
+        if args.entity_attributes is None:
+            if hasattr(args, 'ned_features'):
+                setattr(args, 'entity_attributes', args.ned_features)
+            else:
+                setattr(args, 'entity_attributes', [])
 
         args.dropout_ratio = 0.0
         args.verbose = False

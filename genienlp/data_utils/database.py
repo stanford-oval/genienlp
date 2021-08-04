@@ -31,24 +31,20 @@ import logging
 
 from .database_utils import has_overlap, is_banned, normalize_text
 
-tracer = logging.getLogger('elasticsearch')
-tracer.setLevel(logging.CRITICAL)
-
 logger = logging.getLogger(__name__)
 
 
 class Database(object):
-    def __init__(self, canonical2type, typeqid2id, all_canonicals, ned_features_default_val, ned_features_size):
+    def __init__(self, canonical2type, typeqid2id, all_canonicals, max_features_size):
         self.canonical2type = canonical2type
         self.typeqid2id = typeqid2id
         self.id2type = {v: k for k, v in self.typeqid2id.items()}
         self.all_canonicals = all_canonicals
 
-        self.unk_id = ned_features_default_val[0]
+        self.unk_id = 0
         self.unk_type = self.id2type[self.unk_id]
 
-        self.ned_features_default_val = ned_features_default_val
-        self.ned_features_size = ned_features_size
+        self.max_features_size = max_features_size
 
     def lookup_ngrams(self, tokens, min_entity_len, max_entity_len):
         # load nltk lazily
@@ -56,7 +52,7 @@ class Database(object):
 
         nltk.download('averaged_perceptron_tagger', quiet=True)
 
-        tokens_type_ids = [[self.unk_id] * self.ned_features_size[0]] * len(tokens)
+        tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
 
         max_entity_len = min(max_entity_len, len(tokens))
         min_entity_len = min(min_entity_len, len(tokens))
@@ -81,7 +77,7 @@ class Database(object):
                     used_aliases.append([self.typeqid2id.get(self.canonical2type[gram_text], self.unk_id), start, end])
 
         for type_id, beg, end in used_aliases:
-            tokens_type_ids[beg:end] = [[type_id] * self.ned_features_size[0]] * (end - beg)
+            tokens_type_ids[beg:end] = [[type_id] * self.max_features_size] * (end - beg)
 
         return tokens_type_ids
 
@@ -111,14 +107,14 @@ class Database(object):
 
                     # match found
                     found = True
-                    tokens_type_ids.extend([[self.typeqid2id[type] * self.ned_features_size[0]] for _ in range(i, cur)])
+                    tokens_type_ids.extend([[self.typeqid2id[type] * self.max_features_size] for _ in range(i, cur)])
 
                     # move i to current unprocessed position
                     i = cur
                     break
 
             if not found:
-                tokens_type_ids.append([self.unk_id * self.ned_features_size[0]])
+                tokens_type_ids.append([self.unk_id * self.max_features_size])
                 i += 1
 
         return tokens_type_ids
@@ -137,7 +133,7 @@ class Database(object):
                     # match found
                     found = True
                     tokens_type_ids.extend(
-                        [[self.typeqid2id[self.canonical2type[tokens_str]] * self.ned_features_size[0]] for _ in range(i, end)]
+                        [[self.typeqid2id[self.canonical2type[tokens_str]] * self.max_features_size] for _ in range(i, end)]
                     )
                     # move i to current unprocessed position
                     i = end
@@ -145,14 +141,14 @@ class Database(object):
                 else:
                     end -= 1
             if not found:
-                tokens_type_ids.append([self.unk_id * self.ned_features_size[0]])
+                tokens_type_ids.append([self.unk_id * self.max_features_size])
                 i += 1
             found = False
 
         return tokens_type_ids
 
     def lookup_entities(self, tokens, entities):
-        tokens_type_ids = [[self.unk_id] * self.ned_features_size[0]] * len(tokens)
+        tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
         tokens_text = " ".join(tokens)
 
         for ent in entities:
@@ -164,13 +160,13 @@ class Database(object):
 
             type = self.typeqid2id.get(self.canonical2type[ent], self.unk_id)
 
-            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [[type] * self.ned_features_size[0]] * ent_num_tokens
+            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [[type] * self.max_features_size] * ent_num_tokens
 
         return tokens_type_ids
 
     def lookup(self, tokens, database_lookup_method=None, min_entity_len=2, max_entity_len=4, answer_entities=None):
 
-        tokens_type_ids = [[self.unk_id] * self.ned_features_size[0]] * len(tokens)
+        tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
 
         if answer_entities is not None:
             tokens_type_ids = self.lookup_entities(tokens, answer_entities)

@@ -59,7 +59,7 @@ from transformers import (
 
 from ..util import get_devices
 from .decoder_vocab import DecoderVocabulary
-from .example import SequentialField, get_pad_feature
+from .example import Entity, SequentialField
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +267,7 @@ class TransformerNumericalizer(object):
             self._tokenizer.add_tokens(special_tokens)
 
         # add entity boundary special tokens
-        if self.args.add_types_to_text != 'no' or self.args.add_qids_to_text != 'no':
+        if self.args.add_entities_to_text != 'no':
             self._tokenizer.add_tokens(['<e>', '</e>'])
 
         # add special tokens for ambig_qa task
@@ -507,9 +507,9 @@ class TransformerNumericalizer(object):
 
             return all_processed_labels
 
-        if self.args.add_types_to_text == 'insert':
-            raise ValueError('Insert option for add_types_to_text argument is not supported for token_classification tasks')
-        elif self.args.add_types_to_text == 'append':
+        if self.args.add_entities_to_text == 'insert':
+            raise ValueError('Insert option for add_entities_to_text argument is not supported for token_classification tasks')
+        elif self.args.add_entities_to_text == 'append':
             all_context_plus_questions_wo_types = [example[: example.index(' <e>')] for example in all_context_plus_questions]
         else:
             all_context_plus_questions_wo_types = all_context_plus_questions
@@ -717,9 +717,7 @@ class TransformerNumericalizer(object):
                 special_tokens_mask = batch_special_tokens_mask[i]
                 num_prefix_special_tokens, num_suffix_special_tokens = self.get_num_special_tokens(special_tokens_mask)
 
-                pad_feat = get_pad_feature(
-                    self.args.ned_features, self.args.ned_features_default_val, self.args.ned_features_size
-                )
+                pad_feat = Entity.get_pad_entity(self.args.max_features_size)
                 feat = [pad_feat] * num_prefix_special_tokens + feat + [pad_feat] * num_suffix_special_tokens
 
                 batch_features.append(feat)

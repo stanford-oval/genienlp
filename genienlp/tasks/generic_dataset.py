@@ -1875,12 +1875,12 @@ class CrossNERDataset(CQA):
     @classmethod
     def return_splits(cls, name, path='.data', train='train', validation='dev', test='test', **kwargs):
 
-        ner_domains = kwargs.pop('ner_domains')
+        crossner_domains = kwargs.pop('crossner_domains')
 
         all_train_data = []
         all_validation_data = []
         all_test_data = []
-        for domain in ner_domains:
+        for domain in crossner_domains:
             # download datasets and cache them
             train_data, validation_data, test_data = None, None, None
             train_path, validation_path, test_path = None, None, None

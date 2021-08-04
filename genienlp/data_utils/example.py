@@ -28,7 +28,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import unicodedata
-from dataclasses import dataclass
 from typing import Iterable, List, NamedTuple, Union
 
 import torch
@@ -45,38 +44,39 @@ class SequentialField(NamedTuple):
     feature: Union[torch.tensor, List[List[int]], None]
 
 
-# Feature is defined per token
-# Each field contains a list of possible values for that feature
-@dataclass
-class Feature:
-    type_id: List[int] = None
-    type_prob: List[float] = None
-    qid: List[int] = None
+VALID_ENTITY_ATTRIBUTES = ('type_id', 'type_prob', 'qid')
 
-    def __mul__(self, n):
-        return [self for _ in range(n)]
+
+# Entity is defined per token
+# Each attribute contains a list of possible values for that entity
+class Entity(object):
+    def __init__(
+        self,
+        type_id: List[int] = None,
+        type_prob: List[float] = None,
+        qid: List[int] = None,
+    ):
+        self.type_id = type_id
+        self.type_prob = type_prob
+        self.qid = qid
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
     def flatten(self):
         result = []
-        for field in VALID_FEATURE_FIELDS:
+        for field in VALID_ENTITY_ATTRIBUTES:
             field_val = getattr(self, field)
             if field_val:
                 result += field_val
         return result
 
-
-VALID_FEATURE_FIELDS = tuple(Feature.__annotations__.keys())
-
-
-def get_pad_feature(feature_fields, ned_features_default_val, ned_features_size):
-    # return None if not using NED
-    pad_feature = None
-    if len(feature_fields):
-        pad_feature = Feature()
-        for i, field in enumerate(feature_fields):
-            assert field in VALID_FEATURE_FIELDS
-            setattr(pad_feature, field, [ned_features_default_val[i]] * ned_features_size[i])
-    return pad_feature
+    @staticmethod
+    def get_pad_entity(max_features_size):
+        pad_feature = Entity()
+        for i, field in enumerate(VALID_ENTITY_ATTRIBUTES):
+            setattr(pad_feature, field, [0] * max_features_size)
+        return pad_feature
 
 
 class Example(object):
@@ -88,9 +88,9 @@ class Example(object):
         self,
         example_id: str,
         context: str,
-        context_feature: List[Feature],
+        context_feature: List[Entity],
         question: str,
-        question_feature: List[Feature],
+        question_feature: List[Entity],
         answer: str,
     ):
 
@@ -141,7 +141,7 @@ class NumericalizedExamples(NamedTuple):
             pad_feature = []
         else:
             sep_token = ' ' + numericalizer.sep_token + ' '
-            pad_feature = [get_pad_feature(args.ned_features, args.ned_features_default_val, args.ned_features_size)]
+            pad_feature = [Entity.get_pad_entity(args.max_features_size)]
 
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []
@@ -159,11 +159,11 @@ class NumericalizedExamples(NamedTuple):
             )
             all_context_plus_question_features.append(context_plus_question_feature)
 
-        features = None
-        if args.do_ned and args.add_types_to_text == 'no' and args.add_qids_to_text == 'no':
-            features = [a for a in all_context_plus_question_features if a]
-            if len(features) == 0:
-                features = None
+        if args.do_ned and args.add_entities_to_text == 'no':
+            features = all_context_plus_question_features
+        else:
+            # features are already processed and added to input as text
+            features = None
 
         tokenized_contexts = numericalizer.encode_batch(all_context_plus_questions, field_name='context', features=features)
 

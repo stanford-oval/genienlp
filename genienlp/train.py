@@ -109,7 +109,7 @@ def prepare_data(args, logger):
             kwargs.update(train_eval_shared_kwargs)
             kwargs['all_dirs'] = args.train_src_languages
             kwargs['cached_path'] = os.path.join(args.cache, task.name)
-            kwargs['ner_domains'] = args.ner_domains
+            kwargs['crossner_domains'] = args.crossner_domains
             if args.use_curriculum:
                 kwargs['curriculum'] = True
 
@@ -128,10 +128,7 @@ def prepare_data(args, logger):
                 assert splits.train
 
             if task.name.startswith('almond'):
-                if args.ned_features_default_val:
-                    args.db_unk_id = int(args.ned_features_default_val[0])
-                else:
-                    args.db_unk_id = 0
+                args.db_unk_id = 0
                 if args.do_ned:
                     if bootleg:
                         args.num_db_types = len(bootleg.typeqid2id)
@@ -161,7 +158,7 @@ def prepare_data(args, logger):
             kwargs.update(train_eval_shared_kwargs)
             kwargs['all_dirs'] = args.eval_src_languages
             kwargs['cached_path'] = os.path.join(args.cache, task.name)
-            kwargs['ner_domains'] = args.ner_domains
+            kwargs['crossner_domains'] = args.crossner_domains
             kwargs['hf_test_overfit'] = args.hf_test_overfit
 
             logger.info(f'Adding {task.name} to validation datasets')
@@ -753,7 +750,7 @@ def main(args):
         model = model_class(args=args, vocab_sets=train_sets + val_sets, tasks=tasks, src_lang=src_lang, tgt_lang=tgt_lang)
 
     # dump entities if required
-    if args.ned_dump_entity_type_pairs and args.add_types_to_text == 'append':
+    if args.ned_dump_entity_type_pairs and args.add_entities_to_text == 'append':
         for task, train_set, val_set in zip(tasks, train_sets, val_sets):
             ned_dump_entity_type_pairs(train_set, args.data, 'train', task.utterance_field)
             ned_dump_entity_type_pairs(val_set, args.data, 'eval', task.utterance_field)

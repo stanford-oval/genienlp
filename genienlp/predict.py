@@ -294,7 +294,7 @@ def prepare_data(args, device, src_lang):
                 'all_dirs': task_languages,
                 'num_workers': args.num_workers,
                 'src_lang': src_lang,
-                'ner_domains': args.ner_domains,
+                'crossner_domains': args.crossner_domains,
                 'hf_test_overfit': args.hf_test_overfit,
             }
         )

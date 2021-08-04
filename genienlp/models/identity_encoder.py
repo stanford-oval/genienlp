@@ -135,15 +135,15 @@ class IdentityEncoder(nn.Module):
 
         context_entity_ids, context_entity_probs, context_entity_masking = None, None, None
 
-        if self.args.num_db_types > 0 and self.args.add_types_to_text == 'no':
-            context_entity_ids = batch.context.feature[:, :, : self.args.ned_features_size[0]].long()
+        if self.args.do_ned and self.args.add_entities_to_text == 'no':
+            context_entity_ids = batch.context.feature[:, :, : self.args.max_features_size].long()
 
             # indicates position of entities
-            context_entity_masking = (context_entity_ids != self.args.ned_features_default_val[0]).int()
+            context_entity_masking = (context_entity_ids != 0).int()
 
             if self.args.entity_type_agg_method == 'weighted':
                 context_entity_probs = batch.context.feature[
-                    :, :, self.args.ned_features_size[0] : self.args.ned_features_size[0] + self.args.ned_features_size[1]
+                    :, :, self.args.max_features_size : self.args.max_features_size + self.args.max_features_size
                 ].long()
 
         final_context, context_rnn_state = self.compute_final_embeddings(

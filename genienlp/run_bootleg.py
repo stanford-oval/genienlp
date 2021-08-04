@@ -96,10 +96,6 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--database_type', default='json', choices=['json', 'remote-elastic'], help='database to interact with for NER'
-    )
-
-    parser.add_argument(
         '--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams database_lookup_method is used '
     )
     parser.add_argument(
@@ -154,9 +150,7 @@ def parse_argv(parser):
     )
     parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
 
-    parser.add_argument(
-        '--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...'
-    )
+    parser.add_argument('--ned_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
 
     parser.add_argument(
         '--bootleg_data_splits',
@@ -200,7 +194,7 @@ def parse_argv(parser):
 
     # token classification task args
     parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')
-    parser.add_argument('--ner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
+    parser.add_argument('--crossner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
     parser.add_argument(
         '--hf_test_overfit',
         action='store_true',
@@ -246,7 +240,7 @@ def dump_bootleg_features(args, logger):
         'cache_input_data': args.cache_input_data,
         'num_workers': args.num_workers,
         'all_dirs': args.train_src_languages,
-        'ner_domains': args.ner_domains,
+        'crossner_domains': args.crossner_domains,
     }
 
     # run_bootleg does not need special treatment for train vs eval/ test
@@ -324,8 +318,11 @@ def main(args):
     args.ned_retrieve_method = 'bootleg'
     args.override_context = None
     args.override_question = None
+
+    # set these so we can use post_parse_general for train and run_bootleg
     args.val_task_names = None
-    args.ned_features = []
+    args.max_types_per_qid = 0
+    args.max_qids_per_entity = 0
 
     args = post_parse_general(args)
     set_seed(args)

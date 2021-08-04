@@ -36,7 +36,6 @@ import subprocess
 
 from genienlp.model_utils.transformers_utils import MODEL_PARALLEL_SUPPORTED_MODELS
 
-from .data_utils.example import VALID_FEATURE_FIELDS
 from .tasks.registry import get_tasks
 from .util import have_multilingual
 
@@ -101,6 +100,14 @@ def parse_argv(parser):
         default='en',
         help='Specify dataset target languages used during validation for multilingual tasks'
         'multiple languages for each task should be concatenated with +',
+    )
+
+    parser.add_argument('--max_qids_per_entity', type=int, default=1, help='maximum number of qids to keep for each entity')
+    parser.add_argument(
+        '--max_types_per_qid',
+        type=int,
+        default=2,
+        help='maximum number of types to keep for each qid associated with an entity',
     )
 
     parser.add_argument(
@@ -400,9 +407,6 @@ def parse_argv(parser):
     # NED args
     parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
     parser.add_argument(
-        '--database_type', default='json', choices=['json', 'remote-elastic'], help='database to interact with for NER'
-    )
-    parser.add_argument(
         '--database_dump_typeqid2id',
         action='store_true',
         help='This will create the "type to id" mapping for all entities available in ES database',
@@ -455,17 +459,25 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        "--add_types_to_text",
+        "--add_entities_to_text",
         default='no',
         choices=['no', 'insert', 'append'],
-        help='Method for adding types to input text in text-based NER approach',
+        help='Method for adding entities to input text in text-based NER approach',
     )
 
     parser.add_argument(
-        "--add_qids_to_text",
-        default='no',
-        choices=['no', 'insert', 'append'],
-        help='Method for adding qids to input text in text-based NER approach',
+        "--entity_attributes",
+        nargs='+',
+        default=['type_id'],
+        help='Process only these entity attributes for adding them to text. Options are type_id, type_prob, and qid',
+    )
+
+    parser.add_argument(
+        "--almond_type_mapping_path",
+        default=None,
+        type=str,
+        help='If provided, will override the usual almond type mapping in data_utils/database_file/'
+        'Path should be relative to --root',
     )
 
     parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
@@ -486,30 +498,7 @@ def parse_argv(parser):
         'ngrams: lookup all ngrams in the text and see if there is a match',
     )
 
-    parser.add_argument(
-        '--almond_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...'
-    )
-    parser.add_argument(
-        '--ned_features',
-        nargs='+',
-        type=str,
-        default=['type_id', 'type_prob', 'qid'],
-        help='Features that will be extracted for each entity: "type" and "qid" are supported. Order is important',
-    )
-    parser.add_argument(
-        '--ned_features_size',
-        nargs='+',
-        type=int,
-        default=[1, 1, 1],
-        help='Max length of each feature vector. All features are padded up to this length',
-    )
-    parser.add_argument(
-        '--ned_features_default_val',
-        nargs='+',
-        type=float,
-        default=[0, 1.0, 0],
-        help='Max length of each feature vector. All features are padded up to this length',
-    )
+    parser.add_argument('--ned_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
 
     # translation args
     parser.add_argument(
@@ -537,7 +526,7 @@ def parse_argv(parser):
 
     # token classification task args
     parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')
-    parser.add_argument('--ner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
+    parser.add_argument('--crossner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
     parser.add_argument(
         '--hf_test_overfit',
         action='store_true',
@@ -618,6 +607,8 @@ def post_parse_general(args):
     for x in ['data', 'save', 'log_dir', 'dist_sync_file']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
 
+    args.max_features_size = args.max_types_per_qid * args.max_qids_per_entity
+
     # tasks with the same name share the same task object
     train_tasks_dict = get_tasks(args.train_task_names, args)
     args.train_tasks = list(train_tasks_dict.values())
@@ -630,20 +621,6 @@ def post_parse_general(args):
 
 
 def post_parse_train_specific(args):
-    if args.add_types_to_text != 'no' and args.add_qids_to_text != 'no' and args.add_types_to_text != args.add_qids_to_text:
-        raise ValueError('Method for adding types and qids should be the same')
-
-    for feat in args.ned_features:
-        if feat not in VALID_FEATURE_FIELDS:
-            raise ValueError(
-                'Feature {} is not supported. Please provide valid features from {} list'.format(feat, VALID_FEATURE_FIELDS)
-            )
-
-    if len(args.ned_features) != len(args.ned_features_size):
-        raise ValueError('You should specify max feature size for each feature you provided')
-
-    args.num_features = len(args.ned_features)
-
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
 
@@ -673,9 +650,6 @@ def post_parse_train_specific(args):
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_src_languages.split('+')) > 1):
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
 
-    if not (len(args.ned_features) == len(args.ned_features_size) == len(args.ned_features_default_val)):
-        raise ValueError('You should specify size and default value for each feature you provided')
-
     if args.preprocess_special_tokens and args.model == 'TransformerLSTM':
         raise ValueError('Preprocessing special tokens should not be used for TransformerLSTM models')
 
@@ -697,8 +671,6 @@ def post_parse_train_specific(args):
 
     for x in ['embeddings']:
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
-
-    args.num_features = len(args.ned_features)
 
     save_args(args, force_overwrite=True)
 

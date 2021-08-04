@@ -47,8 +47,7 @@ from ..data_utils.almond_utils import (
     tokenize_cjk_chars,
 )
 from ..data_utils.database import Database
-from ..data_utils.example import Example, Feature, get_pad_feature
-from ..data_utils.remote_database import RemoteElasticDatabase
+from ..data_utils.example import Entity, Example
 from ..model_utils.translation import align_and_replace, compute_attention
 from ..paraphrase.data_utils import input_heuristics, output_heuristics
 from .almond_dataset import AlmondDataset
@@ -78,36 +77,24 @@ class BaseAlmondTask(BaseTask):
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
         self._almond_thingtalk_version = args.almond_thingtalk_version
 
-        self.almond_domains = args.almond_domains
+        self.ned_domains = args.ned_domains
         self.all_schema_types = set()
 
         if args.do_ned and self.args.ned_retrieve_method != 'bootleg':
             self._init_db()
 
     def _init_db(self):
-        if self.args.database_type == 'json':
-            canonical2type = {}
-            all_canonicals = marisa_trie.Trie()
-            # canonical2type.json is a big file (>4G); load it only when necessary
-            if self.args.ned_retrieve_method not in ['bootleg', 'type-oracle']:
-                with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
-                    canonical2type = ujson.load(fin)
-                    all_canonicals = marisa_trie.Trie(canonical2type.keys())
-            with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
-                typeqid2id = ujson.load(fin)
+        canonical2type = {}
+        all_canonicals = marisa_trie.Trie()
+        # canonical2type.json is a big file (>4G); load it only when necessary
+        if self.args.ned_retrieve_method not in ['bootleg', 'type-oracle']:
+            with open(os.path.join(self.args.database_dir, 'es_material/canonical2type.json'), 'r') as fin:
+                canonical2type = ujson.load(fin)
+                all_canonicals = marisa_trie.Trie(canonical2type.keys())
+        with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
+            typeqid2id = ujson.load(fin)
 
-            self.db = Database(
-                canonical2type, typeqid2id, all_canonicals, self.args.ned_features_default_val, self.args.ned_features_size
-            )
-
-        elif self.args.database_type == 'remote-elastic':
-            with open(os.path.join(self.args.database_dir, 'es_material/elastic_config.json'), 'r') as fin:
-                es_config = ujson.load(fin)
-            with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
-                typeqid2id = ujson.load(fin)
-            self.db = RemoteElasticDatabase(
-                es_config, typeqid2id, self.args.ned_features_default_val, self.args.ned_features_size
-            )
+        self.db = Database(canonical2type, typeqid2id, all_canonicals, self.args.max_features_size)
 
     @property
     def utterance_field(self):
@@ -240,9 +227,7 @@ class BaseAlmondTask(BaseTask):
         return features
 
     def oracle_type_ids(self, tokens, entity2type):
-        tokens_type_ids = [
-            [self.args.ned_features_default_val[0]] * self.args.ned_features_size[0] for _ in range(len(tokens))
-        ]
+        tokens_type_ids = [[0] * self.args.max_features_size for _ in range(len(tokens))]
         tokens_text = " ".join(tokens)
 
         for ent, type in entity2type.items():
@@ -256,7 +241,7 @@ class BaseAlmondTask(BaseTask):
             token_pos = len(tokens_text[:idx].split())
 
             type_id = self.db.typeqid2id[type]
-            type_id = self.pad_features([type_id], self.args.ned_features_size[0], self.args.ned_features_default_val[0])
+            type_id = self.pad_features([type_id], self.args.max_features_size, 0)
 
             tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
 
@@ -265,17 +250,16 @@ class BaseAlmondTask(BaseTask):
     def find_type_ids(self, tokens, answer):
         tokens_type_ids = []
 
-        if self.args.database_type == 'json':
-            if self.args.ned_retrieve_method == 'naive':
-                tokens_type_ids = self.db.lookup(
-                    tokens, self.args.database_lookup_method, self.args.min_entity_len, self.args.max_entity_len
-                )
-            elif self.args.ned_retrieve_method == 'entity-oracle':
-                answer_entities = quoted_pattern_with_space.findall(answer)
-                tokens_type_ids = self.db.lookup(tokens, answer_entities=answer_entities)
-            elif self.args.ned_retrieve_method == 'type-oracle':
-                entity2type = self.collect_answer_entity_types(answer)
-                tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
+        if self.args.ned_retrieve_method == 'naive':
+            tokens_type_ids = self.db.lookup(
+                tokens, self.args.database_lookup_method, self.args.min_entity_len, self.args.max_entity_len
+            )
+        elif self.args.ned_retrieve_method == 'entity-oracle':
+            answer_entities = quoted_pattern_with_space.findall(answer)
+            tokens_type_ids = self.db.lookup(tokens, answer_entities=answer_entities)
+        elif self.args.ned_retrieve_method == 'type-oracle':
+            entity2type = self.collect_answer_entity_types(answer)
+            tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
 
         return tokens_type_ids
 
@@ -306,17 +290,13 @@ class BaseAlmondTask(BaseTask):
 
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         if self.override_context is not None and field_name == 'context':
-            pad_feature = get_pad_feature(
-                self.args.ned_features, self.args.ned_features_default_val, self.args.ned_features_size
-            )
+            pad_feature = Entity.get_pad_entity(self.args.max_features_size)
             return (
                 self.override_context,
                 [pad_feature] * len(self.override_context.split(' ')) if pad_feature else [],
             )
         if self.override_question is not None and field_name == 'question':
-            pad_feature = get_pad_feature(
-                self.args.ned_features, self.args.ned_features_default_val, self.args.ned_features_size
-            )
+            pad_feature = Entity.get_pad_entity(self.args.max_features_size)
             return (
                 self.override_question,
                 [pad_feature] * len(self.override_question.split(' ')) if pad_feature else [],
@@ -386,26 +366,16 @@ class BaseAlmondTask(BaseTask):
 
         tokens_type_ids, tokens_type_probs, token_qids = None, None, None
 
-        if self.args.do_ned and 'type_id' in self.args.ned_features and field_name != 'answer':
-            tokens_type_ids = [
-                [self.args.ned_features_default_val[0]] * self.args.ned_features_size[0] for _ in range(new_sentence_length)
-            ]
-        if self.args.do_ned and 'type_prob' in self.args.ned_features and field_name != 'answer':
-            tokens_type_probs = [
-                [self.args.ned_features_default_val[1]] * self.args.ned_features_size[1] for _ in range(new_sentence_length)
-            ]
-        if self.args.do_ned and 'qid' in self.args.ned_features and field_name != 'answer':
-            token_qids = [
-                [self.args.ned_features_default_val[2]] * self.args.ned_features_size[2] for _ in range(new_sentence_length)
-            ]
+        if self.args.do_ned and field_name != 'answer':
+            tokens_type_ids = [[0] * self.args.max_features_size for _ in range(new_sentence_length)]
+            tokens_type_probs = [[0] * self.args.max_features_size for _ in range(new_sentence_length)]
+            token_qids = [[-1] * self.args.max_features_size for _ in range(new_sentence_length)]
 
         if self.args.do_ned and self.args.ned_retrieve_method != 'bootleg' and field_name not in self.no_feature_fields:
-            if 'type_id' in self.args.ned_features:
+            if 'type_id' in self.args.entity_attributes:
                 tokens_type_ids = self.find_type_ids(new_tokens, answer)
-            if 'type_prob' in self.args.ned_features:
-                tokens_type_probs = self.find_type_probs(
-                    new_tokens, self.args.ned_features_default_val[1], self.args.ned_features_size[1]
-                )
+            if 'type_prob' in self.args.entity_attributes:
+                tokens_type_probs = self.find_type_probs(new_tokens, 0, self.args.max_features_size)
 
         zip_list = []
         if tokens_type_ids:
@@ -418,7 +388,7 @@ class BaseAlmondTask(BaseTask):
             assert len(token_qids) == new_sentence_length
             zip_list.append(token_qids)
 
-        features = [Feature(*tup) for tup in zip(*zip_list)]
+        features = [Entity(*tup) for tup in zip(*zip_list)]
 
         return new_sentence, features
 
