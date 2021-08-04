@@ -40,6 +40,7 @@ from pprint import pformat
 from torch.multiprocessing import Process, set_start_method
 
 from .data_utils.bootleg import Bootleg, BootlegAnnotator
+from .data_utils.database import Database
 from .run_bootleg import bootleg_process_splits
 
 try:
@@ -316,16 +317,22 @@ def prepare_data(args, device, src_lang):
             else:
                 data = split.test
                 path = path.test
-            if args.do_ned and args.ned_retrieve_method == 'bootleg':
-                bootleg = Bootleg(args)
-                file_name = os.path.basename(path.rsplit('.', 1)[0])
-                if os.path.exists(f'{args.bootleg_output_dir}/{file_name}_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl'):
-                    bootleg_process_splits(bootleg, data.examples, path, task.utterance_field)
+            if args.do_ned:
+                if args.ned_retrieve_method == 'bootleg':
+                    bootleg = Bootleg(args)
+                    file_name = os.path.basename(path.rsplit('.', 1)[0])
+                    if os.path.exists(
+                        f'{args.bootleg_output_dir}/{file_name}_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl'
+                    ):
+                        bootleg_process_splits(bootleg, data.examples, path, task.utterance_field)
+                    else:
+                        # no prepped bootleg features are available
+                        # extract features on-the-fly using bootleg annotator
+                        bootleg_annotator = BootlegAnnotator(args, device)
+                        bootleg_annotator.extract_features(data.examples, task.utterance_field)
                 else:
-                    # no prepped bootleg features are available
-                    # extract features on-the-fly using bootleg annotator
-                    bootleg_annotator = BootlegAnnotator(args, device, bootleg)
-                    bootleg_annotator.extract_features(data.examples, task.utterance_field)
+                    db = Database(args)
+                    db.db_process_examples(data.examples, task.utterance_field)
             task_data_processed.append(data)
             task_path_processed.append(path)
             logger.info(f'{task.name} has {len(data.examples)} prediction examples')
