@@ -53,7 +53,7 @@ setuptools.setup(
         'bert-score~=0.3',
         'requests~=2.22',
         'num2words>=0.5.10',
-        'datasets==1.10.2',
+        'datasets==1.11.0',
         'seqeval==1.2.2',
         'transformers==4.9.1',
         'sentencepiece==0.1.*',
