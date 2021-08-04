@@ -26,16 +26,12 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-
+import json
 import logging
 import time
 from collections import defaultdict
 
-import ujson
 from elasticsearch import Elasticsearch, RequestsHttpConnection, exceptions
-from elasticsearch.client import XPackClient
-from elasticsearch.client.utils import NamespacedClient
 
 from .database import is_banned
 from .database_utils import has_overlap, normalize_text
@@ -48,11 +44,6 @@ tracer.setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
 
 
-class XPackClientMPCompatible(XPackClient):
-    def __getattr__(self, attr_name):
-        return NamespacedClient.__getattribute__(self, attr_name)
-
-
 class RemoteElasticDatabase(object):
     def __init__(self, config, typeqid2id, max_features_size):
         self.typeqid2id = typeqid2id
@@ -62,7 +53,7 @@ class RemoteElasticDatabase(object):
 
         self.max_features_size = max_features_size
 
-        self.canonical2type = defaultdict(list)
+        self.canonical2typeqid = defaultdict(list)
         self.auth = (config['username'], config['password'])
         self.index = config['index']
         self.host = config['host']
@@ -74,9 +65,6 @@ class RemoteElasticDatabase(object):
             connection_class=RequestsHttpConnection,
             maxsize=8,
         )
-
-        # use xpack client that is compatible with multiprocessing
-        self.es.xpack = XPackClientMPCompatible(self.es)
 
     def lookup(self, tokens, min_entity_len=2, max_entity_len=4, answer_entities=None):
 
@@ -119,25 +107,25 @@ class RemoteElasticDatabase(object):
     def batch_find_matches(self, keys_list, allow_fuzzy):
 
         if allow_fuzzy:
-            query_temp = ujson.dumps(
+            query_temp = json.dumps(
                 {
                     "size": 1,
                     "query": {"multi_match": {"query": "{}", "fields": ["canonical^8", "aliases^3"], "fuzziness": "AUTO"}},
                 }
             )
         else:
-            query_temp = ujson.dumps(
+            query_temp = json.dumps(
                 {"size": 1, "query": {"multi_match": {"query": "{}", "fields": ["canonical^8", "aliases^3"]}}}
             )
 
         queries = []
         for key in keys_list:
-            queries.append(ujson.loads(query_temp.replace('"{}"', '"' + key + '"')))
+            queries.append(json.loads(query_temp.replace('"{}"', '"' + key + '"')))
 
-        search_header = ujson.dumps({'index': self.index})
+        search_header = json.dumps({'index': self.index})
         request = ''
         for q in queries:
-            request += '{}\n{}\n'.format(search_header, ujson.dumps(q))
+            request += '{}\n{}\n'.format(search_header, json.dumps(q))
 
         retries = 0
         result = None
@@ -255,16 +243,12 @@ class RemoteElasticDatabase(object):
 
         return all_tokens_type_ids
 
-    def es_dump(self, mode):
+    def es_dump(self):
 
-        assert mode in ['canonical2type', 'typeqid2id'], 'Mode not supported; use either canonical2type or typeqid2id'
-
-        if mode == 'canonical2type':
-            return_dict = defaultdict(list)
-            dump_file_name = 'canonical2type'
-        elif mode == 'typeqid2id':
-            return_dict = defaultdict(int)
-            dump_file_name = 'typeqid2id'
+        alias2qids = defaultdict(list)
+        qid2typeqid = defaultdict(list)
+        typeqid2id = defaultdict(int)
+        typeqid2id['unk'] = 0
 
         begin = time.time()
 
@@ -280,14 +264,17 @@ class RemoteElasticDatabase(object):
                 return None, -1
             print("total docs:", total_values)
             for match in result["hits"]["hits"]:
-                if mode == 'canonical2type':
-                    return_dict[match['_source']['canonical']].append(match['_source']['type'][len('org.wikidata:') :])
-                elif mode == 'typeqid2id':
-                    if match['_source']['type'] not in return_dict:
-                        return_dict[match['_source']['type']] = len(self.typeqid2id)
+                source = match['_source']
+                # name, type, value, canonical, aliases, description = match['_source']
+                type, value, canonical = source['type'], source['value'], source['canonical']
+                type = type[len('org.wikidata:') :]
+                alias2qids[canonical].append(value)
+                qid2typeqid[value] = type
+                if type not in typeqid2id:
+                    typeqid2id[type] = len(typeqid2id)
 
             scroll_id = result['_scroll_id']
-            print('processed: {}, time elapsed: {}'.format(i, time.time() - begin))
+            print('processed: {:.0f}, time elapsed: {:.2f}'.format(total_values / 10000, time.time() - begin))
 
             return scroll_id, total_values
 
@@ -295,11 +282,14 @@ class RemoteElasticDatabase(object):
         i = 0
         chunk = 0
         while True:
-            if total_values % 4000000 == 0:
-                with open(f'{dump_file_name}_{chunk}.json', 'w') as fout:
-                    ujson.dump(return_dict, fout, ensure_ascii=True)
+            if total_values % 2000000 == 0:
+                with open(f'alias2qids_{chunk}.json', 'w') as fout:
+                    json.dump(alias2qids, fout, ensure_ascii=True)
+                with open(f'qid2typeqid_{chunk}.json', 'w') as fout:
+                    json.dump(qid2typeqid, fout, ensure_ascii=True)
                 chunk += 1
-                return_dict.clear()
+                alias2qids.clear()
+                qid2typeqid.clear()
             try:
                 scroll_id, total_values = do_search(scroll_id, total_values)
                 if scroll_id is None and total_values == -1:
@@ -309,5 +299,10 @@ class RemoteElasticDatabase(object):
                 break
 
         # dump any remaining values
-        with open(f'{dump_file_name}_{chunk}.json', 'w') as fout:
-            ujson.dump(return_dict, fout, ensure_ascii=True)
+        with open(f'alias2qids_{chunk}.json', 'w') as fout:
+            json.dump(alias2qids, fout, ensure_ascii=True)
+        with open(f'qid2typeqid_{chunk}.json', 'w') as fout:
+            json.dump(qid2typeqid, fout, ensure_ascii=True)
+
+        with open(f'typeqid2id_{chunk}.json', 'w') as fout:
+            json.dump(typeqid2id, fout, ensure_ascii=True)

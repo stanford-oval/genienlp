@@ -30,6 +30,7 @@
 import logging
 import os
 import re
+import sys
 from collections import defaultdict
 
 import marisa_trie
@@ -104,6 +105,9 @@ class BaseAlmondTask(BaseTask):
             with open(os.path.join(self.args.database_dir, 'es_material/typeqid2id.json'), 'r') as fin:
                 typeqid2id = ujson.load(fin)
             self.db = RemoteElasticDatabase(es_config, typeqid2id, self.args.max_features_size)
+            if self.args.database_dump_canonical2type or self.args.database_dump_typeqid2id:
+                self.db.es_dump()
+            sys.exit(1)
 
     @property
     def utterance_field(self):
