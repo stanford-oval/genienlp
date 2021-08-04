@@ -54,7 +54,6 @@ from .data_utils.bootleg import Bootleg
 from .data_utils.database import Database
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
-from .run_bootleg import bootleg_process_splits
 from .util import (
     elapsed_time,
     get_devices,
@@ -145,9 +144,9 @@ def prepare_data(args, logger):
             save_args(args, force_overwrite=True)
 
             if bootleg:
-                bootleg_process_splits(bootleg, splits.train.examples, paths.train, task.utterance_field)
+                bootleg.process_examples(splits.train.examples, paths.train, task.utterance_field)
             elif db:
-                db.db_process_examples(splits.train.examples, task.utterance_field)
+                db.process_examples(splits.train.examples, paths.train, task.utterance_field)
 
             train_sets.append(splits.train)
             logger.info(f'{task.name} has {len(splits.train)} training examples')
@@ -171,9 +170,9 @@ def prepare_data(args, logger):
             logger.info(f'{task.name} has {len(splits.eval)} validation examples')
 
             if bootleg:
-                bootleg_process_splits(bootleg, splits.eval.examples, paths.eval, task.utterance_field)
+                bootleg.process_examples(splits.eval.examples, paths.eval, task.utterance_field)
             elif db:
-                db.db_process_examples(splits.eval.examples, task.utterance_field)
+                db.process_examples(splits.eval.examples, paths.eval, task.utterance_field)
 
             val_sets.append(splits.eval)
 

@@ -41,6 +41,7 @@ from .example import Entity
 logger = logging.getLogger(__name__)
 
 
+# TODO: use a better name for this class. Perhaps EntityLinker or NED
 class Database(object):
     def __init__(self, args):
         self.args = args
@@ -96,7 +97,7 @@ class Database(object):
             for title in titles:
                 self.wiki2normalized_type.append((title, normalized_type))
 
-    def db_process_examples(self, examples, utterance_field):
+    def process_examples(self, examples, split_path, utterance_field):
         all_token_type_ids, all_token_type_probs, all_token_qids = [], [], []
         for n, ex in enumerate(examples):
             if utterance_field == 'question':
@@ -220,12 +221,12 @@ class Database(object):
                     type = 'keywords'
 
                 if type:
-                    if self.args.bootleg_post_process_types:
-                        type = type.lower()
-                        for pair in self.wiki2normalized_type:
-                            if fnmatch.fnmatch(type, pair[0]):
-                                type = pair[1]
-                                break
+                    # normalize thingtalk types
+                    type = type.lower()
+                    for pair in self.wiki2normalized_type:
+                        if fnmatch.fnmatch(type, pair[0]):
+                            type = pair[1]
+                            break
 
                     assert type in self.type_vocab_to_typeqid, f'{type}, {answer}'
                 else:

@@ -407,17 +407,6 @@ def parse_argv(parser):
     # NED args
     parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
     parser.add_argument(
-        '--database_dump_typeqid2id',
-        action='store_true',
-        help='This will create the "type to id" mapping for all entities available in ES database',
-    )
-    parser.add_argument(
-        '--database_dump_alias2type',
-        action='store_true',
-        help='This will create the "canonical to type" mapping for all entities available in ES database',
-    )
-
-    parser.add_argument(
         '--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams database_lookup_method is used '
     )
     parser.add_argument(

@@ -202,32 +202,25 @@ def parse_argv(parser):
     )
 
 
-def bootleg_process_splits(bootleg, examples, path, utterance_field, mode='train'):
-    config_overrides = bootleg.fixed_overrides
-
+def bootleg_process_splits(bootleg, examples, path, utterance_field):
     input_file_dir = os.path.dirname(path)
     input_file_name = os.path.basename(path.rsplit('.', 1)[0] + '_bootleg.jsonl')
-
     data_overrides = ["--data_config.data_dir", input_file_dir, "--data_config.test_dataset.file", input_file_name]
 
     # get config args
+    config_overrides = bootleg.fixed_overrides
     config_overrides.extend(data_overrides)
     config_args = bootleg.create_config(config_overrides)
 
-    if mode == 'dump':
-        # create jsonl files from input examples
-        # jsonl is the input format bootleg expects
-        bootleg.create_jsonl(path, examples, utterance_field)
+    # create jsonl files from input examples
+    # jsonl is the input format bootleg expects
+    bootleg.create_jsonl(path, examples, utterance_field)
 
-        # extract mentions and mention spans in the sentence and write them to output jsonl files
-        bootleg.extract_mentions(path)
+    # extract mentions and mention spans in the sentence and write them to output jsonl files
+    bootleg.extract_mentions(path)
 
-        # find the right entity candidate for each mention
-        bootleg.disambiguate_mentions(config_args)
-
-    # override examples features with bootleg features
-    else:
-        bootleg.process_examples(examples, input_file_name, utterance_field)
+    # find the right entity candidate for each mention
+    bootleg.disambiguate_mentions(config_args)
 
 
 def dump_bootleg_features(args, logger):
@@ -282,7 +275,7 @@ def dump_bootleg_features(args, logger):
         extension = task_all_paths[0].rsplit('.', 1)[1]
         all_paths = os.path.join(dir_name, 'combined' + '.' + extension)
 
-        bootleg_process_splits(bootleg, all_examples, all_paths, task.utterance_field, mode='dump')
+        bootleg_process_splits(bootleg, all_examples, all_paths, task.utterance_field)
 
         # unmerge bootleg dumped labels
         line_number = 0
@@ -318,6 +311,7 @@ def main(args):
     args.ned_retrieve_method = 'bootleg'
     args.override_context = None
     args.override_question = None
+    args.almond_type_mapping_path = None
 
     # set these so we can use post_parse_general for train and run_bootleg
     args.val_task_names = None

@@ -227,12 +227,12 @@ class Bootleg(Database):
 
         return tokens_type_ids, tokens_type_probs, tokens_qids
 
-    def process_examples(self, examples, input_file_name, utterance_field):
+    def process_examples(self, examples, split_path, utterance_field):
         # extract features for each token in input sentence from bootleg outputs
         all_token_type_ids, all_token_type_probs, all_token_qids = [], [], []
 
         threshold = self.args.bootleg_prob_threshold
-        file_name = input_file_name[: -len('_bootleg.jsonl')]
+        file_name = os.path.basename(split_path.rsplit('.', 1)[0])
 
         with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/{self.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
             for i, line in enumerate(fin):

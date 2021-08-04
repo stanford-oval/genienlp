@@ -163,7 +163,7 @@ class Server(object):
         if self.bootleg_annotator:
             self.bootleg_annotator.extract_features(examples, task.utterance_field)
         elif self.db:
-            self.db.db_process_examples(examples, task.utterance_field)
+            self.db.process_examples(examples, None, task.utterance_field)
 
         self.model.add_new_vocab_from_data([task])
         batch = self.numericalize_examples(examples)

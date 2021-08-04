@@ -42,7 +42,6 @@ from ..data_utils.almond_utils import (
     process_id,
     tokenize_cjk_chars,
 )
-from ..data_utils.database import Database
 from ..data_utils.example import Example
 from ..model_utils.translation import align_and_replace, compute_attention
 from ..paraphrase.data_utils import input_heuristics, output_heuristics
@@ -71,12 +70,6 @@ class BaseAlmondTask(BaseTask):
 
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
-
-        if args.do_ned and self.args.ned_retrieve_method != 'bootleg':
-            self._init_db()
-
-    def _init_db(self):
-        self.db = Database(self.args)
 
     @property
     def utterance_field(self):
@@ -122,18 +115,8 @@ class BaseAlmondTask(BaseTask):
 
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         if self.override_context is not None and field_name == 'context':
-            # pad_feature = Entity.get_pad_entity(self.args.max_features_size)
-            # return (
-            #     self.override_context,
-            #     [pad_feature] * len(self.override_context.split(' ')) if pad_feature else [],
-            # )
             return self.override_context
         if self.override_question is not None and field_name == 'question':
-            # pad_feature = Entity.get_pad_entity(self.args.max_features_size)
-            # return (
-            #     self.override_question,
-            #     [pad_feature] * len(self.override_question.split(' ')) if pad_feature else [],
-            # )
             return self.override_question
         if not sentence:
             return ''
