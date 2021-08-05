@@ -248,6 +248,26 @@ class Bootleg(AbstractEntityLinker):
 
         self.replace_features_inplace(examples, all_token_type_ids, all_token_type_probs, all_token_qids, utterance_field)
 
+    def dump_entities_with_labels(self, examples, path, utterance_field):
+        input_file_dir = os.path.dirname(path)
+        input_file_name = os.path.basename(path.rsplit('.', 1)[0] + '_bootleg.jsonl')
+        data_overrides = ["--data_config.data_dir", input_file_dir, "--data_config.test_dataset.file", input_file_name]
+
+        # get config args
+        config_overrides = self.fixed_overrides
+        config_overrides.extend(data_overrides)
+        config_args = self.create_config(config_overrides)
+
+        # create jsonl files from input examples
+        # jsonl is the input format bootleg expects
+        self.create_jsonl(path, examples, utterance_field)
+
+        # extract mentions and mention spans in the sentence and write them to output jsonl files
+        self.extract_mentions(path)
+
+        # find the right entity candidate for each mention
+        self.disambiguate_mentions(config_args)
+
 
 class BootlegAnnotator(Bootleg):
     '''
