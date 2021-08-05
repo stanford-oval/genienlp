@@ -37,13 +37,14 @@ from bootleg.end2end.extract_mentions import extract_mentions
 from bootleg.run import run_model
 from bootleg.utils.parser.parser_utils import parse_boot_and_emm_args
 
-from .database import Database
-from .database_utils import is_banned, reverse_bisect_left
+from . import AbstractEntityLinker
+from .ned_utils import is_banned, reverse_bisect_left
+from ..util import get_devices
 
 logger = logging.getLogger(__name__)
 
 
-class Bootleg(Database):
+class Bootleg(AbstractEntityLinker):
     '''
     A wrapper for all functionalities needed from bootleg. It takes care of data preprocessing,
     running examples through bootleg, and overriding examples features with the extracted ones
@@ -65,11 +66,8 @@ class Bootleg(Database):
             self.entityqid2typenames = ujson.load(fin)
         ###
 
-        # Mapping between model directory and checkpoint name
-        model2checkpoint = {'bootleg_uncased_mini': 'bootleg_wiki.pth', 'bootleg_uncased_super_mini': 'bootleg_wiki.pth'}
-
-        self.ckpt_name, extension = model2checkpoint[self.args.bootleg_model].split('.')
-        self.model_ckpt_path = os.path.join(self.model_dir, self.ckpt_name + '.' + extension)
+        self.ckpt_name = 'bootleg_wiki'
+        self.model_ckpt_path = os.path.join(self.model_dir, self.ckpt_name + '.pth')
 
         self.fixed_overrides = [
             # emmental configs
@@ -257,9 +255,10 @@ class BootlegAnnotator(Bootleg):
     extracting required features from examples on-the-fly
     '''
 
-    def __init__(self, args, device):
+    def __init__(self, args):
         super().__init__(args)
         bootleg_config = self.create_config(self.fixed_overrides)
+        device = get_devices()[0] # server only runs on a single device
 
         # instantiate the annotator class. we use annotator only in server mode.
         # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
@@ -276,7 +275,7 @@ class BootlegAnnotator(Bootleg):
         # collect all outputs now; we will filter later
         self.annotator.set_threshold(0.0)
 
-    def extract_features(self, examples, utterance_field):
+    def process_examples(self, examples, split_path, utterance_field):
         with torch.no_grad():
             bootleg_inputs = []
             for ex in examples:

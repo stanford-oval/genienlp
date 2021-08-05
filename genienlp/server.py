@@ -41,9 +41,8 @@ import torch
 from . import models
 from .arguments import check_and_update_generation_args
 from .calibrate import ConfidenceEstimator
-from .data_utils.bootleg import BootlegAnnotator
-from .data_utils.database import Database
 from .data_utils.example import Example, NumericalizedExamples
+from .ned.ned_utils import init_ned_model
 from .tasks.registry import get_tasks
 from .util import get_devices, load_config_json, log_model_size, set_seed
 from .validate import generate_with_model
@@ -103,17 +102,14 @@ def parse_argv(parser):
 
 
 class Server(object):
-    def __init__(
-        self, args, numericalizer, model, device, confidence_estimators, estimator_filenames, bootleg_annotator=None, db=None
-    ):
+    def __init__(self, args, numericalizer, model, device, confidence_estimators, estimator_filenames, ned_model):
         self.args = args
         self.device = device
         self.numericalizer = numericalizer
         self.model = model
         self.confidence_estimators = confidence_estimators
         self.estimator_filenames = estimator_filenames
-        self.bootleg_annotator = bootleg_annotator
-        self.db = db
+        self.ned_model = ned_model
 
         self._cached_task_names = dict()
 
@@ -160,10 +156,8 @@ class Server(object):
             examples.append(ex)
 
         # process features for examples
-        if self.bootleg_annotator:
-            self.bootleg_annotator.extract_features(examples, task.utterance_field)
-        elif self.db:
-            self.db.process_examples(examples, None, task.utterance_field)
+        if self.ned_model:
+            self.ned_model.process_examples(examples, None, task.utterance_field)
 
         self.model.add_new_vocab_from_data([task])
         batch = self.numericalize_examples(examples)
@@ -277,12 +271,7 @@ def init(args):
     devices = get_devices()
     device = devices[0]  # server only runs on a single device
 
-    bootleg_annotator, db = None, None
-    if args.do_ned:
-        if args.ned_retrieve_method == 'bootleg':
-            bootleg_annotator = BootlegAnnotator(args, device)
-        else:
-            db = Database(args)
+    ned_model = init_ned_model(args, 'bootleg-annotator')
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
@@ -321,12 +310,10 @@ def init(args):
             logger.info('Loading confidence estimator "%s" from %s', estimator.name, path)
         args.mc_dropout_num = confidence_estimators[0].mc_dropout_num  # we assume all estimators have the same mc_dropout_num
 
-    return model, device, confidence_estimators, estimator_filenames, bootleg_annotator, db
+    return model, device, confidence_estimators, estimator_filenames, ned_model
 
 
 def main(args):
-    model, device, confidence_estimators, estimator_filenames, bootleg_annotator, db = init(args)
-    server = Server(
-        args, model.numericalizer, model, device, confidence_estimators, estimator_filenames, bootleg_annotator, db
-    )
+    model, device, confidence_estimators, estimator_filenames, ned_model = init(args)
+    server = Server(args, model.numericalizer, model, device, confidence_estimators, estimator_filenames, ned_model)
     server.run()

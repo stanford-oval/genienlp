@@ -39,9 +39,6 @@ from pprint import pformat
 # multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
-from .data_utils.bootleg import Bootleg, BootlegAnnotator
-from .data_utils.database import Database
-
 try:
     set_start_method('spawn')
 except RuntimeError:
@@ -52,6 +49,7 @@ import torch
 from . import models
 from .arguments import check_and_update_generation_args
 from .calibrate import ConfidenceEstimator
+from .ned.ned_utils import init_ned_model
 from .tasks.registry import get_tasks
 from .util import (
     combine_folders_on_disk,
@@ -316,22 +314,17 @@ def prepare_data(args, device, src_lang):
             else:
                 data = split.test
                 path = path.test
-            if args.do_ned:
-                if args.ned_retrieve_method == 'bootleg':
-                    bootleg = Bootleg(args)
-                    file_name = os.path.basename(path.rsplit('.', 1)[0])
-                    if os.path.exists(
-                        f'{args.bootleg_output_dir}/{file_name}_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl'
-                    ):
-                        bootleg.process_examples(data.examples, path, task.utterance_field)
-                    else:
-                        # no prepped bootleg features are available
-                        # extract features on-the-fly using bootleg annotator
-                        bootleg_annotator = BootlegAnnotator(args, device)
-                        bootleg_annotator.extract_features(data.examples, task.utterance_field)
-                else:
-                    db = Database(args)
-                    db.process_examples(data.examples, path, task.utterance_field)
+
+            file_name = os.path.basename(path.rsplit('.', 1)[0])
+            if (
+                args.ned_retrieve_method == 'bootleg'
+                and os.path.exists(f'{args.bootleg_output_dir}/{file_name}_bootleg/bootleg_wiki/bootleg_labels.jsonl')
+            ) or (args.ned_retrieve_method != 'bootleg'):
+                ned_model = init_ned_model(args)
+            else:
+                ned_model = init_ned_model(args, 'bootleg-annotator')
+            ned_model.process_examples(data.examples, path, task.utterance_field)
+
             task_data_processed.append(data)
             task_path_processed.append(path)
             logger.info(f'{task.name} has {len(data.examples)} prediction examples')

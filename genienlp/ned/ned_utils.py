@@ -34,6 +34,8 @@ import unicodedata
 import nltk
 from nltk.corpus import stopwords
 
+from genienlp import ned
+
 nltk.download('stopwords', quiet=True)
 
 BANNED_PHRASES = set(
@@ -273,3 +275,24 @@ def reverse_bisect_left(a, x, lo=None, hi=None):
         else:
             lo = mid + 1
     return lo
+
+
+def init_ned_model(args, ned_class_name=None):
+    ned_model = None
+    if args.do_ned:
+        if ned_class_name is None:
+            if args.ned_retrieve_method == 'bootleg':
+                ned_class_name = 'Bootleg'
+            elif args.ned_retrieve_method == 'bootleg-annotator':
+                ned_class_name = 'BootlegAnnotator'
+            elif args.ned_retrieve_method == 'naive':
+                ned_class_name = 'NaiveEntityLinker'
+            elif args.ned_retrieve_method == 'type-oracle':
+                ned_class_name = 'TypeOracleEntityLinker'
+            elif args.ned_retrieve_method == 'entity-oracle':
+                ned_class_name = 'EntityOracleEntityLinker'
+            else:
+                raise ValueError('Invalid ned_retrieve_method')
+        ned_class = getattr(ned, ned_class_name)
+        ned_model = ned_class(args)
+    return ned_model

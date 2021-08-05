@@ -36,8 +36,9 @@ from pprint import pformat
 
 import ujson
 
+from genienlp.ned.bootleg import Bootleg
+
 from .arguments import post_parse_general
-from .data_utils.bootleg import Bootleg
 from .util import set_seed
 
 logger = logging.getLogger(__name__)
