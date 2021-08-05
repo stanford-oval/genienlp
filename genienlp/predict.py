@@ -36,7 +36,6 @@ import shutil
 from collections import defaultdict
 from pprint import pformat
 
-# multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
 try:

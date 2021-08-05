@@ -34,7 +34,7 @@ import unicodedata
 import nltk
 from nltk.corpus import stopwords
 
-from genienlp import ned
+from .. import ned
 
 nltk.download('stopwords', quiet=True)
 

@@ -30,8 +30,6 @@ import os
 import re
 
 import numpy as np
-
-# multiprocessing with CUDA
 from torch.multiprocessing import Process, set_start_method
 
 from ..data_utils.almond_utils import tokenize_cjk_chars
@@ -60,8 +58,7 @@ from transformers import (
     T5Tokenizer,
 )
 
-from genienlp.model_utils.transformers_utils import GenieMBartTokenizer
-
+from ..model_utils.transformers_utils import GenieMBartTokenizer
 from ..util import combine_files_on_disk, get_part_path, set_seed, split_file_on_disk
 from .data_utils import group_together
 from .GPT2Seq2Seq import GPT2Seq2Seq

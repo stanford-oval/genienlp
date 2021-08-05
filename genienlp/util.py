@@ -45,11 +45,10 @@ from torch.functional import Tensor
 from transformers import MarianConfig, MBartConfig
 from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 
-from genienlp.model_utils.transformers_utils import MARIAN_GROUP_MEMBERS
-
 from .data_utils.almond_utils import token_type_regex
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
+from .model_utils.transformers_utils import MARIAN_GROUP_MEMBERS
 
 logger = logging.getLogger(__name__)
 

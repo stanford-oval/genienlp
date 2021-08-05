@@ -31,8 +31,8 @@ import os
 
 import ujson
 
-from genienlp.data_utils.example import Entity
-from genienlp.ned.ned_utils import has_overlap, is_banned, normalize_text
+from ..data_utils.example import Entity
+from ..ned.ned_utils import has_overlap, is_banned, normalize_text
 
 logger = logging.getLogger(__name__)
 
