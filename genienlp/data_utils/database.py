@@ -339,12 +339,16 @@ class Database(object):
             if utterance_field == 'question':
                 assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.question.split(' '))
                 examples[n].question_feature = features
+                # use pad features for non-utterance field
+                examples[n].context_feature = [Entity.get_pad_entity(self.max_features_size)] * len(ex.context.split(' '))
                 # override original question with entities added to it
                 examples[n].question = self.add_entities_to_text(ex.question, features)
 
             else:
                 assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.context.split(' '))
                 examples[n].context_feature = features
+                # use pad features for non-utterance field
+                examples[n].question_feature = [Entity.get_pad_entity(self.max_features_size)] * len(ex.question.split(' '))
                 # override original question with entities added to it
                 examples[n].context = self.add_entities_to_text(ex.context, features)
 
