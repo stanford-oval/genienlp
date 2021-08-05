@@ -41,20 +41,12 @@ from .example import Entity
 logger = logging.getLogger(__name__)
 
 
-# TODO: use a better name for this class. Perhaps EntityLinker or NED
-class Database(object):
+class AbstractEntityLinker(object):
     def __init__(self, args):
         self.args = args
         self.max_features_size = self.args.max_features_size
 
         ### general attributes
-        # alias2type.json is a big file (>4G); load it only when necessary
-        if self.args.ned_retrieve_method not in ['bootleg', 'type-oracle']:
-            with open(os.path.join(self.args.database_dir, 'es_material/alias2type.json'), 'r') as fin:
-                self.alias2type = ujson.load(fin)
-                all_aliases = marisa_trie.Trie(self.alias2type.keys())
-                self.all_aliases = all_aliases
-
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/type_vocab_to_wikidataqid.json') as fin:
             self.type_vocab_to_typeqid = ujson.load(fin)
             self.typeqid_to_type_vocab = {v: k for k, v in self.type_vocab_to_typeqid.items()}
@@ -123,118 +115,12 @@ class Database(object):
 
         self.replace_features_inplace(examples, all_token_type_ids, all_token_type_probs, all_token_qids, utterance_field)
 
-    def collect_answer_entity_types(self, tokens, answer):
-        entity2type = dict()
-        sentence = ' '.join(tokens)
-
-        answer_entities = quoted_pattern_with_space.findall(answer)
-        for ent in answer_entities:
-            # skip examples with sentence-annotation entity mismatch. hopefully there's not a lot of them.
-            # this is usually caused by paraphrasing where it adds "-" after entity name: "korean-style restaurants"
-            # or add "'" before or after an entity
-            if not re.search(rf'(^|\s){ent}($|\s)', sentence):
-                # print(f'***ent: {ent} {tokens} {answer}')
-                continue
-
-            # ** this should change if thingtalk syntax changes **
-
-            # ( ... [Book|Music|...] ( ) filter id =~ " position and affirm " ) ...'
-            # ... ^^org.schema.Book:Person ( " james clavell " ) ...
-            # ... contains~ ( [award|genre|...] , " booker " ) ...
-            # ... inLanguage =~ " persian " ...
-
-            # missing syntax from current code
-            #  ... @com.spotify . song ( ) filter in_array~ ( id , [ " piano man " , " uptown girl " ] ) ) [ 1 : 2 ]  ...
-
-            # assume first syntax
-            idx = answer.index('" ' + ent + ' "')
-
-            type = None
-            tokens_before_entity = answer[:idx].split()
-
-            if tokens_before_entity[-2] == 'Location':
-                type = 'Location'
-
-            elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in [
-                'ratingValue',
-                'reviewCount',
-                'checkoutTime',
-                'checkinTime',
-            ]:
-                type = tokens_before_entity[-2]
-
-            elif tokens_before_entity[-1] == '=~':
-                if tokens_before_entity[-2] in ['id', 'value']:
-                    # travers previous tokens until find filter
-                    i = -3
-                    while tokens_before_entity[i] != 'filter' and i - 3 > -len(tokens_before_entity):
-                        i -= 1
-                    type = tokens_before_entity[i - 3]
-                else:
-                    type = tokens_before_entity[-2]
-
-            elif tokens_before_entity[-4] == 'contains~':
-                type = tokens_before_entity[-2]
-
-            elif tokens_before_entity[-2].startswith('^^'):
-                type = tokens_before_entity[-2].rsplit(':', 1)[1]
-                if (
-                    type == 'Person'
-                    and tokens_before_entity[-3] == 'null'
-                    and tokens_before_entity[-5] in ['director', 'creator', 'actor']
-                ):
-                    type = tokens_before_entity[-5]
-
-            elif tokens_before_entity[-1] in [',', '[']:
-                type = 'keywords'
-
-            if type:
-                # normalize thingtalk types
-                type = type.lower()
-                for pair in self.wiki2normalized_type:
-                    if fnmatch.fnmatch(type, pair[0]):
-                        type = pair[1]
-                        break
-
-                assert type in self.type_vocab_to_typeqid, f'{type}, {answer}'
-            else:
-                print(f'{type}, {answer}')
-                continue
-
-            entity2type[ent] = type
-
-            self.all_schema_types.add(type)
-
-        return entity2type
-
     def pad_features(self, features, max_size, pad_id):
         if len(features) > max_size:
             features = features[:max_size]
         else:
             features += [pad_id] * (max_size - len(features))
         return features
-
-    def oracle_type_ids(self, tokens, entity2type):
-        tokens_type_ids = [[0] * self.args.max_features_size for _ in range(len(tokens))]
-        tokens_text = " ".join(tokens)
-
-        for ent, type in entity2type.items():
-            ent_num_tokens = len(ent.split(' '))
-            if ent in tokens_text:
-                idx = tokens_text.index(ent)
-            else:
-                logger.warning('Found a mismatch between sentence and annotation entities')
-                logger.info(f'sentence: {tokens_text}, entity2type: {entity2type}')
-                continue
-            token_pos = len(tokens_text[:idx].split())
-
-            typeqid = self.type_vocab_to_typeqid[type]
-            type_id = self.typeqid2id[typeqid]
-            type_id = self.pad_features([type_id], self.args.max_features_size, 0)
-
-            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
-
-        return tokens_type_ids
 
     def convert_entities_to_strings(self, feat):
         final_types = ''
@@ -323,22 +209,6 @@ class Database(object):
     def find_type_probs(self, tokens, default_val, default_size):
         token_freqs = [[default_val] * default_size] * len(tokens)
         return token_freqs
-
-    def find_type_ids(self, tokens, answer):
-        tokens_type_ids = []
-
-        if self.args.ned_retrieve_method == 'naive':
-            tokens_type_ids = self.lookup(
-                tokens, self.args.database_lookup_method, self.args.min_entity_len, self.args.max_entity_len
-            )
-        elif self.args.ned_retrieve_method == 'entity-oracle':
-            answer_entities = quoted_pattern_with_space.findall(answer)
-            tokens_type_ids = self.lookup(tokens, answer_entities=answer_entities)
-        elif self.args.ned_retrieve_method == 'type-oracle':
-            entity2type = self.collect_answer_entity_types(tokens, answer)
-            tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
-
-        return tokens_type_ids
 
     def lookup_ngrams(self, tokens, min_entity_len, max_entity_len):
         # load nltk lazily
@@ -455,15 +325,162 @@ class Database(object):
 
         return tokens_type_ids
 
-    def lookup(self, tokens, database_lookup_method=None, min_entity_len=2, max_entity_len=4, answer_entities=None):
+    def lookup(self, tokens, database_lookup_method=None, min_entity_len=2, max_entity_len=4):
         tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
-        if answer_entities is not None:
-            tokens_type_ids = self.lookup_entities(tokens, answer_entities)
-        else:
-            if database_lookup_method == 'smaller_first':
-                tokens_type_ids = self.lookup_smaller(tokens)
-            elif database_lookup_method == 'longer_first':
-                tokens_type_ids = self.lookup_longer(tokens)
-            elif database_lookup_method == 'ngrams':
-                tokens_type_ids = self.lookup_ngrams(tokens, min_entity_len, max_entity_len)
+        if database_lookup_method == 'smaller_first':
+            tokens_type_ids = self.lookup_smaller(tokens)
+        elif database_lookup_method == 'longer_first':
+            tokens_type_ids = self.lookup_longer(tokens)
+        elif database_lookup_method == 'ngrams':
+            tokens_type_ids = self.lookup_ngrams(tokens, min_entity_len, max_entity_len)
+        return tokens_type_ids
+
+
+class NaiveEntityLinker(AbstractEntityLinker):
+    def __init__(self, args):
+        super().__init__(args)
+
+        with open(os.path.join(self.args.database_dir, 'es_material/alias2type.json'), 'r') as fin:
+            # alias2type.json is a big file (>4G); load it only when necessary
+            self.alias2type = ujson.load(fin)
+            all_aliases = marisa_trie.Trie(self.alias2type.keys())
+            self.all_aliases = all_aliases
+
+    def find_type_ids(self, tokens):
+        tokens_type_ids = self.lookup(
+            tokens, self.args.database_lookup_method, self.args.min_entity_len, self.args.max_entity_len
+        )
+        return tokens_type_ids
+
+
+class TypeOracleEntityLinker(AbstractEntityLinker):
+    def __init__(self, args):
+        super().__init__(args)
+
+    def find_type_ids(self, tokens, answer):
+        entity2type = self.collect_answer_entity_types(tokens, answer)
+        tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
+        return tokens_type_ids
+
+    def oracle_type_ids(self, tokens, entity2type):
+        tokens_type_ids = [[0] * self.args.max_features_size for _ in range(len(tokens))]
+        tokens_text = " ".join(tokens)
+
+        for ent, type in entity2type.items():
+            ent_num_tokens = len(ent.split(' '))
+            if ent in tokens_text:
+                idx = tokens_text.index(ent)
+            else:
+                logger.warning('Found a mismatch between sentence and annotation entities')
+                logger.info(f'sentence: {tokens_text}, entity2type: {entity2type}')
+                continue
+            token_pos = len(tokens_text[:idx].split())
+
+            typeqid = self.type_vocab_to_typeqid[type]
+            type_id = self.typeqid2id[typeqid]
+            type_id = self.pad_features([type_id], self.args.max_features_size, 0)
+
+            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
+
+        return tokens_type_ids
+
+    def collect_answer_entity_types(self, tokens, answer):
+        entity2type = dict()
+        sentence = ' '.join(tokens)
+
+        answer_entities = quoted_pattern_with_space.findall(answer)
+        for ent in answer_entities:
+            # skip examples with sentence-annotation entity mismatch. hopefully there's not a lot of them.
+            # this is usually caused by paraphrasing where it adds "-" after entity name: "korean-style restaurants"
+            # or add "'" before or after an entity
+            if not re.search(rf'(^|\s){ent}($|\s)', sentence):
+                # print(f'***ent: {ent} {tokens} {answer}')
+                continue
+
+            # ** this should change if thingtalk syntax changes **
+
+            # ( ... [Book|Music|...] ( ) filter id =~ " position and affirm " ) ...'
+            # ... ^^org.schema.Book:Person ( " james clavell " ) ...
+            # ... contains~ ( [award|genre|...] , " booker " ) ...
+            # ... inLanguage =~ " persian " ...
+
+            # missing syntax from current code
+            #  ... @com.spotify . song ( ) filter in_array~ ( id , [ " piano man " , " uptown girl " ] ) ) [ 1 : 2 ]  ...
+
+            # assume first syntax
+            idx = answer.index('" ' + ent + ' "')
+
+            type = None
+            tokens_before_entity = answer[:idx].split()
+
+            if tokens_before_entity[-2] == 'Location':
+                type = 'Location'
+
+            elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in [
+                'ratingValue',
+                'reviewCount',
+                'checkoutTime',
+                'checkinTime',
+            ]:
+                type = tokens_before_entity[-2]
+
+            elif tokens_before_entity[-1] == '=~':
+                if tokens_before_entity[-2] in ['id', 'value']:
+                    # travers previous tokens until find filter
+                    i = -3
+                    while tokens_before_entity[i] != 'filter' and i - 3 > -len(tokens_before_entity):
+                        i -= 1
+                    type = tokens_before_entity[i - 3]
+                else:
+                    type = tokens_before_entity[-2]
+
+            elif tokens_before_entity[-4] == 'contains~':
+                type = tokens_before_entity[-2]
+
+            elif tokens_before_entity[-2].startswith('^^'):
+                type = tokens_before_entity[-2].rsplit(':', 1)[1]
+                if (
+                    type == 'Person'
+                    and tokens_before_entity[-3] == 'null'
+                    and tokens_before_entity[-5] in ['director', 'creator', 'actor']
+                ):
+                    type = tokens_before_entity[-5]
+
+            elif tokens_before_entity[-1] in [',', '[']:
+                type = 'keywords'
+
+            if type:
+                # normalize thingtalk types
+                type = type.lower()
+                for pair in self.wiki2normalized_type:
+                    if fnmatch.fnmatch(type, pair[0]):
+                        type = pair[1]
+                        break
+
+                assert type in self.type_vocab_to_typeqid, f'{type}, {answer}'
+            else:
+                print(f'{type}, {answer}')
+                continue
+
+            entity2type[ent] = type
+
+            self.all_schema_types.add(type)
+
+        return entity2type
+
+
+class EntityOracleEntityLinker(AbstractEntityLinker):
+    def __init__(self, args):
+        super().__init__(args)
+
+        with open(os.path.join(self.args.database_dir, 'es_material/alias2type.json'), 'r') as fin:
+            # alias2type.json is a big file (>4G); load it only when necessary
+            self.alias2type = ujson.load(fin)
+            all_aliases = marisa_trie.Trie(self.alias2type.keys())
+            self.all_aliases = all_aliases
+
+    def find_type_ids(self, tokens, answer):
+        answer_entities = quoted_pattern_with_space.findall(answer)
+        tokens_type_ids = self.lookup_entities(tokens, answer_entities)
+
         return tokens_type_ids
