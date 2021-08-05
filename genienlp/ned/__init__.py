@@ -1,3 +1,3 @@
-from .base import AbstractEntityLinker  # noqa
-from .bootleg import Bootleg, BootlegAnnotator  # noqa
-from .entity_linker import EntityOracleEntityLinker, NaiveEntityLinker, TypeOracleEntityLinker  # noqa
+from .base import AbstractEntityDisambiguator  # noqa
+from .bootleg import BatchBootlegEntityDisambiguator, ServingBootlegEntityDisambiguator  # noqa
+from .main import EntityOracleEntityDisambiguator, NaiveEntityDisambiguator, TypeOracleEntityDisambiguator  # noqa

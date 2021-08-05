@@ -37,7 +37,7 @@ from pprint import pformat
 import ujson
 
 from .arguments import post_parse_general
-from .ned.bootleg import Bootleg
+from .ned.bootleg import BatchBootlegEntityDisambiguator
 from .util import set_seed
 
 logger = logging.getLogger(__name__)
@@ -199,7 +199,7 @@ def parse_argv(parser):
 
 
 def bootleg_dump_entities(args, logger):
-    bootleg = Bootleg(args)
+    bootleg = BatchBootlegEntityDisambiguator(args)
 
     bootleg_shared_kwargs = {
         'subsample': args.subsample,

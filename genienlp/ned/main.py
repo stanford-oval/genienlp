@@ -35,12 +35,12 @@ import marisa_trie
 import ujson
 
 from ..data_utils.almond_utils import quoted_pattern_with_space
-from .base import AbstractEntityLinker
+from .base import AbstractEntityDisambiguator
 
 logger = logging.getLogger(__name__)
 
 
-class NaiveEntityLinker(AbstractEntityLinker):
+class NaiveEntityDisambiguator(AbstractEntityDisambiguator):
     def __init__(self, args):
         super().__init__(args)
 
@@ -57,7 +57,7 @@ class NaiveEntityLinker(AbstractEntityLinker):
         return tokens_type_ids
 
 
-class EntityOracleEntityLinker(AbstractEntityLinker):
+class EntityOracleEntityDisambiguator(AbstractEntityDisambiguator):
     def __init__(self, args):
         super().__init__(args)
 
@@ -74,7 +74,7 @@ class EntityOracleEntityLinker(AbstractEntityLinker):
         return tokens_type_ids
 
 
-class TypeOracleEntityLinker(AbstractEntityLinker):
+class TypeOracleEntityDisambiguator(AbstractEntityDisambiguator):
     def __init__(self, args):
         super().__init__(args)
 

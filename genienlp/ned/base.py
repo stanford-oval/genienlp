@@ -37,7 +37,7 @@ from ..ned.ned_utils import has_overlap, is_banned, normalize_text
 logger = logging.getLogger(__name__)
 
 
-class AbstractEntityLinker(object):
+class AbstractEntityDisambiguator(object):
     def __init__(self, args):
         self.args = args
         self.max_features_size = self.args.max_features_size

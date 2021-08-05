@@ -37,14 +37,14 @@ from bootleg.end2end.extract_mentions import extract_mentions
 from bootleg.run import run_model
 from bootleg.utils.parser.parser_utils import parse_boot_and_emm_args
 
-from . import AbstractEntityLinker
+from . import AbstractEntityDisambiguator
 from .ned_utils import is_banned, reverse_bisect_left
 from ..util import get_devices
 
 logger = logging.getLogger(__name__)
 
 
-class Bootleg(AbstractEntityLinker):
+class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
     '''
     A wrapper for all functionalities needed from bootleg. It takes care of data preprocessing,
     running examples through bootleg, and overriding examples features with the extracted ones
@@ -269,7 +269,7 @@ class Bootleg(AbstractEntityLinker):
         self.disambiguate_mentions(config_args)
 
 
-class BootlegAnnotator(Bootleg):
+class ServingBootlegEntityDisambiguator(BatchBootlegEntityDisambiguator):
     '''
     BootlegAnnotator is a wrapper for bootleg's native annotator which takes care of bootleg instantiations and
     extracting required features from examples on-the-fly
