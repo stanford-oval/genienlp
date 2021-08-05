@@ -763,7 +763,6 @@ def load_config_json(args):
             'almond_lang_as_question',
             'almond_has_multiple_programs',
             'almond_detokenize_sentence',
-            'almond_thingtalk_version',
             'preprocess_special_tokens',
             'dropper_ratio',
             'dropper_min_count',
@@ -838,7 +837,6 @@ def load_config_json(args):
                 'almond_has_multiple_programs',
                 'almond_lang_as_question',
                 'preprocess_special_tokens',
-                'almond_thingtalk_version',
                 'no_fast_tokenizer',
                 'force_fast_tokenizer',
             ):

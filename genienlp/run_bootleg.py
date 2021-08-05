@@ -170,10 +170,6 @@ def parse_argv(parser):
         action='store_true',
         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)',
     )
-    parser.add_argument(
-        '--almond_thingtalk_version', type=int, choices=[1, 2], default=2, help='Thingtalk version for almond datasets'
-    )
-
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used for training')
 

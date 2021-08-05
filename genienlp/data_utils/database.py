@@ -136,104 +136,72 @@ class Database(object):
                 # print(f'***ent: {ent} {tokens} {answer}')
                 continue
 
-            if self.args.almond_thingtalk_version == 1:
-                #  ... param:inAlbum:Entity(org.schema.Music:MusicAlbum) == " XXXX " ...
-                # ... param:artists contains " XXX " ^^com.spotify:artist and param:id =~ " XXX " ...
-                # ... filter param:geo:Location == location: " XXXX " and ...
+            # ** this should change if thingtalk syntax changes **
 
-                # assume first syntax
-                idx = answer.index('" ' + ent + ' "')
+            # ( ... [Book|Music|...] ( ) filter id =~ " position and affirm " ) ...'
+            # ... ^^org.schema.Book:Person ( " james clavell " ) ...
+            # ... contains~ ( [award|genre|...] , " booker " ) ...
+            # ... inLanguage =~ " persian " ...
 
-                type = None
+            # missing syntax from current code
+            #  ... @com.spotify . song ( ) filter in_array~ ( id , [ " piano man " , " uptown girl " ] ) ) [ 1 : 2 ]  ...
 
-                answer_tokens_after_entity = answer[idx + len('" ' + ent + ' "') :].split()
-                if answer_tokens_after_entity[0].startswith('^^'):
-                    type = answer_tokens_after_entity[0].rsplit(':', 1)[1]
+            # assume first syntax
+            idx = answer.index('" ' + ent + ' "')
 
-                if type is None:
+            type = None
+            tokens_before_entity = answer[:idx].split()
 
-                    answer_tokens_before_entity = answer[:idx].split()
+            if tokens_before_entity[-2] == 'Location':
+                type = 'Location'
 
-                    # check last three tokens to find one that starts with param
-                    for i in range(3):
-                        if answer_tokens_before_entity[-i].startswith('param:'):
-                            type = answer_tokens_before_entity[-i]
-                            break
+            elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in [
+                'ratingValue',
+                'reviewCount',
+                'checkoutTime',
+                'checkinTime',
+            ]:
+                type = tokens_before_entity[-2]
 
-                    if type:
-                        type = type.strip('()').rsplit(':', 1)[1]
-
-                assert type in self.type_vocab_to_typeqid
-
-                entity2type[ent] = type
-
-            else:
-                # ** this should change if thingtalk syntax changes **
-
-                # ( ... [Book|Music|...] ( ) filter id =~ " position and affirm " ) ...'
-                # ... ^^org.schema.Book:Person ( " james clavell " ) ...
-                # ... contains~ ( [award|genre|...] , " booker " ) ...
-                # ... inLanguage =~ " persian " ...
-
-                # missing syntax from current code
-                #  ... @com.spotify . song ( ) filter in_array~ ( id , [ " piano man " , " uptown girl " ] ) ) [ 1 : 2 ]  ...
-
-                # assume first syntax
-                idx = answer.index('" ' + ent + ' "')
-
-                type = None
-                tokens_before_entity = answer[:idx].split()
-
-                if tokens_before_entity[-2] == 'Location':
-                    type = 'Location'
-
-                elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in [
-                    'ratingValue',
-                    'reviewCount',
-                    'checkoutTime',
-                    'checkinTime',
-                ]:
-                    type = tokens_before_entity[-2]
-
-                elif tokens_before_entity[-1] == '=~':
-                    if tokens_before_entity[-2] in ['id', 'value']:
-                        # travers previous tokens until find filter
-                        i = -3
-                        while tokens_before_entity[i] != 'filter' and i - 3 > -len(tokens_before_entity):
-                            i -= 1
-                        type = tokens_before_entity[i - 3]
-                    else:
-                        type = tokens_before_entity[-2]
-
-                elif tokens_before_entity[-4] == 'contains~':
-                    type = tokens_before_entity[-2]
-
-                elif tokens_before_entity[-2].startswith('^^'):
-                    type = tokens_before_entity[-2].rsplit(':', 1)[1]
-                    if (
-                        type == 'Person'
-                        and tokens_before_entity[-3] == 'null'
-                        and tokens_before_entity[-5] in ['director', 'creator', 'actor']
-                    ):
-                        type = tokens_before_entity[-5]
-
-                elif tokens_before_entity[-1] in [',', '[']:
-                    type = 'keywords'
-
-                if type:
-                    # normalize thingtalk types
-                    type = type.lower()
-                    for pair in self.wiki2normalized_type:
-                        if fnmatch.fnmatch(type, pair[0]):
-                            type = pair[1]
-                            break
-
-                    assert type in self.type_vocab_to_typeqid, f'{type}, {answer}'
+            elif tokens_before_entity[-1] == '=~':
+                if tokens_before_entity[-2] in ['id', 'value']:
+                    # travers previous tokens until find filter
+                    i = -3
+                    while tokens_before_entity[i] != 'filter' and i - 3 > -len(tokens_before_entity):
+                        i -= 1
+                    type = tokens_before_entity[i - 3]
                 else:
-                    print(f'{type}, {answer}')
-                    continue
+                    type = tokens_before_entity[-2]
 
-                entity2type[ent] = type
+            elif tokens_before_entity[-4] == 'contains~':
+                type = tokens_before_entity[-2]
+
+            elif tokens_before_entity[-2].startswith('^^'):
+                type = tokens_before_entity[-2].rsplit(':', 1)[1]
+                if (
+                    type == 'Person'
+                    and tokens_before_entity[-3] == 'null'
+                    and tokens_before_entity[-5] in ['director', 'creator', 'actor']
+                ):
+                    type = tokens_before_entity[-5]
+
+            elif tokens_before_entity[-1] in [',', '[']:
+                type = 'keywords'
+
+            if type:
+                # normalize thingtalk types
+                type = type.lower()
+                for pair in self.wiki2normalized_type:
+                    if fnmatch.fnmatch(type, pair[0]):
+                        type = pair[1]
+                        break
+
+                assert type in self.type_vocab_to_typeqid, f'{type}, {answer}'
+            else:
+                print(f'{type}, {answer}')
+                continue
+
+            entity2type[ent] = type
 
             self.all_schema_types.add(type)
 
@@ -335,7 +303,7 @@ class Database(object):
         for n, (ex, tokens_type_ids, tokens_type_probs, tokens_qids) in enumerate(
             zip(examples, all_token_type_ids, all_token_type_probs, all_token_qids)
         ):
-            features = [Entity(*tup) for tup in zip(*[tokens_type_ids, tokens_type_probs, tokens_qids])]
+            features = [Entity(*tup) for tup in zip(tokens_type_ids, tokens_type_probs, tokens_qids)]
             if utterance_field == 'question':
                 assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.question.split(' '))
                 examples[n].question_feature = features
@@ -349,7 +317,7 @@ class Database(object):
                 examples[n].context_feature = features
                 # use pad features for non-utterance field
                 examples[n].question_feature = [Entity.get_pad_entity(self.max_features_size)] * len(ex.question.split(' '))
-                # override original question with entities added to it
+                # override original context with entities added to it
                 examples[n].context = self.add_entities_to_text(ex.context, features)
 
     def find_type_probs(self, tokens, default_val, default_size):
