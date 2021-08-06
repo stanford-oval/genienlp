@@ -322,7 +322,8 @@ def prepare_data(args, device, src_lang):
                 ned_model = init_ned_model(args)
             else:
                 ned_model = init_ned_model(args, 'bootleg-annotator')
-            ned_model.process_examples(data.examples, path, task.utterance_field)
+            if ned_model:
+                ned_model.process_examples(data.examples, path, task.utterance_field)
 
             task_data_processed.append(data)
             task_path_processed.append(path)

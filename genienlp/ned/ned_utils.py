@@ -277,24 +277,23 @@ def reverse_bisect_left(a, x, lo=None, hi=None):
     return lo
 
 
-def init_ned_model(args, ned_class_name=None):
+def init_ned_model(args, ned_retrieve_method=None):
     ned_model = None
+    if ned_retrieve_method is None:
+        ned_retrieve_method = args.ned_retrieve_method
     if args.do_ned:
-        if ned_class_name is None:
-            if args.ned_retrieve_method == 'bootleg':
-                ned_class_name = 'BatchBootlegEntityDisambiguator'
-            elif args.ned_retrieve_method == 'bootleg-annotator':
-                ned_class_name = 'ServingBootlegEntityDisambiguator'
-            elif args.ned_retrieve_method == 'naive':
-                ned_class_name = 'NaiveEntityDisambiguator'
-            elif args.ned_retrieve_method == 'entity-oracle':
-                ned_class_name = 'EntityOracleEntityDisambiguator'
-            elif args.ned_retrieve_method == 'type-oracle':
-                ned_class_name = 'TypeOracleEntityDisambiguator'
-            else:
-                raise ValueError(
-                    'Invalid ned_class_name. Please choose between bootleg, naive, entity-oracle, and type-oracle'
-                )
-        ned_class = getattr(ned, ned_class_name)
+        if ned_retrieve_method == 'bootleg':
+            ned_retrieve_method = 'BatchBootlegEntityDisambiguator'
+        elif ned_retrieve_method == 'bootleg-annotator':
+            ned_retrieve_method = 'ServingBootlegEntityDisambiguator'
+        elif ned_retrieve_method == 'naive':
+            ned_retrieve_method = 'NaiveEntityDisambiguator'
+        elif ned_retrieve_method == 'entity-oracle':
+            ned_retrieve_method = 'EntityOracleEntityDisambiguator'
+        elif ned_retrieve_method == 'type-oracle':
+            ned_retrieve_method = 'TypeOracleEntityDisambiguator'
+        else:
+            raise ValueError('Invalid ned_retrieve_method. Please choose between bootleg, naive, entity-oracle, and type-oracle')
+        ned_class = getattr(ned, ned_retrieve_method)
         ned_model = ned_class(args)
     return ned_model
