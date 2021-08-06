@@ -230,6 +230,8 @@ BANNED_PHRASES = set(
         'publication date',
         'home address',
         'home assistant',
+        'key words',
+        'keywords',
     ]
 )
 
