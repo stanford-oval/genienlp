@@ -148,7 +148,12 @@ def parse_argv(parser):
     parser.add_argument(
         '--bootleg_extract_num_workers', type=int, default=32, help='Number of workers for extracing mentions step of bootleg'
     )
-    parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
+    parser.add_argument(
+        '--ned_normalize_types',
+        type=str,
+        choices=['no', 'yes', 'force'],
+        help='Normalize types. yes: attempt to map; if unsuccessful use original. force: attempt to map; if unsuccessful drop the type.',
+    )
 
     parser.add_argument('--ned_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
 

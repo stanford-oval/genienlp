@@ -427,7 +427,12 @@ def parse_argv(parser):
         default=0.3,
         help='Probability threshold for accepting a candidate for a mention',
     )
-    parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
+    parser.add_argument(
+        '--ned_normalize_types',
+        type=str,
+        choices=['no', 'yes', 'force'],
+        help='Normalize types. yes: attempt to map; if unsuccessful use original. force: attempt to map; if unsuccessful drop the type.',
+    )
 
     parser.add_argument(
         '--entity_type_agg_method',

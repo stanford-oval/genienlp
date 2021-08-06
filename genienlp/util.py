@@ -790,7 +790,7 @@ def load_config_json(args):
             'bootleg_output_dir',
             'bootleg_model',
             'bootleg_prob_threshold',
-            'bootleg_post_process_types',
+            'ned_normalize_types',
             'att_pooling',
             'no_separator',
             'num_labels',
@@ -840,6 +840,8 @@ def load_config_json(args):
                 'force_fast_tokenizer',
             ):
                 setattr(args, r, False)
+            elif r in ('ned_normalize_types'):
+                setattr(args, r, 'no')
             elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
                 setattr(args, r, 0)
             elif r in ('entity_word_embeds_dropout'):

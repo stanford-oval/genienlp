@@ -19,7 +19,7 @@ args = parser.parse_args()
 if __name__ == '__main__':
 
     args.bootleg_model = 'bootleg_uncased_mini'
-    args.bootleg_post_process_types = True
+    args.ned_normalize_types = 'yes'
     args.bootleg_output_dir = 'results_temp'
     args.embeddings = '.embeddings'
     args.almond_type_mapping_path = None
@@ -51,14 +51,14 @@ if __name__ == '__main__':
             bootleg_line['aliases'], bootleg_line['cands'], bootleg_line['cand_probs'], bootleg_line['spans']
         ):
             # without mapping
-            bootleg.args.bootleg_post_process_types = False
+            bootleg.args.ned_normalize_types = 'no'
             type_ids, type_probs, qids = bootleg.collect_features_per_alias(alias, all_probs, all_qids)
             type_vocabs = []
             for id_ in type_ids:
                 type_vocab = bootleg.typeqid_to_type_vocab[bootleg.id2typeqid[id_]]
                 type_vocabs.append(type_vocab)
                 all_titles[type_vocab] += 1
-            bootleg.args.bootleg_post_process_types = True
+            bootleg.args.ned_normalize_types = 'yes'
             type_ids, type_probs, qids = bootleg.collect_features_per_alias(alias, all_probs, all_qids)
             for id_ in type_ids:
                 all_new_titles[bootleg.typeqid_to_type_vocab[bootleg.id2typeqid[id_]]] += 1

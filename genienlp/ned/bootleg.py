@@ -191,7 +191,7 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
                     for typeqid in all_typeqids:
                         if typeqid in self.typeqid2id:
                             # map wikidata types to thingtalk types
-                            if self.args.bootleg_post_process_types:
+                            if self.args.ned_normalize_types != 'no':
                                 # map qid to title
                                 title = self.typeqid_to_type_vocab[typeqid]
 
@@ -200,8 +200,10 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
 
                                 # attempt to normalize qids failed; just use the original type
                                 if typeqids is None:
-                                    typeqids = [typeqid]
-
+                                    if self.args.ned_normalize_types == 'yes':
+                                        typeqids = [typeqid]
+                                    else:
+                                        continue
                             else:
                                 typeqids = [typeqid]
 
