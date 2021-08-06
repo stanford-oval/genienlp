@@ -307,6 +307,7 @@ class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
                 'reviewCount',
                 'checkoutTime',
                 'checkinTime',
+                'contentRating',
             ]:
                 type = tokens_before_entity[-2]
 
