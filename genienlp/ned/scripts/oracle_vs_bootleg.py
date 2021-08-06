@@ -19,7 +19,7 @@ args = parser.parse_args()
 if __name__ == '__main__':
 
     args.bootleg_model = 'bootleg_uncased_mini'
-    args.bootleg_post_process_types = True
+    args.ned_normalize_types = 'yes'
     args.bootleg_output_dir = 'results_temp'
     args.embeddings = '.embeddings'
     args.almond_type_mapping_path = None
