@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2021-2022 The Board of Trustees of the Leland Stanford Junior University
+# Copyright (c) 2020-2021 The Board of Trustees of the Leland Stanford Junior University
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,6 @@ import os
 import ujson
 
 from ..data_utils.example import Entity
-from ..ned.ned_utils import has_overlap, is_banned, normalize_text
 
 logger = logging.getLogger(__name__)
 
@@ -87,30 +86,8 @@ class AbstractEntityDisambiguator(object):
                 self.wiki2normalized_type.append((title, normalized_type))
 
     def process_examples(self, examples, split_path, utterance_field):
-        all_token_type_ids, all_token_type_probs, all_token_qids = [], [], []
-        for n, ex in enumerate(examples):
-            if utterance_field == 'question':
-                sentence = ex.question
-            else:
-                sentence = ex.context
-            answer = ex.answer
-            tokens = sentence.split(' ')
-            length = len(tokens)
-
-            tokens_type_ids = [[0] * self.args.max_features_size for _ in range(length)]
-            tokens_type_probs = [[0] * self.args.max_features_size for _ in range(length)]
-            token_qids = [[-1] * self.args.max_features_size for _ in range(length)]
-
-            if 'type_id' in self.args.entity_attributes:
-                tokens_type_ids = self.find_type_ids(tokens, answer)
-            if 'type_prob' in self.args.entity_attributes:
-                tokens_type_probs = self.find_type_probs(tokens, 0, self.args.max_features_size)
-
-            all_token_type_ids.append(tokens_type_ids)
-            all_token_type_probs.append(tokens_type_probs)
-            all_token_qids.append(token_qids)
-
-        self.replace_features_inplace(examples, all_token_type_ids, all_token_type_probs, all_token_qids, utterance_field)
+        # each subclass should implement their own process_examples method
+        raise NotImplementedError()
 
     def pad_features(self, features, max_size, pad_id):
         if len(features) > max_size:
@@ -202,132 +179,3 @@ class AbstractEntityDisambiguator(object):
                 examples[n].question_feature = [Entity.get_pad_entity(self.max_features_size)] * len(ex.question.split(' '))
                 # override original context with entities added to it
                 examples[n].context = self.add_entities_to_text(ex.context, features)
-
-    def find_type_probs(self, tokens, default_val, default_size):
-        token_freqs = [[default_val] * default_size] * len(tokens)
-        return token_freqs
-
-    def lookup_ngrams(self, tokens, min_entity_len, max_entity_len):
-        # load nltk lazily
-        import nltk
-
-        nltk.download('averaged_perceptron_tagger', quiet=True)
-
-        tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
-
-        max_entity_len = min(max_entity_len, len(tokens))
-        min_entity_len = min(min_entity_len, len(tokens))
-
-        pos_tagged = nltk.pos_tag(tokens)
-        verbs = set([x[0] for x in pos_tagged if x[1].startswith('V')])
-
-        used_aliases = []
-        for n in range(max_entity_len, min_entity_len - 1, -1):
-            ngrams = nltk.ngrams(tokens, n)
-            start = -1
-            end = n - 1
-            for gram in ngrams:
-                start += 1
-                end += 1
-                gram_text = normalize_text(" ".join(gram))
-
-                if not is_banned(gram_text) and gram_text not in verbs and gram_text in self.all_aliases:
-                    if has_overlap(start, end, used_aliases):
-                        continue
-
-                    used_aliases.append([self.typeqid2id.get(self.alias2type[gram_text], self.unk_id), start, end])
-
-        for type_id, beg, end in used_aliases:
-            tokens_type_ids[beg:end] = [[type_id] * self.max_features_size] * (end - beg)
-
-        return tokens_type_ids
-
-    def lookup_smaller(self, tokens):
-        tokens_type_ids = []
-        i = 0
-        while i < len(tokens):
-            token = tokens[i]
-            # sort by number of tokens so longer keys get matched first
-            matched_items = sorted(self.all_aliases.keys(token), key=lambda item: len(item), reverse=True)
-            found = False
-            for key in matched_items:
-                type = self.alias2type[key]
-                key_tokenized = key.split()
-                cur = i
-                j = 0
-                while cur < len(tokens) and j < len(key_tokenized):
-                    if tokens[cur] != key_tokenized[j]:
-                        break
-                    j += 1
-                    cur += 1
-
-                if j == len(key_tokenized):
-                    if is_banned(' '.join(key_tokenized)):
-                        continue
-
-                    # match found
-                    found = True
-                    tokens_type_ids.extend([[self.typeqid2id[type] * self.max_features_size] for _ in range(i, cur)])
-
-                    # move i to current unprocessed position
-                    i = cur
-                    break
-
-            if not found:
-                tokens_type_ids.append([self.unk_id * self.max_features_size])
-                i += 1
-
-        return tokens_type_ids
-
-    def lookup_longer(self, tokens):
-        i = 0
-        tokens_type_ids = []
-
-        length = len(tokens)
-        found = False
-        while i < length:
-            end = length
-            while end > i:
-                tokens_str = ' '.join(tokens[i:end])
-                if tokens_str in self.all_aliases:
-                    # match found
-                    found = True
-                    tokens_type_ids.extend(
-                        [[self.typeqid2id[self.alias2type[tokens_str]] * self.max_features_size] for _ in range(i, end)]
-                    )
-                    # move i to current unprocessed position
-                    i = end
-                    break
-                else:
-                    end -= 1
-            if not found:
-                tokens_type_ids.append([self.unk_id * self.max_features_size])
-                i += 1
-            found = False
-
-        return tokens_type_ids
-
-    def lookup_entities(self, tokens, entities):
-        tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
-        tokens_text = " ".join(tokens)
-
-        for ent in entities:
-            if ent not in self.all_aliases:
-                continue
-            ent_num_tokens = len(ent.split(' '))
-            idx = tokens_text.index(ent)
-            token_pos = len(tokens_text[:idx].strip().split(' '))
-            type = self.typeqid2id.get(self.alias2type[ent], self.unk_id)
-            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [[type] * self.max_features_size] * ent_num_tokens
-
-        return tokens_type_ids
-
-    def lookup(self, tokens, database_lookup_method=None, min_entity_len=2, max_entity_len=4):
-        tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
-        if database_lookup_method == 'smaller_first':
-            tokens_type_ids = self.lookup_smaller(tokens)
-        elif database_lookup_method == 'longer_first':
-            tokens_type_ids = self.lookup_longer(tokens)
-        elif database_lookup_method == 'ngrams':
-            tokens_type_ids = self.lookup_ngrams(tokens, min_entity_len, max_entity_len)
-        return tokens_type_ids

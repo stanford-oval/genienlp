@@ -57,7 +57,7 @@ class BaseTask(object):
 
     @property
     def utterance_field(self):
-        return NotImplementedError
+        return NotImplementedError()
 
     def get_splits(self, root, **kwargs):
         """

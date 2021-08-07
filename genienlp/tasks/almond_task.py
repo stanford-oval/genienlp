@@ -73,7 +73,7 @@ class BaseAlmondTask(BaseTask):
 
     @property
     def utterance_field(self):
-        return NotImplementedError
+        return NotImplementedError()
 
     @property
     def metrics(self):
