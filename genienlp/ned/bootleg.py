@@ -37,9 +37,9 @@ from bootleg.end2end.extract_mentions import extract_mentions
 from bootleg.run import run_model
 from bootleg.utils.parser.parser_utils import parse_boot_and_emm_args
 
+from ..util import get_devices
 from . import AbstractEntityDisambiguator
 from .ned_utils import is_banned, reverse_bisect_left
-from ..util import get_devices
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +159,13 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
         tokens_qids = [[0] * self.max_features_size for _ in range(len(tokenized))]
 
         for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
+
+            # sort candidates based on bootleg's confidence scores (i.e. probabilities)
+            # this used to be in bootleg code but was removed in recent version
+            packed_list = zip(all_probs, all_qids)
+            packed_list_sorted = sorted(packed_list, key=lambda item: item[0], reverse=True)
+            all_probs, all_qids = list(zip(*packed_list_sorted))
+
             # filter qids with probability lower than a threshold
             idx = reverse_bisect_left(all_probs, threshold)
             all_qids = all_qids[:idx]
@@ -278,7 +285,7 @@ class ServingBootlegEntityDisambiguator(BatchBootlegEntityDisambiguator):
     def __init__(self, args):
         super().__init__(args)
         bootleg_config = self.create_config(self.fixed_overrides)
-        device = get_devices()[0] # server only runs on a single device
+        device = get_devices()[0]  # server only runs on a single device
 
         # instantiate the annotator class. we use annotator only in server mode.
         # for training we use bootleg functions which preprocess and cache data using multiprocessing, and batching to speed up NED
