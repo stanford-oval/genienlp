@@ -411,7 +411,11 @@
       "Bantu",
       "Serbo-Croatian",
       "big city",
-      "Upper Guinea Creoles"
+      "Upper Guinea Creoles",
+      "iso_lang_code"
+    ],
+    "word": [
+      "keywords"
     ]
   },
   "books": {
