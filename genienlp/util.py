@@ -783,7 +783,6 @@ def load_config_json(args):
             'num_db_types',
             'db_unk_id',
             'ned_retrieve_method',
-            'database_lookup_method',
             'ned_domains',
             'almond_type_mapping_path',
             'max_features_size',
@@ -862,8 +861,6 @@ def load_config_json(args):
                 setattr(args, r, 4)
             elif r == 'ned_retrieve_method':
                 setattr(args, r, 'naive')
-            elif r == 'database_lookup_method':
-                setattr(args, r, 'ngrams')
             elif r == 'locale':
                 setattr(args, r, 'en')
             elif r == 'num_beam_groups':
