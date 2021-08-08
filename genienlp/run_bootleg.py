@@ -96,10 +96,10 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams database_lookup_method is used '
+        '--min_entity_len', type=int, default=1, help='Minimum token-length of entities in ngram-based lookup of bootleg'
     )
     parser.add_argument(
-        '--max_entity_len', type=int, default=4, help='Maximum length for entities when ngrams database_lookup_method is used '
+        '--max_entity_len', type=int, default=4, help='Maximum token-length of entities in ngram-based lookup of bootleg'
     )
     parser.add_argument(
         '--database_dir',

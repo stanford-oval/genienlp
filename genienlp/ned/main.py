@@ -79,7 +79,7 @@ class BaseEntityDisambiguator(AbstractEntityDisambiguator):
         token_freqs = [[default_val] * default_size] * len(tokens)
         return token_freqs
 
-    def lookup_ngrams(self, tokens, min_entity_len, max_entity_len):
+    def lookup_ngrams(self, tokens):
         # load nltk lazily
         import nltk
 
@@ -87,8 +87,8 @@ class BaseEntityDisambiguator(AbstractEntityDisambiguator):
 
         tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
 
-        max_entity_len = min(max_entity_len, len(tokens))
-        min_entity_len = min(min_entity_len, len(tokens))
+        max_entity_len = min(self.args.max_entity_len, len(tokens))
+        min_entity_len = min(self.args.min_entity_len, len(tokens))
 
         pos_tagged = nltk.pos_tag(tokens)
         verbs = set([x[0] for x in pos_tagged if x[1].startswith('V')])
@@ -106,77 +106,62 @@ class BaseEntityDisambiguator(AbstractEntityDisambiguator):
                 if not is_banned(gram_text) and gram_text not in verbs and gram_text in self.alias2type:
                     if has_overlap(start, end, used_aliases):
                         continue
+                    qids = self.alias2qids[gram_text]
+                    types = []
+                    for qid in qids:
+                        typeqid = self.qid2typeqid.get(qid, 'unk')
+                        type_vocab = self.typeqid_to_type_vocab.get(typeqid, None)
+                        if type_vocab:
+                            # normalize types
+                            type_vocab = type_vocab.lower()
+                            for pair in self.wiki2normalized_type:
+                                if fnmatch.fnmatch(type_vocab, pair[0]):
+                                    type_vocab = pair[1]
+                                    break
 
-                    used_aliases.append([self.typeqid2id.get(self.alias2type[gram_text][0], self.unk_id), start, end])
+                            assert type_vocab in self.type_vocab_to_typeqid, f'{type_vocab}, {tokens}'
+                        else:
+                            print(f'{type_vocab}, {tokens}')
+                            continue
 
-        for type_id, beg, end in used_aliases:
-            tokens_type_ids[beg:end] = [[type_id] * self.max_features_size] * (end - beg)
+                        types.append(self.type_vocab_to_typeqid[type_vocab])
 
-        return tokens_type_ids
+                    padded_types = self.pad_features(types, self.max_features_size, -1)
 
-    def lookup_smaller(self, tokens):
-        tokens_type_ids = []
-        i = 0
-        while i < len(tokens):
-            token = tokens[i]
-            # sort by number of tokens so longer keys get matched first
-            matched_items = sorted(self.alias2type.keys(token), key=lambda item: len(item), reverse=True)
-            found = False
-            for key in matched_items:
-                type = self.alias2type[key]
-                key_tokenized = key.split()
-                cur = i
-                j = 0
-                while cur < len(tokens) and j < len(key_tokenized):
-                    if tokens[cur] != key_tokenized[j]:
-                        break
-                    j += 1
-                    cur += 1
+                    used_aliases.append((padded_types, start, end))
 
-                if j == len(key_tokenized):
-                    if is_banned(' '.join(key_tokenized)):
-                        continue
-
-                    # match found
-                    found = True
-                    tokens_type_ids.extend([[self.typeqid2id[type] * self.max_features_size] for _ in range(i, cur)])
-
-                    # move i to current unprocessed position
-                    i = cur
-                    break
-
-            if not found:
-                tokens_type_ids.append([self.unk_id * self.max_features_size])
-                i += 1
+        for type_ids, beg, end in used_aliases:
+            tokens_type_ids[beg:end] = type_ids * (end - beg)
 
         return tokens_type_ids
 
-    def lookup_longer(self, tokens):
-        i = 0
-        tokens_type_ids = []
+    def lookup(self, tokens):
+        tokens_type_ids = self.lookup_ngrams(tokens)
+        return tokens_type_ids
 
-        length = len(tokens)
-        found = False
-        while i < length:
-            end = length
-            while end > i:
-                tokens_str = ' '.join(tokens[i:end])
-                if tokens_str in self.alias2type:
-                    # match found
-                    found = True
-                    tokens_type_ids.extend(
-                        [[self.typeqid2id[self.alias2type[tokens_str]] * self.max_features_size] for _ in range(i, end)]
-                    )
-                    # move i to current unprocessed position
-                    i = end
-                    break
-                else:
-                    end -= 1
-            if not found:
-                tokens_type_ids.append([self.unk_id * self.max_features_size])
-                i += 1
-            found = False
 
+class NaiveEntityDisambiguator(BaseEntityDisambiguator):
+    def __init__(self, args):
+        super().__init__(args)
+        self.alias2type = marisa_trie.RecordTrie("<p").mmap(
+            os.path.join(self.args.database_dir, 'es_material/alias2typeqid.marisa')
+        )
+
+    def find_type_ids(self, tokens, answer=None):
+        tokens_type_ids = self.lookup(tokens)
+        return tokens_type_ids
+
+
+class EntityOracleEntityDisambiguator(BaseEntityDisambiguator):
+    def __init__(self, args):
+        super().__init__(args)
+        self.alias2type = marisa_trie.RecordTrie("<p").mmap(
+            os.path.join(self.args.database_dir, 'es_material/alias2typeqid.marisa')
+        )
+
+    def find_type_ids(self, tokens, answer):
+        answer_entities = quoted_pattern_with_space.findall(answer)
+        tokens_type_ids = self.lookup_entities(tokens, answer_entities)
         return tokens_type_ids
 
     def lookup_entities(self, tokens, entities):
@@ -194,43 +179,6 @@ class BaseEntityDisambiguator(AbstractEntityDisambiguator):
 
         return tokens_type_ids
 
-    def lookup(self, tokens, database_lookup_method=None, min_entity_len=2, max_entity_len=4):
-        tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
-        if database_lookup_method == 'smaller_first':
-            tokens_type_ids = self.lookup_smaller(tokens)
-        elif database_lookup_method == 'longer_first':
-            tokens_type_ids = self.lookup_longer(tokens)
-        elif database_lookup_method == 'ngrams':
-            tokens_type_ids = self.lookup_ngrams(tokens, min_entity_len, max_entity_len)
-        return tokens_type_ids
-
-
-class NaiveEntityDisambiguator(BaseEntityDisambiguator):
-    def __init__(self, args):
-        super().__init__(args)
-        self.alias2type = marisa_trie.RecordTrie("<p").mmap(
-            os.path.join(self.args.database_dir, 'es_material/alias2typeqid.marisa')
-        )
-
-    def find_type_ids(self, tokens, answer=None):
-        tokens_type_ids = self.lookup(
-            tokens, self.args.database_lookup_method, self.args.min_entity_len, self.args.max_entity_len
-        )
-        return tokens_type_ids
-
-
-class EntityOracleEntityDisambiguator(BaseEntityDisambiguator):
-    def __init__(self, args):
-        super().__init__(args)
-        self.alias2type = marisa_trie.RecordTrie("<p").mmap(
-            os.path.join(self.args.database_dir, 'es_material/alias2typeqid.marisa')
-        )
-
-    def find_type_ids(self, tokens, answer):
-        answer_entities = quoted_pattern_with_space.findall(answer)
-        tokens_type_ids = self.lookup_entities(tokens, answer_entities)
-        return tokens_type_ids
-
 
 class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
     def __init__(self, args):
@@ -238,10 +186,7 @@ class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
 
     def find_type_ids(self, tokens, answer):
         entity2type = self.collect_answer_entity_types(tokens, answer)
-        tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
-        return tokens_type_ids
 
-    def oracle_type_ids(self, tokens, entity2type):
         tokens_type_ids = [[0] * self.args.max_features_size for _ in range(len(tokens))]
         tokens_text = " ".join(tokens)
 
