@@ -401,12 +401,8 @@ def parse_argv(parser):
 
     # NED args
     parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
-    parser.add_argument(
-        '--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams database_lookup_method is used '
-    )
-    parser.add_argument(
-        '--max_entity_len', type=int, default=4, help='Maximum length for entities when ngrams database_lookup_method is used '
-    )
+    parser.add_argument('--min_entity_len', type=int, default=1, help='Minimum token-length of entities in ngram-based lookup')
+    parser.add_argument('--max_entity_len', type=int, default=4, help='Maximum token-length of entities in ngram-based lookup')
     parser.add_argument(
         '--database_dir',
         type=str,
@@ -476,15 +472,6 @@ def parse_argv(parser):
         choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'],
         type=str,
         help='how to retrieve types for entities',
-    )
-
-    parser.add_argument(
-        '--database_lookup_method',
-        default='ngrams',
-        choices=['ngrams', 'smaller_first', 'longer_first'],
-        help='smaller_first: start from one token and grow into longer spans until a match is found,'
-        'longer_first: start from the longest span and shrink until a match is found,'
-        'ngrams: lookup all ngrams in the text and see if there is a match',
     )
 
     parser.add_argument('--ned_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
