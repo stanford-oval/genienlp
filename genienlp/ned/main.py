@@ -135,21 +135,6 @@ class BaseEntityDisambiguator(AbstractEntityDisambiguator):
 
         return tokens_type_ids
 
-    def lookup_entities(self, tokens, entities):
-        tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
-        tokens_text = " ".join(tokens)
-
-        for ent in entities:
-            if ent not in self.alias2type:
-                continue
-            ent_num_tokens = len(ent.split(' '))
-            idx = tokens_text.index(ent)
-            token_pos = len(tokens_text[:idx].strip().split(' '))
-            type = self.typeqid2id.get(self.alias2type[ent], self.unk_id)
-            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [[type] * self.max_features_size] * ent_num_tokens
-
-        return tokens_type_ids
-
     def lookup(self, tokens):
         tokens_type_ids = self.lookup_ngrams(tokens)
         return tokens_type_ids
@@ -179,6 +164,21 @@ class EntityOracleEntityDisambiguator(BaseEntityDisambiguator):
         tokens_type_ids = self.lookup_entities(tokens, answer_entities)
         return tokens_type_ids
 
+    def lookup_entities(self, tokens, entities):
+        tokens_type_ids = [[self.unk_id] * self.max_features_size] * len(tokens)
+        tokens_text = " ".join(tokens)
+
+        for ent in entities:
+            if ent not in self.alias2type:
+                continue
+            ent_num_tokens = len(ent.split(' '))
+            idx = tokens_text.index(ent)
+            token_pos = len(tokens_text[:idx].strip().split(' '))
+            type = self.typeqid2id.get(self.alias2type[ent], self.unk_id)
+            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [[type] * self.max_features_size] * ent_num_tokens
+
+        return tokens_type_ids
+
 
 class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
     def __init__(self, args):
@@ -186,10 +186,7 @@ class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
 
     def find_type_ids(self, tokens, answer):
         entity2type = self.collect_answer_entity_types(tokens, answer)
-        tokens_type_ids = self.oracle_type_ids(tokens, entity2type)
-        return tokens_type_ids
 
-    def oracle_type_ids(self, tokens, entity2type):
         tokens_type_ids = [[0] * self.args.max_features_size for _ in range(len(tokens))]
         tokens_text = " ".join(tokens)
 
