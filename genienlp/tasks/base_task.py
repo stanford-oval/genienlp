@@ -57,7 +57,7 @@ class BaseTask(object):
 
     @property
     def utterance_field(self):
-        return NotImplementedError
+        return NotImplementedError()
 
     def get_splits(self, root, **kwargs):
         """
@@ -81,7 +81,7 @@ class BaseTask(object):
             return self.override_context
         if self.override_question is not None and field_name == 'question':
             return self.override_question
-        return sentence, []
+        return sentence
 
     @property
     def metrics(self):

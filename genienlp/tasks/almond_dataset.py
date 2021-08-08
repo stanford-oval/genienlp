@@ -34,8 +34,7 @@ import os
 
 import torch
 
-from genienlp.data_utils.almond_utils import chunk_file, create_examples_from_file
-
+from ..data_utils.almond_utils import chunk_file, create_examples_from_file
 from .base_dataset import Split
 from .generic_dataset import CQA
 

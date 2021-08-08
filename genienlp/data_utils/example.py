@@ -34,7 +34,7 @@ import torch
 
 
 def identity(x, **kw):
-    return x, []
+    return x
 
 
 class SequentialField(NamedTuple):
@@ -111,12 +111,14 @@ class Example(object):
             if lower:
                 arg = arg.lower()
 
-            sentence, features = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer, example_id=example_id)
+            sentence = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer, example_id=example_id)
 
             args.append(sentence)
 
             if argname != 'answer':
-                args.append(features)
+                # we use a placeholder for features here
+                # the features will be produced and overridden via bootleg or database
+                args.append([])
 
         return Example(*args)
 

@@ -34,8 +34,7 @@ import logging
 import os
 import subprocess
 
-from genienlp.model_utils.transformers_utils import MODEL_PARALLEL_SUPPORTED_MODELS
-
+from .model_utils.transformers_utils import MODEL_PARALLEL_SUPPORTED_MODELS
 from .tasks.registry import get_tasks
 from .util import have_multilingual
 
@@ -283,10 +282,6 @@ def parse_argv(parser):
         action='store_true',
         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)',
     )
-    parser.add_argument(
-        '--almond_thingtalk_version', type=int, choices=[1, 2], default=2, help='Thingtalk version for almond datasets'
-    )
-
     parser.add_argument('--preprocess_special_tokens', action='store_true', help='convert special ThingTalk tokens to words')
 
     parser.add_argument(
@@ -406,17 +401,6 @@ def parse_argv(parser):
 
     # NED args
     parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
-    parser.add_argument(
-        '--database_dump_typeqid2id',
-        action='store_true',
-        help='This will create the "type to id" mapping for all entities available in ES database',
-    )
-    parser.add_argument(
-        '--database_dump_canonical2type',
-        action='store_true',
-        help='This will create the "canonical to type" mapping for all entities available in ES database',
-    )
-
     parser.add_argument(
         '--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams database_lookup_method is used '
     )

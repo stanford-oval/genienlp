@@ -50,10 +50,9 @@ from transformers import (
 
 from . import arguments, models
 from .arguments import save_args
-from .data_utils.bootleg import Bootleg
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
-from .run_bootleg import bootleg_process_splits
+from .ned.ned_utils import init_ned_model
 from .util import (
     elapsed_time,
     get_devices,
@@ -87,11 +86,8 @@ def initialize_logger(args):
 
 
 def prepare_data(args, logger):
-
-    # initialize bootleg
-    bootleg = None
-    if args.do_ned and args.ned_retrieve_method == 'bootleg':
-        bootleg = Bootleg(args)
+    # initialize ned_model
+    ned_model = init_ned_model(args)
 
     train_sets, val_sets, aux_sets = [], [], []
 
@@ -130,10 +126,8 @@ def prepare_data(args, logger):
             if task.name.startswith('almond'):
                 args.db_unk_id = 0
                 if args.do_ned:
-                    if bootleg:
-                        args.num_db_types = len(bootleg.typeqid2id)
-                    elif getattr(task, 'db', None):
-                        args.num_db_types = len(task.db.typeqid2id)
+                    if ned_model:
+                        args.num_db_types = len(ned_model.typeqid2id)
                 else:
                     args.num_db_types = 0
             else:
@@ -141,13 +135,11 @@ def prepare_data(args, logger):
                 args.num_db_types = 0
             save_args(args, force_overwrite=True)
 
-            if bootleg:
-                bootleg_process_splits(args, splits.train.examples, paths.train, task, bootleg)
+            if ned_model:
+                ned_model.process_examples(splits.train.examples, paths.train, task.utterance_field)
 
             train_sets.append(splits.train)
             logger.info(f'{task.name} has {len(splits.train)} training examples')
-
-            logger.info(f"train all_schema_types: {getattr(task, 'all_schema_types', None)}")
 
         for task in args.val_tasks:
             logger.info(f'Loading {task.name}')
@@ -167,12 +159,13 @@ def prepare_data(args, logger):
             assert not splits.train and not splits.test and not splits.aux
             logger.info(f'{task.name} has {len(splits.eval)} validation examples')
 
-            if bootleg:
-                bootleg_process_splits(args, splits.eval.examples, paths.eval, task, bootleg)
+            if ned_model:
+                ned_model.process_examples(splits.eval.examples, paths.eval, task.utterance_field)
 
             val_sets.append(splits.eval)
 
-            logger.info(f"validation all_schema_types: {getattr(task, 'all_schema_types', None)}")
+    if hasattr(ned_model, 'all_schema_types'):
+        logger.info(f"train all_schema_types: {ned_model.all_schema_types}")
 
     return train_sets, val_sets, aux_sets
 

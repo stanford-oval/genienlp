@@ -45,11 +45,10 @@ from torch.functional import Tensor
 from transformers import MarianConfig, MBartConfig
 from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 
-from genienlp.model_utils.transformers_utils import MARIAN_GROUP_MEMBERS
-
 from .data_utils.almond_utils import token_type_regex
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
+from .model_utils.transformers_utils import MARIAN_GROUP_MEMBERS
 
 logger = logging.getLogger(__name__)
 
@@ -763,7 +762,6 @@ def load_config_json(args):
             'almond_lang_as_question',
             'almond_has_multiple_programs',
             'almond_detokenize_sentence',
-            'almond_thingtalk_version',
             'preprocess_special_tokens',
             'dropper_ratio',
             'dropper_min_count',
@@ -838,7 +836,6 @@ def load_config_json(args):
                 'almond_has_multiple_programs',
                 'almond_lang_as_question',
                 'preprocess_special_tokens',
-                'almond_thingtalk_version',
                 'no_fast_tokenizer',
                 'force_fast_tokenizer',
             ):

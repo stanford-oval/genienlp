@@ -64,9 +64,8 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
-from genienlp.model_utils.transformers_utils import GenieMBartTokenizer
-
 from ..data_utils.progbar import prange, progress_bar
+from ..model_utils.transformers_utils import GenieMBartTokenizer
 from ..util import set_seed, split_file_on_disk
 from .data_utils import add_special_tokens, mask_tokens
 from .dataset import LengthSortedSampler, TextDataset

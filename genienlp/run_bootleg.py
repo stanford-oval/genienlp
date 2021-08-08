@@ -37,7 +37,7 @@ from pprint import pformat
 import ujson
 
 from .arguments import post_parse_general
-from .data_utils.bootleg import Bootleg
+from .ned.bootleg import BatchBootlegEntityDisambiguator
 from .util import set_seed
 
 logger = logging.getLogger(__name__)
@@ -170,10 +170,6 @@ def parse_argv(parser):
         action='store_true',
         help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)',
     )
-    parser.add_argument(
-        '--almond_thingtalk_version', type=int, choices=[1, 2], default=2, help='Thingtalk version for almond datasets'
-    )
-
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used for training')
 
@@ -202,37 +198,8 @@ def parse_argv(parser):
     )
 
 
-def bootleg_process_splits(args, examples, path, task, bootleg, mode='train'):
-    config_overrides = bootleg.fixed_overrides
-
-    input_file_dir = os.path.dirname(path)
-    input_file_name = os.path.basename(path.rsplit('.', 1)[0] + '_bootleg.jsonl')
-
-    data_overrides = ["--data_config.data_dir", input_file_dir, "--data_config.test_dataset.file", input_file_name]
-
-    # get config args
-    config_overrides.extend(data_overrides)
-    config_args = bootleg.create_config(config_overrides)
-
-    if mode == 'dump':
-        # create jsonl files from input examples
-        # jsonl is the input format bootleg expects
-        bootleg.create_jsonl(path, examples, task.utterance_field)
-
-        # extract mentions and mention spans in the sentence and write them to output jsonl files
-        bootleg.extract_mentions(path)
-
-        # find the right entity candidate for each mention
-        bootleg.disambiguate_mentions(config_args)
-
-    # override examples features with bootleg features
-    else:
-        bootleg.process_examples(examples, input_file_name, task.utterance_field)
-
-
-def dump_bootleg_features(args, logger):
-
-    bootleg = Bootleg(args)
+def bootleg_dump_entities(args, logger):
+    bootleg = BatchBootlegEntityDisambiguator(args)
 
     bootleg_shared_kwargs = {
         'subsample': args.subsample,
@@ -282,7 +249,7 @@ def dump_bootleg_features(args, logger):
         extension = task_all_paths[0].rsplit('.', 1)[1]
         all_paths = os.path.join(dir_name, 'combined' + '.' + extension)
 
-        bootleg_process_splits(args, all_examples, all_paths, task, bootleg, mode='dump')
+        bootleg.dump_entities_with_labels(all_examples, all_paths, task.utterance_field)
 
         # unmerge bootleg dumped labels
         line_number = 0
@@ -318,6 +285,7 @@ def main(args):
     args.ned_retrieve_method = 'bootleg'
     args.override_context = None
     args.override_question = None
+    args.almond_type_mapping_path = None
 
     # set these so we can use post_parse_general for train and run_bootleg
     args.val_task_names = None
@@ -329,4 +297,4 @@ def main(args):
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
 
-    dump_bootleg_features(args, logger)
+    bootleg_dump_entities(args, logger)

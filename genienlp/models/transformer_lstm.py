@@ -33,9 +33,8 @@ import logging
 import torch
 from transformers import AutoConfig, AutoModel, BertConfig, PretrainedConfig, XLMRobertaConfig
 
-from genienlp.model_utils.transformers_utils import BertModelForNER, XLMRobertaModelForNER
-
 from ..data_utils.numericalizer import TransformerNumericalizer
+from ..model_utils.transformers_utils import BertModelForNER, XLMRobertaModelForNER
 from ..util import adjust_language_code
 from .base import GenieModel
 from .identity_encoder import IdentityEncoder
