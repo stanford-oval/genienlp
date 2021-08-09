@@ -19,13 +19,23 @@ args = parser.parse_args()
 if __name__ == '__main__':
 
     args.bootleg_model = 'bootleg_uncased_mini'
-    args.ned_normalize_types = 'yes'
+
+    # ned_normalize_types = 'yes'
+    # args.ned_normalize_types = 'yes'
+    # args.bootleg_prob_threshold = 0.3
+    # args.max_types_per_qid = 1
+    # args.max_qids_per_entity = 1
+
+    ned_normalize_types = 'yes'
+    args.ned_normalize_types = ned_normalize_types
+    args.bootleg_prob_threshold = 0.01
+    args.max_types_per_qid = 2
+    args.max_qids_per_entity = 1
+
     args.bootleg_output_dir = 'results_temp'
     args.embeddings = '.embeddings'
     args.almond_type_mapping_path = None
-    args.bootleg_prob_threshold = 0.3
-    args.max_types_per_qid = 1
-    args.max_qids_per_entity = 1
+
     args.max_features_size = args.max_types_per_qid * args.max_qids_per_entity
 
     bootleg = BatchBootlegEntityDisambiguator(args)
@@ -58,16 +68,18 @@ if __name__ == '__main__':
                 type_vocab = bootleg.typeqid_to_type_vocab[bootleg.id2typeqid[id_]]
                 type_vocabs.append(type_vocab)
                 all_titles[type_vocab] += 1
-            bootleg.args.ned_normalize_types = 'yes'
+
+            # with mapping
+            bootleg.args.ned_normalize_types = ned_normalize_types
             type_ids, type_probs, qids = bootleg.collect_features_per_alias(alias, all_probs, all_qids)
-            for id_ in type_ids:
-                all_new_titles[bootleg.typeqid_to_type_vocab[bootleg.id2typeqid[id_]]] += 1
             type_vocabs_new = []
             for id_ in type_ids:
                 type_vocab = bootleg.typeqid_to_type_vocab[bootleg.id2typeqid[id_]]
                 type_vocabs_new.append(type_vocab)
-                all_titles[type_vocab] += 1
+                all_new_titles[type_vocab] += 1
 
+            if len(type_probs) == len(type_vocabs) == 0:
+                continue
             fout.write(f'{alias}, {type_probs}, {qids}, {type_vocabs}, {type_vocabs_new}' + '\n')
 
     fout.close()
