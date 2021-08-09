@@ -26,8 +26,10 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+import fnmatch
 import logging
 import os
+import re
 
 import ujson
 
@@ -81,9 +83,27 @@ class AbstractEntityDisambiguator(object):
         self.ckpt_name = None
 
     def update_wiki2normalized_type(self):
+        matches, inclusions = [], []
         for normalized_type, titles in self.almond_type_mapping.items():
             for title in titles:
-                self.wiki2normalized_type.append((title, normalized_type))
+                if re.search(r'[.?*]', title):
+                    inclusions.append((title, normalized_type))
+                else:
+                    matches.append((title, normalized_type))
+
+        # do wildcard matching only after going through all exact matches
+        self.wiki2normalized_type.extend(matches)
+        self.wiki2normalized_type.extend(inclusions)
+
+    def normalize_types(self, type):
+        norm_type = None
+        type = type.lower()
+        for pair in self.wiki2normalized_type:
+            if fnmatch.fnmatch(type, pair[0]):
+                norm_type = pair[1]
+                break
+
+        return norm_type
 
     def process_examples(self, examples, split_path, utterance_field):
         # each subclass should implement their own process_examples method
@@ -167,15 +187,19 @@ class AbstractEntityDisambiguator(object):
             if utterance_field == 'question':
                 assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.question.split(' '))
                 examples[n].question_feature = features
+
                 # use pad features for non-utterance field
                 examples[n].context_feature = [Entity.get_pad_entity(self.max_features_size)] * len(ex.context.split(' '))
+
                 # override original question with entities added to it
                 examples[n].question = self.add_entities_to_text(ex.question, features)
 
             else:
                 assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.context.split(' '))
                 examples[n].context_feature = features
+
                 # use pad features for non-utterance field
                 examples[n].question_feature = [Entity.get_pad_entity(self.max_features_size)] * len(ex.question.split(' '))
+
                 # override original context with entities added to it
                 examples[n].context = self.add_entities_to_text(ex.context, features)
