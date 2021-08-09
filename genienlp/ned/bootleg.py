@@ -26,7 +26,6 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-import fnmatch
 import logging
 import os
 
@@ -64,6 +63,10 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
 
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json') as fin:
             self.entityqid2typenames = ujson.load(fin)
+
+        # large print
+        self.entityqid2typenames['Q1548123'] = ['format']
+
         ###
 
         self.ckpt_name = 'bootleg_wiki'
@@ -135,23 +138,6 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
     def disambiguate_mentions(self, config_args):
         run_model(self.args.bootleg_dump_mode, config_args)
 
-    def post_process_bootleg_types(self, title):
-        types = None
-        title = title.lower()
-        for pair in self.wiki2normalized_type:
-            if fnmatch.fnmatch(title, pair[0]):
-                types = pair[1]
-                break
-
-        typeqids = None
-        if types is not None:
-            if isinstance(types, str):
-                typeqids = [self.type_vocab_to_typeqid[types]]
-            elif isinstance(types, (list, tuple)):
-                typeqids = [self.type_vocab_to_typeqid[type_] for type_ in types]
-
-        return typeqids
-
     def collect_features_per_alias(self, alias, all_probs, all_qids):
         type_ids = []
         type_probs = []
@@ -178,44 +164,45 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
                 qids.append(int(qid[1:]))
 
                 # get all types for a qid
-                all_typeqids = []
+                all_types = []
                 if qid in self.entityqid2typenames and self.entityqid2typenames[qid]:
-                    # map entity qid to its type titles on wikidata ; then map titles to their wikidata qids
+                    # map entity qid to its types on wikidata
                     for typename in self.entityqid2typenames[qid]:
-                        if typename in self.type_vocab_to_typeqid:
-                            all_typeqids.append(self.type_vocab_to_typeqid[typename])
+                        all_types.append(typename)
 
-                if len(all_typeqids):
-                    count = 0
-                    # go through all types
-                    for typeqid in all_typeqids:
-                        if typeqid in self.typeqid2id:
-                            # map wikidata types to thingtalk types
-                            if self.args.ned_normalize_types != 'no':
-                                # map qid to title
-                                title = self.typeqid_to_type_vocab[typeqid]
+                if len(all_types) == 0:
+                    continue
 
-                                # process may return multiple types for a single type when it's ambiguous
-                                typeqids = self.post_process_bootleg_types(title)
+                count = 0
+                # go through all types
+                for type in all_types:
+                    if count >= self.args.max_types_per_qid:
+                        break
 
-                                # attempt to normalize qids failed; just use the original type
-                                if typeqids is None:
-                                    if self.args.ned_normalize_types == 'yes':
-                                        typeqids = [typeqid]
-                                    else:
-                                        continue
-                            else:
-                                typeqids = [typeqid]
+                    new_typeqid = None
+                    if self.args.ned_normalize_types != 'no':
+                        new_type = self.normalize_types(type)
+                        if new_type is not None:
+                            new_typeqid = self.type_vocab_to_typeqid[new_type]
 
-                            for typeqid_ in typeqids:
-                                if count >= self.args.max_types_per_qid:
-                                    break
-                                type_id = self.typeqid2id[typeqid_]
-                                if type_id in type_ids:
-                                    continue
-                                type_ids.append(type_id)
-                                type_probs.append(prob)
-                                count += 1
+                    if new_typeqid is None:
+                        if self.args.ned_normalize_types == 'force':
+                            # attempt to normalize type failed; ignore current type
+                            continue
+                        else:
+                            if type not in self.type_vocab_to_typeqid:
+                                continue
+                            # attempt to normalize type failed; use original type
+                            new_typeqid = self.type_vocab_to_typeqid[type]
+
+                    if new_typeqid not in self.typeqid2id:
+                        continue
+                    type_id = self.typeqid2id[new_typeqid]
+                    if type_id in type_ids:
+                        continue
+                    type_ids.append(type_id)
+                    type_probs.append(prob)
+                    count += 1
 
         return type_ids, type_probs, qids
 

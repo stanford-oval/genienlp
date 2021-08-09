@@ -43,7 +43,6 @@ logger = logging.getLogger(__name__)
 class BaseEntityDisambiguator(AbstractEntityDisambiguator):
     def __init__(self, args):
         super().__init__(args)
-        self.alias2type = marisa_trie.RecordTrie("<p")
 
     def process_examples(self, examples, split_path, utterance_field):
         all_token_type_ids, all_token_type_probs, all_token_qids = [], [], []
@@ -56,14 +55,14 @@ class BaseEntityDisambiguator(AbstractEntityDisambiguator):
             tokens = sentence.split(' ')
             length = len(tokens)
 
-            tokens_type_ids = [[0] * self.args.max_features_size for _ in range(length)]
-            tokens_type_probs = [[0] * self.args.max_features_size for _ in range(length)]
-            token_qids = [[-1] * self.args.max_features_size for _ in range(length)]
+            tokens_type_ids = [self.pad_features([], self.max_features_size, 0) for _ in range(length)]
+            tokens_type_probs = [self.pad_features([], self.max_features_size, 0) for _ in range(length)]
+            token_qids = [self.pad_features([], self.max_features_size, -1) for _ in range(length)]
 
             if 'type_id' in self.args.entity_attributes:
                 tokens_type_ids = self.find_type_ids(tokens, answer)
             if 'type_prob' in self.args.entity_attributes:
-                tokens_type_probs = self.find_type_probs(tokens, 0, self.args.max_features_size)
+                tokens_type_probs = self.find_type_probs(tokens, 0, self.max_features_size)
 
             all_token_type_ids.append(tokens_type_ids)
             all_token_type_probs.append(tokens_type_probs)
@@ -78,6 +77,21 @@ class BaseEntityDisambiguator(AbstractEntityDisambiguator):
     def find_type_probs(self, tokens, default_val, default_size):
         token_freqs = [[default_val] * default_size] * len(tokens)
         return token_freqs
+
+
+class NaiveEntityDisambiguator(BaseEntityDisambiguator):
+    def __init__(self, args):
+        super().__init__(args)
+        self.alias2qids = marisa_trie.RecordTrie("<p").mmap(
+            os.path.join(self.args.database_dir, 'es_material/alias2qids.marisa')
+        )
+        self.qid2typeqid = marisa_trie.RecordTrie("<p").mmap(
+            os.path.join(self.args.database_dir, 'es_material/qid2typeqid.marisa')
+        )
+
+    def find_type_ids(self, tokens, answer=None):
+        tokens_type_ids = self.lookup_ngrams(tokens)
+        return tokens_type_ids
 
     def lookup_ngrams(self, tokens):
         # load nltk lazily
@@ -109,54 +123,32 @@ class BaseEntityDisambiguator(AbstractEntityDisambiguator):
                     qids = self.alias2qids[gram_text]
                     types = []
                     for qid in qids:
-                        typeqid = self.qid2typeqid.get(qid, 'unk')
-                        type_vocab = self.typeqid_to_type_vocab.get(typeqid, None)
-                        if type_vocab:
-                            # normalize types
-                            type_vocab = type_vocab.lower()
-                            for pair in self.wiki2normalized_type:
-                                if fnmatch.fnmatch(type_vocab, pair[0]):
-                                    type_vocab = pair[1]
-                                    break
-
-                            assert type_vocab in self.type_vocab_to_typeqid, f'{type_vocab}, {tokens}'
-                        else:
-                            print(f'{type_vocab}, {tokens}')
+                        if qid not in self.qid2typeqid or self.qid2typeqid[qid] not in self.typeqid_to_type_vocab:
                             continue
+                        typeqid = self.qid2typeqid[qid]
+                        type = self.typeqid_to_type_vocab[typeqid]
+                        new_type = self.normalize_types(type)
+                        assert new_type in self.type_vocab_to_typeqid, f'{new_type}, {tokens}'
+                        types.append(self.typeqid2id[self.type_vocab_to_typeqid[new_type]])
 
-                        types.append(self.type_vocab_to_typeqid[type_vocab])
+                    padded_type_ids = self.pad_features(types, self.max_features_size, -1)
 
-                    padded_types = self.pad_features(types, self.max_features_size, -1)
-
-                    used_aliases.append((padded_types, start, end))
+                    used_aliases.append((padded_type_ids, start, end))
 
         for type_ids, beg, end in used_aliases:
             tokens_type_ids[beg:end] = type_ids * (end - beg)
 
         return tokens_type_ids
 
-    def lookup(self, tokens):
-        tokens_type_ids = self.lookup_ngrams(tokens)
-        return tokens_type_ids
-
-
-class NaiveEntityDisambiguator(BaseEntityDisambiguator):
-    def __init__(self, args):
-        super().__init__(args)
-        self.alias2type = marisa_trie.RecordTrie("<p").mmap(
-            os.path.join(self.args.database_dir, 'es_material/alias2typeqid.marisa')
-        )
-
-    def find_type_ids(self, tokens, answer=None):
-        tokens_type_ids = self.lookup(tokens)
-        return tokens_type_ids
-
 
 class EntityOracleEntityDisambiguator(BaseEntityDisambiguator):
     def __init__(self, args):
         super().__init__(args)
-        self.alias2type = marisa_trie.RecordTrie("<p").mmap(
-            os.path.join(self.args.database_dir, 'es_material/alias2typeqid.marisa')
+        self.alias2qids = marisa_trie.RecordTrie(f"<{'p'*5}").mmap(
+            os.path.join(self.args.database_dir, 'es_material/alias2qids.marisa')
+        )
+        self.qid2typeqid = marisa_trie.RecordTrie("<p").mmap(
+            os.path.join(self.args.database_dir, 'es_material/qid2typeqid.marisa')
         )
 
     def find_type_ids(self, tokens, answer):
@@ -169,7 +161,7 @@ class EntityOracleEntityDisambiguator(BaseEntityDisambiguator):
         tokens_text = " ".join(tokens)
 
         for ent in entities:
-            if ent not in self.alias2type:
+            if ent not in self.alias2qids:
                 continue
             ent_num_tokens = len(ent.split(' '))
             idx = tokens_text.index(ent)
@@ -187,7 +179,7 @@ class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
     def find_type_ids(self, tokens, answer):
         entity2type = self.collect_answer_entity_types(tokens, answer)
 
-        tokens_type_ids = [[0] * self.args.max_features_size for _ in range(len(tokens))]
+        tokens_type_ids = [[0] * self.max_features_size for _ in range(len(tokens))]
         tokens_text = " ".join(tokens)
 
         for ent, type in entity2type.items():
@@ -202,7 +194,7 @@ class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
 
             typeqid = self.type_vocab_to_typeqid[type]
             type_id = self.typeqid2id[typeqid]
-            type_id = self.pad_features([type_id], self.args.max_features_size, 0)
+            type_id = self.pad_features([type_id], self.max_features_size, 0)
 
             tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [type_id] * ent_num_tokens
 
@@ -225,9 +217,6 @@ class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
             # ... ^^org.schema.Book:Person ( " james clavell " ) ...
             # ... contains~ ( [award|genre|...] , " booker " ) ...
             # ... inLanguage =~ " persian " ...
-
-            # missing syntax from current code
-            #  ... @com.spotify . song ( ) filter in_array~ ( id , [ " piano man " , " uptown girl " ] ) ) [ 1 : 2 ]  ...
 
             # assume first syntax
             idx = answer.index('" ' + ent + ' "')
@@ -270,7 +259,12 @@ class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
                     type = tokens_before_entity[-5]
 
             elif tokens_before_entity[-1] in [',', '[']:
-                type = 'keywords'
+                if tokens_before_entity[-2] in ['award']:
+                    type = tokens_before_entity[-2]
+                elif tokens_before_entity[-2] == ',':
+                    type = tokens_before_entity[-3]
+                else:
+                    type = 'keywords'
 
             if type:
                 # normalize thingtalk types

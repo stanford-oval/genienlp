@@ -74,6 +74,7 @@ BANNED_PHRASES = set(
         'selections',
         'pages',
         'isbn',
+        'isbns',
         'isbn numbers',
         'average rating',
         'count',
@@ -232,6 +233,7 @@ BANNED_PHRASES = set(
         'home assistant',
         'key words',
         'keywords',
+        'list of books',
     ]
 )
 
@@ -295,7 +297,9 @@ def init_ned_model(args, ned_retrieve_method=None):
         elif ned_retrieve_method == 'type-oracle':
             ned_retrieve_method = 'TypeOracleEntityDisambiguator'
         else:
-            raise ValueError('Invalid ned_retrieve_method. Please choose between bootleg, naive, entity-oracle, and type-oracle')
+            raise ValueError(
+                'Invalid ned_retrieve_method. Please choose between bootleg, naive, entity-oracle, and type-oracle'
+            )
         ned_class = getattr(ned, ned_retrieve_method)
         ned_model = ned_class(args)
     return ned_model
