@@ -60,7 +60,7 @@ def main(args):
         extracted_metrics = [
             {
                 'name': split + '-' + key,
-                'numberValue': val / 100,
+                'numberValue': val,
                 'format': "PERCENTAGE",
             }
             for key, val in list(metrics.items())[:max_size]
