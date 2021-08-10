@@ -69,8 +69,7 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
 
         ###
 
-        self.ckpt_name = 'bootleg_wiki'
-        self.model_ckpt_path = os.path.join(self.model_dir, self.ckpt_name + '.pth')
+        self.model_ckpt_path = os.path.join(self.model_dir, 'bootleg_wiki.pth')
 
         self.fixed_overrides = [
             # emmental configs
@@ -237,7 +236,7 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
 
         file_name = os.path.basename(split_path.rsplit('.', 1)[0])
 
-        with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/{self.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
+        with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/bootleg_wiki/bootleg_labels.jsonl', 'r') as fin:
             for i, line in enumerate(fin):
                 if i >= self.args.subsample:
                     break

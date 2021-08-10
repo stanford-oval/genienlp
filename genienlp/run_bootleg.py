@@ -258,7 +258,7 @@ def bootleg_dump_entities(args, logger):
 
         # unmerge bootleg dumped labels
         line_number = 0
-        with open(f'{args.bootleg_output_dir}/combined_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
+        with open(f'{args.bootleg_output_dir}/combined_bootleg/bootleg_wiki/bootleg_labels.jsonl', 'r') as fin:
 
             # sort output lines first to align with input (required for bootleg >=1.0.0)
             all_lines = fin.readlines()
@@ -266,7 +266,7 @@ def bootleg_dump_entities(args, logger):
             all_lines = list(zip(*sorted(zip(all_sent_ids, all_lines), key=lambda item: item[0])))[1]
 
             for i, split in enumerate(args.bootleg_data_splits):
-                output_path = f'{args.bootleg_output_dir}/{split}_bootleg/{bootleg.ckpt_name}'
+                output_path = f'{args.bootleg_output_dir}/{split}_bootleg/bootleg_wiki'
                 os.makedirs(output_path, exist_ok=True)
                 output_file = open(os.path.join(output_path, 'bootleg_labels.jsonl'), 'w')
                 split_size = len(task_all_examples[i])

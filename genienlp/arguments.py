@@ -469,7 +469,7 @@ def parse_argv(parser):
     parser.add_argument(
         '--ned_retrieve_method',
         default='bootleg',
-        choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'],
+        choices=['naive', 'entity-oracle', 'type-oracle', 'entity-type-oracle', 'bootleg'],
         type=str,
         help='how to retrieve types for entities',
     )
