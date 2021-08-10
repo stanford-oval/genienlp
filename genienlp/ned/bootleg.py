@@ -165,6 +165,12 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
 
                 # get all types for a qid
                 all_types = []
+                if 'books' in self.args.ned_domains:
+                    if alias in ['houghton mifflin', 'ciudad de buenos aires']:
+                        all_types = ['award']
+                    elif alias in ['blanche', 'biblioteca breve', '3rd edition']:
+                        all_types = ['version, edition, or translation']
+
                 if qid in self.entityqid2typenames and self.entityqid2typenames[qid]:
                     # map entity qid to its types on wikidata
                     for typename in self.entityqid2typenames[qid]:
