@@ -240,7 +240,7 @@ class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
                 if tokens_before_entity[-2] in ['id', 'value']:
                     # travers previous tokens until find filter
                     i = -3
-                    while tokens_before_entity[i] != 'filter' and i - 3 > -len(tokens_before_entity):
+                    while tokens_before_entity[i] != 'filter' and -(i - 3) < len(tokens_before_entity):
                         i -= 1
                     type = tokens_before_entity[i - 3]
                 else:
@@ -258,11 +258,15 @@ class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
                 ):
                     type = tokens_before_entity[-5]
 
-            elif tokens_before_entity[-1] in [',', '[']:
-                if tokens_before_entity[-2] in ['award']:
-                    type = tokens_before_entity[-2]
-                elif tokens_before_entity[-2] == ',':
-                    type = tokens_before_entity[-3]
+            elif tokens_before_entity[-1] == ',':
+                # traver se back until reach beginning of brackets
+                i = -2
+                while tokens_before_entity[i] != '[' and -(i - 2) < len(tokens_before_entity):
+                    i -= 1
+                if tokens_before_entity[i - 1] in ['award']:
+                    type = tokens_before_entity[i - 1]
+                elif tokens_before_entity[i - 1] == ',':
+                    type = tokens_before_entity[i - 2]
                 else:
                     type = 'keywords'
 
