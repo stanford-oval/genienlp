@@ -711,6 +711,7 @@
     ],
     "language": [
       "language",
+      "inlanguage",
       "iso_lang_code",
       "modern language",
       "l language"
