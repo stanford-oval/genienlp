@@ -80,7 +80,6 @@ class AbstractEntityDisambiguator(object):
 
         self.unk_id = 0
         self.unk_type = self.id2typeqid[self.unk_id]
-        self.ckpt_name = None
 
     def update_wiki2normalized_type(self):
         matches, inclusions = [], []
@@ -102,7 +101,6 @@ class AbstractEntityDisambiguator(object):
             if fnmatch.fnmatch(type, pair[0]):
                 norm_type = pair[1]
                 break
-
         return norm_type
 
     def process_examples(self, examples, split_path, utterance_field):
