@@ -26,12 +26,12 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-import fnmatch
 import logging
 import os
 import re
 
 import marisa_trie
+import ujson
 
 from ..data_utils.almond_utils import quoted_pattern_with_space
 from ..ned.ned_utils import has_overlap, is_banned, normalize_text
@@ -82,7 +82,7 @@ class BaseEntityDisambiguator(AbstractEntityDisambiguator):
 class NaiveEntityDisambiguator(BaseEntityDisambiguator):
     def __init__(self, args):
         super().__init__(args)
-        self.alias2qids = marisa_trie.RecordTrie("<p").mmap(
+        self.alias2qids = marisa_trie.RecordTrie(f"<{'p'*5}").mmap(
             os.path.join(self.args.database_dir, 'es_material/alias2qids.marisa')
         )
         self.qid2typeqid = marisa_trie.RecordTrie("<p").mmap(
@@ -172,17 +172,20 @@ class EntityOracleEntityDisambiguator(BaseEntityDisambiguator):
         return tokens_type_ids
 
 
-class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
+class EntityAndTypeOracleEntityDisambiguator(BaseEntityDisambiguator):
     def __init__(self, args):
         super().__init__(args)
 
-    def find_type_ids(self, tokens, answer):
+    def find_type_ids(self, tokens, answer, aliases=None):
         entity2type = self.collect_answer_entity_types(tokens, answer)
 
         tokens_type_ids = [[0] * self.max_features_size for _ in range(len(tokens))]
         tokens_text = " ".join(tokens)
 
         for ent, type in entity2type.items():
+            # remove entities that were not detected by bootleg
+            if aliases and not any(ent == alias for alias in aliases):
+                continue
             ent_num_tokens = len(ent.split(' '))
             if ent in tokens_text:
                 idx = tokens_text.index(ent)
@@ -218,7 +221,6 @@ class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
             # ... contains~ ( [award|genre|...] , " booker " ) ...
             # ... inLanguage =~ " persian " ...
 
-            # assume first syntax
             idx = answer.index('" ' + ent + ' "')
 
             type = None
@@ -258,33 +260,66 @@ class TypeOracleEntityDisambiguator(BaseEntityDisambiguator):
                 ):
                     type = tokens_before_entity[-5]
 
-            elif tokens_before_entity[-1] == ',':
-                # traver se back until reach beginning of brackets
-                i = -2
+            elif tokens_before_entity[-1] == ',' and tokens_before_entity[-2] in ['award']:
+                type = 'award'
+
+            elif tokens_before_entity[-1] in [',', '[']:
+                # traverse back until reach beginning of list
+                i = -1
                 while tokens_before_entity[i] != '[' and -(i - 2) < len(tokens_before_entity):
                     i -= 1
-                if tokens_before_entity[i - 1] in ['award']:
-                    type = tokens_before_entity[i - 1]
-                elif tokens_before_entity[i - 1] == ',':
+                if tokens_before_entity[i - 1] == ',':
                     type = tokens_before_entity[i - 2]
                 else:
                     type = 'keywords'
 
             if type:
-                # normalize thingtalk types
-                type = type.lower()
-                for pair in self.wiki2normalized_type:
-                    if fnmatch.fnmatch(type, pair[0]):
-                        type = pair[1]
-                        break
-
-                assert type in self.type_vocab_to_typeqid, f'{type}, {answer}'
+                norm_type = self.normalize_types(type)
+                assert norm_type in self.type_vocab_to_typeqid, f'{norm_type}, {answer}'
             else:
                 print(f'{type}, {answer}')
                 continue
 
-            entity2type[ent] = type
+            entity2type[ent] = norm_type
 
-            self.all_schema_types.add(type)
+            self.all_schema_types.add(norm_type)
 
         return entity2type
+
+
+class TypeOracleEntityDisambiguator(EntityAndTypeOracleEntityDisambiguator):
+    def __init__(self, args):
+        super().__init__(args)
+
+    def process_examples(self, examples, split_path, utterance_field):
+        all_token_type_ids, all_token_type_probs, all_token_qids = [], [], []
+
+        file_name = os.path.basename(split_path.rsplit('.', 1)[0])
+        with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/bootleg_wiki/bootleg_labels.jsonl', 'r') as fin:
+            for i, line in enumerate(fin):
+                if i >= self.args.subsample:
+                    break
+                bootleg_aliases = ujson.loads(line)['aliases']
+                ex = examples[i]
+                if utterance_field == 'question':
+                    sentence = ex.question
+                else:
+                    sentence = ex.context
+                answer = ex.answer
+                tokens = sentence.split(' ')
+                length = len(tokens)
+
+                tokens_type_ids = [self.pad_features([], self.max_features_size, 0) for _ in range(length)]
+                tokens_type_probs = [self.pad_features([], self.max_features_size, 0) for _ in range(length)]
+                token_qids = [self.pad_features([], self.max_features_size, -1) for _ in range(length)]
+
+                if 'type_id' in self.args.entity_attributes:
+                    tokens_type_ids = self.find_type_ids(tokens, answer, bootleg_aliases)
+                if 'type_prob' in self.args.entity_attributes:
+                    tokens_type_probs = self.find_type_probs(tokens, 0, self.max_features_size)
+
+                all_token_type_ids.append(tokens_type_ids)
+                all_token_type_probs.append(tokens_type_probs)
+                all_token_qids.append(token_qids)
+
+        self.replace_features_inplace(examples, all_token_type_ids, all_token_type_probs, all_token_qids, utterance_field)

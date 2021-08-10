@@ -296,9 +296,11 @@ def init_ned_model(args, ned_retrieve_method=None):
             ned_retrieve_method = 'EntityOracleEntityDisambiguator'
         elif ned_retrieve_method == 'type-oracle':
             ned_retrieve_method = 'TypeOracleEntityDisambiguator'
+        elif ned_retrieve_method == 'entity-type-oracle':
+            ned_retrieve_method = 'EntityAndTypeOracleEntityDisambiguator'
         else:
             raise ValueError(
-                'Invalid ned_retrieve_method. Please choose between bootleg, naive, entity-oracle, and type-oracle'
+                'Invalid ned_retrieve_method. Please choose between bootleg, naive, entity-oracle, type-oracle, and entity-type-oracle'
             )
         ned_class = getattr(ned, ned_retrieve_method)
         ned_model = ned_class(args)
