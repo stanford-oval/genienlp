@@ -271,7 +271,10 @@ def init(args):
     devices = get_devices()
     device = devices[0]  # server only runs on a single device
 
-    ned_model = init_ned_model(args, 'bootleg-annotator')
+    if args.ned_retrieve_method == 'bootleg':
+        ned_model = init_ned_model(args, 'bootleg-annotator')
+    else:
+        ned_model = init_ned_model(args)
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
