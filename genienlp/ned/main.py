@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 class BaseEntityDisambiguator(AbstractEntityDisambiguator):
     def __init__(self, args):
         super().__init__(args)
+        self.alias2qids = marisa_trie.RecordTrie(f"<{'p'*5}")
+        self.qid2typeqid = marisa_trie.RecordTrie("<p")
 
     def process_examples(self, examples, split_path, utterance_field):
         all_token_type_ids, all_token_type_probs, all_token_qids = [], [], []
@@ -77,6 +79,24 @@ class BaseEntityDisambiguator(AbstractEntityDisambiguator):
     def find_type_probs(self, tokens, default_val, default_size):
         token_freqs = [[default_val] * default_size] * len(tokens)
         return token_freqs
+
+    def process_types_for_alias(self, alias):
+        qids = self.alias2qids[alias]
+        if isinstance(qids, list):
+            assert len(qids) == 1
+            qids = qids[0]
+        types = []
+        for qid in qids:
+            qid = qid.decode('utf-8')
+            if qid not in self.qid2typeqid or self.qid2typeqid[qid] not in self.typeqid_to_type_vocab:
+                continue
+            typeqid = self.qid2typeqid[qid]
+            type = self.typeqid_to_type_vocab[typeqid]
+            new_type = self.normalize_types(type)
+            assert new_type in self.type_vocab_to_typeqid, f'{new_type}, {alias}'
+            types.append(self.typeqid2id[self.type_vocab_to_typeqid[new_type]])
+
+        return self.pad_features(types, self.max_features_size, 0)
 
 
 class NaiveEntityDisambiguator(BaseEntityDisambiguator):
@@ -115,28 +135,17 @@ class NaiveEntityDisambiguator(BaseEntityDisambiguator):
             for gram in ngrams:
                 start += 1
                 end += 1
-                gram_text = normalize_text(" ".join(gram))
+                alias = normalize_text(" ".join(gram))
 
-                if not is_banned(gram_text) and gram_text not in verbs and gram_text in self.alias2type:
+                if not is_banned(alias) and alias not in verbs and alias in self.alias2qids:
                     if has_overlap(start, end, used_aliases):
                         continue
-                    qids = self.alias2qids[gram_text]
-                    types = []
-                    for qid in qids:
-                        if qid not in self.qid2typeqid or self.qid2typeqid[qid] not in self.typeqid_to_type_vocab:
-                            continue
-                        typeqid = self.qid2typeqid[qid]
-                        type = self.typeqid_to_type_vocab[typeqid]
-                        new_type = self.normalize_types(type)
-                        assert new_type in self.type_vocab_to_typeqid, f'{new_type}, {tokens}'
-                        types.append(self.typeqid2id[self.type_vocab_to_typeqid[new_type]])
 
-                    padded_type_ids = self.pad_features(types, self.max_features_size, -1)
-
+                    padded_type_ids = self.process_types_for_alias(alias)
                     used_aliases.append((padded_type_ids, start, end))
 
         for type_ids, beg, end in used_aliases:
-            tokens_type_ids[beg:end] = type_ids * (end - beg)
+            tokens_type_ids[beg:end] = [type_ids] * (end - beg)
 
         return tokens_type_ids
 
@@ -166,8 +175,8 @@ class EntityOracleEntityDisambiguator(BaseEntityDisambiguator):
             ent_num_tokens = len(ent.split(' '))
             idx = tokens_text.index(ent)
             token_pos = len(tokens_text[:idx].strip().split(' '))
-            type = self.typeqid2id.get(self.alias2type[ent], self.unk_id)
-            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = [[type] * self.max_features_size] * ent_num_tokens
+            padded_type_ids = self.process_types_for_alias(ent)
+            tokens_type_ids[token_pos : token_pos + ent_num_tokens] = padded_type_ids
 
         return tokens_type_ids
 

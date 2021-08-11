@@ -30,7 +30,7 @@ if __name__ == '__main__':
     args.ned_normalize_types = ned_normalize_types
     args.bootleg_prob_threshold = 0.01
     args.max_types_per_qid = 2
-    args.max_qids_per_entity = 1
+    args.max_qids_per_entity = 2
 
     args.bootleg_output_dir = 'results_temp'
     args.embeddings = '.embeddings'
