@@ -900,11 +900,11 @@ def load_config_json(args):
                 setattr(args, 'entity_attributes', args.ned_features)
             else:
                 setattr(args, 'entity_attributes', [])
-        if args.bootleg_post_process_types is None:
-            if hasattr(args, 'ned_normalize_types') and args.ned_normalize_types in ['yes', 'force']:
-                setattr(args, 'bootleg_post_process_types', True)
+        if args.ned_normalize_types is None:
+            if hasattr(args, 'bootleg_post_process_types') and args.bootleg_post_process_types:
+                setattr(args, 'ned_normalize_types', 'yes')
         else:
-            setattr(args, 'bootleg_post_process_types', False)
+            setattr(args, 'ned_normalize_types', 'no')
 
         args.dropout_ratio = 0.0
         args.verbose = False
