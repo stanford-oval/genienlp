@@ -203,8 +203,12 @@ class Server(object):
                             response.append({'candidates': candidates})
                     else:
                         response = [{'answer': p[0]} for p in output.predictions]
-        except RuntimeError:
-            exit(100)
+        except RuntimeError as e:
+            # catch all cuda errors and exit
+            if 'CUDA error' in str(e):
+                exit(100)
+            else:
+                raise e
 
         return response
 
