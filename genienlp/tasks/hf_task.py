@@ -255,7 +255,9 @@ class FEW_NERD(HFTask):
 
     def get_splits(self, root, **kwargs):
         kwargs['config_name'] = 'supervised'
-        splits, paths = HFDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
+        splits, paths = HFDataset.return_splits(
+            name="nbroad/" + self.name, path=root, make_example=self._make_example, **kwargs
+        )
         for split in splits:
             if split:
                 split.is_classification = True
