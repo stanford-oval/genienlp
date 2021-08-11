@@ -270,6 +270,34 @@ def computeF1(outputs, targets):
     return sum(outs) / len(outputs) * 100
 
 
+def computeNERF1(outputs, targets):
+    greedy_processed = [pred.split() for pred in outputs]
+    answer_processed = [ans[0].split() for ans in targets]
+
+    ner_f1 = seq_metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed) * 100
+
+    return ner_f1
+
+
+def computeIOB1NERF1(outputs, targets):
+    greedy_processed = [pred.split() for pred in outputs]
+    answer_processed = [ans[0].split() for ans in targets]
+
+    def convert_IOB2_to_IOB1(labels):
+        cur_category = None
+        for n, label in enumerate(labels):
+            if label[0] == "B" and label[2:] != cur_category:
+                labels[n] = "I" + label[1:]
+            cur_category = label[2:]
+
+    convert_IOB2_to_IOB1(greedy_processed)
+    convert_IOB2_to_IOB1(answer_processed)
+    ner_f1 = (
+        seq_metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed, mode='strict', scheme=seq_scheme.IOB1) * 100
+    )
+    return ner_f1
+
+
 def computeEM(outputs, targets):
     outs = [metric_max_over_ground_truths(exact_match, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
@@ -597,33 +625,14 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
         metric_values.append(f1)
 
     if 'ner_f1_IOB1' in requested_metrics:
-        greedy_processed = [pred.split() for pred in greedy]
-        answer_processed = [ans[0].split() for ans in answer]
-
-        def convert_IOB2_to_IOB1(labels):
-            cur_category = None
-            for n, label in enumerate(labels):
-                if label[0] == "B" and label[2:] != cur_category:
-                    labels[n] = "I" + label[1:]
-                cur_category = label[2:]
-
-        convert_IOB2_to_IOB1(greedy_processed)
-        convert_IOB2_to_IOB1(answer_processed)
-        f1 = (
-            seq_metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed, mode='strict', scheme=seq_scheme.IOB1) * 100
-        )
-
+        ner_f1 = computeIOB1NERF1(greedy, answer)
         metric_keys.append('ner_f1_IOB1')
-        metric_values.append(f1)
+        metric_values.append(ner_f1)
 
     if 'ner_f1' in requested_metrics:
-        greedy_processed = [pred.split() for pred in greedy]
-        answer_processed = [ans[0].split() for ans in answer]
-
-        f1 = seq_metrics.f1_score(y_pred=greedy_processed, y_true=answer_processed) * 100
-
+        ner_f1 = computeNERF1(greedy, answer)
         metric_keys.append('ner_f1')
-        metric_values.append(f1)
+        metric_values.append(ner_f1)
 
     norm_greedy = [normalize_text(g) for g in greedy]
     norm_answer = [[normalize_text(a) for a in al] for al in answer]
