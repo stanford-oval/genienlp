@@ -67,28 +67,28 @@ class HFDataset(CQA):
         super().__init__(examples, **kwargs)
 
     @classmethod
-    def return_splits(cls, name, root='.data', train='train', validation='validation', test='test', **kwargs):
+    def return_splits(cls, name, path='.data', train='train', validation='validation', test='test', **kwargs):
         config_name = kwargs.pop('config_name', None)
         # download datasets and cache them
         train_data, validation_data, test_data = None, None, None
         train_path, validation_path, test_path = None, None, None
         if train:
-            train_data = load_dataset(path=name, name=config_name, split='train', cache_dir=root)
+            train_data = load_dataset(path=name, name=config_name, split='train', cache_dir=path)
             train_path = train_data.cache_files[0]['filename']
         if validation:
-            validation_data = load_dataset(path=name, name=config_name, split=validation, cache_dir=root)
+            validation_data = load_dataset(path=name, name=config_name, split=validation, cache_dir=path)
             validation_path = validation_data.cache_files[0]['filename']
         if test:
-            test_data = load_dataset(path=name, name=config_name, split='test', cache_dir=root)
+            test_data = load_dataset(path=name, name=config_name, split='test', cache_dir=path)
             test_path = test_data.cache_files[0]['filename']
 
         if kwargs.pop('hf_test_overfit', False):
             # override validation/ test data with train data
             if validation:
-                validation_data = load_dataset(path=name, name=config_name, split='train', cache_dir=root)
+                validation_data = load_dataset(path=name, name=config_name, split='train', cache_dir=path)
                 validation_path = validation_data.cache_files[0]['filename']
             if test:
-                test_data = load_dataset(path=name, name=config_name, split='train', cache_dir=root)
+                test_data = load_dataset(path=name, name=config_name, split='train', cache_dir=path)
                 test_path = test_data.cache_files[0]['filename']
 
         train_data = None if train is None else cls(train_data, **kwargs)
