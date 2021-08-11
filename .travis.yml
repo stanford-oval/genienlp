@@ -51,7 +51,10 @@ jobs:
       name: "KF server tests"
       script:
         - bash ./tests/test_kfserver.sh
-
+    -
+      name: "CUDA tests"
+      script:
+        - bash ./tests/test_cuda.sh
 
 deploy:
   provider: pypi
