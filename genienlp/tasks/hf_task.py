@@ -238,6 +238,13 @@ class FEW_NERD(HFTask):
 
     def _make_example(self, ex, **kwargs):
         example_id = ex['id']
+
+        # avoid long sequences
+        # only 1 example which is in the test test is longer than 200 words
+        ex['tokens'] = ex['tokens'][:200]
+        ex['course_tags'] = ex['course_tags'][:200]
+        ex['fine_tags'] = ex['fine_tags'][:200]
+
         context = ' '.join(ex['tokens'])
         question = ''
 
