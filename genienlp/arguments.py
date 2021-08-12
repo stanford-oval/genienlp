@@ -308,13 +308,17 @@ def parse_argv(parser):
         help='alternative momentum for Adam (only when not using transformer scheduler), and RAdam',
     )
     parser.add_argument(
-        '--optimizer', default='adam', choices=['adam', 'adamw', 'sgd', 'radam'], type=str, help='optimizer to use'
+        '--optimizer',
+        default='adam',
+        choices=['adam', 'adamw', 'adafactor', 'radam', 'sgd'],
+        type=str,
+        help='optimizer to use',
     )
     parser.add_argument(
         '--lr_schedule',
         type=str,
         default='transformer',
-        choices=['transformer', 'constant', 'linear', 'sgd', 'cosine'],
+        choices=['transformer', 'constant', 'linear', 'sgd', 'cosine', 'multi_linear_cosine'],
         help='The learning rate strategy. All of them can be used with or without warmup.',
     )
     parser.add_argument(

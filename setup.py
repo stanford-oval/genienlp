@@ -64,6 +64,7 @@ setuptools.setup(
         'nltk~=3.4',
         'ujson~=4.1',
         'pathos==0.2.8',
+        'pytorch-lightning-spells==0.0.3',
         # for kf:
         'kfserving>=0.5.0',
         # for NED:
