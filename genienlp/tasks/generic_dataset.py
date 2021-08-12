@@ -1845,8 +1845,6 @@ class JSON(CQA):
 
 
 class CrossNERDataset(CQA):
-    is_classification = True
-
     def __init__(self, data, *, make_example, **kwargs):
 
         subsample = kwargs.pop('subsample')
@@ -1933,7 +1931,6 @@ class CrossNERDataset(CQA):
 
 class OODDataset(CQA):
     name = 'ood'
-    is_sequence_classification = True
 
     def __init__(self, path, lower=False, cached_path=None, skip_cache=False, **kwargs):
         examples = []

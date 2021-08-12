@@ -133,9 +133,6 @@ class CONLLNER(HFTask):
     def get_splits(self, root, **kwargs):
         kwargs['hf_test_overfit'] = self.args.hf_test_overfit
         splits, paths = HFDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
-        for split in splits:
-            if split:
-                split.is_classification = True
         return splits, paths
 
 
@@ -268,7 +265,4 @@ class FEW_NERD(HFTask):
         splits, paths = HFDataset.return_splits(
             name="nbroad/" + self.name, path=root, make_example=self._make_example, **kwargs
         )
-        for split in splits:
-            if split:
-                split.is_classification = True
         return splits, paths

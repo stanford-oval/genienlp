@@ -463,7 +463,34 @@ class TransformerNumericalizer(object):
 
         return num_prefix_special_tokens, num_suffix_special_tokens
 
-    def process_classification_labels(self, all_context_plus_questions, all_answers):
+    def process_sequence_classification_labels(self, all_answers):
+        answers = [
+            [
+                int(ans),
+            ]
+            for ans in all_answers
+        ]
+
+        batch_decoder_numerical = []
+        if self.decoder_vocab:
+            for i in range(len(answers)):
+                batch_decoder_numerical.append(self.decoder_vocab.encode(answers[i]))
+        else:
+            batch_decoder_numerical = [[]] * len(answers)
+
+        tokenized_answers = []
+        for i in range(len(answers)):
+            tokenized_answers.append(
+                SequentialField(
+                    value=answers[i],
+                    length=len(answers[i]),
+                    limited=batch_decoder_numerical[i],
+                    feature=None,
+                )
+            )
+        return answers
+
+    def process_token_classification_labels(self, all_context_plus_questions, all_answers):
         def tokenize_and_align_labels(all_sequences, all_sequences_wo_types, all_labels):
             tokenized_inputs = self._tokenizer.batch_encode_plus(
                 all_sequences,
