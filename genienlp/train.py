@@ -35,21 +35,15 @@ import math
 import os
 import time
 from copy import deepcopy
-from functools import partial
 from pprint import pformat
 
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from transformers import (
-    AdamW,
-    get_constant_schedule_with_warmup,
-    get_cosine_schedule_with_warmup,
-    get_linear_schedule_with_warmup,
-)
 
 from . import arguments, models
 from .arguments import save_args
+from .model_utils.optimizer import init_opt
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
 from .ned.ned_utils import init_ned_model
@@ -210,7 +204,6 @@ def update_fraction(args, task_iteration):
         next_fraction = args.curriculum_rate * task_iteration
     elif args.curriculum_strategy == 'exp':
         next_fraction = args.curriculum_rate * np.exp(task_iteration)
-
     fraction = min(args.curriculum_max_frac, next_fraction)
 
     return fraction
@@ -631,66 +624,6 @@ def train(
             )
 
         logger.info(f'{args.pretrained_model} model is saved to {args.save} without any fine-tuning')
-
-
-def get_transformer_learning_rate(i, *, dimension, warmup):
-    i += 1
-    return 1.0 / math.sqrt(dimension) * min(1 / math.sqrt(i), i / (warmup * math.sqrt(warmup)))
-
-
-def get_sgd_learning_rate(i, *, warmup):
-    i += 1
-    return min(math.sqrt(warmup) / math.sqrt(i), i / warmup)
-
-
-def init_opt(args, model, logger):
-    if args.optimizer == 'adam':
-        # Adam with transformer schedule has a different set of default hyperparameters:
-        if args.lr_schedule == 'transformer':
-            opt = torch.optim.Adam(
-                model.params, lr=args.lr_multiply, betas=(0.9, 0.98), eps=1e-9, weight_decay=args.weight_decay
-            )
-        else:
-            opt = torch.optim.Adam(
-                model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay
-            )
-    elif args.optimizer == 'adamw':
-        opt = AdamW(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay)
-    elif args.optimizer == 'radam':
-        import radam
-
-        if args.warmup > 1:
-            logger.warning('With RAdam optimizer, warmup is never applied')
-        opt = radam.RAdam(model.params, lr=args.lr_multiply, betas=(args.beta0, 0.999), weight_decay=args.weight_decay)
-    else:
-        assert args.optimizer == 'sgd'
-        opt = torch.optim.SGD(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay)
-
-    if args.lr_schedule == 'transformer':
-        lr_lambda = partial(get_transformer_learning_rate, dimension=args.dimension, warmup=args.warmup)
-        scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
-    elif args.lr_schedule == 'constant':
-        scheduler = get_constant_schedule_with_warmup(opt, num_warmup_steps=args.warmup)
-    elif args.lr_schedule == 'linear':
-        scheduler = get_linear_schedule_with_warmup(
-            opt,
-            num_training_steps=sum(args.train_iterations) // args.gradient_accumulation_steps,
-            num_warmup_steps=args.warmup,
-        )
-    elif args.lr_schedule == 'cosine':
-        scheduler = get_cosine_schedule_with_warmup(
-            opt,
-            num_training_steps=sum(args.train_iterations) // args.gradient_accumulation_steps,
-            num_warmup_steps=args.warmup,
-            num_cycles=0.5,
-        )
-    elif args.lr_schedule == 'sgd':
-        lr_lambda = partial(get_sgd_learning_rate, warmup=args.warmup)
-        scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
-    else:
-        raise ValueError('Invalid learning rate scheduler.')
-
-    return opt, scheduler
 
 
 def main(args):
