@@ -377,6 +377,7 @@ class CrossNERTask(BaseAlmondTask):
         )
 
     def get_splits(self, root, **kwargs):
+        kwargs['crossner_domains'] = self.args.crossner_domains
         return CrossNERDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
 
 

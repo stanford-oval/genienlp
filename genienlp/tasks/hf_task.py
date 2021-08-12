@@ -93,6 +93,7 @@ class AmbigQA(HFTask):
         )
 
     def get_splits(self, root, **kwargs):
+        kwargs['hf_test_overfit'] = self.args.hf_test_overfit
         return HFDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
 
 
@@ -130,6 +131,7 @@ class CONLLNER(HFTask):
         )
 
     def get_splits(self, root, **kwargs):
+        kwargs['hf_test_overfit'] = self.args.hf_test_overfit
         splits, paths = HFDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
         for split in splits:
             if split:
@@ -261,7 +263,8 @@ class FEW_NERD(HFTask):
         )
 
     def get_splits(self, root, **kwargs):
-        kwargs['config_name'] = 'supervised'
+        kwargs['config_name'] = self.args.few_nerd_setting
+        kwargs['hf_test_overfit'] = self.args.hf_test_overfit
         splits, paths = HFDataset.return_splits(
             name="nbroad/" + self.name, path=root, make_example=self._make_example, **kwargs
         )

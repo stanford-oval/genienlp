@@ -41,11 +41,10 @@ class BaseTask(object):
 
     def __init__(self, name, args):
         self.name = name
+        self.args = args
         self._metrics = ['em', 'nem', 'nf1']
         # special task-specific tokens that should not be subword tokenized
         self.special_tokens = set()
-        self.override_context = args.override_context
-        self.override_question = args.override_question
 
     @property
     def default_question(self):
@@ -77,10 +76,10 @@ class BaseTask(object):
         return prediction
 
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None):
-        if self.override_context is not None and field_name == 'context':
-            return self.override_context
-        if self.override_question is not None and field_name == 'question':
-            return self.override_question
+        if self.args.override_context is not None and field_name == 'context':
+            return self.args.override_context
+        if self.args.override_question is not None and field_name == 'question':
+            return self.args.override_question
         return sentence
 
     @property

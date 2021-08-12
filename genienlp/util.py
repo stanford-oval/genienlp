@@ -794,6 +794,7 @@ def load_config_json(args):
             'no_separator',
             'num_labels',
             'crossner_domains',
+            'few_nerd_setting',
             'hf_test_overfit',
             'override_valid_metrics',
         ]
@@ -853,6 +854,8 @@ def load_config_json(args):
                 setattr(args, r, [])
             elif r == 'database_type':
                 setattr(args, r, 'json')
+            elif r == 'few_nerd_setting':
+                setattr(args, r, 'supervised')
             elif r == 'att_pooling':
                 setattr(args, r, 'max')
             elif r == 'min_entity_len':

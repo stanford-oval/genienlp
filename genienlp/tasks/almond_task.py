@@ -114,9 +114,9 @@ class BaseAlmondTask(BaseTask):
         return new_prediction
 
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
-        if self.override_context is not None and field_name == 'context':
+        if self.args.override_context is not None and field_name == 'context':
             return self.override_context
-        if self.override_question is not None and field_name == 'question':
+        if self.args.override_question is not None and field_name == 'question':
             return self.override_question
         if not sentence:
             return ''

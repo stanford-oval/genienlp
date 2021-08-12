@@ -1897,7 +1897,6 @@ class CrossNERDataset(CQA):
                 with open(test_path, "r") as fin:
                     test_data = fin.readlines()
 
-            # Uncomment for testing
             if kwargs.pop("hf_test_overfit", False):
                 if validation:
                     validation_path = os.path.join(path, domain, 'train.txt')

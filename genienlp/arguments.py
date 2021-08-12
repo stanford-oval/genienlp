@@ -504,6 +504,13 @@ def parse_argv(parser):
     parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')
     parser.add_argument('--crossner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
     parser.add_argument(
+        '--few_nerd_setting',
+        type=str,
+        default='supervised',
+        choices=['supervised', 'intra', 'inter'],
+        help='experiment setting for few_nerd task',
+    )
+    parser.add_argument(
         '--hf_test_overfit',
         action='store_true',
         help='Debugging flag for hf datasets where validation will be performed on train set',
