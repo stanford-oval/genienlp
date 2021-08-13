@@ -286,7 +286,11 @@ def computeSM(outputs, targets):
 
 def computeBERTScore(outputs, targets, lang):
     bertscore_metric = load_metric("bertscore")
-    return sum(bertscore_metric.compute(predictions=outputs, references=targets, lang=lang)['f1']) / len(outputs) * 100
+    return (
+        sum(bertscore_metric.compute(predictions=outputs, references=targets, lang=lang, use_fast_tokenizer=True)['f1'])
+        / len(outputs)
+        * 100
+    )
 
 
 def computeTER(outputs, targets):
