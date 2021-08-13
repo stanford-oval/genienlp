@@ -62,7 +62,7 @@ class HFDataset(CQA):
             train_data = load_dataset(path=name, name=config_name, split='train', cache_dir=path)
             train_path = train_data.cache_files[0]['filename']
         if validation:
-            validation_data = load_dataset(path=name, name=config_name, split=validation, cache_dir=path)
+            validation_data = load_dataset(path=name, name=config_name, split='validation', cache_dir=path)
             validation_path = validation_data.cache_files[0]['filename']
         if test:
             test_data = load_dataset(path=name, name=config_name, split='test', cache_dir=path)
