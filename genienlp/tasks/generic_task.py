@@ -360,11 +360,12 @@ class CrossNERTask(BaseAlmondTask):
     def metrics(self):
         return ['ner_f1', 'em', 'f1', 'pem']
 
-    def _is_program_field(self, field_name):
-        return field_name == 'answer'
-
+    @property
     def utterance_field(self):
         return 'context'
+
+    def _is_program_field(self, field_name):
+        return field_name == 'answer'
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         example_id = parts[0]

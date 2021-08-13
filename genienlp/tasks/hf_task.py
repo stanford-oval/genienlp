@@ -117,6 +117,7 @@ class CONLLNER(HFTask):
     def metrics(self):
         return ['ner_f1', 'em', 'f1', 'pem']
 
+    @property
     def utterance_field(self):
         return 'context'
 
@@ -232,6 +233,7 @@ class FEW_NERD(HFTask):
     def metrics(self):
         return ['ner_f1', 'em', 'f1', 'pem']
 
+    @property
     def utterance_field(self):
         return 'context'
 
