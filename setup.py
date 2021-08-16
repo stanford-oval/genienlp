@@ -55,7 +55,7 @@ setuptools.setup(
         'num2words>=0.5.10',
         'datasets==1.11.0',
         'seqeval==1.2.2',
-        'transformers==4.9.1',
+        'transformers==4.9.2',
         'sentencepiece==0.1.*',
         'sentence-transformers==2.0.0',
         'mosestokenizer~=1.1',
