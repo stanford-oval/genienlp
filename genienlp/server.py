@@ -162,46 +162,53 @@ class Server(object):
         self.model.add_new_vocab_from_data([task])
         batch = self.numericalize_examples(examples)
 
-        with torch.no_grad():
-            if self.args.calibrator_paths is not None:
-                output = generate_with_model(
-                    self.model,
-                    [batch],
-                    self.numericalizer,
-                    task,
-                    self.args,
-                    output_predictions_only=True,
-                    confidence_estimators=self.confidence_estimators,
-                )
-                response = []
-                if sum(self.args.num_outputs) > 1:
-                    for idx, predictions in enumerate(output.predictions):
-                        candidates = []
-                        for cand in predictions:
-                            candidate = {'answer': cand, 'score': {}}
-                            for e_idx, estimator_scores in enumerate(output.confidence_scores):
-                                candidate['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
-                            candidates.append(candidate)
-                        response.append({'candidates': candidates})
-                else:
-                    for idx, p in enumerate(output.predictions):
-                        instance = {'answer': p[0], 'score': {}}
-                        for e_idx, estimator_scores in enumerate(output.confidence_scores):
-                            instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
-                        response.append(instance)
-            else:
-                output = generate_with_model(
-                    self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True
-                )
-                if sum(self.args.num_outputs) > 1:
+        try:
+            with torch.no_grad():
+                if self.args.calibrator_paths is not None:
+                    output = generate_with_model(
+                        self.model,
+                        [batch],
+                        self.numericalizer,
+                        task,
+                        self.args,
+                        output_predictions_only=True,
+                        confidence_estimators=self.confidence_estimators,
+                    )
                     response = []
-                    for idx, predictions in enumerate(output.predictions):
-                        candidates = []
-                        for cand in predictions:
-                            candidates.append({'answer': cand})
-                        response.append({'candidates': candidates})
+                    if sum(self.args.num_outputs) > 1:
+                        for idx, predictions in enumerate(output.predictions):
+                            candidates = []
+                            for cand in predictions:
+                                candidate = {'answer': cand, 'score': {}}
+                                for e_idx, estimator_scores in enumerate(output.confidence_scores):
+                                    candidate['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
+                                candidates.append(candidate)
+                            response.append({'candidates': candidates})
+                    else:
+                        for idx, p in enumerate(output.predictions):
+                            instance = {'answer': p[0], 'score': {}}
+                            for e_idx, estimator_scores in enumerate(output.confidence_scores):
+                                instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
+                            response.append(instance)
                 else:
-                    response = [{'answer': p[0]} for p in output.predictions]
+                    output = generate_with_model(
+                        self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True
+                    )
+                    if sum(self.args.num_outputs) > 1:
+                        response = []
+                        for idx, predictions in enumerate(output.predictions):
+                            candidates = []
+                            for cand in predictions:
+                                candidates.append({'answer': cand})
+                            response.append({'candidates': candidates})
+                    else:
+                        response = [{'answer': p[0]} for p in output.predictions]
+        except RuntimeError as e:
+            # catch all cuda errors and exit
+            if 'CUDA error' in str(e):
+                exit(100)
+            else:
+                raise e
 
         return response
 

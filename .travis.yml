@@ -52,7 +52,6 @@ jobs:
       script:
         - bash ./tests/test_kfserver.sh
 
-
 deploy:
   provider: pypi
   username: __token__
