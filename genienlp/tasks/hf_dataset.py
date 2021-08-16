@@ -60,22 +60,22 @@ class HFDataset(CQA):
         train_path, validation_path, test_path = None, None, None
         if train:
             train_data = load_dataset(path=name, name=config_name, split='train', cache_dir=path)
-            train_path = train_data.cache_files[0]['filename']
+            train_path = train_data.cache_files[0]['filename'].replace('-', '/')
         if validation:
             validation_data = load_dataset(path=name, name=config_name, split='validation', cache_dir=path)
-            validation_path = validation_data.cache_files[0]['filename']
+            validation_path = validation_data.cache_files[0]['filename'].replace('-', '/').replace('validation', validation)
         if test:
             test_data = load_dataset(path=name, name=config_name, split='test', cache_dir=path)
-            test_path = test_data.cache_files[0]['filename']
+            test_path = test_data.cache_files[0]['filename'].replace('-', '/')
 
         if kwargs.pop('hf_test_overfit', False):
             # override validation/ test data with train data
             if validation:
                 validation_data = load_dataset(path=name, name=config_name, split='train', cache_dir=path)
-                validation_path = validation_data.cache_files[0]['filename']
+                validation_path = validation_data.cache_files[0]['filename'].replace('-', '/')
             if test:
                 test_data = load_dataset(path=name, name=config_name, split='train', cache_dir=path)
-                test_path = test_data.cache_files[0]['filename']
+                test_path = test_data.cache_files[0]['filename'].replace('-', '/')
 
         train_data = None if train is None else cls(train_data, **kwargs)
         validation_data = None if validation is None else cls(validation_data, **kwargs)
