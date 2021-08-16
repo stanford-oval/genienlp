@@ -26,11 +26,13 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import logging
 import unicodedata
 from typing import Iterable, List, NamedTuple, Union
 
 import torch
+
+logger = logging.getLogger(__name__)
 
 
 def identity(x, **kw):
@@ -168,6 +170,18 @@ class NumericalizedExamples(NamedTuple):
             features = None
 
         tokenized_contexts = numericalizer.encode_batch(all_context_plus_questions, field_name='context', features=features)
+
+        drop_ids = set()
+        lengths = []
+        for i, context in enumerate(tokenized_contexts):
+            if context.length >= 510:
+                logger.warning('Skipping sequence with length > 510')
+                drop_ids.add(i)
+            lengths.append(context.length)
+
+        examples = [item for i, item in enumerate(examples) if i not in drop_ids]
+        tokenized_contexts = [item for i, item in enumerate(tokenized_contexts) if i not in drop_ids]
+        all_context_plus_questions = [item for i, item in enumerate(all_context_plus_questions) if i not in drop_ids]
 
         # TODO remove double attempts at context tokenization
         if args.model == 'TransformerForTokenClassification':
