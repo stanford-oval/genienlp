@@ -1,5 +1,5 @@
 # override this to "nvidia/cuda:10.1-runtime-ubi8" if cuda is desired
-ARG BASE_IMAGE=932360549041.dkr.ecr.us-west-2.amazonaws.com/genie-toolkit:base
+ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi:latest
 FROM ${BASE_IMAGE}
 
 ARG USER=genienlp
