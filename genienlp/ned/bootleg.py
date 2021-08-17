@@ -186,8 +186,10 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
                     new_typeqid = None
                     if self.args.ned_normalize_types != 'no':
                         new_type = self.normalize_types(type)
-                        if new_type is not None:
+                        if new_type is not None and new_type in self.type_vocab_to_typeqid:
                             new_typeqid = self.type_vocab_to_typeqid[new_type]
+                        elif new_type:
+                            print(new_type)
 
                     if new_typeqid is None:
                         if self.args.ned_normalize_types == 'force':
