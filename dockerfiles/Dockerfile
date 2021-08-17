@@ -1,10 +1,10 @@
 # override this to "nvidia/cuda:10.1-runtime-ubi8" if cuda is desired
-ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi:latest
+ARG BASE_IMAGE=932360549041.dkr.ecr.us-west-2.amazonaws.com/genie-toolkit:base
 FROM ${BASE_IMAGE}
 
 ARG USER=genienlp
 
-MAINTAINER Thingpedia Admins <thingpedia-admins@lists.stanford.edu>
+LABEL maintainer="Thingpedia Admins <thingpedia-admins@lists.stanford.edu>"
 
 USER root
 
@@ -13,16 +13,23 @@ COPY . /opt/genienlp
 
 # install basic tools and python3, install dependencies, and then cleanup
 # HACK: we need to download the wheel manually or docker will die
-RUN dnf -y install git gcc gcc-c++ make cmake && \
-    dnf -y module enable python38 \
-        && dnf -y install python38 \
+RUN dnf -y install \
+        git \
+        gcc \
+        gcc-c++ \
+        make \
+        cmake \
+    && dnf -y module enable python38 \
+    && dnf -y install \
+        python38 \
         python38-devel \
         python38-pip \
         python38-wheel \
-        && pip3 install --upgrade pip \
-        && pip3 install --use-feature=2020-resolver awscli \
-	&& pip3 install --use-feature=2020-resolver -e /opt/genienlp \
-	&& python3 -m spacy download en_core_web_sm \
+    && pip3 install --upgrade pip \
+    && pip3 install \
+        awscli \
+        -e /opt/genienlp \
+    && python3 -m spacy download en_core_web_sm \
 	&& rm -fr /root/.cache \
 	&& dnf -y remove gcc gcc-c++ make cmake \
 	&& rm -fr /var/cache/dnf

@@ -65,7 +65,7 @@ setuptools.setup(
         # for kf
         'kfserving>=0.5.0',
         # for NED
-        'bootleg @ git+https://github.com/Mehrad0711/bootleg@b6c207259a83c21c77aeaf8088ee85f24ec7e708',
+        'bootleg @ git+https://github.com/Mehrad0711/bootleg@08da02ddc10540688747291f8ab54a1bacdfe433',
         'marisa_trie_m==0.7.6',
         # for calibration:
         'scikit-learn~=0.23',
