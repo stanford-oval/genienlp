@@ -840,7 +840,7 @@ def load_config_json(args):
             ):
                 setattr(args, r, False)
             elif r in ('ned_normalize_types'):
-                setattr(args, r, 'no')
+                setattr(args, r, 'off')
             elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
                 setattr(args, r, 0)
             elif r in ('entity_word_embeds_dropout'):
@@ -894,7 +894,7 @@ def load_config_json(args):
             if hasattr(args, 'add_types_to_text'):
                 setattr(args, 'add_entities_to_text', args.add_types_to_text)
             else:
-                setattr(args, 'add_entities_to_text', 'no')
+                setattr(args, 'add_entities_to_text', 'off')
         if args.entity_attributes is None:
             if hasattr(args, 'ned_features'):
                 setattr(args, 'entity_attributes', args.ned_features)
@@ -902,9 +902,9 @@ def load_config_json(args):
                 setattr(args, 'entity_attributes', [])
         if args.ned_normalize_types is None:
             if hasattr(args, 'bootleg_post_process_types') and args.bootleg_post_process_types:
-                setattr(args, 'ned_normalize_types', 'yes')
+                setattr(args, 'ned_normalize_types', 'soft')
         else:
-            setattr(args, 'ned_normalize_types', 'no')
+            setattr(args, 'ned_normalize_types', 'off')
 
         args.dropout_ratio = 0.0
         args.verbose = False

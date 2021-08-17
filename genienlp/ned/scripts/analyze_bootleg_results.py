@@ -12,6 +12,7 @@ parser.add_argument('--input_file', type=str)
 parser.add_argument('--database_dir', type=str)
 parser.add_argument('--ned_domains', type=str, nargs='+')
 parser.add_argument('--subsample', type=int, default='1000000000')
+parser.add_argument('--output_file', type=str, default='results.txt')
 
 
 args = parser.parse_args()
@@ -20,13 +21,13 @@ if __name__ == '__main__':
 
     args.bootleg_model = 'bootleg_uncased_mini'
 
-    # ned_normalize_types = 'yes'
-    # args.ned_normalize_types = 'yes'
+    # ned_normalize_types = 'soft'
+    # args.ned_normalize_types = 'soft'
     # args.bootleg_prob_threshold = 0.3
     # args.max_types_per_qid = 1
     # args.max_qids_per_entity = 1
 
-    ned_normalize_types = 'yes'
+    ned_normalize_types = 'soft'
     args.ned_normalize_types = ned_normalize_types
     args.bootleg_prob_threshold = 0.01
     args.max_types_per_qid = 2
@@ -51,7 +52,7 @@ if __name__ == '__main__':
     all_titles = Counter()
     all_new_titles = Counter()
 
-    fout = open('results.txt', 'w')
+    fout = open(args.output_file, 'w')
 
     for count, bootleg_line in enumerate(lines):
         if count >= args.subsample:
@@ -61,7 +62,7 @@ if __name__ == '__main__':
             bootleg_line['aliases'], bootleg_line['cands'], bootleg_line['cand_probs'], bootleg_line['spans']
         ):
             # without mapping
-            bootleg.args.ned_normalize_types = 'no'
+            bootleg.args.ned_normalize_types = 'off'
             type_ids, type_probs, qids = bootleg.collect_features_per_alias(alias, all_probs, all_qids)
             type_vocabs = []
             for id_ in type_ids:

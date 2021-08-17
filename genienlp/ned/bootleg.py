@@ -157,56 +157,58 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
             all_qids = all_qids[: self.args.max_qids_per_entity]
             all_probs = all_probs[: self.args.max_qids_per_entity]
 
-        if not is_banned(alias):
-            for qid, prob in zip(all_qids, all_probs):
-                # to map qids to unique ids we just need to remove the Q character as qids are distinct
-                qids.append(int(qid[1:]))
+        if is_banned(alias):
+            return type_ids, type_probs, qids
 
-                # get all types for a qid
-                all_types = []
-                if 'books' in self.args.ned_domains:
-                    if alias in ['houghton mifflin', 'ciudad de buenos aires']:
-                        all_types = ['award']
-                    elif alias in ['blanche', 'biblioteca breve', '3rd edition', '4th edition']:
-                        all_types = ['version, edition, or translation']
+        for qid, prob in zip(all_qids, all_probs):
+            # to map qids to unique ids we just need to remove the Q character as qids are distinct
+            qids.append(int(qid[1:]))
 
-                if qid in self.entityqid2typenames and self.entityqid2typenames[qid]:
-                    # map entity qid to its types on wikidata
-                    all_types.extend(self.entityqid2typenames[qid])
+            # get all types for a qid
+            all_types = []
+            if 'books' in self.args.ned_domains:
+                if alias in ['houghton mifflin', 'ciudad de buenos aires']:
+                    all_types = ['award']
+                elif alias in ['blanche', 'biblioteca breve', '3rd edition', '4th edition']:
+                    all_types = ['version, edition, or translation']
 
-                if len(all_types) == 0:
-                    continue
+            if qid in self.entityqid2typenames and self.entityqid2typenames[qid]:
+                # map entity qid to its types on wikidata
+                all_types.extend(self.entityqid2typenames[qid])
 
-                count = 0
-                # go through all types
-                for type in all_types:
-                    if count >= self.args.max_types_per_qid:
-                        break
+            if len(all_types) == 0:
+                continue
 
-                    new_typeqid = None
-                    if self.args.ned_normalize_types != 'no':
-                        new_type = self.normalize_types(type)
-                        if new_type is not None:
-                            new_typeqid = self.type_vocab_to_typeqid[new_type]
+            count = 0
+            # go through all types
+            for type in all_types:
+                if count >= self.args.max_types_per_qid:
+                    break
 
-                    if new_typeqid is None:
-                        if self.args.ned_normalize_types == 'force':
-                            # attempt to normalize type failed; ignore current type
+                new_typeqid = None
+                if self.args.ned_normalize_types != 'off':
+                    new_type = self.normalize_types(type)
+                    if new_type is not None:
+                        new_typeqid = self.type_vocab_to_typeqid[new_type]
+
+                if new_typeqid is None:
+                    if self.args.ned_normalize_types == 'strict':
+                        # attempt to normalize type failed; ignore current type
+                        continue
+                    else:
+                        if type not in self.type_vocab_to_typeqid:
                             continue
-                        else:
-                            if type not in self.type_vocab_to_typeqid:
-                                continue
-                            # attempt to normalize type failed; use original type
-                            new_typeqid = self.type_vocab_to_typeqid[type]
+                        # attempt to normalize type failed; use original type
+                        new_typeqid = self.type_vocab_to_typeqid[type]
 
-                    if new_typeqid not in self.typeqid2id:
-                        continue
-                    type_id = self.typeqid2id[new_typeqid]
-                    if type_id in type_ids:
-                        continue
-                    type_ids.append(type_id)
-                    type_probs.append(prob)
-                    count += 1
+                if new_typeqid not in self.typeqid2id:
+                    continue
+                type_id = self.typeqid2id[new_typeqid]
+                if type_id in type_ids:
+                    continue
+                type_ids.append(type_id)
+                type_probs.append(prob)
+                count += 1
 
         return type_ids, type_probs, qids
 

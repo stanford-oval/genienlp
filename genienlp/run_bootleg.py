@@ -95,12 +95,8 @@ def parse_argv(parser):
         '--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)'
     )
 
-    parser.add_argument(
-        '--min_entity_len', type=int, default=1, help='Minimum token-length of entities in ngram-based lookup of bootleg'
-    )
-    parser.add_argument(
-        '--max_entity_len', type=int, default=4, help='Maximum token-length of entities in ngram-based lookup of bootleg'
-    )
+    parser.add_argument('--min_entity_len', type=int, default=1, help='Minimum token-length of entities retrieved in bootleg')
+    parser.add_argument('--max_entity_len', type=int, default=4, help='Maximum token-length of entities retrieved in bootleg')
     parser.add_argument(
         '--database_dir',
         type=str,
@@ -151,7 +147,7 @@ def parse_argv(parser):
     parser.add_argument(
         '--ned_normalize_types',
         type=str,
-        choices=['no', 'yes', 'force'],
+        choices=['off', 'soft', 'strict'],
         help='Normalize types. yes: attempt to map; if unsuccessful use original. force: attempt to map; if unsuccessful drop the type.',
     )
 
