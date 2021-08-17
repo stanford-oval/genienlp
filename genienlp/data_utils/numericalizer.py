@@ -267,7 +267,7 @@ class TransformerNumericalizer(object):
             self._tokenizer.add_tokens(special_tokens)
 
         # add entity boundary special tokens
-        if self.args.add_entities_to_text != 'no':
+        if self.args.add_entities_to_text != 'off':
             self._tokenizer.add_tokens(['<e>', '</e>'])
 
         # add special tokens for ambig_qa task

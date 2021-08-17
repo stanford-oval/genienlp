@@ -11,6 +11,7 @@ parser.add_argument('--bootleg_labels', type=str)
 parser.add_argument('--oracle_labels', type=str)
 parser.add_argument('--database_dir', type=str)
 parser.add_argument('--ned_domains', type=str, nargs='+')
+parser.add_argument('--output_file', type=str, default='comparison.txt')
 
 args = parser.parse_args()
 
@@ -19,12 +20,12 @@ if __name__ == '__main__':
 
     args.bootleg_model = 'bootleg_uncased_mini'
 
-    # args.ned_normalize_types = 'yes'
+    # args.ned_normalize_types = 'soft'
     # args.bootleg_prob_threshold = 0.3
     # args.max_types_per_qid = 1
     # args.max_qids_per_entity = 1
 
-    args.ned_normalize_types = 'force'
+    args.ned_normalize_types = 'strict'
     args.bootleg_prob_threshold = 0.01
     args.max_types_per_qid = 2
     args.max_qids_per_entity = 2
@@ -44,7 +45,7 @@ if __name__ == '__main__':
     no_TT_type = Counter()
     not_correct = Counter()
 
-    fout = open('comparison.txt', 'w')
+    fout = open(args.output_file, 'w')
 
     for oracle_line, bootleg_line in zip(oracle_lines, bootleg_lines):
 

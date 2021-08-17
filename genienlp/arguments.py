@@ -401,8 +401,18 @@ def parse_argv(parser):
 
     # NED args
     parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
-    parser.add_argument('--min_entity_len', type=int, default=1, help='Minimum token-length of entities in ngram-based lookup')
-    parser.add_argument('--max_entity_len', type=int, default=4, help='Maximum token-length of entities in ngram-based lookup')
+    parser.add_argument(
+        '--min_entity_len',
+        type=int,
+        default=1,
+        help='Minimum token-length of entities in ngram-based lookup of naive NED approach',
+    )
+    parser.add_argument(
+        '--max_entity_len',
+        type=int,
+        default=4,
+        help='Maximum token-length of entities in ngram-based lookup  of naive NED approach',
+    )
     parser.add_argument(
         '--database_dir',
         type=str,
@@ -425,9 +435,9 @@ def parse_argv(parser):
     )
     parser.add_argument(
         '--ned_normalize_types',
-        type=str,
-        choices=['no', 'yes', 'force'],
-        help='Normalize types. yes: attempt to map; if unsuccessful use original. force: attempt to map; if unsuccessful drop the type.',
+        default='off',
+        choices=['off', 'soft', 'strict'],
+        help='Normalize types. soft: attempt to map; if unsuccessful use original. strict: attempt to map; if unsuccessful drop the type.',
     )
 
     parser.add_argument(
@@ -445,8 +455,8 @@ def parse_argv(parser):
 
     parser.add_argument(
         "--add_entities_to_text",
-        default='no',
-        choices=['no', 'insert', 'append'],
+        default='off',
+        choices=['off', 'insert', 'append'],
         help='Method for adding entities to input text in text-based NER approach',
     )
 

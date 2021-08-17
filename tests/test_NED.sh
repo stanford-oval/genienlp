@@ -5,13 +5,13 @@
 i=0
 # test NED
 for hparams in \
-      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method bootleg --ned_domains thingpedia --bootleg_model bootleg_uncased_mini --add_entities_to_text append --ned_normalize_types yes --ned_dump_entity_type_pairs" \
-      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method bootleg --ned_domains thingpedia --bootleg_model bootleg_uncased_mini --add_entities_to_text no --ned_normalize_types yes" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method bootleg --ned_domains thingpedia --bootleg_model bootleg_uncased_mini --add_entities_to_text append --ned_normalize_types soft --ned_dump_entity_type_pairs" \
+      "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method bootleg --ned_domains thingpedia --bootleg_model bootleg_uncased_mini --add_entities_to_text off --ned_normalize_types soft" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method naive --ned_domains thingpedia --add_entities_to_text insert" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method entity-oracle --ned_domains thingpedia --add_entities_to_text insert --ned_dump_entity_type_pairs" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --ned_retrieve_method type-oracle --ned_domains thingpedia --add_entities_to_text insert" \
-      "--model TransformerLSTM --pretrained_model bert-base-cased --ned_retrieve_method bootleg --ned_domains thingpedia --bootleg_model bootleg_uncased_mini --add_entities_to_text no --ned_normalize_types yes" \
-      "--model TransformerLSTM --pretrained_model bert-base-cased --ned_retrieve_method bootleg --ned_domains thingpedia --bootleg_model bootleg_uncased_mini --add_entities_to_text append --ned_normalize_types yes --override_context ." ;
+      "--model TransformerLSTM --pretrained_model bert-base-cased --ned_retrieve_method bootleg --ned_domains thingpedia --bootleg_model bootleg_uncased_mini --add_entities_to_text off --ned_normalize_types soft" \
+      "--model TransformerLSTM --pretrained_model bert-base-cased --ned_retrieve_method bootleg --ned_domains thingpedia --bootleg_model bootleg_uncased_mini --add_entities_to_text append --ned_normalize_types soft --override_context ." ;
 do
 
     # train
@@ -22,7 +22,7 @@ do
 
     # check if result file exists
     if test ! -f $workdir/model_$i/eval_results/valid/almond_dialogue_nlu.tsv ; then
-        echo "File not found!"database_lookup_method
+        echo "File not found!"
         exit 1
     fi
 
