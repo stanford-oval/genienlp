@@ -30,6 +30,8 @@
 
 import argparse
 
+from genienlp import train_bootleg
+
 from . import arguments, cache_embeddings, calibrate, export, kfserver, predict, run_bootleg, server, train, write_kf_metrics
 from .paraphrase import run_generation, run_lm_finetuning
 from .paraphrase.scripts import clean_paraphrasing_dataset, dialog_to_tsv, split_dataset, transform_dataset
@@ -75,10 +77,15 @@ subcommands = {
         sts_filter.main,
     ),
     # bootleg commands
-    'bootleg-dump-features': (
+    'bootleg-predict': (
         'Extract candidate features for named entity mentions in the dataset',
         run_bootleg.parse_argv,
         run_bootleg.main,
+    ),
+    'bootleg-train': (
+        'train a bootleg model',
+        train_bootleg.parse_argv,
+        train_bootleg.main,
     ),
     # kf commands
     'kfserver': ('Export KFServing interface to predict', server.parse_argv, kfserver.main),

@@ -28,6 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import logging
 import os
+import shutil
 
 import torch
 import ujson
@@ -55,7 +56,8 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
 
         ### bootleg specific attribtues
         self.model_dir = f'{self.args.database_dir}/{self.args.bootleg_model}'
-        self.config_path = f'{self.model_dir}/bootleg_config.yaml'
+        # self.config_path = f'{self.model_dir}/bootleg_config.yaml'
+        self.config_path = f'{self.model_dir}/parsed_config.yaml'
         self.cand_map = f'{self.args.database_dir}/wiki_entity_data/entity_mappings/alias2qids.json'
 
         self.entity_dir = f'{self.args.database_dir}/wiki_entity_data'
@@ -68,7 +70,6 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
         self.entityqid2typenames['Q1548123'] = ['format']
 
         ###
-
         self.model_ckpt_path = os.path.join(self.model_dir, 'bootleg_wiki.pth')
 
         self.fixed_overrides = [
@@ -329,3 +330,65 @@ class ServingBootlegEntityDisambiguator(BatchBootlegEntityDisambiguator):
                 all_token_qids.append(tokens_qids)
 
             self.replace_features_inplace(examples, all_token_type_ids, all_token_type_probs, all_token_qids, utterance_field)
+
+
+class TrainBootlegEntityDisambiguator(BatchBootlegEntityDisambiguator):
+    def __init__(self, args):
+        super().__init__(args)
+
+        self.fixed_overrides = [
+            # emmental configs
+            "--emmental.log_path",
+            self.model_dir,
+            # "--emmental.model_path",
+            # self.model_ckpt_path,
+            "--emmental.use_exact_log_path",
+            'True',
+            "--emmental.device",
+            str(getattr(self.args, 'bootleg_device', 0)),
+            # data configs
+            "--data_config.print_examples_prep",
+            'False',
+            "--data_config.entity_dir",
+            self.entity_dir,
+            "--data_config.entity_prep_dir",
+            "prep",
+            "--data_config.emb_dir",
+            self.embed_dir,
+            "--data_config.alias_cand_map",
+            'alias2qids.json',
+            "--data_config.word_embedding.cache_dir",
+            self.args.embeddings,
+            "--data_config.print_examples",
+            'False',
+        ]
+
+    def create_config(self, overrides):
+        config_args = parse_boot_and_emm_args(self.config_path, overrides)
+        return config_args
+
+    def train(self, config_args):
+        run_model('train', config_args)
+
+    def run_train(self, examples, path, utterance_field):
+        # input_file_dir = os.path.dirname(path)
+        # input_file_name = os.path.basename(path.rsplit('.', 1)[0] + '_bootleg.jsonl')
+        # data_overrides = ["--data_config.data_dir", input_file_dir, "--data_config.test_dataset.file", input_file_name]
+        data_overrides = [
+            "--data_config.data_dir",
+            f'{self.args.database_dir}/sample_data',
+        ]
+
+        # get config args
+        config_overrides = self.fixed_overrides
+        config_overrides.extend(data_overrides)
+        config_args = self.create_config(config_overrides)
+
+        # create jsonl files from input examples
+        # jsonl is the input format bootleg expects
+        self.create_jsonl(path, examples, utterance_field)
+
+        # train a bootleg model
+        self.train(config_args)
+
+        shutil.move(os.path.join(self.model_dir, 'last_model.pth'), os.path.join(self.model_dir, 'bootleg_wiki.pth'))
