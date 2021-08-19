@@ -56,8 +56,8 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
 
         ### bootleg specific attribtues
         self.model_dir = f'{self.args.database_dir}/{self.args.bootleg_model}'
-        # self.config_path = f'{self.model_dir}/bootleg_config.yaml'
-        self.config_path = f'{self.model_dir}/parsed_config.yaml'
+        self.config_path = f'{self.model_dir}/bootleg_config.yaml'
+        # self.config_path = f'{self.model_dir}/parsed_config.yaml'
         self.cand_map = f'{self.args.database_dir}/wiki_entity_data/entity_mappings/alias2qids.json'
 
         self.entity_dir = f'{self.args.database_dir}/wiki_entity_data'
@@ -361,6 +361,8 @@ class TrainBootlegEntityDisambiguator(BatchBootlegEntityDisambiguator):
             self.args.embeddings,
             "--data_config.print_examples",
             'False',
+            "--data_config.overwrite_preprocessed_data",
+            'True',
         ]
 
     def create_config(self, overrides):
