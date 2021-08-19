@@ -53,7 +53,7 @@ ISO_to_LANG = {
     'hi': 'Hindi',
     'fr': 'French',
     'de': 'German',
-    'pl': 'Polsih',
+    'pl': 'Polish',
     'ar': 'Arabic',
     'vi': 'Vietnamese',
     'ji': 'Yiddish',
