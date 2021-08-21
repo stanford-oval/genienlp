@@ -33,7 +33,7 @@ from ..data_utils.example import Example
 from . import generic_dataset
 from .almond_task import BaseAlmondTask
 from .base_task import BaseTask
-from .generic_dataset import CrossNERDataset, OODDataset
+from .generic_dataset import BiTODDataset, CrossNERDataset, OODDataset
 from .registry import register_task
 
 
@@ -377,7 +377,7 @@ class CrossNERTask(BaseAlmondTask):
         )
 
     def get_splits(self, root, **kwargs):
-        return CrossNERDataset.return_splits(name=self.name, path=root, make_example=self._make_example, **kwargs)
+        return CrossNERDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
 
 
 @register_task('ood_task')
@@ -393,3 +393,43 @@ class OODTask(BaseTask):
 
     def get_splits(self, root, **kwargs):
         return OODDataset.splits(root=root, **kwargs)
+
+
+@register_task('bitod')
+class BiTOD(BaseTask):
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self.special_tokens = {
+            'USER:',
+            'SYSTEM:',
+            '<knowledge>',
+            '<history>',
+            '<state>',
+            '#unknown',
+            'DST:',
+            'API:',
+            'Response:',
+        }
+        self._metrics = 'casedbleu'
+
+    def utterance_field(self):
+        return 'context'
+
+    def _make_example(self, turn, **kwargs):
+        dial_id, turn_id, context, answer, train_target = (
+            turn['dial_id'],
+            turn['turn_id'],
+            turn['input_text'],
+            turn['output_text'],
+            turn['train_target'],
+        )
+        question = ''
+
+        example_id = '/'.join([dial_id, str(turn_id), train_target])
+
+        return Example.from_raw(
+            self.name + '/' + str(example_id), context, question, answer, preprocess=self.preprocess_field, lower=False
+        )
+
+    def get_splits(self, root, **kwargs):
+        return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)

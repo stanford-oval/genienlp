@@ -325,9 +325,19 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
 
         output = generate_with_model(model, val_iter, numericalizer, task, args)
 
+        validation_outputs = output
+        if task.name == 'bitod' and args.bitod_validation_task != 'all':
+            validation_outputs = GenerationOutput()
+            for i in range(len(output.example_ids)):
+                id_, train_task = output.example_ids[i].rsplit('/', 1)
+                if train_task in args.bitod_validation_task:
+                    validation_outputs.answers.append(output.answers[i])
+                    validation_outputs.predictions.append(output.predictions[i])
+
         metrics = calculate_and_reduce_metrics(
-            output.predictions, output.answers, task.metrics, args.reduce_metrics, model.tgt_lang
+            validation_outputs.predictions, validation_outputs.answers, task.metrics, args.reduce_metrics, model.tgt_lang
         )
+
         results = [output.predictions, output.answers, output.contexts]
         print_results(names, results, num_print=num_print)
 

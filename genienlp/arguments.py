@@ -523,6 +523,13 @@ def parse_argv(parser):
         help='Debugging flag for hf datasets where validation will be performed on train set',
     )
 
+    parser.add_argument(
+        '--bitod_validation_task',
+        default='all',
+        choices=['dst', 'api', 'response', 'all'],
+        help='',
+    )
+
 
 def check_and_update_generation_args(args):
     """

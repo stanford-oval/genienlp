@@ -270,10 +270,6 @@ class TransformerNumericalizer(object):
         if self.args.add_entities_to_text != 'off':
             self._tokenizer.add_tokens(['<e>', '</e>'])
 
-        # add special tokens for ambig_qa task
-        if any(task.name == 'ambig_qa' for task in tasks):
-            self._tokenizer.add_tokens(['<q>', '<p>', '<u>'])
-
         existing_special_tokens = self._tokenizer.special_tokens_map
         # add separator if it doesn't exist. It will be used to concatenate context and question
         if 'sep_token' not in existing_special_tokens:

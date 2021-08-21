@@ -796,6 +796,7 @@ def load_config_json(args):
             'crossner_domains',
             'hf_test_overfit',
             'override_valid_metrics',
+            'bitod_validation_task',
         ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
@@ -851,6 +852,8 @@ def load_config_json(args):
                 setattr(args, r, [0])
             elif r in ['override_valid_metrics']:
                 setattr(args, r, [])
+            elif r in ['bitod_validation_task']:
+                setattr(args, r, 'all')
             elif r == 'database_type':
                 setattr(args, r, 'json')
             elif r == 'att_pooling':
