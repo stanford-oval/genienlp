@@ -252,7 +252,11 @@ def do_validate(
             metric_entry += f'{metric_key}_{metric_value:.2f}:'
         metric_entry = metric_entry[:-1]
 
-        deca_score += metric_dict[val_task.metrics[0]]
+        deca_metric = val_task.metrics[0]
+        if deca_metric == 'loss':
+            deca_score += val_loss
+        else:
+            deca_score += metric_dict[deca_metric]
 
         # val log
         logger.info(log_entry + metric_entry)
