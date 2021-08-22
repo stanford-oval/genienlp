@@ -340,8 +340,11 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
 
         output = generate_with_model(model, val_iter, numericalizer, task, args)
 
+        # loss is already calculated
+        metrics_to_return = [metric for metric in task.metrics if metric != 'loss']
+
         metrics = calculate_and_reduce_metrics(
-            output.predictions, output.answers, task.metrics, args.reduce_metrics, model.tgt_lang
+            output.predictions, output.answers, metrics_to_return, args.reduce_metrics, model.tgt_lang
         )
         results = [output.predictions, output.answers, output.contexts]
         print_results(names, results, num_print=num_print)
