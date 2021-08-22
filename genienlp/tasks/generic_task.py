@@ -399,7 +399,19 @@ class OODTask(BaseTask):
 class BiTOD(BaseTask):
     def __init__(self, name, args):
         super().__init__(name, args)
-        self.special_tokens = {
+        special_tokens_v1 = {
+            '<user>',
+            '<system>',
+            '<API>',
+            '<knowledge>',
+            '<slot>',
+            '<relation>',
+            '<value>',
+            '<sep>',
+            '<unknow>',
+            '<dialogue_state>',
+        }
+        special_tokens_v2 = {
             'USER:',
             'SYSTEM:',
             '<knowledge>',
@@ -410,6 +422,7 @@ class BiTOD(BaseTask):
             'API:',
             'Response:',
         }
+        self.special_tokens = special_tokens_v1 | special_tokens_v2
         self._metrics = 'casedbleu'
 
     def utterance_field(self):
