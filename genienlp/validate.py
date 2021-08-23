@@ -149,6 +149,13 @@ def generate_with_seq2seq_model(
             batch_answer = numericalizer.reverse(batch.answer.value.data, 'answer')
             answers += batch_answer
 
+        model.train()
+        loss = model(batch).loss
+        model.eval()
+
+        # loss = calculate_loss(model, partial_batch_prediction_logits, batch.answer)
+        total_loss += loss
+
         for hyperparameter_idx in range(len(args.temperature)):
             generated = model.generate(
                 batch,
@@ -165,7 +172,7 @@ def generate_with_seq2seq_model(
                 do_sample=args.temperature[hyperparameter_idx] != 0,  # if temperature==0, we do not sample
             )
             partial_batch_prediction_ids = generated.sequences
-            partial_batch_prediction_logits = torch.stack(generated.scores).permute(1, 0, 2).contiguous()
+            # partial_batch_prediction_logits = torch.stack(generated.scores).permute(1, 0, 2).contiguous()
 
             if model._output_attentions:
                 cross_attentions = generated.cross_attentions
@@ -212,10 +219,9 @@ def generate_with_seq2seq_model(
         predictions += batch_prediction
         confidence_features += batch_confidence_features
 
-        loss = calculate_loss(model, partial_batch_prediction_logits, batch.answer)
-        total_loss += loss
+    # total_loss /= (len(answers) * len(args.temperature))
 
-    total_loss /= len(answers)
+    total_loss /= len(example_ids)
 
     if original_order is not None:
         # sort back to the original order
@@ -275,7 +281,12 @@ def generate_with_classification_model(
 
         all_example_ids += batch_example_ids
 
-        output = model(input_ids=batch.context.value, attention_mask=(batch.context.value != numericalizer.pad_id))
+        # pass labels to get loss
+        output = model(
+            input_ids=batch.context.value,
+            attention_mask=(batch.context.value != numericalizer.pad_id),
+            labels=batch.answer.value,
+        )
 
         labels = batch.answer.value.tolist()
 
@@ -305,10 +316,10 @@ def generate_with_classification_model(
         all_answers += processed_labels
         all_predictions += processed_preds
 
-        loss = calculate_loss(model, logits, batch.answer)
-        total_loss += loss
+        # loss = calculate_loss(model, logits, batch.answer)
+        total_loss += output.loss
 
-    total_loss /= len(batch.answer)
+    total_loss /= len(all_example_ids)
 
     if original_order is not None:
         # sort back to the original order
