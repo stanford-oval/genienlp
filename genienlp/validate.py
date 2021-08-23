@@ -136,11 +136,12 @@ def generate_with_seq2seq_model(
                 do_sample=args.temperature[hyperparameter_idx] != 0,  # if temperature==0, we do not sample
             )
             partial_batch_prediction_ids = generated.sequences
-            cross_attentions = getattr(generated, 'cross_attentions', None)
 
-            if cross_attentions is not None:
+            if model._output_attentions:
+                cross_attentions = generated.cross_attentions
+
                 # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)
-                cross_attentions = torch.stack(([torch.stack(tuple) for tuple in cross_attentions]))
+                cross_attentions = torch.stack(([torch.stack(tuple) for tuple in cross_attentions])).cpu()
 
                 # reshape to (num_layers, batch_size, num_heads, max_output_length, max_input_length)
                 cross_attentions = cross_attentions.squeeze(4)
