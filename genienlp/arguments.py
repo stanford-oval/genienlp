@@ -525,6 +525,11 @@ def parse_argv(parser):
         choices=['dst', 'api', 'response', 'all'],
         help='',
     )
+    parser.add_argument(
+        '--bitod_e2e_evaluation',
+        action='store_true',
+        help='',
+    )
 
 
 def check_and_update_generation_args(args):

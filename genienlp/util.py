@@ -583,13 +583,20 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
         f'answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}'
     )
 
+    if train:
+        sort_key_fn = dataset.sort_key_fn
+        batch_size_fn = dataset.batch_size_fn
+    else:
+        sort_key_fn = getattr(dataset, 'eval_sort_key_fn', dataset.sort_key_fn)
+        batch_size_fn = getattr(dataset, 'eval_batch_size_fn', dataset.batch_size_fn)
+
     sampler = LengthSortedIterator(
         all_features,
         batch_size=batch_size,
         sort=True,
         shuffle_and_repeat=train,
-        sort_key_fn=dataset.sort_key_fn,
-        batch_size_fn=dataset.batch_size_fn,
+        sort_key_fn=sort_key_fn,
+        batch_size_fn=batch_size_fn,
         groups=dataset.groups,
     )
     # get the sorted data_source
@@ -797,6 +804,7 @@ def load_config_json(args):
             'hf_test_overfit',
             'override_valid_metrics',
             'bitod_validation_task',
+            'bitod_e2e_evaluation',
         ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict

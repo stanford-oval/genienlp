@@ -80,6 +80,10 @@ def id_value(ex):
     return id_
 
 
+def dialogue_id_value(ex):
+    return ex.example_id
+
+
 # batch_size functions; batch size is calculated after pad tokens are added
 def input_tokens_fn(batch: Iterable[NumericalizedExamples]):
     return max([context_question_len(e) for e in batch]) * len(batch)
@@ -1985,6 +1989,9 @@ class BiTODDataset(CQA):
                     break
 
         super().__init__(examples, **kwargs)
+
+        self.eval_sort_key_fn = None
+        self.eval_batch_size_fn = default_batch_fn
 
     @classmethod
     def return_splits(cls, path='.data', train='train', validation='valid', test='test', **kwargs):
