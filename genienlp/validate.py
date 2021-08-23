@@ -93,6 +93,7 @@ def generate_with_seq2seq_model(
         answers
         contexts
     """
+    total_loss = 0.0 if model._output_scores else None
     output_confidence_scores = confidence_estimators is not None
     predictions = []
     confidence_features = []
@@ -119,6 +120,10 @@ def generate_with_seq2seq_model(
             # need gold answer for confidence estimation
             batch_answer = numericalizer.reverse(batch.answer.value.data, 'answer')
             answers += batch_answer
+
+        if total_loss is not None:
+            loss = model(batch, train=True).loss.item()
+            total_loss += loss
 
         for hyperparameter_idx in range(len(args.temperature)):
             generated = model.generate(
@@ -182,6 +187,9 @@ def generate_with_seq2seq_model(
         predictions += batch_prediction
         confidence_features += batch_confidence_features
 
+    if total_loss is not None:
+        total_loss /= len(example_ids)
+
     if original_order is not None:
         # sort back to the original order
         original_order, example_ids, predictions, answers, contexts, confidence_features = [
@@ -203,9 +211,7 @@ def generate_with_seq2seq_model(
             numericalizer._tokenizer.tgt_lang,
         )
 
-    # TODO calculate and return loss
-    loss = None
-    output = GenerationOutput(loss=loss)
+    output = GenerationOutput(loss=total_loss)
 
     if output_predictions_only:
         output.predictions = predictions
@@ -229,6 +235,7 @@ def generate_with_seq2seq_model(
 def generate_with_classification_model(
     model, data_iterator, numericalizer, task, original_order=None, disable_progbar=True
 ) -> GenerationOutput:
+    total_loss = 0.0
     all_example_ids = []
     all_answers = []
     all_contexts = []
@@ -241,7 +248,12 @@ def generate_with_classification_model(
 
         all_example_ids += batch_example_ids
 
-        output = model(input_ids=batch.context.value, attention_mask=(batch.context.value != numericalizer.pad_id))
+        # pass labels to get loss
+        output = model(
+            input_ids=batch.context.value,
+            attention_mask=(batch.context.value != numericalizer.pad_id),
+            labels=batch.answer.value,
+        )
 
         labels = batch.answer.value.tolist()
 
@@ -271,6 +283,10 @@ def generate_with_classification_model(
         all_answers += processed_labels
         all_predictions += processed_preds
 
+        total_loss += output.loss
+
+    total_loss /= len(all_example_ids)
+
     if original_order is not None:
         # sort back to the original order
         original_order, all_example_ids, all_predictions, all_answers, all_contexts = [
@@ -280,10 +296,8 @@ def generate_with_classification_model(
             )
         ]
 
-    # TODO calculate and return loss
-    loss = None
     output = GenerationOutput(
-        loss=loss, example_ids=all_example_ids, contexts=all_contexts, answers=all_answers, predictions=all_predictions
+        loss=total_loss, example_ids=all_example_ids, contexts=all_contexts, answers=all_answers, predictions=all_predictions
     )
 
     return output
