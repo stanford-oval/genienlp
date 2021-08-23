@@ -121,7 +121,7 @@ def generate_with_seq2seq_model(
         answers
         contexts
     """
-    total_loss = 0.0
+    total_loss = 0.0 if model._output_scores else None
     output_confidence_scores = confidence_estimators is not None
     predictions = []
     confidence_features = []
@@ -167,11 +167,11 @@ def generate_with_seq2seq_model(
             partial_batch_prediction_ids = generated.sequences
             partial_batch_prediction_logits = torch.stack(generated.scores).permute(1, 0, 2).contiguous()
 
-            cross_attentions = getattr(generated, 'cross_attentions', None)
+            if model._output_attentions:
+                cross_attentions = generated.cross_attentions
 
-            if cross_attentions is not None:
                 # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)
-                cross_attentions = torch.stack(([torch.stack(tuple) for tuple in cross_attentions]))
+                cross_attentions = torch.stack(([torch.stack(tuple) for tuple in cross_attentions])).cpu()
 
                 # reshape to (num_layers, batch_size, num_heads, max_output_length, max_input_length)
                 cross_attentions = cross_attentions.squeeze(4)

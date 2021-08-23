@@ -242,8 +242,8 @@ def do_validate(
         output, metric_dict = validate(val_task, val_iter, model, numericalizer, args, num_print=args.num_print)
         val_loss = output.loss
         if val_loss is not None:
-            log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss_{val_loss.item():.4f}:'
-            writer.add_scalar(f'loss/{val_task.name}/val', val_loss.item(), iteration)
+            log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss_{val_loss:.4f}:'
+            writer.add_scalar(f'loss/{val_task.name}/val', val_loss, iteration)
         else:
             log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:'
 

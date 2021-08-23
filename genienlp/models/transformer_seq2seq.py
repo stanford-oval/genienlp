@@ -35,6 +35,7 @@ from transformers import AutoConfig, AutoModelForSeq2SeqLM, MBartTokenizer, MBar
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..model_utils.transformers_utils import MULTILINGUAL_TOKENIZERS
+from ..tasks.almond_task import Translate
 from ..util import ConfidenceFeatures, adjust_language_code
 from .base import GenieModel
 from .common import LabelSmoothingCrossEntropy
@@ -52,6 +53,10 @@ class TransformerSeq2Seq(GenieModel):
         self.args = args
         args.dimension = config.d_model
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
+        
+        self._output_scores = any('loss' in task.metrics for task in tasks)
+        self._output_attentions = any(isinstance(task, Translate) for task in tasks)
+        self._output_hidden_states = False
 
         self.src_lang, self.tgt_lang = adjust_language_code(
             config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
@@ -109,7 +114,7 @@ class TransformerSeq2Seq(GenieModel):
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
     def forward(self, *input, **kwargs):
-        if self.training:
+        if self.training or kwargs.get('train', False):
             batch = input[0]
 
             answer = batch.answer.value
@@ -133,7 +138,8 @@ class TransformerSeq2Seq(GenieModel):
             # (3) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
             # (4) if `args.label_smoothing > 0.0`, will add label smoothing term to loss
             outputs = self.model(
-                batch.context.value, labels=answer, attention_mask=(batch.context.value != self.numericalizer.pad_id)
+                batch.context.value, labels=answer, attention_mask=(batch.context.value != self.numericalizer.pad_id),
+                output_attentions=False, output_hidden_states=False, return_dict=True
             )
             batch_size, vocab_size = outputs.logits.shape[0], outputs.logits.shape[2]
             loss = self.criterion(
@@ -187,9 +193,9 @@ class TransformerSeq2Seq(GenieModel):
             diversity_penalty=diversity_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
             do_sample=do_sample,
-            output_scores=True,
-            output_attentions=True,
-            output_hidden_states=False,
+            output_scores=self._output_scores,
+            output_attentions=self._output_attentions,
+            output_hidden_states=self._output_hidden_states,
             return_dict_in_generate=True,
         )
 
