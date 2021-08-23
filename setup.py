@@ -71,5 +71,7 @@ setuptools.setup(
         'scikit-learn~=0.23',
         'dill~=0.3',
         'xgboost~=1.3',
+        # BiToD
+        'BiToD==0.0.1',
     ],
 )

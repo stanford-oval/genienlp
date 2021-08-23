@@ -583,13 +583,20 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
         f'answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}'
     )
 
+    if train:
+        sort_key_fn = dataset.sort_key_fn
+        batch_size_fn = dataset.batch_size_fn
+    else:
+        sort_key_fn = getattr(dataset, 'eval_sort_key_fn', dataset.sort_key_fn)
+        batch_size_fn = getattr(dataset, 'eval_batch_size_fn', dataset.batch_size_fn)
+
     sampler = LengthSortedIterator(
         all_features,
         batch_size=batch_size,
         sort=True,
         shuffle_and_repeat=train,
-        sort_key_fn=dataset.sort_key_fn,
-        batch_size_fn=dataset.batch_size_fn,
+        sort_key_fn=sort_key_fn,
+        batch_size_fn=batch_size_fn,
         groups=dataset.groups,
     )
     # get the sorted data_source
@@ -815,12 +822,19 @@ def load_config_json(args):
             'reduce_metrics',
             'database_dir',
         ]
-        # these are true/ false arguments
-        overwrite_actions = ['do_alignment', 'align_preserve_input_quotation', 'align_remove_output_quotation']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
+
+        # these are true/ false arguments
+        overwrite_actions = [
+            'do_alignment',
+            'align_preserve_input_quotation',
+            'align_remove_output_quotation',
+            'bitod_e2e_evaluation',
+        ]
         for o in overwrite_actions:
+            # if argument is True in predict overwrite train; if False retrieve from train
             if not getattr(args, o, False):
                 retrieve.append(o)
 

@@ -445,4 +445,5 @@ class BiTOD(BaseTask):
         )
 
     def get_splits(self, root, **kwargs):
+        kwargs['e2e_evaluation'] = self.args.bitod_e2e_evaluation
         return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)

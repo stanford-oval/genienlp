@@ -529,6 +529,11 @@ def parse_argv(parser):
         choices=['dst', 'api', 'response', 'all'],
         help='',
     )
+    parser.add_argument(
+        '--bitod_e2e_evaluation',
+        action='store_true',
+        help='',
+    )
 
 
 def check_and_update_generation_args(args):
@@ -618,6 +623,10 @@ def post_parse_general(args):
 
 
 def post_parse_train_specific(args):
+    if args.bitod_e2e_evaluation and args.val_batch_size[0] != 1:
+        logger.warning('When evaluating bitod end2end val_batch_size should be 1 so we load data turn by turn')
+        args.val_batch_size = [1]
+
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
 
