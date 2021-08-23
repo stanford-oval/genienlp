@@ -187,7 +187,7 @@ class TransformerSeq2Seq(GenieModel):
             diversity_penalty=diversity_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
             do_sample=do_sample,
-            output_scores=False,
+            output_scores=True,
             output_attentions=True,
             output_hidden_states=False,
             return_dict_in_generate=True,

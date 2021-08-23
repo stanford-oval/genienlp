@@ -242,7 +242,7 @@ class TransformerLSTM(GenieModel):
             do_sample=do_sample,
             generation_dict={'max_output_length': max_output_length},
             encoder_output=encoder_output,
-            output_scores=False,
+            output_scores=True,
             output_attentions=False,
             output_hidden_states=False,
             return_dict_in_generate=True,

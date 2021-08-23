@@ -39,6 +39,34 @@ from .models import TransformerForSequenceClassification, TransformerForTokenCla
 from .util import GenerationOutput, merge_translated_sentences
 
 
+def calculate_loss(model, pred_logits, answer):
+    # calculate loss
+    # it's not exactly meaningful to calculate loss for generation tasks
+    # cause position of prediction tokens may not align with gold tokens
+    batch_size, vocab_size = pred_logits.shape[0], pred_logits.shape[2]
+    answer_value = answer.value[:, 1:].contiguous()
+    answer_length = answer.length - 1
+    partial_batch_prediction_logits = pred_logits[:, : max(answer_length), :].contiguous()
+    partial_batch_prediction_logits = torch.where(
+        torch.isinf(partial_batch_prediction_logits),
+        torch.tensor(1e-10, device=partial_batch_prediction_logits.device),
+        partial_batch_prediction_logits,
+    )
+    loss = model.criterion(
+        partial_batch_prediction_logits.view(-1, vocab_size),
+        target=answer_value.view(-1),
+        ignore_index=model.numericalizer.pad_id,
+    )
+    loss = loss.view(batch_size, -1)  # (batch_size, sequence_length)
+    loss = loss.sum(dim=1) / answer_length  # accounts for the case where BOS is removed
+    if model.dropper is not None:
+        dropper_mask = model.dropper(loss)
+        loss = loss * dropper_mask
+    loss = loss.sum()  # sum over the batch size
+
+    return loss
+
+
 def generate_with_model(
     model,
     data_iterator,
@@ -93,6 +121,7 @@ def generate_with_seq2seq_model(
         answers
         contexts
     """
+    total_loss = 0.0
     output_confidence_scores = confidence_estimators is not None
     predictions = []
     confidence_features = []
@@ -136,6 +165,8 @@ def generate_with_seq2seq_model(
                 do_sample=args.temperature[hyperparameter_idx] != 0,  # if temperature==0, we do not sample
             )
             partial_batch_prediction_ids = generated.sequences
+            partial_batch_prediction_logits = torch.stack(generated.scores).permute(1, 0, 2).contiguous()
+
             cross_attentions = getattr(generated, 'cross_attentions', None)
 
             if cross_attentions is not None:
@@ -181,6 +212,11 @@ def generate_with_seq2seq_model(
         predictions += batch_prediction
         confidence_features += batch_confidence_features
 
+        loss = calculate_loss(model, partial_batch_prediction_logits, batch.answer)
+        total_loss += loss
+
+    total_loss /= len(answers)
+
     if original_order is not None:
         # sort back to the original order
         original_order, example_ids, predictions, answers, contexts, confidence_features = [
@@ -202,9 +238,7 @@ def generate_with_seq2seq_model(
             numericalizer._tokenizer.tgt_lang,
         )
 
-    # TODO calculate and return loss
-    loss = None
-    output = GenerationOutput(loss=loss)
+    output = GenerationOutput(loss=total_loss)
 
     if output_predictions_only:
         output.predictions = predictions
@@ -228,6 +262,7 @@ def generate_with_seq2seq_model(
 def generate_with_classification_model(
     model, data_iterator, numericalizer, task, original_order=None, disable_progbar=True
 ) -> GenerationOutput:
+    total_loss = 0.0
     all_example_ids = []
     all_answers = []
     all_contexts = []
@@ -270,6 +305,11 @@ def generate_with_classification_model(
         all_answers += processed_labels
         all_predictions += processed_preds
 
+        loss = calculate_loss(model, logits, batch.answer)
+        total_loss += loss
+
+    total_loss /= len(batch.answer)
+
     if original_order is not None:
         # sort back to the original order
         original_order, all_example_ids, all_predictions, all_answers, all_contexts = [
@@ -279,10 +319,8 @@ def generate_with_classification_model(
             )
         ]
 
-    # TODO calculate and return loss
-    loss = None
     output = GenerationOutput(
-        loss=loss, example_ids=all_example_ids, contexts=all_contexts, answers=all_answers, predictions=all_predictions
+        loss=total_loss, example_ids=all_example_ids, contexts=all_contexts, answers=all_answers, predictions=all_predictions
     )
 
     return output
