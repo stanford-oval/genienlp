@@ -41,6 +41,7 @@ class BaseTask(object):
 
     def __init__(self, name, args):
         self.name = name
+        self.args = args
         self._metrics = ['em', 'nem', 'nf1']
         # special task-specific tokens that should not be subword tokenized
         self.special_tokens = set()

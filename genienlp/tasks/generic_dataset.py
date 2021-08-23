@@ -1985,6 +1985,10 @@ class BiTODDataset(CQA):
                     break
 
         super().__init__(examples, **kwargs)
+        
+        if kwargs['e2e_evaluation']:
+            self.eval_sort_key_fn = None
+            self.eval_batch_size_fn = default_batch_fn
 
     @classmethod
     def return_splits(cls, path='.data', train='train', validation='valid', test='test', **kwargs):
