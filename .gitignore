@@ -25,7 +25,7 @@ models/.DS_Store
 src/
 workdir/
 *save*/
-eval_dir/*
+eval_dir*/*
 genieNLP-tests*
 
 lightning_logs/
