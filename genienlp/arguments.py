@@ -524,12 +524,6 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--bitod_validation_task',
-        default='all',
-        choices=['dst', 'api', 'response', 'all'],
-        help='',
-    )
-    parser.add_argument(
         '--bitod_e2e_evaluation',
         action='store_true',
         help='',

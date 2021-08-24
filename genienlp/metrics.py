@@ -27,10 +27,10 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import collections
 import os
 import re
 import string
+from collections import Counter, OrderedDict, defaultdict
 from contextlib import closing
 from multiprocessing import Pool, cpu_count
 from subprocess import PIPE, Popen
@@ -212,7 +212,7 @@ def normalize_text(s):
 def f1_score(prediction, ground_truth):
     prediction_tokens = prediction.split()
     ground_truth_tokens = ground_truth.split()
-    common = collections.Counter(prediction_tokens) & collections.Counter(ground_truth_tokens)
+    common = Counter(prediction_tokens) & Counter(ground_truth_tokens)
     num_same = sum(common.values())
     if num_same == 0:
         return 0
@@ -513,6 +513,44 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
 
 
+def computeBITOD(greedy, answer, tgt_lang):
+    num_examples = len(answer)
+    subtask_metrics_dict = defaultdict(tuple)
+
+    subtasks = ['dst', 'api', 'response']
+    subtask_metrics = [['em'], ['em'], ['casedbleu']]
+    subtask_weights = [1, 1, 1]
+
+    for t in range(len(subtasks)):
+        preds, golds = [], []
+        for i in range(t, num_examples, 3):
+            preds.append(greedy[i])
+            golds.append(answer[i])
+
+        metrics_to_compute = subtask_metrics[t]
+        sub_metrics, _ = compute_metrics(preds, golds, metrics_to_compute, tgt_lang)
+        subtask_metrics_dict[subtasks[t]] = (sub_metrics, len(golds), subtask_weights[t])
+
+    # TODO  how should we aggregate?
+    bitod_score = 0.0
+    weighted_num_examples = 0
+    for subtask, (sub_metrics, num_ex, weight) in subtask_metrics_dict.items():
+        if subtask == 'dst':
+            bitod_score += weight * (sub_metrics['em'] * num_ex)
+            JGA = sub_metrics['em']
+        elif subtask == 'api':
+            bitod_score += weight * (sub_metrics['em'] * num_ex)
+            api_em = sub_metrics['em']
+        elif subtask == 'response':
+            bitod_score += weight * (sub_metrics['casedbleu'] * num_ex)
+            response_bleu = sub_metrics['casedbleu']
+        weighted_num_examples += weight * num_ex
+
+    bitod_score /= weighted_num_examples
+
+    return bitod_score, JGA, response_bleu, api_em
+
+
 def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
     """
     Inputs:
@@ -532,6 +570,11 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
     metric_values = []
     if not isinstance(answer[0], list):
         answer = [[a] for a in answer]
+    if 'bitod_score' in requested_metrics:
+        requested_metrics += ['JGA', 'response_bleu', 'api_em']
+        bitod_score, JGA, response_bleu, api_em = computeBITOD(greedy, answer, lang)
+        metric_keys += ['bitod_score', 'JGA', 'response_bleu', 'api_em']
+        metric_values += [bitod_score, JGA, response_bleu, api_em]
     if 'lfem' in requested_metrics:
         lfem, answer = computeLFEM(greedy, answer)
         metric_keys += ['lfem']
@@ -541,9 +584,10 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
         avg_dialogue = (joint_goal_em + request_em) / 2
         metric_keys += ['joint_goal_em', 'turn_request_em', 'turn_goal_em', 'avg_dialogue']
         metric_values += [joint_goal_em, request_em, turn_goal_em, avg_dialogue]
-    em = computeEM(greedy, answer)
-    metric_keys += ['em']
-    metric_values += [em]
+    if 'em' in requested_metrics:
+        em = computeEM(greedy, answer)
+        metric_keys += ['em']
+        metric_values += [em]
     if 'pem' in requested_metrics:
         pem = computePartialEM(greedy, answer)
         metric_keys.append('pem')
@@ -644,5 +688,17 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
         metric_values += [corpus_f1, precision, recall]
 
     metric_dict = dict(zip(metric_keys, metric_values))
-    metric_dict = collections.OrderedDict((key, metric_dict[key]) for key in requested_metrics)
+    metric_dict = OrderedDict((key, metric_dict[key]) for key in requested_metrics)
     return metric_dict, answer
+
+
+def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics, lang):
+    metrics = OrderedDict()
+    for i in range(len(predictions[0])):
+        partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute, lang)
+        for k, v in partial_metrics.items():
+            if reduce_metrics == 'max':
+                metrics[k] = max(metrics.get(k, 0), v)
+            else:
+                raise ValueError('Invalid reduce_metrics argument')
+    return metrics
