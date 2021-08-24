@@ -532,7 +532,7 @@ def computeBITOD(greedy, answer, tgt_lang):
         subtask_metrics_dict[subtasks[t]] = (sub_metrics, len(golds), subtask_weights[t])
 
     # TODO  how should we aggregate?
-    bitod_score = 0.0
+    bitod_score, JGA, response_bleu, api_em = 0.0, 0.0, 0.0, 0.0
     weighted_num_examples = 0
     for subtask, (sub_metrics, num_ex, weight) in subtask_metrics_dict.items():
         if subtask == 'dst':
