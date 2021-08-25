@@ -29,12 +29,11 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys
-from collections import OrderedDict
 
 import torch
 
 from .data_utils.progbar import progress_bar
-from .metrics import compute_metrics
+from .metrics import calculate_and_reduce_metrics
 from .models import TransformerForSequenceClassification, TransformerForTokenClassification
 from .util import GenerationOutput, merge_translated_sentences
 
@@ -303,26 +302,29 @@ def generate_with_classification_model(
     return output
 
 
-def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics, lang):
-    metrics = OrderedDict()
-    for i in range(len(predictions[0])):
-        partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute, lang)
-        for k, v in partial_metrics.items():
-            if reduce_metrics == 'max':
-                metrics[k] = max(metrics.get(k, 0), v)
-            else:
-                raise ValueError('Invalid reduce_metrics argument')
-    return metrics
-
-
-def print_results(keys, values, num_print=1):
+def print_results(results, num_print):
     print()
-    start = 0
-    end = start + num_print
-    values = [val[start:end] for val in values]
-    for ex_idx in range(len(values[0])):
-        for key_idx, key in enumerate(keys):
-            value = values[key_idx][ex_idx]
+
+    values = list(results.values())
+    num_examples = len(values[0])
+
+    # examples are sorted by length
+    # to get good diversity, get half of examples from second quartile
+    start = int(num_examples / 4)
+    end = start + int(num_print / 2)
+    first_list = [val[start:end] for val in values]
+
+    # and the other half from fourth quartile
+    start = int(3 * num_examples / 4)
+    end = start + num_print - int(num_print / 2)
+    second_list = [val[start:end] for val in values]
+
+    # join examples
+    processed_values = [first + second for first, second in zip(first_list, second_list)]
+
+    for ex_idx in range(len(processed_values[0])):
+        for key_idx, key in enumerate(results.keys()):
+            value = processed_values[key_idx][ex_idx]
             v = value[0] if isinstance(value, list) else value
             print(f'{key:>11}: {repr(v)}')
         print()
@@ -336,8 +338,6 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
             # get rid of the DataParallel wrapper
             model = model.module
 
-        names = ['beam search', 'answer', 'context']
-
         output = generate_with_model(model, val_iter, numericalizer, task, args)
 
         # loss is already calculated
@@ -346,7 +346,9 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
         metrics = calculate_and_reduce_metrics(
             output.predictions, output.answers, metrics_to_return, args.reduce_metrics, model.tgt_lang
         )
-        results = [output.predictions, output.answers, output.contexts]
-        print_results(names, results, num_print=num_print)
+
+        results = {'beam search': output.predictions, 'answer': output.answers, 'context': output.contexts}
+
+        print_results(results, num_print)
 
         return output, metrics

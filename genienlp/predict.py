@@ -38,6 +38,8 @@ from pprint import pformat
 
 from torch.multiprocessing import Process, set_start_method
 
+from genienlp.metrics import calculate_and_reduce_metrics
+
 try:
     set_start_method('spawn')
 except RuntimeError:
@@ -60,7 +62,7 @@ from .util import (
     set_seed,
     split_folder_on_disk,
 )
-from .validate import calculate_and_reduce_metrics, generate_with_model
+from .validate import generate_with_model
 
 logger = logging.getLogger(__name__)
 
