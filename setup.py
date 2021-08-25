@@ -72,6 +72,6 @@ setuptools.setup(
         'dill~=0.3',
         'xgboost~=1.3',
         # BiToD
-        'BiToD==0.0.1',
+        'BiToD @ git+ssh://git@github.com/Mehrad0711/BiToD@main',
     ],
 )
