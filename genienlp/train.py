@@ -565,13 +565,12 @@ def train(
                 # validate
                 if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
                     if args.print_train_examples_too:
-                        names = ['answer', 'context']
-                        values = [
-                            numericalizer.reverse(batch.answer.value.data, 'answer'),
-                            numericalizer.reverse(batch.context.value.data, 'context'),
-                        ]
-                        num_print = min(len(values[0]), args.num_print)
-                        print_results(names, values, num_print=num_print)
+                        results = {
+                            'answer': numericalizer.reverse(batch.answer.value.data, 'answer'),
+                            'context': numericalizer.reverse(batch.context.value.data, 'context'),
+                        }
+                        num_print = min(len(results['answer']), args.num_print)
+                        print_results(results, num_print)
 
                     deca_score = do_validate(
                         iteration,

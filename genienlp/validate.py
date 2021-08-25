@@ -601,14 +601,24 @@ def generate_with_classification_model(
     return output
 
 
-def print_results(keys, values, num_print=1):
+def print_results(results, num_print):
     print()
-    start = 0
-    end = start + num_print
-    values = [val[start:end] for val in values]
-    for ex_idx in range(len(values[0])):
-        for key_idx, key in enumerate(keys):
-            value = values[key_idx][ex_idx]
+
+    values = list(results.values())
+    num_examples = len(values[0])
+    process_values = []
+
+    start = int(num_examples / 4)
+    end = start + int(num_print / 2)
+    process_values += [val[start:end] for val in values]
+
+    start = int(3 * num_examples / 4)
+    end = start + num_print - int(num_print / 2)
+    process_values += [val[start:end] for val in values]
+
+    for ex_idx in range(len(process_values[0])):
+        for key_idx, key in enumerate(results.keys()):
+            value = process_values[key_idx][ex_idx]
             v = value[0] if isinstance(value, list) else value
             print(f'{key:>11}: {repr(v)}')
         print()
@@ -622,18 +632,16 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
             # get rid of the DataParallel wrapper
             model = model.module
 
-        names = ['beam search', 'answer', 'context']
-
         output = generate_with_model(model, val_iter, numericalizer, task, args)
 
         # loss is already calculated
         metrics_to_compute = [metric for metric in task.metrics if metric not in ['loss']]
-
         metrics = calculate_and_reduce_metrics(
             output.predictions, output.answers, metrics_to_compute, args.reduce_metrics, model.tgt_lang
         )
 
-        results = [output.predictions, output.answers, output.contexts]
-        print_results(names, results, num_print=num_print)
+        results = {'beam search': output.predictions, 'answer': output.answers, 'context': output.contexts}
+
+        print_results(results, num_print)
 
         return output, metrics
