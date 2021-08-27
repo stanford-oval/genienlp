@@ -447,6 +447,7 @@ def run(args, device):
                     output_confidence_features=args.save_confidence_features,
                     confidence_estimators=confidence_estimators,
                     disable_progbar=False,
+                    eval_dir=eval_dir,
                 )
 
             if args.save_confidence_features:
