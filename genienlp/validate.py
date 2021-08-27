@@ -29,6 +29,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import copy
 import logging
+import os
 import re
 import sys
 import time
@@ -61,6 +62,7 @@ def generate_with_model(
     confidence_estimators=None,
     disable_progbar=True,
     interactive=False,
+    eval_dir=None,
 ):
     if args.bitod_e2e_evaluation:
         if interactive:
@@ -80,6 +82,7 @@ def generate_with_model(
                 numericalizer,
                 task,
                 args,
+                eval_dir,
                 output_predictions_only=output_predictions_only,
                 original_order=original_order,
                 disable_progbar=disable_progbar,
@@ -344,6 +347,7 @@ def generate_with_seq2seq_model_for_dialogue(
     numericalizer,
     task,
     args,
+    eval_dir,
     output_predictions_only=False,
     original_order=None,
     disable_progbar=True,
@@ -586,7 +590,7 @@ def generate_with_seq2seq_model_for_dialogue(
             bitod_preds[dial_id]["turns"][str(turn_id)]["response"] = predictions[-1]
             ####
 
-    with open(f"{int(time.time())}_bitod_preds.json", 'w') as fout:
+    with open(os.path.join(eval_dir, 'bitod_preds.json'), 'w') as fout:
         ujson.dump(bitod_preds, fout, indent=2, ensure_ascii=False)
 
     if original_order is not None:
