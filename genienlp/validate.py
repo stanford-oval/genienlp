@@ -283,8 +283,8 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
                                 constraints=[constraints],
                             )
                         except Exception as e:
-                            print(f'Error: {e}')
-                            print(f'Failed API call with api_name: {api_name} and constraints: {constraints}')
+                            logger.error(f'Error: {e}')
+                            logger.error(f'Failed API call with api_name: {api_name} and constraints: {constraints}')
                             msg = [0, 0]
 
                         domain = api_name.split(" ")[0]
@@ -558,14 +558,19 @@ def generate_with_seq2seq_model_for_dialogue(
                             constraints=[constraints],
                         )
                     except Exception as e:
-                        print(f'Error: {e}')
-                        print(f'Failed API call with api_name: {api_name} and constraints: {constraints}')
+                        logger.error(f'Error: {e}')
+                        logger.error(
+                            f'Failed API call with api_name: {api_name} and constraints: {constraints} for turn: {dial_id}/{turn_id}'
+                        )
                         msg = [0, 0]
 
                     domain = api_name.split(" ")[0]
 
                     knowledge = defaultdict(dict)
                     if int(msg[1]) <= 0:
+                        logger.warning(
+                            f'Message = No item available for api_name: {api_name} and constraints: {constraints} for turn: {dial_id}/{turn_id}'
+                        )
                         new_knowledge_text = f'( {domain} ) Message = No item available.'
                     else:
                         # why does it only choose the first; does the same happen for training data?
