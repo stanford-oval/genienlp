@@ -58,6 +58,7 @@ setuptools.setup(
         'datasets==1.12.1',
         'seqeval==1.2.2',
         'transformers==4.10.2',
+        'dictdiffer~=0.9',
         'sentencepiece==0.1.*',
         'sentence-transformers==2.0.0',
         'mosestokenizer~=1.1',
