@@ -148,6 +148,9 @@ def generate_with_seq2seq_model_for_dialogue(
     answers = []
     contexts = []
 
+    # TODO: handle multiple responses
+    hyperparameter_idx = 0
+
     cur_dial_id = ''
 
     device = model.device
@@ -178,8 +181,9 @@ def generate_with_seq2seq_model_for_dialogue(
             active_api = None
             bitod_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
 
-        batch_tokens = numericalizer.convert_ids_to_tokens(turn.context.value.data, skip_special_tokens=False)
         batch_context = []
+        batch_tokens = numericalizer.convert_ids_to_tokens(turn.context.value.data, skip_special_tokens=False)
+
         # remove only beginning and trailing special tokens
         # otherwise the sep_token added between context and question will be lost
         for text in batch_tokens:
@@ -202,14 +206,10 @@ def generate_with_seq2seq_model_for_dialogue(
             ]
             answers += batch_answer
 
-        # iterate through turns
-        hyperparameter_idx = 0
-
-        # we always use gold history following common practice
-
         if train_target == 'dst':
             input_text = replace_match(contexts[-1], state_re, new_state_text)
 
+            ## we always use gold history following common practice
             ## if you want to use predicted response instead of gold uncomment the following
             # last_sys_pred = predictions[-1][0].strip()
             # input_text = replace_match(input_text, last_system_re, last_sys_pred)
@@ -257,6 +257,7 @@ def generate_with_seq2seq_model_for_dialogue(
             no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
             do_sample=args.temperature[hyperparameter_idx] != 0,
         )
+
         partial_batch_prediction_ids = generated.sequences
 
         partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
@@ -288,36 +289,31 @@ def generate_with_seq2seq_model_for_dialogue(
 
         elif train_target == 'api':
             new_knowledge_text = 'null'
-            constraints = {}
-
-            api_name = active_api if active_api else 'None'
-
             do_api_call = predictions[-1][0].strip()
 
             if do_api_call == 'yes':
                 # make api call
                 api_name = active_api
-                # do api call
+
                 if api_name in dialogue_state:
                     constraints = state2constraints(dialogue_state[api_name])
                     domain = api_name.split(" ")[0]
                     knowledge = defaultdict(dict)
 
                     try:
-                        msg = api.call_api(
-                            r_en_API_MAP.get(api_name, api_name),
-                            constraints=[constraints],
-                        )
+                        msg = api.call_api(r_en_API_MAP.get(api_name, api_name), constraints=[constraints])
                     except Exception as e:
                         logger.error(f'Error: {e}')
                         logger.error(
-                            f'Failed API call with api_name: {api_name}, constraints: {constraints}, processed_query: {msg[2]}, for turn: {dial_id}/{turn_id}'
+                            f'Failed API call with api_name: {api_name}, constraints: {constraints},'
+                            f' processed_query: {msg[2]}, for turn: {dial_id}/{turn_id}'
                         )
                         msg = [0, 0, 0]
 
                     if int(msg[1]) <= 0:
                         logger.warning(
-                            f'Message = No item available for api_name: {api_name}, constraints: {constraints}, processed_query: {msg[2]}, for turn: {dial_id}/{turn_id}'
+                            f'Message = No item available for api_name: {api_name}, constraints: {constraints},'
+                            f' processed_query: {msg[2]}, for turn: {dial_id}/{turn_id}'
                         )
                         gold_dial_state = span2state(state_re.search(contexts[-1]).group(1).strip(), api_names)
                         logger.warning(
@@ -326,21 +322,24 @@ def generate_with_seq2seq_model_for_dialogue(
 
                         new_knowledge_text = f'( {domain} ) Message = No item available.'
                     else:
-                        # why does it only choose the first; does the same happen for training data?
+                        # always choose highest ranking results (having deterministic api results)
                         knowledge[domain].update(msg[0])
                         new_knowledge_text = knowledge2span(knowledge)
+
+                    #### save latest api constraints
+                    bitod_preds[dial_id]["API"][r_en_API_MAP.get(api_name, api_name)] = copy.deepcopy(constraints)
+                    ####
 
             elif do_api_call == 'no':
                 # do nothing
                 pass
             else:
                 logger.error(
-                    f'API call should be either yes or no but got {do_api_call}; seems model is still training so we assume it\'s a no'
+                    f'API call should be either yes or no but got {do_api_call}. Seems model is still training so we assume it\'s a no'
                 )
 
-            #### save latest api results and constraints
+            #### save latest api results
             bitod_preds[dial_id]["turns"][str(turn_id)]["api"] = new_knowledge_text
-            bitod_preds[dial_id]["API"][r_en_API_MAP.get(api_name, api_name)] = copy.deepcopy(constraints)
             ####
 
         if train_target == 'response':
