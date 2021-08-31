@@ -26,6 +26,7 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
     original_order=None,
     disable_progbar=True,
 ) -> GenerationOutput:
+    from termcolor import colored
 
     bitod_preds = dict()
 
@@ -51,28 +52,28 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
     convo_history = []
     convo_window = 3
 
+    hyperparameter_idx = 0
+
     train_target = 'response'
 
     next_target = {'dst': 'api', 'api': 'response', 'response': 'dst'}
 
     while True:
         try:
-
             batch_prediction = []
 
             # becomes dst for first turn
             train_target = next_target[train_target]
 
-            hyperparameter_idx = 0
-
             if train_target == 'dst':
                 if convo_history:
-                    print(convo_history[-1])
+                    print(colored(f'SYSTEM: {convo_history[-1]}', 'red', attrs=['bold']))
                 else:
-                    print('Hello! What are you looking for today?')
+                    print(colored('SYSTEM: Hello! What are you looking for today?', 'red', attrs=['bold']))
+
                 # Hello, I am looking for a restaurant with Vegan Options.
                 # construct new input
-                raw_user_input = input('USER: ')
+                raw_user_input = input(colored('USER: ', 'green', attrs=['bold']))
                 if raw_user_input == 'RESET':
                     generate_with_seq2seq_model_for_dialogue_interactive(
                         model,
@@ -86,6 +87,8 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
                     break
                 elif raw_user_input == 'END':
                     sys.exit(0)
+                elif raw_user_input == 'STATE':
+                    print(f'dialogue state: {dialogue_state}')
 
                 raw_user_input = 'USER: ' + raw_user_input.strip()
 
@@ -116,12 +119,7 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
                     limited=torch.tensor([tokenized_contexts.limited], device=device),
                     feature=None,
                 ),
-                answer=SequentialField(
-                    value=None,
-                    length=None,
-                    limited=None,
-                    feature=None,
-                ),
+                answer=SequentialField(value=None, length=None, limited=None, feature=None),
             )
 
             generated = model.generate(
@@ -170,50 +168,45 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
 
             elif train_target == 'api':
                 new_knowledge_text = 'null'
-                constraints = {}
-
-                api_name = active_api if active_api else 'None'
-
                 do_api_call = predictions[-1][0].strip()
 
                 if do_api_call == 'yes':
-                    # make api call if required
+                    # make api call
                     api_name = active_api
-                    # do api call
+
                     if api_name in dialogue_state:
                         constraints = state2constraints(dialogue_state[api_name])
+                        domain = api_name.split(" ")[0]
+                        knowledge = defaultdict(dict)
 
                         try:
-                            msg = api.call_api(
-                                r_en_API_MAP.get(api_name, api_name),
-                                constraints=[constraints],
-                            )
+                            msg = api.call_api(r_en_API_MAP.get(api_name, api_name), constraints=[constraints])
                         except Exception as e:
                             logger.error(f'Error: {e}')
-                            logger.error(f'Failed API call with api_name: {api_name} and constraints: {constraints}')
-                            msg = [0, 0]
+                            logger.error(
+                                f'Failed API call with api_name: {api_name}, constraints: {constraints},'
+                                f' processed_query: {msg[2]}, for turn: {dial_id}/{turn_id}'
+                            )
+                            msg = [0, 0, 0]
 
-                        domain = api_name.split(" ")[0]
-
-                        knowledge = defaultdict(dict)
                         if int(msg[1]) <= 0:
+                            logger.warning(
+                                f'Message = No item available for api_name: {api_name}, constraints: {constraints},'
+                                f' processed_query: {msg[2]}, for turn: {dial_id}/{turn_id}'
+                            )
+
                             new_knowledge_text = f'( {domain} ) Message = No item available.'
                         else:
-                            # why does it only choose the first; does the same happen for training data?
+                            # always choose highest ranking results (having deterministic api results)
                             knowledge[domain].update(msg[0])
                             new_knowledge_text = knowledge2span(knowledge)
 
-                elif do_api_call == 'no':
-                    # do nothing
-                    pass
-                else:
-                    logger.error(
-                        f'API call should be either yes or no but got {do_api_call}; seems model is still training so we assume it\'s a no'
-                    )
+                        #### save latest api constraints
+                        bitod_preds[dial_id]["API"][r_en_API_MAP.get(api_name, api_name)] = copy.deepcopy(constraints)
+                        ####
 
                 #### save latest api results and constraints
                 bitod_preds[dial_id]["turns"][str(turn_id)]["api"] = new_knowledge_text
-                bitod_preds[dial_id]["API"][r_en_API_MAP.get(api_name, api_name)] = copy.deepcopy(constraints)
                 ####
 
             if train_target == 'response':
