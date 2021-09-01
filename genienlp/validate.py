@@ -100,6 +100,11 @@ def generate_with_seq2seq_model(
     answers = []
     contexts = []
 
+    if numericalizer._tokenizer.tgt_lang:
+        tgt_lang = numericalizer._tokenizer.tgt_lang
+    else:
+        tgt_lang = model.orig_tgt_lang
+
     for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
@@ -156,7 +161,7 @@ def generate_with_seq2seq_model(
                 cross_attentions = cross_attentions[-1, ...]
 
                 # postprocess prediction ids
-                kwargs = {'numericalizer': numericalizer, 'cross_attentions': cross_attentions}
+                kwargs = {'numericalizer': numericalizer, 'cross_attentions': cross_attentions, 'tgt_lang': tgt_lang}
                 partial_batch_prediction_ids = task.batch_postprocess_prediction_ids(
                     batch_example_ids, batch.context.value.data, partial_batch_prediction_ids, **kwargs
                 )

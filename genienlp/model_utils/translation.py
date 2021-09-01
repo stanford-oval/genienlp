@@ -85,7 +85,9 @@ def return_token_word_mapping(tokens, tokenizer):
     return token2word_mapping, word2token_span_mapping
 
 
-def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, src_spans, remove_output_quotation):
+def align_and_replace(
+    src_tokens, tgt_tokens, tokenizer, tgt_lang, sample_layer_attention_pooled, src_spans, remove_output_quotation
+):
     src_quotation_symbol = '"'
 
     # M2M100Tokenizer has missing tokens in its fixed vocabulary and encodes them as unknown (https://github.com/pytorch/fairseq/issues/3463)
@@ -121,12 +123,15 @@ def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_
         expanded_matches = [cur_match]
 
         # translation turned digit into words
-        if (
-            len(cur_match) == 1
-            and cur_match[0].isdigit()
-            and (tokenizer.tgt_lang in CONVERTER_CLASSES or tokenizer.tgt_lang[:2] in CONVERTER_CLASSES)
-        ):
-            expanded_matches.append([num2words(cur_match[0], lang=tokenizer.tgt_lang, to='cardinal')])
+        if len(cur_match) == 1 and cur_match[0].isdigit():
+            converter = None
+            if tgt_lang in CONVERTER_CLASSES:
+                converter = CONVERTER_CLASSES[tgt_lang]
+            elif tgt_lang[:2] in CONVERTER_CLASSES:
+                converter = CONVERTER_CLASSES[tgt_lang[:2]]
+
+            if converter and hasattr(converter, 'str_to_number'):
+                expanded_matches.append([num2words(cur_match[0], lang=tgt_lang, to='cardinal')])
 
         for match in expanded_matches:
             count, beg_indices = count_substring(tgt_words, match)
