@@ -381,6 +381,7 @@ class Translate(NaturalSeq2Seq):
 
         numericalizer = kwargs.pop('numericalizer')
         cross_attentions = kwargs.pop('cross_attentions')
+        tgt_lang = kwargs.pop('tgt_lang')
         num_outputs = len(batch_tgt_ids) // len(batch_src_ids)
 
         # TODO _tokenizer should not be private
@@ -448,7 +449,13 @@ class Translate(NaturalSeq2Seq):
             if self.args.do_alignment:
                 src_spans = self.input_spans[example_id]
                 text = align_and_replace(
-                    src_tokens, tgt_tokens, tokenizer, cross_att, src_spans, self.args.align_remove_output_quotation
+                    src_tokens,
+                    tgt_tokens,
+                    tokenizer,
+                    tgt_lang,
+                    cross_att,
+                    src_spans,
+                    self.args.align_remove_output_quotation,
                 )
             else:
                 text = tokenizer.convert_tokens_to_string(tgt_tokens)
