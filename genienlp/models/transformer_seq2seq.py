@@ -58,6 +58,9 @@ class TransformerSeq2Seq(GenieModel):
         if tasks:
             self.set_task_dependent_generation_kwargs(tasks)
 
+        # only used for Marian models. adjusted language codes passed to numericalizer will be None for models trained on single langauge pairs
+        self.orig_src_lang, self.orig_tgt_lang = kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
+
         self.src_lang, self.tgt_lang = adjust_language_code(
             config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
         )
