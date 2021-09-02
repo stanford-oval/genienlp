@@ -96,7 +96,7 @@ class BaseAlmondTask(BaseTask):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
     def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, batch_tgt_ids, **kwargs):
-        return batch_tgt_ids
+        return batch_tgt_ids, None
 
     def postprocess_prediction(self, example_id, prediction):
 
@@ -433,12 +433,12 @@ class Translate(NaturalSeq2Seq):
 
             all_text_outputs.append(text)
 
-            with tokenizer.as_target_tokenizer():
-                partial_batch_prediction_ids = tokenizer.batch_encode_plus(
-                    all_text_outputs, padding=True, return_tensors='pt'
-                )['input_ids']
+        with tokenizer.as_target_tokenizer():
+            partial_batch_prediction_ids = tokenizer.batch_encode_plus(all_text_outputs, padding=True, return_tensors='pt')[
+                'input_ids'
+            ]
 
-        return partial_batch_prediction_ids
+        return partial_batch_prediction_ids, all_text_outputs
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # answer has to be provided by default unless doing prediction

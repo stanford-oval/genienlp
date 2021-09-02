@@ -31,6 +31,7 @@
 import sys
 
 import torch
+from transformers import MarianTokenizer
 
 from .data_utils.progbar import progress_bar
 from .metrics import calculate_and_reduce_metrics
@@ -162,16 +163,22 @@ def generate_with_seq2seq_model(
 
                 # postprocess prediction ids
                 kwargs = {'numericalizer': numericalizer, 'cross_attentions': cross_attentions, 'tgt_lang': tgt_lang}
-                partial_batch_prediction_ids = task.batch_postprocess_prediction_ids(
+                partial_batch_prediction_ids, partial_batch_words = task.batch_postprocess_prediction_ids(
                     batch_example_ids, batch.context.value.data, partial_batch_prediction_ids, **kwargs
                 )
 
-            if output_confidence_features or output_confidence_scores:
-                partial_batch_confidence_features = model.confidence_features(
-                    batch=batch, predictions=partial_batch_prediction_ids, mc_dropout_num=args.mc_dropout_num
-                )
-
-            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')
+            # MarianTokenizer uses two different spm models for encoding source vs target language.
+            # in almond_translate we postprocess text with alignment which gives code-switched sentences.
+            # encoding a code-switched sentence with either spm will omit tokens from the other language
+            # so now we will return both the actual processed text and the encoded version
+            if isinstance(numericalizer._tokenizer, MarianTokenizer):
+                partial_batch_prediction = partial_batch_words
+            else:
+                if output_confidence_features or output_confidence_scores:
+                    partial_batch_confidence_features = model.confidence_features(
+                        batch=batch, predictions=partial_batch_prediction_ids, mc_dropout_num=args.mc_dropout_num
+                    )
+                partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')
 
             def get_example_index(i):
                 return (i // args.num_outputs[hyperparameter_idx]) % batch_size

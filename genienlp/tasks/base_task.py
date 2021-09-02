@@ -71,7 +71,7 @@ class BaseTask(object):
         return generic_dataset.JSON.splits(root=root, name=self.name, **kwargs)
 
     def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, batch_tgt_ids, **kwargs):
-        return batch_tgt_ids
+        return batch_tgt_ids, None
 
     def postprocess_prediction(self, example_id, prediction):
         return prediction
