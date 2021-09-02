@@ -37,9 +37,10 @@ from collections import defaultdict
 import dictdiffer
 import torch
 import ujson
-from BiToD.evaluate import r_en_API_MAP, span2state, state2constraints
+from BiToD.evaluate import r_en_API_MAP
 from BiToD.knowledgebase import api
 from BiToD.preprocess import API_MAP, knowledge2span, read_require_slots, state2span
+from BiToD.utils import span2state, state2constraints
 
 from .data_utils.example import NumericalizedExamples, SequentialField
 from .data_utils.progbar import progress_bar
@@ -297,7 +298,7 @@ def generate_with_seq2seq_model_for_dialogue(
 
                 if api_name in dialogue_state:
                     constraints = state2constraints(dialogue_state[api_name])
-                    domain = api_name.split(" ")[0]
+                    # domain = api_name.split(" ")[0]
                     knowledge = defaultdict(dict)
 
                     try:
@@ -320,10 +321,10 @@ def generate_with_seq2seq_model_for_dialogue(
                             f'state_diff: {list(dictdiffer.diff(dialogue_state[api_name], gold_dial_state[api_name]))}'
                         )
 
-                        new_knowledge_text = f'( {domain} ) Message = No item available.'
+                        new_knowledge_text = f'( {api_name} ) Message = No item available.'
                     else:
                         # always choose highest ranking results (having deterministic api results)
-                        knowledge[domain].update(msg[0])
+                        knowledge[api_name].update(msg[0])
                         new_knowledge_text = knowledge2span(knowledge)
 
                     #### save latest api constraints

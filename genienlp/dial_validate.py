@@ -89,6 +89,7 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
                     sys.exit(0)
                 elif raw_user_input == 'STATE':
                     print(f'dialogue state: {dialogue_state}')
+                    continue
 
                 raw_user_input = 'USER: ' + raw_user_input.strip()
 
@@ -176,7 +177,7 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
 
                     if api_name in dialogue_state:
                         constraints = state2constraints(dialogue_state[api_name])
-                        domain = api_name.split(" ")[0]
+                        # domain = api_name.split(" ")[0]
                         knowledge = defaultdict(dict)
 
                         try:
@@ -195,10 +196,10 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
                                 f' processed_query: {msg[2]}, for turn: {dial_id}/{turn_id}'
                             )
 
-                            new_knowledge_text = f'( {domain} ) Message = No item available.'
+                            new_knowledge_text = f'( {api_name} ) Message = No item available.'
                         else:
                             # always choose highest ranking results (having deterministic api results)
-                            knowledge[domain].update(msg[0])
+                            knowledge[api_name].update(msg[0])
                             new_knowledge_text = knowledge2span(knowledge)
 
                         #### save latest api constraints
