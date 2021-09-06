@@ -1,24 +1,24 @@
-import argparse
 from collections import Counter, defaultdict
 
 import jsonlines
 
 from genienlp.ned import BatchBootlegEntityDisambiguator
 
-parser = argparse.ArgumentParser()
 
-parser.add_argument('--bootleg_labels', type=str)
-parser.add_argument('--oracle_labels', type=str)
-parser.add_argument('--database_dir', type=str)
-parser.add_argument('--ned_domains', type=str, nargs='+')
-parser.add_argument('--output_file', type=str, default='comparison.txt')
+def parse_argv(parser):
 
-args = parser.parse_args()
+    parser.add_argument('--bootleg_labels', type=str)
+    parser.add_argument('--oracle_labels', type=str)
+    parser.add_argument('--database_dir', type=str)
+    parser.add_argument('--ned_domains', type=str, nargs='+')
+    parser.add_argument('--output_file', type=str, default='comparison.txt')
+    parser.add_argument('--bootleg_model', type=str, default='bootleg_uncased_mini')
+    parser.add_argument('--bootleg_output_dir', type=str, default='results_temp')
+    parser.add_argument('--embeddings', type=str, default='.embeddings')
+    parser.add_argument('--almond_type_mapping_path', type=str)
 
 
-if __name__ == '__main__':
-
-    args.bootleg_model = 'bootleg_uncased_mini'
+def main(args):
 
     # args.ned_normalize_types = 'soft'
     # args.bootleg_prob_threshold = 0.3
@@ -29,10 +29,6 @@ if __name__ == '__main__':
     args.bootleg_prob_threshold = 0.01
     args.max_types_per_qid = 2
     args.max_qids_per_entity = 2
-
-    args.bootleg_output_dir = 'results_temp'
-    args.embeddings = '.embeddings'
-    args.almond_type_mapping_path = None
 
     args.max_features_size = args.max_types_per_qid * args.max_qids_per_entity
 

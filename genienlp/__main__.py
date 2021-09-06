@@ -31,6 +31,7 @@
 import argparse
 
 from . import arguments, cache_embeddings, calibrate, export, kfserver, predict, run_bootleg, server, train, write_kf_metrics
+from .ned.scripts import analyze_bootleg_results, oracle_vs_bootleg
 from .paraphrase import run_generation, run_lm_finetuning
 from .paraphrase.scripts import clean_paraphrasing_dataset, dialog_to_tsv, split_dataset, transform_dataset
 from .sts import sts_calculate_scores, sts_filter
@@ -79,6 +80,16 @@ subcommands = {
         'Extract candidate features for named entity mentions in the dataset',
         run_bootleg.parse_argv,
         run_bootleg.main,
+    ),
+    'analyze-bootleg-results': (
+        'Process bootleg dumped labels for data and error analysis',
+        analyze_bootleg_results.parse_argv,
+        analyze_bootleg_results.main,
+    ),
+    'oracle-vs-bootleg': (
+        'Compare entity information retrieved from oracle and bootleg',
+        oracle_vs_bootleg.parse_argv,
+        oracle_vs_bootleg.main,
     ),
     # kf commands
     'kfserver': ('Export KFServing interface to predict', server.parse_argv, kfserver.main),

@@ -1,4 +1,3 @@
-import argparse
 from collections import Counter
 
 import jsonlines
@@ -6,20 +5,21 @@ from termcolor import colored
 
 from genienlp.ned.bootleg import BatchBootlegEntityDisambiguator
 
-parser = argparse.ArgumentParser()
 
-parser.add_argument('--input_file', type=str)
-parser.add_argument('--database_dir', type=str)
-parser.add_argument('--ned_domains', type=str, nargs='+')
-parser.add_argument('--subsample', type=int, default='1000000000')
-parser.add_argument('--output_file', type=str, default='results.txt')
+def parse_argv(parser):
+
+    parser.add_argument('--input_file', type=str)
+    parser.add_argument('--database_dir', type=str)
+    parser.add_argument('--ned_domains', type=str, nargs='+')
+    parser.add_argument('--subsample', type=int, default='1000000000')
+    parser.add_argument('--output_file', type=str, default='results.txt')
+    parser.add_argument('--bootleg_model', type=str, default='bootleg_uncased_mini')
+    parser.add_argument('--bootleg_output_dir', type=str, default='results_temp')
+    parser.add_argument('--embeddings', type=str, default='.embeddings')
+    parser.add_argument('--almond_type_mapping_path', type=str)
 
 
-args = parser.parse_args()
-
-if __name__ == '__main__':
-
-    args.bootleg_model = 'bootleg_uncased_mini'
+def main(args):
 
     # ned_normalize_types = 'soft'
     # args.ned_normalize_types = 'soft'
@@ -33,19 +33,9 @@ if __name__ == '__main__':
     args.max_types_per_qid = 2
     args.max_qids_per_entity = 2
 
-    args.bootleg_output_dir = 'results_temp'
-    args.embeddings = '.embeddings'
-    args.almond_type_mapping_path = None
-
     args.max_features_size = args.max_types_per_qid * args.max_qids_per_entity
 
     bootleg = BatchBootlegEntityDisambiguator(args)
-
-    all_typeqids = []
-    all_aliases = []
-    all_qids = []
-    all_probs = []
-    unknown_qids = set()
 
     lines = jsonlines.open(args.input_file, 'r')
 
