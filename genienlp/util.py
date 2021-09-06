@@ -43,7 +43,7 @@ import torch
 import ujson
 from torch.functional import Tensor
 from transformers import MarianConfig, MBartConfig
-from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
+from transformers.models.mbart50.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 
 from .data_utils.almond_utils import token_type_regex
 from .data_utils.example import NumericalizedExamples
