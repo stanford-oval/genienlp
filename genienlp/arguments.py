@@ -405,13 +405,13 @@ def parse_argv(parser):
         '--min_entity_len',
         type=int,
         default=1,
-        help='Minimum token-length of entities in ngram-based lookup of naive NED approach',
+        help='Minimum token-length of entities in ngram-based lookup for naive NED approach (does not apply to Bootleg)',
     )
     parser.add_argument(
         '--max_entity_len',
         type=int,
         default=4,
-        help='Maximum token-length of entities in ngram-based lookup  of naive NED approach',
+        help='Maximum token-length of entities in ngram-based lookup for naive NED approach (does not apply to Bootleg)',
     )
     parser.add_argument(
         '--database_dir',

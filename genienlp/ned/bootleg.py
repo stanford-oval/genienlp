@@ -64,11 +64,6 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json') as fin:
             self.entityqid2typenames = ujson.load(fin)
 
-        # large print
-        self.entityqid2typenames['Q1548123'] = ['format']
-
-        ###
-
         self.model_ckpt_path = os.path.join(self.model_dir, 'bootleg_wiki.pth')
 
         self.fixed_overrides = [
