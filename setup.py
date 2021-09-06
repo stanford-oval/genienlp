@@ -60,12 +60,12 @@ setuptools.setup(
         'sentence-transformers==2.0.0',
         'mosestokenizer~=1.1',
         'nltk~=3.4',
-        'ujson==4.0.2',
+        'ujson~=4.1',
         'pathos==0.2.8',
         # for kf
         'kfserving>=0.5.0',
         # for NED
-        'bootleg @ git+https://github.com/Mehrad0711/bootleg@b6c207259a83c21c77aeaf8088ee85f24ec7e708',
+        'bootleg==1.0.5',
         'marisa_trie_m==0.7.6',
         # for calibration:
         'scikit-learn~=0.23',
