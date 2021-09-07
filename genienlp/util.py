@@ -783,14 +783,13 @@ def load_config_json(args):
             'num_db_types',
             'db_unk_id',
             'ned_retrieve_method',
-            'database_lookup_method',
             'ned_domains',
             'almond_type_mapping_path',
             'max_features_size',
             'bootleg_output_dir',
             'bootleg_model',
             'bootleg_prob_threshold',
-            'bootleg_post_process_types',
+            'ned_normalize_types',
             'att_pooling',
             'no_separator',
             'num_labels',
@@ -840,6 +839,8 @@ def load_config_json(args):
                 'force_fast_tokenizer',
             ):
                 setattr(args, r, False)
+            elif r in ('ned_normalize_types'):
+                setattr(args, r, 'off')
             elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
                 setattr(args, r, 0)
             elif r in ('entity_word_embeds_dropout'):
@@ -860,8 +861,6 @@ def load_config_json(args):
                 setattr(args, r, 4)
             elif r == 'ned_retrieve_method':
                 setattr(args, r, 'naive')
-            elif r == 'database_lookup_method':
-                setattr(args, r, 'ngrams')
             elif r == 'locale':
                 setattr(args, r, 'en')
             elif r == 'num_beam_groups':
@@ -895,12 +894,17 @@ def load_config_json(args):
             if hasattr(args, 'add_types_to_text'):
                 setattr(args, 'add_entities_to_text', args.add_types_to_text)
             else:
-                setattr(args, 'add_entities_to_text', 'no')
+                setattr(args, 'add_entities_to_text', 'off')
         if args.entity_attributes is None:
             if hasattr(args, 'ned_features'):
                 setattr(args, 'entity_attributes', args.ned_features)
             else:
                 setattr(args, 'entity_attributes', [])
+        if args.ned_normalize_types is None:
+            if hasattr(args, 'bootleg_post_process_types') and args.bootleg_post_process_types:
+                setattr(args, 'ned_normalize_types', 'soft')
+        else:
+            setattr(args, 'ned_normalize_types', 'off')
 
         args.dropout_ratio = 0.0
         args.verbose = False

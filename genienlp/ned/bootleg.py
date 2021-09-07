@@ -26,7 +26,6 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-import fnmatch
 import logging
 import os
 
@@ -64,10 +63,8 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
 
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json') as fin:
             self.entityqid2typenames = ujson.load(fin)
-        ###
 
-        self.ckpt_name = 'bootleg_wiki'
-        self.model_ckpt_path = os.path.join(self.model_dir, self.ckpt_name + '.pth')
+        self.model_ckpt_path = os.path.join(self.model_dir, 'bootleg_wiki.pth')
 
         self.fixed_overrides = [
             # emmental configs
@@ -135,100 +132,97 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
     def disambiguate_mentions(self, config_args):
         run_model(self.args.bootleg_dump_mode, config_args)
 
-    def post_process_bootleg_types(self, title):
-        types = None
-        title = title.lower()
-        for pair in self.wiki2normalized_type:
-            if fnmatch.fnmatch(title, pair[0]):
-                types = pair[1]
-                break
+    def collect_features_per_alias(self, alias, all_probs, all_qids):
+        type_ids = []
+        type_probs = []
+        qids = []
 
-        typeqids = None
-        if types is not None:
-            if isinstance(types, str):
-                typeqids = [self.type_vocab_to_typeqid[types]]
-            elif isinstance(types, (list, tuple)):
-                typeqids = [self.type_vocab_to_typeqid[type_] for type_ in types]
+        # sort candidates based on bootleg's confidence scores (i.e. probabilities)
+        # this used to be in bootleg code but was removed in recent version
+        packed_list = zip(all_probs, all_qids)
+        packed_list_sorted = sorted(packed_list, key=lambda item: item[0], reverse=True)
+        all_probs, all_qids = list(zip(*packed_list_sorted))
 
-        return typeqids
+        # filter qids with probability lower than a threshold
+        idx = reverse_bisect_left(all_probs, self.args.bootleg_prob_threshold)
+        all_qids = all_qids[:idx]
+        all_probs = all_probs[:idx]
 
-    def collect_features_per_line(self, line, threshold):
+        if len(all_qids) > self.args.max_qids_per_entity:
+            all_qids = all_qids[: self.args.max_qids_per_entity]
+            all_probs = all_probs[: self.args.max_qids_per_entity]
+
+        if is_banned(alias):
+            return type_ids, type_probs, qids
+
+        for qid, prob in zip(all_qids, all_probs):
+            # to map qids to unique ids we just need to remove the Q character as qids are distinct
+            qids.append(int(qid[1:]))
+
+            # get all types for a qid
+            all_types = []
+            if 'books' in self.args.ned_domains:
+                if alias in ['houghton mifflin', 'ciudad de buenos aires']:
+                    all_types = ['award']
+                elif alias in ['blanche', 'biblioteca breve', '3rd edition', '4th edition']:
+                    all_types = ['version, edition, or translation']
+
+            if qid in self.entityqid2typenames and self.entityqid2typenames[qid]:
+                # map entity qid to its types on wikidata
+                all_types.extend(self.entityqid2typenames[qid])
+
+            if len(all_types) == 0:
+                continue
+
+            count = 0
+            # go through all types
+            for type in all_types:
+                if count >= self.args.max_types_per_qid:
+                    break
+
+                new_typeqid = None
+                if self.args.ned_normalize_types != 'off':
+                    new_type = self.normalize_types(type)
+                    if new_type is not None:
+                        new_typeqid = self.type_vocab_to_typeqid[new_type]
+
+                if new_typeqid is None:
+                    if self.args.ned_normalize_types == 'strict':
+                        # attempt to normalize type failed; ignore current type
+                        continue
+                    else:
+                        if type not in self.type_vocab_to_typeqid:
+                            continue
+                        # attempt to normalize type failed; use original type
+                        new_typeqid = self.type_vocab_to_typeqid[type]
+
+                if new_typeqid not in self.typeqid2id:
+                    continue
+                type_id = self.typeqid2id[new_typeqid]
+                if type_id in type_ids:
+                    continue
+                type_ids.append(type_id)
+                type_probs.append(prob)
+                count += 1
+
+        return type_ids, type_probs, qids
+
+    def collect_features_per_line(self, line):
         tokenized = line['sentence'].split(' ')
         tokens_type_ids = [[0] * self.max_features_size for _ in range(len(tokenized))]
         tokens_type_probs = [[0] * self.max_features_size for _ in range(len(tokenized))]
         tokens_qids = [[0] * self.max_features_size for _ in range(len(tokenized))]
 
         for alias, all_qids, all_probs, span in zip(line['aliases'], line['cands'], line['cand_probs'], line['spans']):
+            type_ids, type_probs, qids = self.collect_features_per_alias(alias, all_probs, all_qids)
 
-            # sort candidates based on bootleg's confidence scores (i.e. probabilities)
-            # this used to be in bootleg code but was removed in recent version
-            packed_list = zip(all_probs, all_qids)
-            packed_list_sorted = sorted(packed_list, key=lambda item: item[0], reverse=True)
-            all_probs, all_qids = list(zip(*packed_list_sorted))
+            padded_type_ids = self.pad_features(type_ids, self.max_features_size, 0)
+            padded_type_probs = self.pad_features(type_probs, self.max_features_size, 0)
+            padded_qids = self.pad_features(qids, self.max_features_size, -1)
 
-            # filter qids with probability lower than a threshold
-            idx = reverse_bisect_left(all_probs, threshold)
-            all_qids = all_qids[:idx]
-            all_probs = all_probs[:idx]
-
-            if len(all_qids) > self.args.max_qids_per_entity:
-                all_qids = all_qids[: self.args.max_qids_per_entity]
-                all_probs = all_probs[: self.args.max_qids_per_entity]
-
-            type_ids = []
-            type_probs = []
-            qids = []
-
-            if not is_banned(alias):
-                for qid, prob in zip(all_qids, all_probs):
-                    # to map qids to unique ids we just need to remove the Q character as qids are distinct
-                    qids.append(int(qid[1:]))
-
-                    # get all types for a qid
-                    all_typeqids = []
-                    if qid in self.entityqid2typenames and self.entityqid2typenames[qid]:
-                        # map entity qid to its type titles on wikidata ; then map titles to their wikidata qids
-                        for typename in self.entityqid2typenames[qid]:
-                            if typename in self.type_vocab_to_typeqid:
-                                all_typeqids.append(self.type_vocab_to_typeqid[typename])
-
-                    if len(all_typeqids):
-                        count = 0
-                        # go through all types
-                        for typeqid in all_typeqids:
-                            if typeqid in self.typeqid2id:
-                                # map wikidata types to thingtalk types
-                                if self.args.bootleg_post_process_types:
-                                    # map qid to title
-                                    title = self.typeqid_to_type_vocab[typeqid]
-
-                                    # process may return multiple types for a single type when it's ambiguous
-                                    typeqids = self.post_process_bootleg_types(title)
-
-                                    # attempt to normalize qids failed; just use the original type
-                                    if typeqids is None:
-                                        typeqids = [typeqid]
-
-                                else:
-                                    typeqids = [typeqid]
-
-                                for typeqid_ in typeqids:
-                                    if count >= self.args.max_types_per_qid:
-                                        break
-                                    type_id = self.typeqid2id[typeqid_]
-                                    if type_id in type_ids:
-                                        continue
-                                    type_ids.append(type_id)
-                                    type_probs.append(prob)
-                                    count += 1
-
-                padded_type_ids = self.pad_features(type_ids, self.max_features_size, 0)
-                padded_type_probs = self.pad_features(type_probs, self.max_features_size, 0)
-                padded_qids = self.pad_features(qids, self.max_features_size, -1)
-
-                tokens_type_ids[span[0] : span[1]] = [padded_type_ids] * (span[1] - span[0])
-                tokens_type_probs[span[0] : span[1]] = [padded_type_probs] * (span[1] - span[0])
-                tokens_qids[span[0] : span[1]] = [padded_qids] * (span[1] - span[0])
+            tokens_type_ids[span[0] : span[1]] = [padded_type_ids] * (span[1] - span[0])
+            tokens_type_probs[span[0] : span[1]] = [padded_type_probs] * (span[1] - span[0])
+            tokens_qids[span[0] : span[1]] = [padded_qids] * (span[1] - span[0])
 
         return tokens_type_ids, tokens_type_probs, tokens_qids
 
@@ -236,15 +230,14 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
         # extract features for each token in input sentence from bootleg outputs
         all_token_type_ids, all_token_type_probs, all_token_qids = [], [], []
 
-        threshold = self.args.bootleg_prob_threshold
         file_name = os.path.basename(split_path.rsplit('.', 1)[0])
 
-        with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/{self.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
+        with open(f'{self.args.bootleg_output_dir}/{file_name}_bootleg/bootleg_wiki/bootleg_labels.jsonl', 'r') as fin:
             for i, line in enumerate(fin):
                 if i >= self.args.subsample:
                     break
                 line = ujson.loads(line)
-                tokens_type_ids, tokens_type_probs, tokens_qids = self.collect_features_per_line(line, threshold)
+                tokens_type_ids, tokens_type_probs, tokens_qids = self.collect_features_per_line(line)
                 all_token_type_ids.append(tokens_type_ids)
                 all_token_type_probs.append(tokens_type_probs)
                 all_token_qids.append(tokens_qids)
@@ -325,9 +318,7 @@ class ServingBootlegEntityDisambiguator(BatchBootlegEntityDisambiguator):
                 line['aliases'], line['spans'], line['cands'] = label['aliases'], label['spans'], label['cands']
                 line['cand_probs'] = list(map(lambda item: list(item), label['cand_probs']))
 
-                tokens_type_ids, tokens_type_probs, tokens_qids = self.collect_features_per_line(
-                    line, self.args.bootleg_prob_threshold
-                )
+                tokens_type_ids, tokens_type_probs, tokens_qids = self.collect_features_per_line(line)
                 all_token_type_ids.append(tokens_type_ids)
                 all_token_type_probs.append(tokens_type_probs)
                 all_token_qids.append(tokens_qids)

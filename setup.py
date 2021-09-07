@@ -53,6 +53,7 @@ setuptools.setup(
         'bert-score~=0.3',
         'requests~=2.22',
         'num2words>=0.5.10',
+        'termcolor~=1.1',
         'datasets==1.11.0',
         'seqeval==1.2.2',
         'transformers==4.9.2',
@@ -62,9 +63,9 @@ setuptools.setup(
         'nltk~=3.4',
         'ujson~=4.1',
         'pathos==0.2.8',
-        # for kf
+        # for kf:
         'kfserving>=0.5.0',
-        # for NED
+        # for NED:
         'bootleg==1.0.5',
         'marisa_trie_m==0.7.6',
         # for calibration:

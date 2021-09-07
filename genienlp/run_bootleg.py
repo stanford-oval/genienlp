@@ -95,12 +95,8 @@ def parse_argv(parser):
         '--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)'
     )
 
-    parser.add_argument(
-        '--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams database_lookup_method is used '
-    )
-    parser.add_argument(
-        '--max_entity_len', type=int, default=4, help='Maximum length for entities when ngrams database_lookup_method is used '
-    )
+    parser.add_argument('--min_entity_len', type=int, default=1, help='Minimum token-length of entities retrieved in bootleg')
+    parser.add_argument('--max_entity_len', type=int, default=4, help='Maximum token-length of entities retrieved in bootleg')
     parser.add_argument(
         '--database_dir',
         type=str,
@@ -148,10 +144,8 @@ def parse_argv(parser):
     parser.add_argument(
         '--bootleg_extract_num_workers', type=int, default=32, help='Number of workers for extracing mentions step of bootleg'
     )
-    parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
 
     parser.add_argument('--ned_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
-
     parser.add_argument(
         '--bootleg_data_splits',
         nargs='+',
@@ -253,7 +247,7 @@ def bootleg_dump_entities(args, logger):
 
         # unmerge bootleg dumped labels
         line_number = 0
-        with open(f'{args.bootleg_output_dir}/combined_bootleg/{bootleg.ckpt_name}/bootleg_labels.jsonl', 'r') as fin:
+        with open(f'{args.bootleg_output_dir}/combined_bootleg/bootleg_wiki/bootleg_labels.jsonl', 'r') as fin:
 
             # sort output lines first to align with input (required for bootleg >=1.0.0)
             all_lines = fin.readlines()
@@ -261,7 +255,7 @@ def bootleg_dump_entities(args, logger):
             all_lines = list(zip(*sorted(zip(all_sent_ids, all_lines), key=lambda item: item[0])))[1]
 
             for i, split in enumerate(args.bootleg_data_splits):
-                output_path = f'{args.bootleg_output_dir}/{split}_bootleg/{bootleg.ckpt_name}'
+                output_path = f'{args.bootleg_output_dir}/{split}_bootleg/bootleg_wiki'
                 os.makedirs(output_path, exist_ok=True)
                 output_file = open(os.path.join(output_path, 'bootleg_labels.jsonl'), 'w')
                 split_size = len(task_all_examples[i])

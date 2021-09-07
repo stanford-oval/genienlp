@@ -402,10 +402,16 @@ def parse_argv(parser):
     # NED args
     parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
     parser.add_argument(
-        '--min_entity_len', type=int, default=1, help='Minimum length for entities when ngrams database_lookup_method is used '
+        '--min_entity_len',
+        type=int,
+        default=1,
+        help='Minimum token-length of entities in ngram-based lookup for naive NED approach (does not apply to Bootleg)',
     )
     parser.add_argument(
-        '--max_entity_len', type=int, default=4, help='Maximum length for entities when ngrams database_lookup_method is used '
+        '--max_entity_len',
+        type=int,
+        default=4,
+        help='Maximum token-length of entities in ngram-based lookup for naive NED approach (does not apply to Bootleg)',
     )
     parser.add_argument(
         '--database_dir',
@@ -427,7 +433,12 @@ def parse_argv(parser):
         default=0.3,
         help='Probability threshold for accepting a candidate for a mention',
     )
-    parser.add_argument('--bootleg_post_process_types', action='store_true', help='Postprocess bootleg types')
+    parser.add_argument(
+        '--ned_normalize_types',
+        default='off',
+        choices=['off', 'soft', 'strict'],
+        help='Normalize types. soft: attempt to map; if unsuccessful use original. strict: attempt to map; if unsuccessful drop the type.',
+    )
 
     parser.add_argument(
         '--entity_type_agg_method',
@@ -444,8 +455,8 @@ def parse_argv(parser):
 
     parser.add_argument(
         "--add_entities_to_text",
-        default='no',
-        choices=['no', 'insert', 'append'],
+        default='off',
+        choices=['off', 'insert', 'append'],
         help='Method for adding entities to input text in text-based NER approach',
     )
 
@@ -468,18 +479,9 @@ def parse_argv(parser):
     parser.add_argument(
         '--ned_retrieve_method',
         default='bootleg',
-        choices=['naive', 'entity-oracle', 'type-oracle', 'bootleg'],
+        choices=['naive', 'entity-oracle', 'type-oracle', 'entity-type-oracle', 'bootleg'],
         type=str,
         help='how to retrieve types for entities',
-    )
-
-    parser.add_argument(
-        '--database_lookup_method',
-        default='ngrams',
-        choices=['ngrams', 'smaller_first', 'longer_first'],
-        help='smaller_first: start from one token and grow into longer spans until a match is found,'
-        'longer_first: start from the longest span and shrink until a match is found,'
-        'ngrams: lookup all ngrams in the text and see if there is a match',
     )
 
     parser.add_argument('--ned_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
