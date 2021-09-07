@@ -7,11 +7,10 @@ import shutil
 
 import numpy as np
 import torch
-from transformers.models.mbart.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 
 from ..metrics import computeBLEU
 from ..model_utils.transformers_utils import MARIAN_GROUP_MEMBERS
-from ..util import get_mbart_lang
+from ..util import FAIRSEQ_LANGUAGE_CODES, get_mbart_lang
 
 logger = logging.getLogger(__name__)
 
