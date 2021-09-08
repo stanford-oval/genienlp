@@ -34,8 +34,9 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='genienlp',
-    version='0.7.0a1',
+    version='0.7.0a2',
     packages=setuptools.find_packages(exclude=['tests']),
+    package_data={'genienlp': ['ned/database_files/*']},
     entry_points={
         'console_scripts': ['genienlp=genienlp.__main__:main'],
     },
