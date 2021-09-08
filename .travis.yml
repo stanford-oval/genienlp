@@ -13,44 +13,67 @@ install:
 - pip install -e .
 - python3 -m spacy download en_core_web_sm
 
+stages:
+  - test
+  - name: deploy
+    if: type = push AND branch = master AND repo = stanford-oval/genienlp
+
 jobs:
   include:
     -
       name: "Main tests for almond task"
+      stage: test
       script:
         - bash ./tests/test_main_almond.sh
     -
       name: "Main tests for almond_multilingual task"
+      stage: test
       script:
         - bash ./tests/test_main_almond_multilingual.sh
     -
       name: "Paraphrasing tests"
+      stage: test
       script:
         - bash ./tests/test_paraphrasing.sh
     -
       name: "Translation tests"
+      stage: test
       script:
         - bash ./tests/test_translation.sh
     -
       name: "NED tests"
+      stage: test
       script:
         - bash ./tests/test_NED.sh
     -
       name: "Token Classification tests"
+      stage: test
       script:
         - bash ./tests/test_token_classification.sh
     -
       name: "Sequence Classification tests"
+      stage: test
       script:
         - bash ./tests/test_sequence_classification.sh
     -
       name: "Calibration tests"
+      stage: test
       script:
         - bash ./tests/test_calibration.sh
     -
       name: "KF server tests"
+      stage: test
       script:
         - bash ./tests/test_kfserver.sh
+
+    -
+      name: "Docker build"
+      stage: deploy
+      services:
+        - docker
+      install:
+      - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+      script: ./travis/docker-build.sh
 
 deploy:
   provider: pypi
