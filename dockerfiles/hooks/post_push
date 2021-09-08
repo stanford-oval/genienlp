@@ -10,12 +10,6 @@ case $DOCKER_TAG in
 	*-cuda)
 		version=${version}-cuda
 	;;
-	*-cuda-kfserver)
-		version=${version}-cuda-kfserver
-	;;
-	*-kfserver)
-		version=${version}-kfserver
-	;;
 esac
 docker tag $IMAGE_NAME $DOCKER_REPO:$version
 docker push $DOCKER_REPO:$version

@@ -2,8 +2,6 @@
 ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi:latest
 FROM ${BASE_IMAGE}
 
-ARG USER=genienlp
-
 MAINTAINER Thingpedia Admins <thingpedia-admins@lists.stanford.edu>
 
 USER root
@@ -12,7 +10,6 @@ USER root
 COPY . /opt/genienlp
 
 # install basic tools and python3, install dependencies, and then cleanup
-# HACK: we need to download the wheel manually or docker will die
 RUN dnf -y install git gcc gcc-c++ make cmake && \
     dnf -y module enable python38 \
         && dnf -y install python38 \
@@ -30,10 +27,7 @@ RUN dnf -y install git gcc gcc-c++ make cmake && \
 
 # add user genienlp
 RUN useradd -ms /bin/bash -r genienlp
-
-# User root is required for kfserving until https://github.com/aws/amazon-eks-pod-identity-webhook/issues/8 is fixed.
-# There is a workaround by changing pod fsgroup but kfserving inference service cannot set pod level security context.
-USER ${USER}
+USER genienlp
 
 WORKDIR /home/genienlp
 ENTRYPOINT ["/opt/genienlp/dockerfiles/start.sh"]
