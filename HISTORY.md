@@ -1,3 +1,8 @@
+0.7.0a2
+=======
+
+* Fix installation from pip [#201].
+
 0.7.0a1
 =======
 
