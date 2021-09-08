@@ -33,7 +33,7 @@ from ..data_utils.example import Example
 from . import generic_dataset
 from .almond_task import BaseAlmondTask
 from .base_task import BaseTask
-from .generic_dataset import BiTODDataset, CrossNERDataset, OODDataset
+from .generic_dataset import BiTODDataset, CrossNERDataset, OODDataset, WOZ_DSTDataset
 from .registry import register_task
 
 
@@ -447,5 +447,29 @@ class BiTOD(BaseTask):
         )
 
     def get_splits(self, root, **kwargs):
-        kwargs['e2e_evaluation'] = self.args.bitod_e2e_evaluation
+        kwargs['e2e_evaluation'] = self.args.e2e_evaluation
         return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
+
+
+@register_task('woz_dst')
+class WOZ_DST(BaseTask):
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        special_tokens_v2 = {'<state>', '<history>', 'SYSTEM:', 'USER:'}
+        self.special_tokens = special_tokens_v2
+        self._metrics = 'em'
+
+    def utterance_field(self):
+        return 'context'
+
+    def _make_example(self, turn, **kwargs):
+        example_id, context, answer = turn.strip('\n').split('\t')
+        question = ''
+
+        return Example.from_raw(
+            self.name + '/' + str(example_id), context, question, answer, preprocess=self.preprocess_field, lower=False
+        )
+
+    def get_splits(self, root, **kwargs):
+        kwargs['e2e_evaluation'] = self.args.e2e_evaluation
+        return WOZ_DSTDataset.return_splits(path=root, make_example=self._make_example, **kwargs)

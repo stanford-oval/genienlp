@@ -237,7 +237,7 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--bitod_e2e_evaluation',
+        '--e2e_evaluation',
         action='store_true',
         help='',
     )
@@ -250,7 +250,7 @@ def set_default_values(args):
     if args.confidence_feature_path is None:
         args.confidence_feature_path = os.path.join(args.path, 'confidence_features.pkl')
 
-    if args.bitod_e2e_evaluation and args.val_batch_size[0] != 1:
+    if args.e2e_evaluation and args.val_batch_size[0] != 1:
         logger.warning('When evaluating bitod end2end val_batch_size should be 1 so we load data turn by turn')
         args.val_batch_size = [1]
 

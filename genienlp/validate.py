@@ -67,7 +67,7 @@ def generate_with_model(
     interactive=False,
     eval_dir=None,
 ):
-    if args.bitod_e2e_evaluation:
+    if args.e2e_evaluation:
         if interactive:
             return generate_with_seq2seq_model_for_dialogue_interactive(
                 model,

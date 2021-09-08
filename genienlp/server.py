@@ -198,7 +198,7 @@ class Server(object):
                             response.append(instance)
 
                 elif interactive:
-                    self.args.bitod_e2e_evaluation = True
+                    self.args.e2e_evaluation = True
                     output = generate_with_model(
                         self.model,
                         [batch],

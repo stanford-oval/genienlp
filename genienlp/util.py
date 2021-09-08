@@ -830,7 +830,7 @@ def load_config_json(args):
             'do_alignment',
             'align_preserve_input_quotation',
             'align_remove_output_quotation',
-            'bitod_e2e_evaluation',
+            'e2e_evaluation',
         ]
         for o in overwrite_actions:
             # if argument is True in predict overwrite train; if False retrieve from train
