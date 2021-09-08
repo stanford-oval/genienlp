@@ -1,3 +1,13 @@
+0.7.0a1
+=======
+
+* Added support for sequence classification tasks [#176].
+* NED was refactored and cleaned up. Bootleg can now accept an optional file to normalize
+  types. Support for ElasticSearch in the naive NED was removed. Option names were simplified
+  and documentation was improved [#173, #183, #188, #191].
+* kfserving will now terminate with an error in case of CUDA error, allowing graceful
+  restart [#190].
+
 0.6.0
 =====
 
