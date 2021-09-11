@@ -457,7 +457,8 @@ class WOZ_DST(BaseTask):
         super().__init__(name, args)
         special_tokens_v2 = {'<state>', '<history>', 'SYSTEM:', 'USER:'}
         special_tokens_v7 = {'<user>', '<agent>'}
-        self.special_tokens = special_tokens_v2 | special_tokens_v7
+        special_tokens_v9 = {'<acts>'}
+        self.special_tokens = special_tokens_v2 | special_tokens_v7 | special_tokens_v9
         self._metrics = 'em'
 
     def utterance_field(self):
