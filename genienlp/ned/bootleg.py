@@ -54,17 +54,11 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
         logger.info('Initializing Bootleg class')
 
         ### bootleg specific attribtues
-        self.model_dir = f'{self.args.database_dir}/{self.args.bootleg_model}'
-        self.config_path = f'{self.model_dir}/bootleg_config.yaml'
+        self.config_path = f'{self.args.database_dir}/{self.args.bootleg_model}/bootleg_config.yaml'
         self.cand_map = f'{self.args.database_dir}/wiki_entity_data/entity_mappings/alias2qids.json'
-
-        self.entity_dir = f'{self.args.database_dir}/wiki_entity_data'
-        self.embed_dir = f'{self.args.database_dir}/wiki_entity_data'
 
         with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json') as fin:
             self.entityqid2typenames = ujson.load(fin)
-
-        self.model_ckpt_path = os.path.join(self.model_dir, 'bootleg_wiki.pth')
 
         self.fixed_overrides = [
             # emmental configs
@@ -75,7 +69,7 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
             "--emmental.use_exact_log_path",
             'True',
             "--emmental.model_path",
-            self.model_ckpt_path,
+            f'{self.args.database_dir}/{self.args.bootleg_model}/bootleg_wiki.pth',
             "--emmental.device",
             str(getattr(self.args, 'bootleg_device', 0)),
             # run configs
@@ -91,11 +85,9 @@ class BatchBootlegEntityDisambiguator(AbstractEntityDisambiguator):
             "--data_config.print_examples_prep",
             'False',
             "--data_config.entity_dir",
-            self.entity_dir,
+            f'{self.args.database_dir}/wiki_entity_data',
             "--data_config.entity_prep_dir",
             "prep",
-            "--data_config.emb_dir",
-            self.embed_dir,
             "--data_config.alias_cand_map",
             'alias2qids.json',
             "--data_config.word_embedding.cache_dir",
