@@ -830,7 +830,8 @@ def load_config_json(args):
             elif r in (
                 'do_ned',
                 'do_alignment',
-                'align_preserve_input_quotation' 'align_remove_output_quotation',
+                'align_preserve_input_quotation',
+                'align_remove_output_quotation',
                 'use_encoder_loss',
                 'almond_has_multiple_programs',
                 'almond_lang_as_question',
