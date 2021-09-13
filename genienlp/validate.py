@@ -41,6 +41,7 @@ from BiToD.evaluate import r_en_API_MAP
 from BiToD.knowledgebase import api
 from BiToD.preprocess import API_MAP, knowledge2span, read_require_slots, state2span
 from BiToD.utils import span2state, state2constraints
+from dateparser.languages import default_loader
 from transformers import MarianTokenizer
 
 from .data_utils.example import NumericalizedExamples, SequentialField
@@ -406,6 +407,15 @@ def generate_with_seq2seq_model(
     else:
         tgt_lang = model.orig_tgt_lang
 
+    if numericalizer._tokenizer.src_lang:
+        src_lang = numericalizer._tokenizer.src_lang
+    else:
+        src_lang = model.orig_src_lang
+
+    date_parser = default_loader.get_locale(src_lang[:2])
+
+    translate_return_raw_outputs = getattr(args, 'translate_return_raw_outputs', False)
+
     for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
@@ -464,9 +474,14 @@ def generate_with_seq2seq_model(
                 cross_attentions = cross_attentions[-1, ...]
 
                 # postprocess prediction ids
-                kwargs = {'numericalizer': numericalizer, 'cross_attentions': cross_attentions, 'tgt_lang': tgt_lang}
+                kwargs = {
+                    'numericalizer': numericalizer,
+                    'cross_attentions': cross_attentions,
+                    'tgt_lang': tgt_lang,
+                    'date_parser': date_parser,
+                }
 
-                if args.translate_return_raw_outputs:
+                if translate_return_raw_outputs:
                     partial_batch_raw_prediction_ids = partial_batch_prediction_ids
 
                 partial_batch_prediction_ids, partial_batch_words = task.batch_postprocess_prediction_ids(
@@ -490,7 +505,7 @@ def generate_with_seq2seq_model(
             def get_example_index(i):
                 return (i // args.num_outputs[hyperparameter_idx]) % batch_size
 
-            if args.translate_return_raw_outputs:
+            if translate_return_raw_outputs:
                 partial_batch_raw_prediction = numericalizer.reverse(partial_batch_raw_prediction_ids, 'answer')
                 for i in range(len(partial_batch_prediction)):
                     partial_batch_raw_prediction[i] = task.postprocess_prediction(
@@ -571,7 +586,7 @@ def generate_with_seq2seq_model(
         for estimator in confidence_estimators:
             confidence_scores = estimator.estimate(confidence_features)
             output.confidence_scores.append(confidence_scores)
-    if args.translate_return_raw_outputs:
+    if translate_return_raw_outputs:
         output.raw_predictions = raw_predictions
 
     return output
