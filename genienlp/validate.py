@@ -146,6 +146,7 @@ def generate_with_seq2seq_model(
                 do_sample=args.temperature[hyperparameter_idx] != 0,  # if temperature==0, we do not sample
             )
             partial_batch_prediction_ids = generated.sequences
+            partial_batch_words = None
 
             if getattr(task, 'need_attention_scores', False):
                 cross_attentions = generated.cross_attentions
@@ -167,11 +168,12 @@ def generate_with_seq2seq_model(
                     batch_example_ids, batch.context.value.data, partial_batch_prediction_ids, **kwargs
                 )
 
-            # MarianTokenizer uses two different spm models for encoding source vs target language.
-            # in almond_translate we postprocess text with alignment which gives code-switched sentences.
+            # MarianTokenizer uses two different spm models for encoding source and target languages.
+            # in almond_translate we postprocess text with alignment which produces code-switched sentences.
             # encoding a code-switched sentence with either spm will omit tokens from the other language
-            # so now we will return both the actual processed text and the encoded version
-            if isinstance(numericalizer._tokenizer, MarianTokenizer):
+            # so we have to return both the processed and encoded text.
+            # we need to return encoded text too since confidence_features requires ids
+            if isinstance(numericalizer._tokenizer, MarianTokenizer) and partial_batch_words:
                 partial_batch_prediction = partial_batch_words
             else:
                 if output_confidence_features or output_confidence_scores:
