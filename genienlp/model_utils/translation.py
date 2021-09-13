@@ -30,6 +30,7 @@ from collections import OrderedDict
 
 import numpy as np
 import torch
+from dateparser.conf import Settings
 from num2words import CONVERTER_CLASSES, num2words
 from transformers import SPIECE_UNDERLINE, M2M100Tokenizer
 
@@ -86,7 +87,14 @@ def return_token_word_mapping(tokens, tokenizer):
 
 
 def align_and_replace(
-    src_tokens, tgt_tokens, tokenizer, tgt_lang, sample_layer_attention_pooled, src_spans, remove_output_quotation
+    src_tokens,
+    tgt_tokens,
+    sample_layer_attention_pooled,
+    src_spans,
+    tgt_lang,
+    tokenizer,
+    remove_output_quotation,
+    date_parser=None,
 ):
     src_quotation_symbol = '"'
 
@@ -123,15 +131,17 @@ def align_and_replace(
         expanded_matches = [cur_match]
 
         # translation turned digit into words
-        if len(cur_match) == 1 and cur_match[0].isdigit():
-            converter = None
-            if tgt_lang in CONVERTER_CLASSES:
-                converter = CONVERTER_CLASSES[tgt_lang]
-            elif tgt_lang[:2] in CONVERTER_CLASSES:
-                converter = CONVERTER_CLASSES[tgt_lang[:2]]
+        if (
+            len(cur_match) == 1
+            and cur_match[0].isdigit()
+            and (tgt_lang in CONVERTER_CLASSES or tgt_lang[:2] in CONVERTER_CLASSES)
+        ):
+            match = int(cur_match[0])
+            expanded_matches.append([num2words(match, lang=tgt_lang, to='cardinal')])
 
-            if converter and hasattr(converter, 'str_to_number'):
-                expanded_matches.append([num2words(cur_match[0], lang=tgt_lang, to='cardinal')])
+        # find translation of dates
+        elif date_parser:
+            expanded_matches.append(date_parser.translate(' '.join(cur_match), settings=Settings()).split(' '))
 
         for match in expanded_matches:
             count, beg_indices = count_substring(tgt_words, match)

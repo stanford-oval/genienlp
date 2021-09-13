@@ -669,6 +669,6 @@ def post_parse_train_specific(args):
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
 
     save_args(args, force_overwrite=True)
-
+    
     args = check_and_update_generation_args(args)
     return args
