@@ -57,7 +57,7 @@ setuptools.setup(
         'termcolor~=1.1',
         'datasets==1.11.0',
         'seqeval==1.2.2',
-        'transformers==4.10.0',
+        'transformers==4.10.2',
         'sentencepiece==0.1.*',
         'sentence-transformers==2.0.0',
         'mosestokenizer~=1.1',
