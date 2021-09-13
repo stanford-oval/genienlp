@@ -395,6 +395,7 @@ def generate_with_seq2seq_model(
     total_loss = 0.0 if model._output_scores else None
     output_confidence_scores = confidence_estimators is not None
     predictions = []
+    raw_predictions = []
     confidence_features = []
     example_ids = []
     answers = []
@@ -408,6 +409,7 @@ def generate_with_seq2seq_model(
     for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
+        batch_raw_prediction = [[] for _ in range(batch_size)]
         batch_confidence_features = [[] for _ in range(batch_size)]
         batch_example_ids = batch.example_id
 
@@ -463,6 +465,10 @@ def generate_with_seq2seq_model(
 
                 # postprocess prediction ids
                 kwargs = {'numericalizer': numericalizer, 'cross_attentions': cross_attentions, 'tgt_lang': tgt_lang}
+
+                if args.translate_return_raw_outputs:
+                    partial_batch_raw_prediction_ids = partial_batch_prediction_ids
+
                 partial_batch_prediction_ids, partial_batch_words = task.batch_postprocess_prediction_ids(
                     batch_example_ids, batch.context.value.data, partial_batch_prediction_ids, **kwargs
                 )
@@ -484,6 +490,15 @@ def generate_with_seq2seq_model(
             def get_example_index(i):
                 return (i // args.num_outputs[hyperparameter_idx]) % batch_size
 
+            if args.translate_return_raw_outputs:
+                partial_batch_raw_prediction = numericalizer.reverse(partial_batch_raw_prediction_ids, 'answer')
+                for i in range(len(partial_batch_prediction)):
+                    partial_batch_raw_prediction[i] = task.postprocess_prediction(
+                        batch_example_ids[get_example_index(i)], partial_batch_raw_prediction[i]
+                    )
+                for i in range(len(partial_batch_prediction)):
+                    batch_raw_prediction[get_example_index(i)].append(partial_batch_raw_prediction[i])
+
             # post-process predictions
             for i in range(len(partial_batch_prediction)):
                 partial_batch_prediction[i] = task.postprocess_prediction(
@@ -498,24 +513,40 @@ def generate_with_seq2seq_model(
 
         predictions += batch_prediction
         confidence_features += batch_confidence_features
+        raw_predictions += batch_raw_prediction
 
     if total_loss is not None:
         total_loss /= len(example_ids)
 
     if original_order is not None:
         # sort back to the original order
-        original_order, example_ids, predictions, answers, contexts, confidence_features = [
+        original_order, example_ids, predictions, raw_predictions, answers, contexts, confidence_features = [
             list(a)
             for a in tuple(
-                zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidence_features))))
+                zip(
+                    *sorted(
+                        list(
+                            zip(
+                                original_order,
+                                example_ids,
+                                predictions,
+                                raw_predictions,
+                                answers,
+                                contexts,
+                                confidence_features,
+                            )
+                        )
+                    )
+                )
             )
         ]
 
     if getattr(args, 'translate_example_split', False):
         # stitch sentences back together
-        example_ids, predictions, answers, contexts, confidence_features = merge_translated_sentences(
+        example_ids, predictions, raw_predictions, answers, contexts, confidence_features = merge_translated_sentences(
             example_ids,
             predictions,
+            raw_predictions,
             answers,
             contexts,
             confidence_features,
@@ -540,6 +571,8 @@ def generate_with_seq2seq_model(
         for estimator in confidence_estimators:
             confidence_scores = estimator.estimate(confidence_features)
             output.confidence_scores.append(confidence_scores)
+    if args.translate_return_raw_outputs:
+        output.raw_predictions = raw_predictions
 
     return output
 

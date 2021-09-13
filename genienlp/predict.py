@@ -219,6 +219,12 @@ def parse_argv(parser):
         help='split examples with multiple sentences into individual examples',
     )
 
+    parser.add_argument(
+        '--translate_return_raw_outputs',
+        action='store_true',
+        help='return raw translation as well as ones post-processed with alignment. this is useful for STS filtering.',
+    )
+
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
     parser.add_argument(
         '--do_alignment',
@@ -275,7 +281,7 @@ def check_args(args):
         )
 
 
-def prepare_data(args, device, src_lang):
+def prepare_data(args, src_lang):
 
     datasets = []
     paths = []
@@ -391,7 +397,7 @@ def run(args, device):
         tgt_lang=tgt_lang,
     )
 
-    val_sets = prepare_data(args, device, src_lang)
+    val_sets = prepare_data(args, src_lang)
     model.add_new_vocab_from_data(args.tasks)
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
@@ -412,21 +418,20 @@ def run(args, device):
             # single language task
             if language is None or 'multilingual' not in task.name:
                 prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
+                raw_prediction_file_name = os.path.join(eval_dir, task.name + '.raw.tsv')
                 results_file_name = os.path.join(eval_dir, task.name + '.results.json')
             # multi language task
             else:
                 prediction_file_name = os.path.join(eval_dir, task.name + '_{}.tsv'.format(language))
+                raw_prediction_file_name = os.path.join(eval_dir, task.name + '_{}.raw.tsv'.format(language))
                 results_file_name = os.path.join(eval_dir, task.name + '_{}.results.json'.format(language))
-            if os.path.exists(prediction_file_name):
-                if args.overwrite:
-                    logger.warning(f'{prediction_file_name} already exists -- overwriting **')
-                else:
-                    raise OSError(f'{prediction_file_name} already exists')
-            if os.path.exists(results_file_name):
-                if args.overwrite:
-                    logger.warning(f'{results_file_name} already exists -- overwriting **')
-                else:
-                    raise OSError(f'{results_file_name} already exists')
+
+            for fname in [prediction_file_name, raw_prediction_file_name, results_file_name]:
+                if os.path.exists(fname):
+                    if args.overwrite:
+                        logger.warning(f'{fname} already exists -- overwriting **')
+                    else:
+                        raise OSError(f'{fname} already exists')
 
             if args.calibrator_paths is not None:
                 confidence_estimators = []
@@ -468,6 +473,18 @@ def run(args, device):
                         for score in generation_output.confidence_scores:
                             line += '\t' + str(score[i])
                     prediction_file.write(line + '\n')
+
+            if args.translate_return_raw_outputs:
+                with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
+                    for i in range(len(generation_output.example_ids)):
+                        line = (
+                            generation_output.example_ids[i]
+                            + '\t'
+                            + '\t'.join(generation_output.raw_predictions[i])
+                            + '\t'
+                            + generation_output.answers[i]
+                        )  # all outputs separated by '\t'
+                        prediction_file.write(line + '\n')
 
             if len(generation_output.answers) > 0:
                 metrics_to_compute = task.metrics
