@@ -28,7 +28,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import torch
+from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import paired_cosine_distances
+from transquest.algo.sentence_level.monotransquest.run_model import MonoTransQuestModel
 from transquest.algo.sentence_level.siamesetransquest.run_model import SiameseTransQuestModel
 
 
@@ -39,34 +41,26 @@ def parse_argv(parser):
     parser.add_argument('--batch_size', type=int, default=250)
     parser.add_argument('--subsample', type=int, default=-1)
     parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument('--embeddings', type=str, default='.embeddings')
+    parser.add_argument('--model_type', type=str, choices=['st', 'tq-mono', 'tq-siam'])
     parser.add_argument(
         '--model_name',
         type=str,
-        default='xlm-r-distilroberta-base-paraphrase-v1',
-        help='List of available models: https://public.ukp.informatik.tu-darmstadt.de/reimers/sentence-transformers/v0.2/',
+        help='List of available sts models: https://public.ukp.informatik.tu-darmstadt.de/reimers/sentence-transformers/v0.2/'
+        'List of available transquest models: https://tharindu.co.uk/TransQuest/models/sentence_level_pretrained/',
     )
 
 
 def main(args):
+    use_cuda = args.device == 'cuda' and torch.cuda.is_available()
 
-    # model = SentenceTransformer(args.model_name)
-
-    model = SiameseTransQuestModel("TransQuest/siamesetransquest-da-en_zh-wiki")
-
-    predictions = model.predict(
-        [
-            [
-                "Reducerea acestor conflicte este importantă pentru conservare.",
-                "Reducing these conflicts is not important for preservation.",
-            ]
-        ]
-    )
-
-    print(predictions)
-    # sys.exit(1)
-
-    if args.device == 'cuda' and torch.cuda.is_available():
-        model.cuda()
+    if args.model_type == 'tq-mono':
+        model = MonoTransQuestModel("xlmroberta", args.model_name, num_labels=1, use_cuda=use_cuda, cache_dir=args.embeddings)
+    elif args.model_type == 'tq-siam':
+        # cache_dir is not supported yet!
+        model = SiameseTransQuestModel(args.model_name)
+    else:
+        model = SentenceTransformer(args.model_name, device=args.device, cache_folder=args.embeddings)
 
     ids = []
     src_sentences = []
@@ -85,10 +79,14 @@ def main(args):
             if args.subsample != -1 and i >= args.subsample:
                 break
 
-    embeddings1 = model.encode(src_sentences, batch_size=args.batch_size, show_progress_bar=True, convert_to_numpy=True)
-    embeddings2 = model.encode(tgt_sentences, batch_size=args.batch_size, show_progress_bar=True, convert_to_numpy=True)
-
-    cosine_scores = 1 - (paired_cosine_distances(embeddings1, embeddings2))
+    if args.model_type == 'tq-mono':
+        cosine_scores, _ = model.predict(list(map(list, zip(src_sentences, tgt_sentences))))
+    elif args.model_type == 'tq-siam':
+        cosine_scores = model.predict(list(zip(src_sentences, tgt_sentences)))
+    else:
+        embeddings1 = model.encode(src_sentences, batch_size=args.batch_size, show_progress_bar=True, convert_to_numpy=True)
+        embeddings2 = model.encode(tgt_sentences, batch_size=args.batch_size, show_progress_bar=True, convert_to_numpy=True)
+        cosine_scores = 1 - (paired_cosine_distances(embeddings1, embeddings2))
 
     with open(args.output_file, 'w') as fout:
         for i in range(len(ids)):
