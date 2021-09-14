@@ -27,10 +27,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 import torch
-from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import paired_cosine_distances
+from transquest.algo.sentence_level.siamesetransquest.run_model import SiameseTransQuestModel
 
 
 def parse_argv(parser):
@@ -50,7 +49,21 @@ def parse_argv(parser):
 
 def main(args):
 
-    model = SentenceTransformer(args.model_name)
+    # model = SentenceTransformer(args.model_name)
+
+    model = SiameseTransQuestModel("TransQuest/siamesetransquest-da-en_zh-wiki")
+
+    predictions = model.predict(
+        [
+            [
+                "Reducerea acestor conflicte este importantă pentru conservare.",
+                "Reducing these conflicts is not important for preservation.",
+            ]
+        ]
+    )
+
+    print(predictions)
+    # sys.exit(1)
 
     if args.device == 'cuda' and torch.cuda.is_available():
         model.cuda()

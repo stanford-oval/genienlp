@@ -62,6 +62,7 @@ setuptools.setup(
         'dictdiffer~=0.9',
         'sentencepiece==0.1.*',
         'sentence-transformers==2.0.0',
+        'transquest~=1.1',
         'mosestokenizer~=1.1',
         'pathos==0.2.8',
         # for kf:
