@@ -426,7 +426,7 @@ class BiTOD(BaseTask):
         special_tokens_v7 = {'ACTS:'}
         special_tokens_v9 = {'USER_ACTS:'}
         self.special_tokens = special_tokens_v1 | special_tokens_v2 | special_tokens_v5 | special_tokens_v7 | special_tokens_v9
-        self._metrics = 'casedbleu'
+        self._metrics = ['em', 'casedbleu']
 
     def utterance_field(self):
         return 'context'
@@ -449,4 +449,39 @@ class BiTOD(BaseTask):
 
     def get_splits(self, root, **kwargs):
         kwargs['e2e_evaluation'] = self.args.bitod_e2e_evaluation
+        return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
+
+
+@register_task('bitod_nlg')
+class BiTODNLG(BaseTask):
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self.special_tokens = {}
+        self._metrics = ['casedbleu']
+
+    def utterance_field(self):
+        return 'context'
+
+    def _make_example(self, turn, **kwargs):
+        if 'response' not in turn:
+            return None
+
+        dial_id, turn_id, answer, train_target, response = (
+            turn['dial_id'],
+            turn['turn_id'],
+            turn['output_text'],
+            turn['train_target'],
+            turn['response'],
+        )
+        question = ''
+
+        assert train_target == 'response'
+
+        example_id = '/'.join([dial_id, str(turn_id), train_target])
+
+        return Example.from_raw(
+            self.name + '/' + str(example_id), answer, question, response, preprocess=self.preprocess_field, lower=False
+        )
+
+    def get_splits(self, root, **kwargs):
         return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)

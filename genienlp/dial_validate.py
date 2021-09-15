@@ -17,6 +17,42 @@ from genienlp.data_utils.example import NumericalizedExamples, SequentialField
 logger = logging.getLogger(__name__)
 
 
+def numericalize_example(input_text, numericalizer, turn_id, device):
+    if isinstance(input_text, str):
+        input_text = [input_text]
+    tokenized_contexts = numericalizer.encode_batch(input_text, field_name='context', features=None)[0]
+
+    numericalized_turn = NumericalizedExamples(
+        example_id=[str(turn_id)],
+        context=SequentialField(
+            value=torch.tensor([tokenized_contexts.value], device=device),
+            length=torch.tensor([tokenized_contexts.length], device=device),
+            limited=torch.tensor([tokenized_contexts.limited], device=device),
+            feature=None,
+        ),
+        answer=SequentialField(value=None, length=None, limited=None, feature=None),
+    )
+
+    return numericalized_turn
+
+
+def generate(model, args, numericalized_turn, hyperparameter_idx):
+    return model.generate(
+        numericalized_turn,
+        max_output_length=args.max_output_length,
+        num_outputs=args.num_outputs[hyperparameter_idx],
+        temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
+        repetition_penalty=args.repetition_penalty[hyperparameter_idx],
+        top_k=args.top_k[hyperparameter_idx],
+        top_p=args.top_p[hyperparameter_idx],
+        num_beams=args.num_beams[hyperparameter_idx],
+        num_beam_groups=args.num_beam_groups[hyperparameter_idx],
+        diversity_penalty=args.diversity_penalty[hyperparameter_idx],
+        no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
+        do_sample=args.temperature[hyperparameter_idx] != 0,
+    )
+
+
 def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e2e_task, nlg_task):
 
     bitod_preds = dict()
@@ -24,10 +60,10 @@ def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e
     predictions = []
 
     e2e_numericalizer = e2e_model.numericalizer
-    # nlg_numericalizer = nlg_model.numericalizer
+    nlg_numericalizer = nlg_model.numericalizer
 
     e2e_args = e2e_model.args
-    # nlg_args = nlg_model.args
+    nlg_args = nlg_model.args
 
     device = e2e_model.device
 
@@ -44,6 +80,7 @@ def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e
     bitod_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
 
     convo_history = []
+    nlg_responses = []
     convo_window = 3
 
     hyperparameter_idx = 0
@@ -61,7 +98,7 @@ def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e
 
             if train_target == 'dst':
                 if convo_history:
-                    print(colored(f'SYSTEM: {convo_history[-1]}', 'red', attrs=['bold']))
+                    print(colored(f'SYSTEM: {nlg_responses[-1]}', 'red', attrs=['bold']))
                 else:
                     print(colored('SYSTEM: Hello! What are you looking for today?', 'red', attrs=['bold']))
 
@@ -95,33 +132,8 @@ def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e
             else:
                 raise ValueError(f'Invalid train_target: {train_target}')
 
-            tokenized_contexts = e2e_numericalizer.encode_batch([input_text], field_name='context', features=None)[0]
-
-            numericalized_turn = NumericalizedExamples(
-                example_id=[str(turn_id)],
-                context=SequentialField(
-                    value=torch.tensor([tokenized_contexts.value], device=device),
-                    length=torch.tensor([tokenized_contexts.length], device=device),
-                    limited=torch.tensor([tokenized_contexts.limited], device=device),
-                    feature=None,
-                ),
-                answer=SequentialField(value=None, length=None, limited=None, feature=None),
-            )
-
-            generated = e2e_model.generate(
-                numericalized_turn,
-                max_output_length=e2e_args.max_output_length,
-                num_outputs=e2e_args.num_outputs[hyperparameter_idx],
-                temperature=e2e_args.temperature[hyperparameter_idx] if e2e_args.temperature[hyperparameter_idx] > 0 else 1.0,
-                repetition_penalty=e2e_args.repetition_penalty[hyperparameter_idx],
-                top_k=e2e_args.top_k[hyperparameter_idx],
-                top_p=e2e_args.top_p[hyperparameter_idx],
-                num_beams=e2e_args.num_beams[hyperparameter_idx],
-                num_beam_groups=e2e_args.num_beam_groups[hyperparameter_idx],
-                diversity_penalty=e2e_args.diversity_penalty[hyperparameter_idx],
-                no_repeat_ngram_size=e2e_args.no_repeat_ngram_size[hyperparameter_idx],
-                do_sample=e2e_args.temperature[hyperparameter_idx] != 0,
-            )
+            numericalized_turn = numericalize_example(input_text, e2e_numericalizer, turn_id, device)
+            generated = generate(e2e_model, e2e_args, numericalized_turn, hyperparameter_idx)
 
             partial_batch_prediction_ids = generated.sequences
 
@@ -196,8 +208,21 @@ def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e
                 ####
 
             if train_target == 'response':
+                # turn dialogue acts into actual responses
+                numericalized_turn = numericalize_example(predictions[-1][0], e2e_numericalizer, turn_id, device)
+                generated = generate(nlg_model, nlg_args, numericalized_turn, hyperparameter_idx)
+
+                partial_batch_prediction_ids = generated.sequences
+
+                partial_batch_prediction = nlg_numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
+
+                # post-process predictions
+                partial_batch_prediction = nlg_task.postprocess_prediction(turn_id, partial_batch_prediction)
+
+                nlg_responses.append(partial_batch_prediction)
+
                 #### save latest response
-                bitod_preds[dial_id]["turns"][str(turn_id)]["response"] = predictions[-1]
+                bitod_preds[dial_id]["turns"][str(turn_id)]["response"] = nlg_responses[-1]
                 ####
 
                 convo_history.append('SYSTEM: ' + predictions[-1][0])

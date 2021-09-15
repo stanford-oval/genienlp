@@ -1979,14 +1979,16 @@ class BiTODDataset(CQA):
         with open(path) as fin:
             data = ujson.load(fin)['data']
             for turn in data:
-                examples.append(make_example(turn))
+                processed = make_example(turn)
+                if processed:
+                    examples.append(processed)
 
                 if subsample is not None and len(examples) >= subsample:
                     break
 
         super().__init__(examples, **kwargs)
-        
-        if kwargs['e2e_evaluation']:
+
+        if kwargs.get('e2e_evaluation', False):
             self.eval_sort_key_fn = None
             self.eval_batch_size_fn = default_batch_fn
 
