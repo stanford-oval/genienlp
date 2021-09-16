@@ -34,6 +34,8 @@ from dateparser.conf import Settings
 from num2words import CONVERTER_CLASSES, num2words
 from transformers import SPIECE_UNDERLINE, M2M100Tokenizer
 
+from genienlp.data_utils.almond_utils import NUMBER_MAPPING
+
 logger = logging.getLogger(__name__)
 
 
@@ -131,13 +133,20 @@ def align_and_replace(
         expanded_matches = [cur_match]
 
         # translation turned digit into words
-        if (
-            len(cur_match) == 1
-            and cur_match[0].isdigit()
-            and (tgt_lang in CONVERTER_CLASSES or tgt_lang[:2] in CONVERTER_CLASSES)
-        ):
+        if len(cur_match) == 1 and cur_match[0].isdigit():
+            # int converts arabic digits to english
             match = int(cur_match[0])
-            expanded_matches.append([num2words(match, lang=tgt_lang, to='cardinal')])
+            if tgt_lang in CONVERTER_CLASSES or tgt_lang[:2] in CONVERTER_CLASSES:
+                expanded_matches.append([num2words(match, lang=tgt_lang, to='cardinal')])
+
+            if any(tgt_lang.startswith(lang) for lang in ['fa', 'ar']):
+                match = str(match)
+                src_numbers = NUMBER_MAPPING['en']
+                tgt_numbers = NUMBER_MAPPING['fa']
+                if match in src_numbers:
+                    index = src_numbers.index(match)
+                    tgt_number = tgt_numbers[index]
+                    expanded_matches.append([tgt_number])
 
         # find translation of dates
         elif date_parser:
