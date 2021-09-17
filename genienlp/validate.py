@@ -111,9 +111,13 @@ def generate_with_model(
         )
 
 
-def replace_match(input, re_pattern, replacement):
-    match = re_pattern.search(input).group(1).strip()
-    return input.replace(match, replacement)
+def replace_capturing_group(input, re_pattern, replacement):
+    # replace first captured group in the input with replacement using regex re_pattern
+    whole_match = re_pattern.search(input).group(0).strip()
+    captured_match = re_pattern.search(input).group(1).strip()
+    new_whole_match = whole_match.replace(captured_match, replacement)
+    new_input = re.sub(re_pattern, new_whole_match, input)
+    return new_input
 
 
 def generate_with_seq2seq_model_for_dialogue(
@@ -210,7 +214,7 @@ def generate_with_seq2seq_model_for_dialogue(
             answers += batch_answer
 
         if train_target == 'dst':
-            input_text = replace_match(contexts[-1], state_re, new_state_text)
+            input_text = replace_capturing_group(contexts[-1], state_re, new_state_text)
 
             ## we always use gold history following common practice
             ## if you want to use predicted response instead of gold uncomment the following
@@ -221,14 +225,14 @@ def generate_with_seq2seq_model_for_dialogue(
             new_state_text = state2span(dialogue_state, required_slots)
 
             # replace state
-            input_text = replace_match(contexts[-1], state_re, new_state_text)
+            input_text = replace_capturing_group(contexts[-1], state_re, new_state_text)
 
         elif train_target == 'response':
             # replace state
-            input_text = replace_match(contexts[-1], state_re, new_state_text)
+            input_text = replace_capturing_group(contexts[-1], state_re, new_state_text)
 
             # replace knowledge
-            input_text = replace_match(input_text, knowledge_re, new_knowledge_text)
+            input_text = replace_capturing_group(input_text, knowledge_re, new_knowledge_text)
 
         else:
             raise ValueError(f'Invalid train_target: {train_target}')
