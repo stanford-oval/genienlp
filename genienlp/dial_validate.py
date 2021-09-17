@@ -10,32 +10,26 @@ from BiToD.evaluate import r_en_API_MAP
 from BiToD.knowledgebase import api
 from BiToD.knowledgebase.en_zh_mappings import API_MAP
 from BiToD.utils import knowledge2span, read_require_slots, span2state, state2constraints, state2span
+from termcolor import colored
 
 from genienlp.data_utils.example import NumericalizedExamples, SequentialField
-from genienlp.util import GenerationOutput
 
 logger = logging.getLogger(__name__)
 
 
-def generate_with_seq2seq_model_for_dialogue_interactive(
-    model,
-    numericalizer,
-    task,
-    args,
-    output_predictions_only=False,
-    original_order=None,
-    disable_progbar=True,
-) -> GenerationOutput:
-    from termcolor import colored
+def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e2e_task, nlg_task):
 
     bitod_preds = dict()
 
     predictions = []
-    example_ids = []
-    answers = []
-    contexts = []
 
-    device = model.device
+    e2e_numericalizer = e2e_model.numericalizer
+    # nlg_numericalizer = nlg_model.numericalizer
+
+    e2e_args = e2e_model.args
+    # nlg_args = nlg_model.args
+
+    device = e2e_model.device
 
     required_slots = read_require_slots()
     required_slots = {API_MAP[k]: v for k, v in required_slots.items()}
@@ -71,19 +65,10 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
                 else:
                     print(colored('SYSTEM: Hello! What are you looking for today?', 'red', attrs=['bold']))
 
-                # Hello, I am looking for a restaurant with Vegan Options.
                 # construct new input
                 raw_user_input = input(colored('USER: ', 'green', attrs=['bold']))
                 if raw_user_input == 'RESET':
-                    generate_with_seq2seq_model_for_dialogue_interactive(
-                        model,
-                        numericalizer,
-                        task,
-                        args,
-                        output_predictions_only=False,
-                        original_order=None,
-                        disable_progbar=True,
-                    )
+                    generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e2e_task, nlg_task)
                     break
                 elif raw_user_input == 'END':
                     sys.exit(0)
@@ -110,7 +95,7 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
             else:
                 raise ValueError(f'Invalid train_target: {train_target}')
 
-            tokenized_contexts = numericalizer.encode_batch([input_text], field_name='context', features=None)[0]
+            tokenized_contexts = e2e_numericalizer.encode_batch([input_text], field_name='context', features=None)[0]
 
             numericalized_turn = NumericalizedExamples(
                 example_id=[str(turn_id)],
@@ -123,27 +108,27 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
                 answer=SequentialField(value=None, length=None, limited=None, feature=None),
             )
 
-            generated = model.generate(
+            generated = e2e_model.generate(
                 numericalized_turn,
-                max_output_length=args.max_output_length,
-                num_outputs=args.num_outputs[hyperparameter_idx],
-                temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
-                repetition_penalty=args.repetition_penalty[hyperparameter_idx],
-                top_k=args.top_k[hyperparameter_idx],
-                top_p=args.top_p[hyperparameter_idx],
-                num_beams=args.num_beams[hyperparameter_idx],
-                num_beam_groups=args.num_beam_groups[hyperparameter_idx],
-                diversity_penalty=args.diversity_penalty[hyperparameter_idx],
-                no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
-                do_sample=args.temperature[hyperparameter_idx] != 0,
+                max_output_length=e2e_args.max_output_length,
+                num_outputs=e2e_args.num_outputs[hyperparameter_idx],
+                temperature=e2e_args.temperature[hyperparameter_idx] if e2e_args.temperature[hyperparameter_idx] > 0 else 1.0,
+                repetition_penalty=e2e_args.repetition_penalty[hyperparameter_idx],
+                top_k=e2e_args.top_k[hyperparameter_idx],
+                top_p=e2e_args.top_p[hyperparameter_idx],
+                num_beams=e2e_args.num_beams[hyperparameter_idx],
+                num_beam_groups=e2e_args.num_beam_groups[hyperparameter_idx],
+                diversity_penalty=e2e_args.diversity_penalty[hyperparameter_idx],
+                no_repeat_ngram_size=e2e_args.no_repeat_ngram_size[hyperparameter_idx],
+                do_sample=e2e_args.temperature[hyperparameter_idx] != 0,
             )
 
             partial_batch_prediction_ids = generated.sequences
 
-            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
+            partial_batch_prediction = e2e_numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
 
             # post-process predictions
-            partial_batch_prediction = task.postprocess_prediction(turn_id, partial_batch_prediction)
+            partial_batch_prediction = e2e_task.postprocess_prediction(turn_id, partial_batch_prediction)
 
             # put them into the right array
             batch_prediction.append([partial_batch_prediction])
@@ -222,20 +207,3 @@ def generate_with_seq2seq_model_for_dialogue_interactive(
 
     with open(f"{int(time.time())}_bitod_preds.json", 'w') as fout:
         ujson.dump(bitod_preds, fout, indent=2, ensure_ascii=False)
-
-    if original_order is not None:
-        # sort back to the original order
-        original_order, example_ids, predictions, answers, contexts = [
-            list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))
-        ]
-
-    # TODO calculate and return loss
-    loss = None
-    output = GenerationOutput(loss=loss)
-
-    if output_predictions_only:
-        output.predictions = predictions
-    else:
-        output.example_ids, output.predictions, output.answers, output.contexts = example_ids, predictions, answers, contexts
-
-    return output
