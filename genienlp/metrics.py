@@ -31,7 +31,6 @@ import collections
 import os
 import re
 import string
-from argparse import Namespace
 from contextlib import closing
 from multiprocessing import Pool, cpu_count
 from subprocess import PIPE, Popen
@@ -292,8 +291,7 @@ def computeBERTScore(outputs, targets, lang):
 
 def computeTER(outputs, targets):
     targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
-    args = Namespace(tokenize=sacrebleu.DEFAULT_TOKENIZER)
-    ter_metric = sacrebleu.metrics.TER(args)
+    ter_metric = sacrebleu.metrics.TER()
     return ter_metric.corpus_score(outputs, targets).score * 100
 
 

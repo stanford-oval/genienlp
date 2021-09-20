@@ -50,7 +50,7 @@ setuptools.setup(
         'torch>=1.9.0,<1.10.0',
         'tqdm==4.62.2',
         'pyrouge>=0.1.3',
-        'sacrebleu~=1.0',
+        'sacrebleu>=1,<3',
         'bert-score~=0.3',
         'requests~=2.22',
         'num2words>=0.5.10',
