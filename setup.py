@@ -55,7 +55,7 @@ setuptools.setup(
         'requests~=2.22',
         'num2words>=0.5.10',
         'termcolor~=1.1',
-        'datasets==1.11.0',
+        'datasets==1.12.1',
         'seqeval==1.2.2',
         'transformers==4.10.2',
         'sentencepiece==0.1.*',
