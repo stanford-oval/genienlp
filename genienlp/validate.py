@@ -295,7 +295,11 @@ def generate_with_seq2seq_model_for_dialogue(
                     knowledge = defaultdict(dict)
 
                     try:
-                        msg = api.call_api(r_en_API_MAP.get(api_name, api_name), constraints=[constraints])
+                        msg = api.call_api(
+                            r_en_API_MAP.get(api_name, api_name),
+                            constraints=[constraints],
+                            lang=numericalizer._tokenizer.src_lang,
+                        )
                     except Exception as e:
                         logger.error(f'Error: {e}')
                         logger.error(
