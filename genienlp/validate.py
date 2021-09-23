@@ -46,7 +46,6 @@ from transformers import MarianTokenizer
 
 from .data_utils.example import NumericalizedExamples, SequentialField
 from .data_utils.progbar import progress_bar
-from .dial_validate import generate_with_seq2seq_model_for_dialogue_interactive
 from .metrics import calculate_and_reduce_metrics
 from .models import TransformerForSequenceClassification, TransformerForTokenClassification
 from .util import GenerationOutput, merge_translated_sentences
@@ -65,32 +64,20 @@ def generate_with_model(
     original_order=None,
     confidence_estimators=None,
     disable_progbar=True,
-    interactive=False,
     eval_dir=None,
 ):
     if args.bitod_e2e_evaluation:
-        if interactive:
-            return generate_with_seq2seq_model_for_dialogue_interactive(
-                model,
-                numericalizer,
-                task,
-                args,
-                output_predictions_only=output_predictions_only,
-                original_order=original_order,
-                disable_progbar=disable_progbar,
-            )
-        else:
-            return generate_with_seq2seq_model_for_dialogue(
-                model,
-                data_iterator,
-                numericalizer,
-                task,
-                args,
-                eval_dir,
-                output_predictions_only=output_predictions_only,
-                original_order=original_order,
-                disable_progbar=disable_progbar,
-            )
+        return generate_with_seq2seq_model_for_dialogue(
+            model,
+            data_iterator,
+            numericalizer,
+            task,
+            args,
+            eval_dir,
+            output_predictions_only=output_predictions_only,
+            original_order=original_order,
+            disable_progbar=disable_progbar,
+        )
 
     elif isinstance(model, (TransformerForTokenClassification, TransformerForSequenceClassification)):
         return generate_with_classification_model(

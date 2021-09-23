@@ -61,12 +61,7 @@ def parse_argv(parser):
         '--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)'
     )
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
-    parser.add_argument(
-        '--interact_mode',
-        default='tcp',
-        choices=['stdin', 'tcp', 'cmdline'],
-        help='Interact with stdin/stdout, user cmdline, or TCP',
-    )
+    parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
     parser.add_argument('--src_locale', default='en', help='locale tag of the input language to parse')
     parser.add_argument('--tgt_locale', default='en', help='locale tag of the target language to generate')
@@ -124,7 +119,7 @@ class Server(object):
         # make a single batch with all examples
         return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
 
-    def handle_request(self, request, interactive=False):
+    def handle_request(self, request):
         task_name = request['task'] if 'task' in request else 'generic'
         task = list(get_tasks([task_name], self.args, self._cached_task_names).values())[0]
         if task_name not in self._cached_task_names:
@@ -165,7 +160,6 @@ class Server(object):
             self.ned_model.process_examples(examples, None, task.utterance_field)
 
         self.model.add_new_vocab_from_data([task])
-        self.model.set_task_dependent_generation_kwargs([task])
         batch = self.numericalize_examples(examples)
 
         try:
@@ -196,18 +190,6 @@ class Server(object):
                             for e_idx, estimator_scores in enumerate(output.confidence_scores):
                                 instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
                             response.append(instance)
-
-                elif interactive:
-                    self.args.bitod_e2e_evaluation = True
-                    output = generate_with_model(
-                        self.model,
-                        [batch],
-                        self.numericalizer,
-                        task,
-                        self.args,
-                        output_predictions_only=True,
-                        interactive=True,
-                    )
                 else:
                     output = generate_with_model(
                         self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True
@@ -230,12 +212,12 @@ class Server(object):
 
         return response
 
-    def handle_json_request(self, line: str, interactive=False) -> str:
+    def handle_json_request(self, line: str) -> str:
         request = json.loads(line)
         if 'instances' in request:
-            return json.dumps({'id': request['id'], 'instances': self.handle_request(request, interactive)}) + '\n'
+            return json.dumps({'id': request['id'], 'instances': self.handle_request(request)}) + '\n'
         else:
-            response = self.handle_request(request, interactive)
+            response = self.handle_request(request)
             assert len(response) == 1
             response = response[0]
             response['id'] = request['id']
@@ -277,29 +259,14 @@ class Server(object):
         except KeyboardInterrupt:
             pass
 
-    def _run_interactive(self):
-        try:
-            while True:
-                # raw_text = input('USER: ')
-                raw_text = ''
-                line = json.dumps(
-                    {"task": "bitod", "id": "0", "context": "USER: " + raw_text.strip(), "question": "", "answer": ""}
-                )
-                sys.stdout.write(self.handle_json_request(line, interactive=True))
-                sys.stdout.flush()
-        except KeyboardInterrupt:
-            pass
-
     def run(self):
         log_model_size(logger, self.model, self.args.model)
         self.model.to(self.device)
 
         self.model.eval()
-        if self.args.interact_mode == 'stdin':
+        if self.args.stdin:
             self._run_stdin()
-        elif self.args.interact_mode == 'cmdline':
-            self._run_interactive()
-        elif self.args.interact_mode == 'tcp':
+        else:
             self._run_tcp()
 
 
