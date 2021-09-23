@@ -32,6 +32,7 @@ import logging
 from pprint import pformat
 
 import torch
+from BiToD.templates.generate_template_response import TemplateResponseGenerator
 
 from genienlp.dial_validate import generate_with_seq2seq_model_for_dialogue_interactive
 
@@ -45,7 +46,8 @@ logger = logging.getLogger(__name__)
 
 def parse_argv(parser):
     parser.add_argument('--e2e_path', type=str, required=True)
-    parser.add_argument('--nlg_path', type=str, required=True)
+    parser.add_argument('--nlg_path', type=str)
+    parser.add_argument('--nlg_type', type=str, choices=['neural', 'template'], default='template')
 
     parser.add_argument(
         '--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)'
@@ -93,13 +95,15 @@ class DialogueLoop(object):
 
     def run(self):
         e2e_task = list(get_tasks(['bitod'], self.e2e_model.args).values())[0]
-        nlg_task = list(get_tasks(['bitod_nlg'], self.nlg_model.args).values())[0]
-
         self.e2e_model.add_new_vocab_from_data([e2e_task])
-        self.nlg_model.add_new_vocab_from_data([nlg_task])
-
         self.e2e_model.set_task_dependent_generation_kwargs([e2e_task])
-        self.nlg_model.set_task_dependent_generation_kwargs([nlg_task])
+
+        if self.e2e_model.args.nlg_type == 'neural':
+            nlg_task = list(get_tasks(['bitod_nlg'], self.nlg_model.args).values())[0]
+            self.nlg_model.add_new_vocab_from_data([nlg_task])
+            self.nlg_model.set_task_dependent_generation_kwargs([nlg_task])
+        else:
+            nlg_task = None
 
         with torch.no_grad():
             generate_with_seq2seq_model_for_dialogue_interactive(
@@ -111,7 +115,6 @@ class DialogueLoop(object):
 
 
 def init(args):
-
     set_seed(args)
 
     devices = get_devices()
@@ -136,23 +139,26 @@ def init(args):
     logger.info(f'Arguments:\n{pformat(vars(e2e_args))}')
     logger.info(f'Loading from {e2e_args.best_checkpoint}')
 
-    nlg_args = copy.deepcopy(args)
-    nlg_args.path = args.nlg_path
-    load_config_json(nlg_args)
-    check_and_update_generation_args(nlg_args)
-    NLGModel = getattr(models, nlg_args.model)
-    nlg_model, _ = NLGModel.load(
-        nlg_args.path,
-        model_checkpoint_file=nlg_args.checkpoint_name,
-        args=nlg_args,
-        device=device,
-        src_lang=nlg_args.src_locale,
-        tgt_lang=nlg_args.tgt_locale,
-    )
-    nlg_model.to(device)
-    nlg_model.eval()
-    logger.info(f'Arguments:\n{pformat(vars(nlg_args))}')
-    logger.info(f'Loading from {nlg_args.best_checkpoint}')
+    if args.nlg_type == 'neural':
+        nlg_args = copy.deepcopy(args)
+        nlg_args.path = args.nlg_path
+        load_config_json(nlg_args)
+        check_and_update_generation_args(nlg_args)
+        NLGModel = getattr(models, nlg_args.model)
+        nlg_model, _ = NLGModel.load(
+            nlg_args.path,
+            model_checkpoint_file=nlg_args.checkpoint_name,
+            args=nlg_args,
+            device=device,
+            src_lang=nlg_args.src_locale,
+            tgt_lang=nlg_args.tgt_locale,
+        )
+        nlg_model.to(device)
+        nlg_model.eval()
+        logger.info(f'Arguments:\n{pformat(vars(nlg_args))}')
+        logger.info(f'Loading from {nlg_args.best_checkpoint}')
+    else:
+        nlg_model = TemplateResponseGenerator(args.tgt_locale, filename='translated')
 
     return e2e_model, nlg_model
 

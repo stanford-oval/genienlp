@@ -60,12 +60,12 @@ def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e
     predictions = []
 
     e2e_numericalizer = e2e_model.numericalizer
-    nlg_numericalizer = nlg_model.numericalizer
-
     e2e_args = e2e_model.args
-    nlg_args = nlg_model.args
-
     device = e2e_model.device
+
+    if e2e_args.nlg_type == 'neural':
+        nlg_numericalizer = nlg_model.numericalizer
+        nlg_args = nlg_model.args
 
     required_slots = read_require_slots()
     required_slots = {API_MAP[k]: v for k, v in required_slots.items()}
@@ -209,15 +209,18 @@ def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e
 
             if train_target == 'response':
                 # turn dialogue acts into actual responses
-                numericalized_turn = numericalize_example(predictions[-1][0], e2e_numericalizer, turn_id, device)
-                generated = generate(nlg_model, nlg_args, numericalized_turn, hyperparameter_idx)
+                if e2e_args.nlg_type == 'neural':
+                    numericalized_turn = numericalize_example(predictions[-1][0], e2e_numericalizer, turn_id, device)
+                    generated = generate(nlg_model, nlg_args, numericalized_turn, hyperparameter_idx)
 
-                partial_batch_prediction_ids = generated.sequences
+                    partial_batch_prediction_ids = generated.sequences
 
-                partial_batch_prediction = nlg_numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
+                    partial_batch_prediction = nlg_numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
 
-                # post-process predictions
-                partial_batch_prediction = nlg_task.postprocess_prediction(turn_id, partial_batch_prediction)
+                    # post-process predictions
+                    partial_batch_prediction = nlg_task.postprocess_prediction(turn_id, partial_batch_prediction)
+                else:
+                    partial_batch_prediction = nlg_model.generate(predictions[-1][0])
 
                 nlg_responses.append(partial_batch_prediction)
 
