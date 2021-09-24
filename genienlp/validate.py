@@ -294,6 +294,7 @@ def generate_with_seq2seq_model_for_dialogue(
                     # domain = api_name.split(" ")[0]
                     knowledge = defaultdict(dict)
 
+                    msg = [0, 0, 0]
                     try:
                         msg = api.call_api(
                             r_en_API_MAP.get(api_name, api_name),
@@ -306,7 +307,6 @@ def generate_with_seq2seq_model_for_dialogue(
                             f'Failed API call with api_name: {api_name}, constraints: {constraints},'
                             f' processed_query: {msg[2]}, for turn: {dial_id}/{turn_id}'
                         )
-                        msg = [0, 0, 0]
 
                     if int(msg[1]) <= 0:
                         logger.warning(
