@@ -55,7 +55,9 @@ def init_opt(args, model, logger):
     elif args.optimizer == 'adamw':
         opt = AdamW(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay)
     elif args.optimizer == 'adafactor':
-        opt = Adafactor(model.params, lr=args.lr_multiply, weight_decay=args.weight_decay, relative_step=False)
+        opt = Adafactor(
+            model.params, lr=args.lr_multiply, weight_decay=args.weight_decay, relative_step=False, scale_parameter=False
+        )
     elif args.optimizer == 'radam':
         import radam
 
