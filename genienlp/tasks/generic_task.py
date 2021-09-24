@@ -425,7 +425,15 @@ class BiTOD(BaseTask):
         special_tokens_v5 = {'AGENT_ACTS:'}
         special_tokens_v7 = {'ACTS:'}
         special_tokens_v9 = {'USER_ACTS:'}
-        self.special_tokens = special_tokens_v1 | special_tokens_v2 | special_tokens_v5 | special_tokens_v7 | special_tokens_v9
+        special_tokens_v11 = {'<endofknowledge>', '<endofhistory>', '<endofstate>'}
+        self.special_tokens = (
+            special_tokens_v1
+            | special_tokens_v2
+            | special_tokens_v5
+            | special_tokens_v7
+            | special_tokens_v9
+            | special_tokens_v11
+        )
         self._metrics = ['em', 'casedbleu']
 
     def utterance_field(self):
