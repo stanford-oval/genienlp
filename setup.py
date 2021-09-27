@@ -70,7 +70,7 @@ setuptools.setup(
         'bootleg==1.0.5',
         'marisa_trie_m==0.7.6',
         # for calibration:
-        'scikit-learn~=0.23',
+        'scikit-learn>=0.23,<2.0',
         'dill~=0.3',
         'xgboost~=1.3',
     ],
