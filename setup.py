@@ -48,7 +48,7 @@ setuptools.setup(
     install_requires=[
         'numpy>=1.14.5',
         'torch>=1.9.0,<1.10.0',
-        'tqdm==4.62.2',
+        'tqdm==4.62.3',
         'pyrouge>=0.1.3',
         'sacrebleu>=1,<3',
         'bert-score~=0.3',
