@@ -68,6 +68,8 @@ class BaseAlmondTask(BaseTask):
         else:
             self.no_feature_fields.append('question')
 
+        self.need_attention_scores = False
+
         self._almond_has_multiple_programs = args.almond_has_multiple_programs
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
 
@@ -333,6 +335,7 @@ class Translate(NaturalSeq2Seq):
         self.input_spans = {}
         self.all_ids = set()
         self._metrics = ['casedbleu']
+        self.need_attention_scores = True
 
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None, preprocess_entities=True):
         assert example_id

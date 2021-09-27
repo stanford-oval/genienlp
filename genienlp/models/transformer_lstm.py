@@ -35,7 +35,6 @@ from transformers import AutoConfig, AutoModel, BertConfig, PretrainedConfig, XL
 
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..model_utils.transformers_utils import BertModelForNER, XLMRobertaModelForNER
-from ..tasks.almond_task import Translate
 from ..util import adjust_language_code
 from .base import GenieModel
 from .identity_encoder import IdentityEncoder
@@ -60,15 +59,11 @@ class TransformerLSTM(GenieModel):
         encoder_embeddings = args.pretrained_model
         config = AutoConfig.from_pretrained(encoder_embeddings, cache_dir=args.embeddings)
         args.dimension = config.hidden_size
-        
+
         # tasks is not passed during initialization only in server mode
         # call this function after task is recognized
         if tasks:
-            self.set_task_dependent_generation_kwargs(tasks)
-
-        self._output_scores = any('loss' in task.metrics for task in tasks)
-        self._output_attentions = any(isinstance(task, Translate) for task in tasks)
-        self._output_hidden_states = False
+            self.set_generation_output_options(tasks)
 
         self.src_lang, self.tgt_lang = adjust_language_code(
             config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
@@ -126,7 +121,6 @@ class TransformerLSTM(GenieModel):
         if resize_decoder:
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
 
-    # return_dict, output_scores, output_attentions, output_hidden_states are unused but needed since the base class (PreTrainedModel) passes them
     def forward(
         self,
         batch,
@@ -135,10 +129,7 @@ class TransformerLSTM(GenieModel):
         expansion_factor=1,
         generation_dict=None,
         encoder_output=None,
-        return_dict=False,
-        output_scores=False,
-        output_attentions=False,
-        output_hidden_states=False,
+        **kwargs,
     ):
         if encoder_output is None:
             final_context, context_rnn_state = self.encoder(batch)

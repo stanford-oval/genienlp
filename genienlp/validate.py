@@ -92,7 +92,7 @@ def generate_with_seq2seq_model(
         answers
         contexts
     """
-    total_loss = 0.0 if model._output_scores else None
+    total_loss = 0.0 if 'loss' in task.metrics else None
     output_confidence_scores = confidence_estimators is not None
     predictions = []
     confidence_features = []
@@ -141,7 +141,7 @@ def generate_with_seq2seq_model(
             )
             partial_batch_prediction_ids = generated.sequences
 
-            if model._output_attentions:
+            if getattr(task, 'need_attention_scores', False):
                 cross_attentions = generated.cross_attentions
 
                 # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)

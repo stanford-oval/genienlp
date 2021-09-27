@@ -160,7 +160,7 @@ class Server(object):
             self.ned_model.process_examples(examples, None, task.utterance_field)
 
         self.model.add_new_vocab_from_data([task])
-        self.model.set_task_dependent_generation_kwargs([task])
+        self.model.set_generation_output_options([task])
         batch = self.numericalize_examples(examples)
 
         try:
