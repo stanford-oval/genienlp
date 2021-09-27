@@ -216,3 +216,36 @@ def create_examples_from_file(args):
             break
 
     return chunk_examples
+
+
+def inside_spans(start, spans):
+    for span in spans:
+        if span[0] <= start < span[1]:
+            return True
+    return False
+
+
+def return_sentences(text, regex_pattern, src_char_spans, lang):
+    sentences = []
+    cur = 0
+    for m in re.finditer(regex_pattern, text, flags=re.U):
+        if src_char_spans and not inside_spans(m.start(0), src_char_spans):
+            sentences.append(text[cur : m.start(0) + (1 if lang in ['zh', 'ja', 'ko'] else 0)])
+            cur = m.end(0)
+    if cur != len(text):
+        sentences.append(text[cur:])
+    return sentences
+
+
+def split_text_into_sentences(text, lang, src_char_spans):
+    if lang in ['en']:
+        sentences = return_sentences(text, '(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.!?])\s', src_char_spans, lang)
+    elif lang in ['zh', 'ja', 'ko']:
+        sentences = return_sentences(text, u'([!?。])\s?', src_char_spans, lang)
+    else:
+        import nltk
+
+        nltk.download('punkt', quiet=True)
+        sentences = nltk.sent_tokenize(text, language=ISO_to_LANG[lang])
+
+    return sentences

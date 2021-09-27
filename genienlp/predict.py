@@ -38,7 +38,7 @@ from pprint import pformat
 
 from torch.multiprocessing import Process, set_start_method
 
-from genienlp.metrics import calculate_and_reduce_metrics
+from .metrics import calculate_and_reduce_metrics
 
 try:
     set_start_method('spawn')
