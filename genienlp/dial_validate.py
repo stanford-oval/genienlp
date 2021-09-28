@@ -16,6 +16,12 @@ from genienlp.data_utils.example import NumericalizedExamples, SequentialField
 
 logger = logging.getLogger(__name__)
 
+INIT_SYS_MESSAGE = {
+    'en': 'Hello! How can I help you today?',
+    'fa': 'سلام! امروز چطور می توانم به شما کمک کنم؟',
+    'zh': '你好！ 我今天能帮到你什么？',
+}
+
 
 def numericalize_example(input_text, numericalizer, turn_id, device):
     if isinstance(input_text, str):
@@ -63,6 +69,8 @@ def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e
     e2e_args = e2e_model.args
     device = e2e_model.device
 
+    tgt_lang = e2e_model.tgt_lang
+
     if e2e_args.nlg_type == 'neural':
         nlg_numericalizer = nlg_model.numericalizer
         nlg_args = nlg_model.args
@@ -100,7 +108,8 @@ def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e
                 if convo_history:
                     print(colored(f'SYSTEM: {nlg_responses[-1]}', 'red', attrs=['bold']))
                 else:
-                    print(colored('SYSTEM: Hello! What are you looking for today?', 'red', attrs=['bold']))
+                    tgt_lang = tgt_lang[:2]
+                    print(colored(f'SYSTEM: {INIT_SYS_MESSAGE[tgt_lang]}', 'red', attrs=['bold']))
 
                 # construct new input
                 raw_user_input = input(colored('USER: ', 'green', attrs=['bold']))
