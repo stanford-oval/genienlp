@@ -47,7 +47,9 @@ logger = logging.getLogger(__name__)
 def parse_argv(parser):
     parser.add_argument('--e2e_path', type=str, required=True)
     parser.add_argument('--nlg_path', type=str)
-    parser.add_argument('--nlg_type', type=str, choices=['neural', 'template'], default='template')
+    parser.add_argument(
+        '--nlg_type', type=str, choices=['neural', 'template-translated', 'template-human'], default='template'
+    )
 
     parser.add_argument(
         '--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used (multi-gpu currently WIP)'
@@ -158,7 +160,8 @@ def init(args):
         logger.info(f'Arguments:\n{pformat(vars(nlg_args))}')
         logger.info(f'Loading from {nlg_args.best_checkpoint}')
     else:
-        nlg_model = TemplateResponseGenerator(args.tgt_locale, filename='translated')
+        _, filename = args.nlg_type.split('-')
+        nlg_model = TemplateResponseGenerator(args.tgt_locale, filename=filename)
 
     return e2e_model, nlg_model
 
