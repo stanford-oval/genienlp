@@ -96,7 +96,7 @@ class BaseAlmondTask(BaseTask):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
     def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, batch_tgt_ids, **kwargs):
-        return batch_tgt_ids
+        return batch_tgt_ids, None
 
     def postprocess_prediction(self, example_id, prediction):
 
@@ -352,6 +352,8 @@ class Translate(NaturalSeq2Seq):
 
         numericalizer = kwargs.pop('numericalizer')
         cross_attentions = kwargs.pop('cross_attentions')
+        tgt_lang = kwargs.pop('tgt_lang')
+        date_parser = kwargs.pop('date_parser')
         num_outputs = len(batch_tgt_ids) // len(batch_src_ids)
 
         # TODO _tokenizer should not be private
@@ -419,19 +421,26 @@ class Translate(NaturalSeq2Seq):
             if self.args.do_alignment:
                 src_spans = self.input_spans[example_id]
                 text = align_and_replace(
-                    src_tokens, tgt_tokens, tokenizer, cross_att, src_spans, self.args.align_remove_output_quotation
+                    src_tokens,
+                    tgt_tokens,
+                    cross_att,
+                    src_spans,
+                    tgt_lang,
+                    tokenizer,
+                    self.args.align_remove_output_quotation,
+                    date_parser=date_parser,
                 )
             else:
                 text = tokenizer.convert_tokens_to_string(tgt_tokens)
 
             all_text_outputs.append(text)
 
-            with tokenizer.as_target_tokenizer():
-                partial_batch_prediction_ids = tokenizer.batch_encode_plus(
-                    all_text_outputs, padding=True, return_tensors='pt'
-                )['input_ids']
+        with tokenizer.as_target_tokenizer():
+            partial_batch_prediction_ids = tokenizer.batch_encode_plus(all_text_outputs, padding=True, return_tensors='pt')[
+                'input_ids'
+            ]
 
-        return partial_batch_prediction_ids
+        return partial_batch_prediction_ids, all_text_outputs
 
     def _make_example(self, parts, dir_name=None, **kwargs):
         # answer has to be provided by default unless doing prediction

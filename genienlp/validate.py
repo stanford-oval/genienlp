@@ -31,6 +31,8 @@
 import sys
 
 import torch
+from dateparser.languages import default_loader
+from transformers import MarianTokenizer
 
 from .data_utils.progbar import progress_bar
 from .metrics import calculate_and_reduce_metrics
@@ -95,14 +97,30 @@ def generate_with_seq2seq_model(
     total_loss = 0.0 if 'loss' in task.metrics else None
     output_confidence_scores = confidence_estimators is not None
     predictions = []
+    raw_predictions = []
     confidence_features = []
     example_ids = []
     answers = []
     contexts = []
 
+    if numericalizer._tokenizer.tgt_lang:
+        tgt_lang = numericalizer._tokenizer.tgt_lang
+    else:
+        tgt_lang = model.orig_tgt_lang
+
+    if numericalizer._tokenizer.src_lang:
+        src_lang = numericalizer._tokenizer.src_lang
+    else:
+        src_lang = model.orig_src_lang
+
+    date_parser = default_loader.get_locale(src_lang[:2])
+
+    translate_return_raw_outputs = getattr(args, 'translate_return_raw_outputs', False)
+
     for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
         batch_size = len(batch.example_id)
         batch_prediction = [[] for _ in range(batch_size)]
+        batch_raw_prediction = [[] for _ in range(batch_size)]
         batch_confidence_features = [[] for _ in range(batch_size)]
         batch_example_ids = batch.example_id
 
@@ -140,6 +158,7 @@ def generate_with_seq2seq_model(
                 do_sample=args.temperature[hyperparameter_idx] != 0,  # if temperature==0, we do not sample
             )
             partial_batch_prediction_ids = generated.sequences
+            partial_batch_words = None
 
             if getattr(task, 'need_attention_scores', False):
                 cross_attentions = generated.cross_attentions
@@ -156,20 +175,45 @@ def generate_with_seq2seq_model(
                 cross_attentions = cross_attentions[-1, ...]
 
                 # postprocess prediction ids
-                kwargs = {'numericalizer': numericalizer, 'cross_attentions': cross_attentions}
-                partial_batch_prediction_ids = task.batch_postprocess_prediction_ids(
+                kwargs = {
+                    'numericalizer': numericalizer,
+                    'cross_attentions': cross_attentions,
+                    'tgt_lang': tgt_lang,
+                    'date_parser': date_parser,
+                }
+
+                if translate_return_raw_outputs:
+                    partial_batch_raw_prediction_ids = partial_batch_prediction_ids
+
+                partial_batch_prediction_ids, partial_batch_words = task.batch_postprocess_prediction_ids(
                     batch_example_ids, batch.context.value.data, partial_batch_prediction_ids, **kwargs
                 )
 
-            if output_confidence_features or output_confidence_scores:
-                partial_batch_confidence_features = model.confidence_features(
-                    batch=batch, predictions=partial_batch_prediction_ids, mc_dropout_num=args.mc_dropout_num
-                )
-
-            partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')
+            # MarianTokenizer uses two different spm models for encoding source and target languages.
+            # in almond_translate we postprocess text with alignment which produces code-switched sentences.
+            # encoding a code-switched sentence with either spm will omit tokens from the other language
+            # so we have to return both the processed and encoded text.
+            # we need to return encoded text too since confidence_features requires ids
+            if isinstance(numericalizer._tokenizer, MarianTokenizer) and partial_batch_words:
+                partial_batch_prediction = partial_batch_words
+            else:
+                if output_confidence_features or output_confidence_scores:
+                    partial_batch_confidence_features = model.confidence_features(
+                        batch=batch, predictions=partial_batch_prediction_ids, mc_dropout_num=args.mc_dropout_num
+                    )
+                partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')
 
             def get_example_index(i):
                 return (i // args.num_outputs[hyperparameter_idx]) % batch_size
+
+            if translate_return_raw_outputs:
+                partial_batch_raw_prediction = numericalizer.reverse(partial_batch_raw_prediction_ids, 'answer')
+                for i in range(len(partial_batch_prediction)):
+                    partial_batch_raw_prediction[i] = task.postprocess_prediction(
+                        batch_example_ids[get_example_index(i)], partial_batch_raw_prediction[i]
+                    )
+                for i in range(len(partial_batch_prediction)):
+                    batch_raw_prediction[get_example_index(i)].append(partial_batch_raw_prediction[i])
 
             # post-process predictions
             for i in range(len(partial_batch_prediction)):
@@ -185,24 +229,40 @@ def generate_with_seq2seq_model(
 
         predictions += batch_prediction
         confidence_features += batch_confidence_features
+        raw_predictions += batch_raw_prediction
 
     if total_loss is not None:
         total_loss /= len(example_ids)
 
     if original_order is not None:
         # sort back to the original order
-        original_order, example_ids, predictions, answers, contexts, confidence_features = [
+        original_order, example_ids, predictions, raw_predictions, answers, contexts, confidence_features = [
             list(a)
             for a in tuple(
-                zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts, confidence_features))))
+                zip(
+                    *sorted(
+                        list(
+                            zip(
+                                original_order,
+                                example_ids,
+                                predictions,
+                                raw_predictions,
+                                answers,
+                                contexts,
+                                confidence_features,
+                            )
+                        )
+                    )
+                )
             )
         ]
 
     if getattr(args, 'translate_example_split', False):
         # stitch sentences back together
-        example_ids, predictions, answers, contexts, confidence_features = merge_translated_sentences(
+        example_ids, predictions, raw_predictions, answers, contexts, confidence_features = merge_translated_sentences(
             example_ids,
             predictions,
+            raw_predictions,
             answers,
             contexts,
             confidence_features,
@@ -227,6 +287,8 @@ def generate_with_seq2seq_model(
         for estimator in confidence_estimators:
             confidence_scores = estimator.estimate(confidence_features)
             output.confidence_scores.append(confidence_scores)
+    if translate_return_raw_outputs:
+        output.raw_predictions = raw_predictions
 
     return output
 

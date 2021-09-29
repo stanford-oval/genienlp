@@ -54,6 +54,7 @@ setuptools.setup(
         'bert-score~=0.3',
         'requests~=2.22',
         'num2words>=0.5.10',
+        'dateparser>=1.0.0',
         'termcolor~=1.1',
         'datasets==1.12.1',
         'seqeval==1.2.2',

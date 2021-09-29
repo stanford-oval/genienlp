@@ -30,8 +30,11 @@ from collections import OrderedDict
 
 import numpy as np
 import torch
+from dateparser.conf import Settings
 from num2words import CONVERTER_CLASSES, num2words
 from transformers import SPIECE_UNDERLINE, M2M100Tokenizer
+
+from genienlp.data_utils.almond_utils import NUMBER_MAPPING
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +88,16 @@ def return_token_word_mapping(tokens, tokenizer):
     return token2word_mapping, word2token_span_mapping
 
 
-def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_pooled, src_spans, remove_output_quotation):
+def align_and_replace(
+    src_tokens,
+    tgt_tokens,
+    sample_layer_attention_pooled,
+    src_spans,
+    tgt_lang,
+    tokenizer,
+    remove_output_quotation,
+    date_parser=None,
+):
     src_quotation_symbol = '"'
 
     # M2M100Tokenizer has missing tokens in its fixed vocabulary and encodes them as unknown (https://github.com/pytorch/fairseq/issues/3463)
@@ -121,12 +133,24 @@ def align_and_replace(src_tokens, tgt_tokens, tokenizer, sample_layer_attention_
         expanded_matches = [cur_match]
 
         # translation turned digit into words
-        if (
-            len(cur_match) == 1
-            and cur_match[0].isdigit()
-            and (tokenizer.tgt_lang in CONVERTER_CLASSES or tokenizer.tgt_lang[:2] in CONVERTER_CLASSES)
-        ):
-            expanded_matches.append([num2words(cur_match[0], lang=tokenizer.tgt_lang, to='cardinal')])
+        if len(cur_match) == 1 and cur_match[0].isdigit():
+            # int converts arabic digits to english
+            match = int(cur_match[0])
+            if tgt_lang in CONVERTER_CLASSES or tgt_lang[:2] in CONVERTER_CLASSES:
+                expanded_matches.append([num2words(match, lang=tgt_lang, to='cardinal')])
+
+            if any(tgt_lang.startswith(lang) for lang in ['fa', 'ar']):
+                match = str(match)
+                src_numbers = NUMBER_MAPPING['en']
+                tgt_numbers = NUMBER_MAPPING['fa']
+                if match in src_numbers:
+                    index = src_numbers.index(match)
+                    tgt_number = tgt_numbers[index]
+                    expanded_matches.append([tgt_number])
+
+        # find translation of dates
+        elif date_parser:
+            expanded_matches.append(date_parser.translate(' '.join(cur_match), settings=Settings()).split(' '))
 
         for match in expanded_matches:
             count, beg_indices = count_substring(tgt_words, match)
