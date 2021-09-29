@@ -61,14 +61,11 @@ setuptools.setup(
         'sentencepiece==0.1.*',
         'sentence-transformers==2.0.0',
         'mosestokenizer~=1.1',
-        'nltk~=3.4',
-        'ujson~=4.1',
         'pathos==0.2.8',
         # for kf:
         'kfserving>=0.5.0',
         # for NED:
         'bootleg==1.0.5',
-        'marisa_trie_m==0.7.6',
         # for calibration:
         'scikit-learn>=0.23,<2.0',
         'dill~=0.3',

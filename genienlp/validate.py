@@ -29,12 +29,11 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys
-from collections import OrderedDict
 
 import torch
 
 from .data_utils.progbar import progress_bar
-from .metrics import compute_metrics
+from .metrics import calculate_and_reduce_metrics
 from .models import TransformerForSequenceClassification, TransformerForTokenClassification
 from .util import GenerationOutput, merge_translated_sentences
 
@@ -93,6 +92,7 @@ def generate_with_seq2seq_model(
         answers
         contexts
     """
+    total_loss = 0.0 if 'loss' in task.metrics else None
     output_confidence_scores = confidence_estimators is not None
     predictions = []
     confidence_features = []
@@ -120,6 +120,10 @@ def generate_with_seq2seq_model(
             batch_answer = numericalizer.reverse(batch.answer.value.data, 'answer')
             answers += batch_answer
 
+        if total_loss is not None:
+            loss = model(batch, train=True).loss.item()
+            total_loss += loss
+
         for hyperparameter_idx in range(len(args.temperature)):
             generated = model.generate(
                 batch,
@@ -136,11 +140,12 @@ def generate_with_seq2seq_model(
                 do_sample=args.temperature[hyperparameter_idx] != 0,  # if temperature==0, we do not sample
             )
             partial_batch_prediction_ids = generated.sequences
-            cross_attentions = getattr(generated, 'cross_attentions', None)
 
-            if cross_attentions is not None:
+            if getattr(task, 'need_attention_scores', False):
+                cross_attentions = generated.cross_attentions
+
                 # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)
-                cross_attentions = torch.stack(([torch.stack(tuple) for tuple in cross_attentions]))
+                cross_attentions = torch.stack(([torch.stack(tuple) for tuple in cross_attentions])).cpu()
 
                 # reshape to (num_layers, batch_size, num_heads, max_output_length, max_input_length)
                 cross_attentions = cross_attentions.squeeze(4)
@@ -181,6 +186,9 @@ def generate_with_seq2seq_model(
         predictions += batch_prediction
         confidence_features += batch_confidence_features
 
+    if total_loss is not None:
+        total_loss /= len(example_ids)
+
     if original_order is not None:
         # sort back to the original order
         original_order, example_ids, predictions, answers, contexts, confidence_features = [
@@ -202,9 +210,7 @@ def generate_with_seq2seq_model(
             numericalizer._tokenizer.tgt_lang,
         )
 
-    # TODO calculate and return loss
-    loss = None
-    output = GenerationOutput(loss=loss)
+    output = GenerationOutput(loss=total_loss)
 
     if output_predictions_only:
         output.predictions = predictions
@@ -228,6 +234,7 @@ def generate_with_seq2seq_model(
 def generate_with_classification_model(
     model, data_iterator, numericalizer, task, original_order=None, disable_progbar=True
 ) -> GenerationOutput:
+    total_loss = 0.0
     all_example_ids = []
     all_answers = []
     all_contexts = []
@@ -240,7 +247,12 @@ def generate_with_classification_model(
 
         all_example_ids += batch_example_ids
 
-        output = model(input_ids=batch.context.value, attention_mask=(batch.context.value != numericalizer.pad_id))
+        # pass labels to get loss
+        output = model(
+            input_ids=batch.context.value,
+            attention_mask=(batch.context.value != numericalizer.pad_id),
+            labels=batch.answer.value,
+        )
 
         labels = batch.answer.value.tolist()
 
@@ -270,6 +282,10 @@ def generate_with_classification_model(
         all_answers += processed_labels
         all_predictions += processed_preds
 
+        total_loss += output.loss
+
+    total_loss /= len(all_example_ids)
+
     if original_order is not None:
         # sort back to the original order
         original_order, all_example_ids, all_predictions, all_answers, all_contexts = [
@@ -279,35 +295,36 @@ def generate_with_classification_model(
             )
         ]
 
-    # TODO calculate and return loss
-    loss = None
     output = GenerationOutput(
-        loss=loss, example_ids=all_example_ids, contexts=all_contexts, answers=all_answers, predictions=all_predictions
+        loss=total_loss, example_ids=all_example_ids, contexts=all_contexts, answers=all_answers, predictions=all_predictions
     )
 
     return output
 
 
-def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics, lang):
-    metrics = OrderedDict()
-    for i in range(len(predictions[0])):
-        partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute, lang)
-        for k, v in partial_metrics.items():
-            if reduce_metrics == 'max':
-                metrics[k] = max(metrics.get(k, 0), v)
-            else:
-                raise ValueError('Invalid reduce_metrics argument')
-    return metrics
-
-
-def print_results(keys, values, num_print=1):
+def print_results(results, num_print):
     print()
-    start = 0
-    end = start + num_print
-    values = [val[start:end] for val in values]
-    for ex_idx in range(len(values[0])):
-        for key_idx, key in enumerate(keys):
-            value = values[key_idx][ex_idx]
+
+    values = list(results.values())
+    num_examples = len(values[0])
+
+    # examples are sorted by length
+    # to get good diversity, get half of examples from second quartile
+    start = int(num_examples / 4)
+    end = start + int(num_print / 2)
+    first_list = [val[start:end] for val in values]
+
+    # and the other half from fourth quartile
+    start = int(3 * num_examples / 4)
+    end = start + num_print - int(num_print / 2)
+    second_list = [val[start:end] for val in values]
+
+    # join examples
+    processed_values = [first + second for first, second in zip(first_list, second_list)]
+
+    for ex_idx in range(len(processed_values[0])):
+        for key_idx, key in enumerate(results.keys()):
+            value = processed_values[key_idx][ex_idx]
             v = value[0] if isinstance(value, list) else value
             print(f'{key:>11}: {repr(v)}')
         print()
@@ -321,14 +338,17 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
             # get rid of the DataParallel wrapper
             model = model.module
 
-        names = ['beam search', 'answer', 'context']
-
         output = generate_with_model(model, val_iter, numericalizer, task, args)
 
+        # loss is already calculated
+        metrics_to_return = [metric for metric in task.metrics if metric != 'loss']
+
         metrics = calculate_and_reduce_metrics(
-            output.predictions, output.answers, task.metrics, args.reduce_metrics, model.tgt_lang
+            output.predictions, output.answers, metrics_to_return, args.reduce_metrics, model.tgt_lang
         )
-        results = [output.predictions, output.answers, output.contexts]
-        print_results(names, results, num_print=num_print)
+
+        results = {'beam search': output.predictions, 'answer': output.answers, 'context': output.contexts}
+
+        print_results(results, num_print)
 
         return output, metrics

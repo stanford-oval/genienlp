@@ -60,6 +60,11 @@ class TransformerLSTM(GenieModel):
         config = AutoConfig.from_pretrained(encoder_embeddings, cache_dir=args.embeddings)
         args.dimension = config.hidden_size
 
+        # tasks is not passed during initialization only in server mode
+        # call this function after task is recognized
+        if tasks:
+            self.set_generation_output_options(tasks)
+
         self.src_lang, self.tgt_lang = adjust_language_code(
             config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
         )
@@ -116,7 +121,6 @@ class TransformerLSTM(GenieModel):
         if resize_decoder:
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
 
-    # return_dict, output_scores, output_attentions, output_hidden_states are unused but needed since the base class (PreTrainedModel) passes them
     def forward(
         self,
         batch,
@@ -125,10 +129,7 @@ class TransformerLSTM(GenieModel):
         expansion_factor=1,
         generation_dict=None,
         encoder_output=None,
-        return_dict=False,
-        output_scores=False,
-        output_attentions=False,
-        output_hidden_states=False,
+        **kwargs,
     ):
         if encoder_output is None:
             final_context, context_rnn_state = self.encoder(batch)
@@ -242,9 +243,9 @@ class TransformerLSTM(GenieModel):
             do_sample=do_sample,
             generation_dict={'max_output_length': max_output_length},
             encoder_output=encoder_output,
-            output_scores=False,
-            output_attentions=False,
-            output_hidden_states=False,
+            output_scores=self._output_scores,
+            output_attentions=self._output_attentions,
+            output_hidden_states=self._output_hidden_states,
             return_dict_in_generate=True,
         )
         output_ids = generated.sequences

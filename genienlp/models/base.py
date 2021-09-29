@@ -77,3 +77,8 @@ class GenieModel(PreTrainedModel):
         self.numericalizer.grow_vocab(tasks)
         if self.numericalizer.num_tokens > old_num_tokens:
             logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
+
+    def set_generation_output_options(self, tasks):
+        self._output_attentions = any(getattr(task, 'need_attention_scores', False) for task in tasks)
+        self._output_scores = False
+        self._output_hidden_states = False

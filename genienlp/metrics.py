@@ -286,7 +286,11 @@ def computeSM(outputs, targets):
 
 def computeBERTScore(outputs, targets, lang):
     bertscore_metric = load_metric("bertscore")
-    return sum(bertscore_metric.compute(predictions=outputs, references=targets, lang=lang)['f1']) / len(outputs) * 100
+    return (
+        sum(bertscore_metric.compute(predictions=outputs, references=targets, lang=lang, use_fast_tokenizer=True)['f1'])
+        / len(outputs)
+        * 100
+    )
 
 
 def computeTER(outputs, targets):
@@ -642,3 +646,15 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
     metric_dict = dict(zip(metric_keys, metric_values))
     metric_dict = collections.OrderedDict((key, metric_dict[key]) for key in requested_metrics)
     return metric_dict, answer
+
+
+def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics, lang):
+    metrics = collections.OrderedDict()
+    for i in range(len(predictions[0])):
+        partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute, lang)
+        for k, v in partial_metrics.items():
+            if reduce_metrics == 'max':
+                metrics[k] = max(metrics.get(k, 0), v)
+            else:
+                raise ValueError('Invalid reduce_metrics argument')
+    return metrics
