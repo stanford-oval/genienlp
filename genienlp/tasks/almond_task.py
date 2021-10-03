@@ -402,7 +402,7 @@ class Translate(NaturalSeq2Seq):
             cross_att = cross_att[: len(tgt_tokens), : len(src_tokens)]
 
             # plot cross-attention heatmap
-            if self.args.plot_heatmaps:
+            if getattr(self.args, 'plot_heatmaps', False):
                 import matplotlib.pyplot as plt
                 import seaborn as sns
 
