@@ -48,6 +48,7 @@ class TransformerSeq2Seq(GenieModel):
         If `save_directory` is None, will initialize a new model and numericalizer, otherwise, will load them from `save_directory`
         """
         config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
+        self.config = config
         super().__init__(config)
         self.args = args
         args.dimension = config.d_model
@@ -57,7 +58,7 @@ class TransformerSeq2Seq(GenieModel):
         # call this function after task is recognized
         if tasks:
             self.set_generation_output_options(tasks)
-        
+
         # only used for Marian models. adjusted language codes passed to numericalizer will be None for models trained on single langauge pairs
         self.orig_src_lang, self.orig_tgt_lang = kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
         self.src_lang, self.tgt_lang = adjust_language_code(
@@ -81,25 +82,8 @@ class TransformerSeq2Seq(GenieModel):
             tasks=tasks,
         )
 
+        self.update_language_dependent_configs(self.tgt_lang)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
-
-        # set decoder_start_token_id for mbart
-        if self.model.config.decoder_start_token_id is None and isinstance(
-            self.numericalizer._tokenizer, (MBartTokenizer, MBartTokenizerFast)
-        ):
-            if isinstance(self.numericalizer._tokenizer, MBartTokenizer):
-                self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[self.tgt_lang]
-            else:
-                self.model.config.decoder_start_token_id = self.numericalizer._tokenizer.convert_tokens_to_ids(self.tgt_lang)
-
-        # check decoder_start_token_id is set
-        if self.model.config.decoder_start_token_id is None:
-            raise ValueError("Make sure that decoder_start_token_id for the model is defined")
-
-        # set forced_bos_token_id for certain multilingual models
-        if isinstance(self.numericalizer._tokenizer, MULTILINGUAL_TOKENIZERS):
-            forced_bos_token_id = self.numericalizer._tokenizer.lang_code_to_id[self.tgt_lang]
-            self.model.config.forced_bos_token_id = forced_bos_token_id
 
         if args.dropper_ratio > 0:
             # lazy import since dropper is an optional dependency
@@ -114,6 +98,25 @@ class TransformerSeq2Seq(GenieModel):
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
+
+    def update_language_dependent_configs(self, tgt_lang):
+        # set decoder_start_token_id for mbart
+        if self.config.decoder_start_token_id is None and isinstance(
+            self.numericalizer._tokenizer, (MBartTokenizer, MBartTokenizerFast)
+        ):
+            if isinstance(self.numericalizer._tokenizer, MBartTokenizer):
+                self.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[tgt_lang]
+            else:
+                self.config.decoder_start_token_id = self.numericalizer._tokenizer.convert_tokens_to_ids(tgt_lang)
+
+        # check decoder_start_token_id is set
+        if self.config.decoder_start_token_id is None:
+            raise ValueError("Make sure that decoder_start_token_id for the model is defined")
+
+        # set forced_bos_token_id for certain multilingual models
+        if isinstance(self.numericalizer._tokenizer, MULTILINGUAL_TOKENIZERS):
+            forced_bos_token_id = self.numericalizer._tokenizer.lang_code_to_id[tgt_lang]
+            self.config.forced_bos_token_id = forced_bos_token_id
 
     def forward(self, *input, **kwargs):
         if self.training or kwargs.get('train', False):
