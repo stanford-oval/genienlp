@@ -60,7 +60,7 @@ setuptools.setup(
         'seqeval==1.2.2',
         'transformers==4.10.3',
         'sentencepiece==0.1.*',
-        'sentence-transformers==2.0.0',
+        'sentence-transformers==2.1.0',
         'mosestokenizer~=1.1',
         'pathos==0.2.8',
         # for kf:
