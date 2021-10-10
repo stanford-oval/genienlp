@@ -50,6 +50,25 @@ from .validate import generate_with_model
 
 logger = logging.getLogger(__name__)
 
+GENERATION_ARGUMENTS = {
+    'num_beams',
+    'num_beam_groups',
+    'diversity_penalty',
+    'num_outputs',
+    'no_repeat_ngram_size',
+    'top_p',
+    'top_k',
+    'repetition_penalty',
+    'temperature',
+    'max_output_length',
+    'src_locale',
+    'tgt_locale',
+    'do_alignment',
+    'align_preserve_input_quotation',
+    'align_remove_output_quotation',
+    'translate_example_split',
+}
+
 
 def parse_argv(parser):
     parser.add_argument('--path', type=str, required=True)
@@ -124,6 +143,9 @@ class Server(object):
         args = copy.deepcopy(self.args)
         generation_options = request.get('options', {})
         for k, v in generation_options.items():
+            if k not in GENERATION_ARGUMENTS:
+                logger.warning(f'{k} is not a generation option and cannot be overriden')
+                continue
             setattr(args, k, v)
 
         # TODO handle this better by decoupling numericalizer and model
