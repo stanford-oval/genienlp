@@ -65,6 +65,7 @@ setuptools.setup(
         'pathos==0.2.8',
         # for kf:
         'kfserving>=0.5.0',
+        'ray==1.6.0',
         # for NED:
         'bootleg==1.0.5',
         # for calibration:

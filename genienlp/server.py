@@ -30,6 +30,7 @@
 
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -44,10 +45,29 @@ from .calibrate import ConfidenceEstimator
 from .data_utils.example import Example, NumericalizedExamples
 from .ned.ned_utils import init_ned_model
 from .tasks.registry import get_tasks
-from .util import get_devices, load_config_json, log_model_size, set_seed
+from .util import adjust_language_code, get_devices, load_config_json, log_model_size, set_seed
 from .validate import generate_with_model
 
 logger = logging.getLogger(__name__)
+
+GENERATION_ARGUMENTS = {
+    'num_beams',
+    'num_beam_groups',
+    'diversity_penalty',
+    'num_outputs',
+    'no_repeat_ngram_size',
+    'top_p',
+    'top_k',
+    'repetition_penalty',
+    'temperature',
+    'max_output_length',
+    'src_locale',
+    'tgt_locale',
+    'do_alignment',
+    'align_preserve_input_quotation',
+    'align_remove_output_quotation',
+    'translate_example_split',
+}
 
 
 def parse_argv(parser):
@@ -63,8 +83,8 @@ def parse_argv(parser):
     parser.add_argument('--port', default=8401, type=int, help='TCP port to listen on')
     parser.add_argument('--stdin', action='store_true', help='Interact on stdin/stdout instead of TCP')
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
-    parser.add_argument('--src_locale', default='en', help='locale tag of the input language to parse')
-    parser.add_argument('--tgt_locale', default='en', help='locale tag of the target language to generate')
+    parser.add_argument('--src_locale', help='locale tag of the input language to parse')
+    parser.add_argument('--tgt_locale', help='locale tag of the target language to generate')
     parser.add_argument('--inference_name', default='nlp', help='name used by kfserving inference service, alphanumeric only')
 
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
@@ -120,8 +140,24 @@ class Server(object):
         return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
 
     def handle_request(self, request):
+        args = copy.deepcopy(self.args)
+        generation_options = request.get('options', {})
+        for k, v in generation_options.items():
+            if k not in GENERATION_ARGUMENTS:
+                logger.warning(f'{k} is not a generation option and cannot be overriden')
+                continue
+            setattr(args, k, v)
+
+        # TODO handle this better by decoupling numericalizer and model
+        if hasattr(args, 'src_locale') and hasattr(args, 'tgt_locale'):
+            src_locale, tgt_locale = adjust_language_code(
+                self.model.config, self.args.pretrained_model, args.src_locale, args.tgt_locale
+            )
+            self.numericalizer.update_language_dependent_properties(src_locale, tgt_locale)
+            self.model.update_language_dependent_configs(tgt_locale)
+
         task_name = request['task'] if 'task' in request else 'generic'
-        task = list(get_tasks([task_name], self.args, self._cached_task_names).values())[0]
+        task = list(get_tasks([task_name], args, self._cached_task_names).values())[0]
         if task_name not in self._cached_task_names:
             self._cached_task_names[task_name] = task
 
@@ -151,7 +187,7 @@ class Server(object):
                 question = task.default_question
 
             ex = Example.from_raw(
-                str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=self.args.lower
+                str(example_id), context, question, answer, preprocess=task.preprocess_field, lower=args.lower
             )
             examples.append(ex)
 
@@ -165,18 +201,18 @@ class Server(object):
 
         try:
             with torch.no_grad():
-                if self.args.calibrator_paths is not None:
+                if args.calibrator_paths is not None:
                     output = generate_with_model(
                         self.model,
                         [batch],
                         self.numericalizer,
                         task,
-                        self.args,
+                        args,
                         output_predictions_only=True,
                         confidence_estimators=self.confidence_estimators,
                     )
                     response = []
-                    if sum(self.args.num_outputs) > 1:
+                    if sum(args.num_outputs) > 1:
                         for idx, predictions in enumerate(output.predictions):
                             candidates = []
                             for cand in predictions:
@@ -193,9 +229,9 @@ class Server(object):
                             response.append(instance)
                 else:
                     output = generate_with_model(
-                        self.model, [batch], self.numericalizer, task, self.args, output_predictions_only=True
+                        self.model, [batch], self.numericalizer, task, args, output_predictions_only=True
                     )
-                    if sum(self.args.num_outputs) > 1:
+                    if sum(args.num_outputs) > 1:
                         response = []
                         for idx, predictions in enumerate(output.predictions):
                             candidates = []
@@ -222,7 +258,7 @@ class Server(object):
             assert len(response) == 1
             response = response[0]
             response['id'] = request['id']
-            return json.dumps(response) + '\n'
+            return json.dumps(response, ensure_ascii=False) + '\n'
 
     async def handle_client(self, client_reader, client_writer):
         try:
@@ -274,6 +310,10 @@ class Server(object):
 def init(args):
     load_config_json(args)
     check_and_update_generation_args(args)
+    if not args.src_locale:
+        args.src_locale = args.eval_src_languages
+    if not args.tgt_locale:
+        args.tgt_locale = args.eval_tgt_languages
     set_seed(args)
 
     devices = get_devices()

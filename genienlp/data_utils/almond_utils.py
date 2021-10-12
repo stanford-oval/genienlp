@@ -245,6 +245,7 @@ def return_sentences(text, regex_pattern, src_char_spans, is_cjk=False):
 
 
 def split_text_into_sentences(text, lang, src_char_spans):
+    # text = '''the . " ${field} " . of . " ${value} " .'''
     if lang in ['en']:
         sentences = return_sentences(text, '(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.!?])\s', src_char_spans)
     elif lang in ['zh', 'ja', 'ko']:
