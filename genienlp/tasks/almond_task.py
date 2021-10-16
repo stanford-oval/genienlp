@@ -303,7 +303,9 @@ class Translate(NaturalSeq2Seq):
         self.input_spans = {}
         self.all_ids = set()
         self._metrics = ['casedbleu']
-        self.need_attention_scores = True
+
+        # only requires cross_attention scores for alignment
+        self.need_attention_scores = bool(self.args.do_alignment)
 
     def construct_id2span_mapping(self, example_id, sentence, field_name):
         assert field_name in ['context', 'question']
