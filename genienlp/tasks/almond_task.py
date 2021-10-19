@@ -303,7 +303,9 @@ class Translate(NaturalSeq2Seq):
         self.input_spans = {}
         self.all_ids = set()
         self._metrics = ['casedbleu']
-        self.need_attention_scores = True
+
+        # only requires cross_attention scores for alignment
+        self.need_attention_scores = bool(self.args.do_alignment)
 
     def construct_id2span_mapping(self, example_id, sentence, field_name):
         assert field_name in ['context', 'question']
@@ -480,16 +482,22 @@ class Translate(NaturalSeq2Seq):
 
             if self.args.do_alignment:
                 src_spans = self.input_spans[example_id]
-                text = align_and_replace(
-                    src_tokens,
-                    tgt_tokens,
-                    cross_att,
-                    src_spans,
-                    tgt_lang,
-                    tokenizer,
-                    self.args.align_remove_output_quotation,
-                    date_parser=date_parser,
-                )
+                try:
+                    text = align_and_replace(
+                        src_tokens,
+                        tgt_tokens,
+                        cross_att,
+                        src_spans,
+                        tgt_lang,
+                        tokenizer,
+                        self.args.align_remove_output_quotation,
+                        date_parser=date_parser,
+                    )
+                except Exception as e:
+                    logger.error(str(e))
+                    logger.error(f'Alignment failed for src_tokens: [{src_tokens}] and tgt_tokens: [{tgt_tokens}]')
+                    text = tokenizer.convert_tokens_to_string(tgt_tokens)
+
             else:
                 text = tokenizer.convert_tokens_to_string(tgt_tokens)
 
