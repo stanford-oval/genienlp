@@ -139,7 +139,7 @@ class Server(object):
         # make a single batch with all examples
         return NumericalizedExamples.collate_batches(all_features, self.numericalizer, device=self.device)
 
-    def handle_request(self, request):
+    def _init_request(self, request):
         args = copy.deepcopy(self.args)
         generation_options = request.get('options', {})
         for k, v in generation_options.items():
@@ -161,6 +161,9 @@ class Server(object):
         if task_name not in self._cached_task_names:
             self._cached_task_names[task_name] = task
 
+        return task, args
+
+    def _numericalize_request(self, request, task, args):
         # if single example wrap it as a list
         if 'instances' not in request:
             request['instances'] = [
@@ -197,49 +200,58 @@ class Server(object):
 
         self.model.add_new_vocab_from_data([task])
         self.model.set_generation_output_options([task])
-        batch = self.numericalize_examples(examples)
 
+        return self.numericalize_examples(examples)
+
+    def _predict_batch(self, batch, task, args):
+        if args.calibrator_paths is not None:
+            output = generate_with_model(
+                self.model,
+                [batch],
+                self.numericalizer,
+                task,
+                args,
+                output_predictions_only=True,
+                confidence_estimators=self.confidence_estimators,
+            )
+            response = []
+            if sum(args.num_outputs) > 1:
+                for idx, predictions in enumerate(output.predictions):
+                    candidates = []
+                    for cand in predictions:
+                        candidate = {'answer': cand, 'score': {}}
+                        for e_idx, estimator_scores in enumerate(output.confidence_scores):
+                            candidate['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
+                        candidates.append(candidate)
+                    response.append({'candidates': candidates})
+            else:
+                for idx, p in enumerate(output.predictions):
+                    instance = {'answer': p[0], 'score': {}}
+                    for e_idx, estimator_scores in enumerate(output.confidence_scores):
+                        instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
+                    response.append(instance)
+        else:
+            output = generate_with_model(
+                self.model, [batch], self.numericalizer, task, args, output_predictions_only=True
+            )
+            if sum(args.num_outputs) > 1:
+                response = []
+                for idx, predictions in enumerate(output.predictions):
+                    candidates = []
+                    for cand in predictions:
+                        candidates.append({'answer': cand})
+                    response.append({'candidates': candidates})
+            else:
+                response = [{'answer': p[0]} for p in output.predictions]
+
+        return response
+
+    def handle_request(self, request):
         try:
             with torch.no_grad():
-                if args.calibrator_paths is not None:
-                    output = generate_with_model(
-                        self.model,
-                        [batch],
-                        self.numericalizer,
-                        task,
-                        args,
-                        output_predictions_only=True,
-                        confidence_estimators=self.confidence_estimators,
-                    )
-                    response = []
-                    if sum(args.num_outputs) > 1:
-                        for idx, predictions in enumerate(output.predictions):
-                            candidates = []
-                            for cand in predictions:
-                                candidate = {'answer': cand, 'score': {}}
-                                for e_idx, estimator_scores in enumerate(output.confidence_scores):
-                                    candidate['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
-                                candidates.append(candidate)
-                            response.append({'candidates': candidates})
-                    else:
-                        for idx, p in enumerate(output.predictions):
-                            instance = {'answer': p[0], 'score': {}}
-                            for e_idx, estimator_scores in enumerate(output.confidence_scores):
-                                instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
-                            response.append(instance)
-                else:
-                    output = generate_with_model(
-                        self.model, [batch], self.numericalizer, task, args, output_predictions_only=True
-                    )
-                    if sum(args.num_outputs) > 1:
-                        response = []
-                        for idx, predictions in enumerate(output.predictions):
-                            candidates = []
-                            for cand in predictions:
-                                candidates.append({'answer': cand})
-                            response.append({'candidates': candidates})
-                    else:
-                        response = [{'answer': p[0]} for p in output.predictions]
+                task, args = self._init_request(request)
+                batch = self._numericalize_request(request, task, args)
+                response = self._predict_batch(batch, task, args)
         except RuntimeError as e:
             # catch all cuda errors and exit
             if 'CUDA error' in str(e):
