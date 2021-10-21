@@ -281,6 +281,7 @@ def maybe_save(
     log_dir,
     model_parallel,
 ):
+    save_wo_finetuning = bool(best_decascore == -1)
     should_save_best = False
     if deca_score is not None and (best_decascore is None or best_decascore < deca_score):
         best_decascore = deca_score
@@ -300,13 +301,15 @@ def maybe_save(
     save_opt_state_dict = opt.state_dict()
     save_opt_state_dict.update({'start_iteration': iteration})
 
-    saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
+    if not save_wo_finetuning:
+        saver.save(save_model_state_dict, save_opt_state_dict, global_step=iteration)
     if should_save_best:
         logger.info(
             f'{timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress} saving new best model'
         )
         torch.save(save_model_state_dict, os.path.join(log_dir, 'best.pth'))
-        torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
+        if not save_wo_finetuning:
+            torch.save(save_opt_state_dict, os.path.join(log_dir, 'best_optim.pth'))
 
         if model_parallel:
             model.numericalizer.save(saver._savedir)
