@@ -295,8 +295,6 @@ def maybe_save(
         # to load this model later
         model_state_dict = model.module.state_dict()
 
-    model_state_dict = {k: v.cpu() for k, v in model_state_dict.items()}
-
     save_model_state_dict = {'model_state_dict': model_state_dict, 'best_decascore': best_decascore}
     save_opt_state_dict = opt.state_dict()
     save_opt_state_dict.update({'start_iteration': iteration})
