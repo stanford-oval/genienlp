@@ -348,7 +348,7 @@ class Translate(NaturalSeq2Seq):
 
         if no_answer:
             if len(parts) == 1:
-                context = parts
+                context = parts[0]
             elif len(parts) == 2:
                 example_id, context = parts
             elif len(parts) == 3:
