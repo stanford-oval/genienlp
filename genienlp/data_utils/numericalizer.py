@@ -45,6 +45,8 @@ from transformers import (
     BartTokenizerFast,
     BertTokenizer,
     BertTokenizerFast,
+    BlenderbotSmallTokenizer,
+    BlenderbotSmallTokenizerFast,
     ByT5Tokenizer,
     GPT2Tokenizer,
     GPT2TokenizerFast,
@@ -215,6 +217,8 @@ class TransformerNumericalizer(object):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')
         elif isinstance(self._tokenizer, ByT5Tokenizer):
             self._tokenizer.is_piece_fn = lambda wp: False
+        elif isinstance(self._tokenizer, (BlenderbotSmallTokenizer, BlenderbotSmallTokenizerFast)):
+            self._tokenizer.is_piece_fn = lambda wp: not wp.endswith('@@')
 
         # make sure we assigned is_piece_fn
         assert self._tokenizer.is_piece_fn
