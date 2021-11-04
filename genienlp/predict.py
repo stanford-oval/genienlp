@@ -306,6 +306,10 @@ def check_args(args):
 
     if args.main_metric_only and args.extra_metrics:
         raise ValueError('Please remove --main_metric_only from your arguments so the requested extra metrics can be shown.')
+    if 'blenderbot' in args.pretrained_model and args.max_output_length > 128:
+        raise ValueError(
+            f'BlenderBot maximum input/ output length is 128 but max_output_length is set to {args.max_output_length}'
+        )
 
 
 def prepare_data(args):

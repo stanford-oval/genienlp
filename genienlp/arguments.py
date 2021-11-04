@@ -674,6 +674,11 @@ def post_parse_train_specific(args):
     if args.no_fast_tokenizer and args.force_fast_tokenizer:
         raise ValueError('Both no_fast_tokenizer and force_fast_tokenizer flags are on')
 
+    if 'blenderbot' in args.pretrained_model and args.max_output_length > 128:
+        raise ValueError(
+            f'BlenderBot maximum input/ output length is 128 but max_output_length is set to {args.max_output_length}'
+        )
+
     # TODO relax this assertion by allowing training on multiple languages
     if 'mbart' in args.pretrained_model:
         if len(args.train_src_languages.split('+')) != 1 or set(args.train_src_languages.split('+')) != set(
