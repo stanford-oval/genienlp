@@ -223,6 +223,11 @@ class TransformerNumericalizer(object):
         # make sure we assigned is_piece_fn
         assert self._tokenizer.is_piece_fn
 
+        # special case if pad_token_id is not defined (e.g. TransformerForCausalLM models)
+        if self._tokenizer.pad_token_id is None and self._tokenizer.eos_token_id is not None:
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{self._tokenizer.eos_token_id} for open-end generation.")
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+
     def update_language_dependent_properties(self, src_lang, tgt_lang):
         # some tokenizers like Mbart do not set src_lang and tgt_lan when initialized; take care of it here
         self._tokenizer.src_lang = src_lang
@@ -261,7 +266,7 @@ class TransformerNumericalizer(object):
         batch: a List of List of integers
         """
         # TODO account for left padding models
-        return pad_sequence(batch, padding_value=pad_id, batch_first=True)
+        return pad_sequence(batch, padding_value=pad_id if pad_id else 0.0, batch_first=True)
 
     def save(self, save_dir):
         self._tokenizer.save_pretrained(save_dir)

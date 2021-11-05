@@ -29,6 +29,7 @@
 
 import logging
 
+from .transformer_causalLM import TransformerForCausalLM  # noqa
 from .transformer_lstm import TransformerLSTM  # noqa
 from .transformer_seq2seq import TransformerSeq2Seq  # noqa
 from .transformer_sequence_classification import TransformerForSequenceClassification  # noqa
