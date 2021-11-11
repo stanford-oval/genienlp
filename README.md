@@ -33,7 +33,7 @@ After installation, `genienlp` command becomes available.
 The general form is:
 
 ```bash
-genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> <flags>
+genienlp train --train_tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> <flags>
 ```
 
 The `<datadir>` should contain a single folder called "almond" (the name of the task). That folder should
@@ -42,14 +42,14 @@ contain the files "train.tsv" and "eval.tsv" for train and dev set respectively.
 To train a BERT-LSTM (or other MLM-based model) use:
 
 ```bash
-genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
+genienlp train --train_tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
   --model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embedding 50
 ```
 
 To train a BART or other Seq2Seq model, use:
 
 ```bash
-genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
+genienlp train --train_tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
   --model TransformerSeq2Seq --pretrained_model facebook/bart-large --gradient_accumulation_steps 20
 ```
 
@@ -90,7 +90,7 @@ Calibrate the confidence scores of a trained model:
 1. Calcualate and save confidence features of the evaluation set in a pickle file:
 
    ```bash
-   genienlp predict --task almond --data <datadir> --path <model_dir> --save_confidence_features --confidence_feature_path <confidence_feature_file>
+   genienlp predict --tasks almond --data <datadir> --path <model_dir> --save_confidence_features --confidence_feature_path <confidence_feature_file>
    ```
 2. Train a boosted tree to map confidence features to a score between 0 and 1:
 
