@@ -55,13 +55,11 @@ setuptools.setup(
         'requests~=2.22',
         'num2words>=0.5.10',
         'dateparser>=1.0.0',
-        'termcolor~=1.1',
         'datasets==1.15.1',
         'seqeval==1.2.2',
         'transformers==4.12.3',
         'sentencepiece==0.1.*',
         'sentence-transformers==2.1.0',
-        'mosestokenizer~=1.1',
         'pathos==0.2.8',
         # for kf:
         'kfserving>=0.5.0',
