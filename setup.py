@@ -48,7 +48,6 @@ setuptools.setup(
     install_requires=[
         'numpy>=1.14.5',
         'torch>=1.9.0,<1.10.0',
-        'tqdm==4.62.3',
         'pyrouge>=0.1.3',
         'sacrebleu>=1,<3',
         'bert-score~=0.3',
@@ -58,7 +57,6 @@ setuptools.setup(
         'datasets==1.15.1',
         'seqeval==1.2.2',
         'transformers==4.12.3',
-        'sentencepiece==0.1.*',
         'sentence-transformers==2.1.0',
         'pathos==0.2.8',
         # for kf:
