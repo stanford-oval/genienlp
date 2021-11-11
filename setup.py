@@ -56,7 +56,7 @@ setuptools.setup(
         'num2words>=0.5.10',
         'dateparser>=1.0.0',
         'termcolor~=1.1',
-        'datasets==1.14.0',
+        'datasets==1.15.1',
         'seqeval==1.2.2',
         'transformers==4.12.2',
         'sentencepiece==0.1.*',
