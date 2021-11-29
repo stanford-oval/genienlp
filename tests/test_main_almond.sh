@@ -24,7 +24,8 @@ do
         exit 1
     fi
 
-    if [ $i == 0 ] ; then
+    # check TransformerSeq2Seq and TransformerLSTM
+    if [ $i == 0 ] || [ $i == 2 ] ; then
       echo "Testing export"
       genienlp export --path $workdir/model_$i --output $workdir/model_$i_exported
 

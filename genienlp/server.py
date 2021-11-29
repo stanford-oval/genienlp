@@ -231,9 +231,7 @@ class Server(object):
                         instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
                     response.append(instance)
         else:
-            output = generate_with_model(
-                self.model, [batch], self.numericalizer, task, args, output_predictions_only=True
-            )
+            output = generate_with_model(self.model, [batch], self.numericalizer, task, args, output_predictions_only=True)
             if sum(args.num_outputs) > 1:
                 response = []
                 for idx, predictions in enumerate(output.predictions):

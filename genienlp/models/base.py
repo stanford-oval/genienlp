@@ -78,6 +78,10 @@ class GenieModel(PreTrainedModel):
         if self.numericalizer.num_tokens > old_num_tokens:
             logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
 
+    def update_language_dependent_configs(self, tgt_lang):
+        # we override this method for TransformerSeq2Seq models; otherwise it's a no-op
+        pass
+
     def set_generation_output_options(self, tasks):
         self._output_attentions = any(getattr(task, 'need_attention_scores', False) for task in tasks)
         self._output_scores = False
