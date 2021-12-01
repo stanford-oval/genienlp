@@ -201,9 +201,7 @@ def align_and_replace(
                 else:
                     direction *= -1
                 if topK >= sample_layer_attention_pooled.size(0):
-                    logger.error(
-                        f'Failed to map a span to target using alignment for src_string: [{src_string}] and tgt_string: [{tgt_string}]'
-                    )
+                    logger.error(f'Alignment failed for src_string: [{src_string}] and tgt_string: [{tgt_string}]')
                     break
                 if direction == 1:
                     tgt_beg = torch.topk(sample_layer_attention_pooled[:, src_beg], topK).indices[-1].item()

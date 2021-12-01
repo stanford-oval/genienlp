@@ -1,7 +1,6 @@
 from collections import Counter
 
 import jsonlines
-from termcolor import colored
 
 from genienlp.ned.bootleg import BatchBootlegEntityDisambiguator
 
@@ -84,5 +83,7 @@ def main(args):
             almond_type_vocabs.append(tup)
         else:
             extra_type_vocabs.append(tup)
+
+    from termcolor import colored
 
     print('all_new_titles:', *[colored(tup, "red") for tup in almond_type_vocabs], *extra_type_vocabs)

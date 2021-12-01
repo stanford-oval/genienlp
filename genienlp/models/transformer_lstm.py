@@ -63,7 +63,7 @@ class TransformerLSTM(GenieModel):
         # tasks is not passed during initialization only in server mode
         # call this function after task is recognized
         if tasks:
-            self.set_task_dependent_generation_kwargs(tasks)
+            self.set_generation_output_options(tasks)
 
         self.src_lang, self.tgt_lang = adjust_language_code(
             config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
@@ -121,7 +121,6 @@ class TransformerLSTM(GenieModel):
         if resize_decoder:
             self.decoder.decoder_embeddings.resize_embedding(self.numericalizer.num_tokens)
 
-    # return_dict, output_scores, output_attentions, output_hidden_states are unused but needed since the base class (PreTrainedModel) passes them
     def forward(
         self,
         batch,
@@ -130,10 +129,7 @@ class TransformerLSTM(GenieModel):
         expansion_factor=1,
         generation_dict=None,
         encoder_output=None,
-        return_dict=False,
-        output_scores=False,
-        output_attentions=False,
-        output_hidden_states=False,
+        **kwargs,
     ):
         if encoder_output is None:
             final_context, context_rnn_state = self.encoder(batch)

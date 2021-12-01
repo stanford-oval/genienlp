@@ -34,7 +34,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='genienlp',
-    version='0.7.0a2',
+    version='0.7.0a3',
     packages=setuptools.find_packages(exclude=['tests']),
     package_data={'genienlp': ['ned/database_files/*']},
     entry_points={
@@ -47,30 +47,28 @@ setuptools.setup(
     url="https://github.com/stanford-oval/genienlp",
     install_requires=[
         'numpy>=1.14.5',
-        'torch>=1.9.0,<1.10.0',
-        'tqdm==4.62.2',
+        'torch>=1.9.0,<1.11.0',
         'pyrouge>=0.1.3',
         'sacrebleu>=1,<3',
         'bert-score~=0.3',
         'requests~=2.22',
         'num2words>=0.5.10',
         'dateparser>=1.0.0',
-        'termcolor~=1.1',
-        'datasets==1.12.1',
-        'seqeval==1.2.2',
-        'transformers==4.10.2',
         'dictdiffer~=0.9',
-        'sentencepiece==0.1.*',
-        'sentence-transformers==2.0.0',
-        'mosestokenizer~=1.1',
+        'datasets==1.16.1',
+        'seqeval==1.2.2',
+        'termcolor~=1.1',
+        'transformers==4.12.5',
+        'sentence-transformers==2.1.0',
         'pathos==0.2.8',
         'pytorch-lightning-spells==0.0.3',
         # for kf:
         'kfserving>=0.5.0',
+        'ray==1.6.0',
         # for NED:
         'bootleg==1.0.5',
         # for calibration:
-        'scikit-learn~=0.23',
+        'scikit-learn>=0.23,<2.0',
         'dill~=0.3',
         'xgboost~=1.3',
         # BiToD

@@ -112,6 +112,7 @@ class TransformerNumericalizer(object):
         self.max_generative_vocab = max_generative_vocab
         self._cache = args.embeddings
         self._tokenizer = None
+        self.config = config
 
         self._preprocess_special_tokens = args.preprocess_special_tokens
 
@@ -125,6 +126,8 @@ class TransformerNumericalizer(object):
         self.args = args
 
         self._init_tokenizer(save_dir, config, src_lang, tgt_lang)
+
+        self.update_language_dependent_properties(src_lang, tgt_lang)
 
         if save_dir is not None:
             logger.info(f'Loading the accompanying numericalizer from {save_dir}')
@@ -179,25 +182,6 @@ class TransformerNumericalizer(object):
 
         self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
 
-        # some tokenizers like Mbart do not set src_lang and tgt_lan when initialized; take care of it here
-        self._tokenizer.src_lang = src_lang
-        self._tokenizer.tgt_lang = tgt_lang
-
-        # define input prefix to add before every input text
-        input_prefix = ''
-        if isinstance(config, MarianConfig) and tgt_lang:
-            input_prefix = f'>>{tgt_lang}<< '
-        # only older T5 models need task-specific input prefix
-        elif self._pretrained_name in T5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys():
-            assert src_lang == 'en'
-            if tgt_lang == 'en':
-                t5_task = 'summarization'
-            else:
-                t5_task = f'translation_en_to_{tgt_lang}'
-            input_prefix = config.task_specific_params[t5_task]['prefix']
-
-        self.input_prefix = input_prefix
-
         # We only include the base tokenizers since `isinstance` checks for inheritance
         if isinstance(self._tokenizer, (BertTokenizer, BertTokenizerFast)):
             self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
@@ -222,6 +206,26 @@ class TransformerNumericalizer(object):
 
         # make sure we assigned is_piece_fn
         assert self._tokenizer.is_piece_fn
+
+    def update_language_dependent_properties(self, src_lang, tgt_lang):
+        # some tokenizers like Mbart do not set src_lang and tgt_lan when initialized; take care of it here
+        self._tokenizer.src_lang = src_lang
+        self._tokenizer.tgt_lang = tgt_lang
+
+        # define input prefix to add before every input text
+        input_prefix = ''
+        if isinstance(self.config, MarianConfig) and tgt_lang:
+            input_prefix = f'>>{tgt_lang}<< '
+        # only older T5 models need task-specific input prefix
+        elif self._pretrained_name in T5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys():
+            assert src_lang == 'en'
+            if tgt_lang == 'en':
+                t5_task = 'summarization'
+            else:
+                t5_task = f'translation_en_to_{tgt_lang}'
+            input_prefix = self.config.task_specific_params[t5_task]['prefix']
+
+        self.input_prefix = input_prefix
 
     def load_extras(self, save_dir):
         if self.max_generative_vocab is not None:

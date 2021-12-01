@@ -735,7 +735,7 @@ def adjust_language_code(config, pretrained_model, src_lang, tgt_lang):
                 src_lang = 'pes'
             else:
                 raise ValueError(
-                    'Source language is not in this Marian model group languages, please specify the correct source language.'
+                    f'Source language "{src_lang}" is not in this Marian model group languages, please specify the correct source language.'
                 )
 
     if model_is_marian and pretrained_model.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:
@@ -746,7 +746,7 @@ def adjust_language_code(config, pretrained_model, src_lang, tgt_lang):
                 tgt_lang = 'pes'
             else:
                 raise ValueError(
-                    'Target language is not in this Marian model group languages, please specify the correct target language.'
+                    f'Target language "{tgt_lang}" is not in this Marian model group languages, please specify the correct target language.'
                 )
 
     if model_is_marian and pretrained_model.rsplit('-', 2)[1] not in MARIAN_GROUP_MEMBERS:
@@ -824,6 +824,8 @@ def load_config_json(args):
             'crossner_domains',
             'hf_test_overfit',
             'override_valid_metrics',
+            'eval_src_languages',
+            'eval_tgt_languages',
         ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict

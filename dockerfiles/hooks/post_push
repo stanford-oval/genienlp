@@ -6,7 +6,7 @@ echo "Running in $(pwd)"
 
 version=$(git describe)
 
-case $DOCKER_TAG in
+case $IMAGE_NAME in
 	*-cuda)
 		version=${version}-cuda
 	;;

@@ -98,12 +98,12 @@ class DialogueLoop(object):
     def run(self):
         e2e_task = list(get_tasks(['bitod'], self.e2e_model.args).values())[0]
         self.e2e_model.add_new_vocab_from_data([e2e_task])
-        self.e2e_model.set_task_dependent_generation_kwargs([e2e_task])
+        self.e2e_model.set_generation_output_options([e2e_task])
 
         if self.e2e_model.args.nlg_type == 'neural':
             nlg_task = list(get_tasks(['bitod_nlg'], self.nlg_model.args).values())[0]
             self.nlg_model.add_new_vocab_from_data([nlg_task])
-            self.nlg_model.set_task_dependent_generation_kwargs([nlg_task])
+            self.nlg_model.set_generation_output_options([nlg_task])
         else:
             nlg_task = None
 

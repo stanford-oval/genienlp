@@ -33,23 +33,23 @@ After installation, `genienlp` command becomes available.
 The general form is:
 
 ```bash
-genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> <flags>
+genienlp train --train_tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> <flags>
 ```
 
 The `<datadir>` should contain a single folder called "almond" (the name of the task). That folder should
 contain the files "train.tsv" and "eval.tsv" for train and dev set respectively.
 
-To train a BERT-LSTM (or other MLM-based model) use:
+To train a BERT-LSTM (or other MLM-based models) use:
 
 ```bash
-genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
+genienlp train --train_tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
   --model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embedding 50
 ```
 
 To train a BART or other Seq2Seq model, use:
 
 ```bash
-genienlp train --tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
+genienlp train --train_tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
   --model TransformerSeq2Seq --pretrained_model facebook/bart-large --gradient_accumulation_steps 20
 ```
 
@@ -79,18 +79,18 @@ genienlp server --path <model_dir>
 ```
 
 Opens a TCP server that listens to requests, formatted as JSON objects containing `id` (the ID of the request),
-`task` (the name of the task), `context` and `question`. The server writes out JSON objects containing `id` and
-`answer`. The server listens to port 8401 by default, use `--port` to specify a different port or `--stdin` to
+`task` (the name of the task), `context`, and `question`. The server writes out JSON objects containing `id` and
+`answer`. The server listens to port 8401 by default. Use `--port` to specify a different port or `--stdin` to
 use standard input/output instead of TCP.
 
 ### Calibrating a trained model
 
 Calibrate the confidence scores of a trained model:
 
-1. Calcualate and save confidence features of the evaluation set in a pickle file:
+1. Calculate and save confidence features of the evaluation set in a pickle file:
 
    ```bash
-   genienlp predict --task almond --data <datadir> --path <model_dir> --save_confidence_features --confidence_feature_path <confidence_feature_file>
+   genienlp predict --tasks almond --data <datadir> --path <model_dir> --save_confidence_features --confidence_feature_path <confidence_feature_file>
    ```
 2. Train a boosted tree to map confidence features to a score between 0 and 1:
 
@@ -135,8 +135,7 @@ genienlp predict --tasks almond_translate --data <data_directory> --pred_languag
 ```
 
 If your dataset is a document or contains long examples, pass `--translate_example_split` to break the examples down into individual sentences before translation for better results. <br>
-To use alignment as described in our localization paper (cited below), use `--replace_qp` and `--force_replace_qp` which ensures the parameters between quotations marks in the sentence are preserved in the output.
-The alignment code has been updated and improved since 0.6.0 release, so if you wish to compare the results use genienlp <=0.6.0. However, we recommend using the newer version for higher translation quality.
+To use [alignment](https://aclanthology.org/2020.emnlp-main.481.pdf), pass `--do_alignment` which ensures the tokens between quotations marks in the sentence are preserved during translation.
 
 ### Named Entity Disambiguation
 
@@ -144,7 +143,7 @@ First run a bootleg model to extract mentions, entity candidates, and contextual
 ```bash
 genienlp bootleg-dump-features --train_tasks <train_task_names> --save <savedir> --preserve_case --data <dataset_dir> --train_batch_tokens 1200 --val_batch_size 2000 --database_type json --database_dir <database_dir> --min_entity_len 1 --max_entity_len 4 --bootleg_model <bootleg_model>
 ```
-This command generates several output files. In `<dataset_dir>` you should see a `prep` dir which contains preprocessed data (e.g. data converted to memory-mapped format, several array to facilitate embedding lookup etc.) If your dataset doesn't change you can reuse the same files.
+This command generates several output files. In `<dataset_dir>` you should see a `prep` dir which contains preprocessed data (e.g. data converted to memory-mapped format, several arrays to facilitate embedding lookup, etc.) If your dataset doesn't change you can reuse the same files.
 It will also generate several files in <results_temp> folder. In `eval_bootleg/[train|eval]/<bootleg_model>/bootleg_lables.jsonl` you can see the examples, mentions, predicted candidates and their probabilities according to bootleg.
 
 Now you can use the extracted features from bootleg in downstream tasks such as semantic parsing to improve named entity understanding and consequently generation:
@@ -197,7 +196,8 @@ If you use the paraphrasing model (BART or GPT-2 fine-tuned on a paraphrasing da
 }
 ```
 
-If you use MarianMT/ MBART/ MT5 for translation task, or XLMR-LSTM model for Seq2Seq tasks, please cite [Localizing Open-Ontology QA Semantic Parsers in a Day Using Machine Translation](https://arxiv.org/abs/2010.05106) and the original paper that introduced the model.
+If you use multilingual models such as MarianMT, MBART, MT5, or XLMR-LSTM for Seq2Seq tasks, please cite [Localizing Open-Ontology QA Semantic Parsers in a Day Using Machine Translation](https://aclanthology.org/2020.emnlp-main.481/),
+[Contextual Semantic Parsing for Multilingual Task-Oriented Dialogues](https://arxiv.org/abs/2111.02574), and the original paper that introduced the model.
 
 ```bibtex
 @inproceedings{moradshahi-etal-2020-localizing,
@@ -210,5 +210,13 @@ If you use MarianMT/ MBART/ MT5 for translation task, or XLMR-LSTM model for Seq
     publisher = "Association for Computational Linguistics",
     url = "https://www.aclweb.org/anthology/2020.emnlp-main.481",
     pages = "5970--5983",
+}
+```
+```bibtex
+@article{moradshahi2021contextual,
+  title={Contextual Semantic Parsing for Multilingual Task-Oriented Dialogues},
+  author={Moradshahi, Mehrad and Tsai, Victoria and Campagna, Giovanni and Lam, Monica S},
+  journal={arXiv preprint arXiv:2111.02574},
+  year={2021}
 }
 ```

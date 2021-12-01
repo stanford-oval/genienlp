@@ -1,3 +1,13 @@
+0.7.0a3
+=======
+
+* Added adafactor optimizer [#204]
+* Added option to compute and log validation loss [#204]
+* Multiple changes to improve alignment in translation, better heuristics for dates and numbers [#204]
+* Added support for changing generation arguments in server requests [#204]
+* Misc. code upgrades and bug fixes [#211, #216, #217]
+* Updated dependencies (major update for sacrebleu) [#202, #203, #205, #206, #209, #210, #212, #214, #218].
+
 0.7.0a2
 =======
 

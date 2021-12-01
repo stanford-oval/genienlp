@@ -109,7 +109,6 @@ def parse_argv(parser):
         type=str,
         nargs='+',
         dest='pred_src_languages',
-        default=['en'],
         help='Specify dataset source languages used during prediction for multilingual tasks'
         'multiple languages for each task should be concatenated with +',
     )
@@ -117,7 +116,6 @@ def parse_argv(parser):
         '--pred_tgt_languages',
         type=str,
         nargs='+',
-        default=['en'],
         help='Specify dataset target languages used during prediction for multilingual tasks'
         'multiple languages for each task should be concatenated with +',
     )
@@ -263,10 +261,15 @@ def set_default_values(args):
 
 def check_args(args):
 
+    if not args.pred_src_languages:
+        setattr(args, 'pred_src_languages', [args.eval_src_languages])
+    if not args.pred_tgt_languages:
+        setattr(args, 'pred_tgt_languages', [args.eval_tgt_languages])
+
     if len(args.task_names) != len(args.pred_src_languages):
         raise ValueError(
-            'You have to define prediction languages for each task'
-            'Use None for single language tasks. Also provide languages in the same order you provided the tasks.'
+            'You have to define prediction languages for each task.'
+            ' Use None for single language tasks. Also provide languages in the same order you provided the tasks.'
         )
 
     if getattr(args, 'do_ned', False) and getattr(args, 'ned_retrieve_method', None) == 'bootleg':

@@ -388,7 +388,7 @@ def generate_with_seq2seq_model(
         answers
         contexts
     """
-    total_loss = 0.0 if model._output_scores else None
+    total_loss = 0.0 if 'loss' in task.metrics else None
     output_confidence_scores = confidence_estimators is not None
     predictions = []
     raw_predictions = []
@@ -454,7 +454,7 @@ def generate_with_seq2seq_model(
             partial_batch_prediction_ids = generated.sequences
             partial_batch_words = None
 
-            if model._output_attentions:
+            if getattr(task, 'need_attention_scores', False):
                 cross_attentions = generated.cross_attentions
 
                 # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)
@@ -697,9 +697,10 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
         output = generate_with_model(model, val_iter, numericalizer, task, args)
 
         # loss is already calculated
-        metrics_to_compute = [metric for metric in task.metrics if metric not in ['loss']]
+        metrics_to_return = [metric for metric in task.metrics if metric != 'loss']
+
         metrics = calculate_and_reduce_metrics(
-            output.predictions, output.answers, metrics_to_compute, args.reduce_metrics, model.tgt_lang
+            output.predictions, output.answers, metrics_to_return, args.reduce_metrics, model.tgt_lang
         )
 
         results = {'beam search': output.predictions, 'answer': output.answers, 'context': output.contexts}

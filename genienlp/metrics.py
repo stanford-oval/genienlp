@@ -698,7 +698,7 @@ def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduc
         partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute, lang)
         for k, v in partial_metrics.items():
             if reduce_metrics == 'max':
-                metrics[k] = max(metrics.get(k, 0), float('{:.3f}'.format(v)))
+                metrics[k] = max(metrics.get(k, 0), v)
             else:
                 raise ValueError('Invalid reduce_metrics argument')
     return metrics

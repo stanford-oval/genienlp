@@ -34,7 +34,6 @@ import torch
 from transformers import PreTrainedModel
 
 from ..data_utils.numericalizer import TransformerNumericalizer
-from ..tasks.almond_task import Translate
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +78,7 @@ class GenieModel(PreTrainedModel):
         if self.numericalizer.num_tokens > old_num_tokens:
             logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
 
-    def set_task_dependent_generation_kwargs(self, tasks):
-        self._output_scores = any('loss' in task.metrics for task in tasks)
-        self._output_attentions = any(isinstance(task, Translate) for task in tasks)
+    def set_generation_output_options(self, tasks):
+        self._output_attentions = any(getattr(task, 'need_attention_scores', False) for task in tasks)
+        self._output_scores = False
         self._output_hidden_states = False

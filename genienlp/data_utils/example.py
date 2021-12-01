@@ -150,7 +150,13 @@ class NumericalizedExamples(NamedTuple):
         all_context_plus_question_features = []
 
         for ex in examples:
-            context_plus_question = ex.context + sep_token + ex.question if len(ex.question) else ex.context
+            if not len(ex.question):
+                context_plus_question = ex.context
+            elif not len(ex.context):
+                context_plus_question = ex.question
+            else:
+                context_plus_question = ex.context + sep_token + ex.question
+
             all_context_plus_questions.append(context_plus_question)
 
             # concatenate question and context features with a separator, but no need for a separator if there are no features to begin with
