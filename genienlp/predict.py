@@ -547,10 +547,18 @@ def main(args):
 
     if args.override_valid_metrics:
         assert len(args.override_valid_metrics) == len(args.tasks)
+        new_metrics = []
         for task, metrics in zip(args.tasks, args.override_valid_metrics):
-            # backward compatibility for models validated on sacrebleu (now casedbleu)
-            metrics = [m if m != 'sacrebleu' else 'casedbleu' for m in metrics]
-            task.metrics = metrics
+            for m in metrics:
+                # remove loss from validation metrics
+                if m == 'loss':
+                    continue
+                # backward compatibility for models validated on sacrebleu (now casedbleu)
+                if m == 'sacrebleu':
+                    m = 'casedblue'
+                new_metrics.append(m)
+
+            task.metrics = new_metrics
 
     if len(devices) > 1:
         logger.info(f'Independent multi-GPU generation on following devices: {devices}')
