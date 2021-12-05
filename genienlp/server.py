@@ -61,6 +61,7 @@ GENERATION_ARGUMENTS = {
     'repetition_penalty',
     'temperature',
     'max_output_length',
+    'min_output_length',
     'src_locale',
     'tgt_locale',
     'do_alignment',
@@ -110,6 +111,13 @@ def parse_argv(parser):
         help='ngrams of this size cannot be repeated in the output. 0 disables it.',
     )
     parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
+    parser.add_argument(
+        '--min_output_length',
+        default=3,
+        type=int,
+        help='maximum output length for generation; '
+        'default is 3 for most multilingual models: BOS, language code, and one token. otherwise it is 2',
+    )
 
     # for confidence estimation:
     parser.add_argument(
@@ -231,9 +239,7 @@ class Server(object):
                         instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
                     response.append(instance)
         else:
-            output = generate_with_model(
-                self.model, [batch], self.numericalizer, task, args, output_predictions_only=True
-            )
+            output = generate_with_model(self.model, [batch], self.numericalizer, task, args, output_predictions_only=True)
             if sum(args.num_outputs) > 1:
                 response = []
                 for idx, predictions in enumerate(output.predictions):

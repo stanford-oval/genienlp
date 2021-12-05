@@ -46,6 +46,7 @@ def generate(model, args, numericalized_turn, hyperparameter_idx):
     return model.generate(
         numericalized_turn,
         max_output_length=args.max_output_length,
+        min_output_length=args.min_output_length,
         num_outputs=args.num_outputs[hyperparameter_idx],
         temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
         repetition_penalty=args.repetition_penalty[hyperparameter_idx],
