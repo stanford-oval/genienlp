@@ -325,7 +325,7 @@ def parse_argv(parser):
         '--lr_schedule',
         type=str,
         default='transformer',
-        choices=['transformer', 'constant', 'linear', 'sgd', 'cosine'],
+        choices=['transformer', 'constant', 'linear', 'sgd', 'cosine', 'polynomial'],
         help='The learning rate strategy. All of them can be used with or without warmup.',
     )
     parser.add_argument(
@@ -333,6 +333,18 @@ def parse_argv(parser):
         default=0.01,
         type=float,
         help='Multiplier for the `transformer` learning rate scheduler, constant value for `constant` and maximum value for `linear` and `cosine` schedulers.',
+    )
+    parser.add_argument(
+        '--lr_poly_end',
+        default=1e-7,
+        type=float,
+        help='Final learning rate for polynomial learning rate scheduler',
+    )
+    parser.add_argument(
+        '--lr_poly_power',
+        default=1.0,
+        type=float,
+        help='Decay power factor for polynomial learning rate scheduler',
     )
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
     parser.add_argument(
