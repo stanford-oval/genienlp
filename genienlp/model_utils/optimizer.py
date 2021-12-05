@@ -8,6 +8,7 @@ from transformers import (
     get_constant_schedule_with_warmup,
     get_cosine_schedule_with_warmup,
     get_linear_schedule_with_warmup,
+    get_polynomial_decay_schedule_with_warmup,
 )
 
 
@@ -61,6 +62,14 @@ def init_opt(args, model, logger):
             opt,
             num_training_steps=num_training_steps,
             num_warmup_steps=args.warmup,
+        )
+    elif args.lr_schedule == 'polynomial':
+        scheduler = get_polynomial_decay_schedule_with_warmup(
+            opt,
+            num_training_steps=num_training_steps,
+            num_warmup_steps=args.warmup,
+            lr_end=args.lr_poly_end,
+            power=args.lr_poly_power,
         )
     elif args.lr_schedule == 'cosine':
         scheduler = get_cosine_schedule_with_warmup(
