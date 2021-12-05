@@ -186,6 +186,13 @@ def parse_argv(parser):
     parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
 
     parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
+    parser.add_argument(
+        '--min_output_length',
+        default=3,
+        type=int,
+        help='maximum output length for generation; '
+        'default is 3 for most multilingual models: BOS, language code, and one token. otherwise it is 2',
+    )
     parser.add_argument('--max_generative_vocab', default=50000, type=int, help='max vocabulary for the generative softmax')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument('--preserve_case', action='store_false', dest='lower', help='whether to preserve casing for all text')

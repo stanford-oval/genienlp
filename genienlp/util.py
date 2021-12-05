@@ -834,6 +834,7 @@ def load_config_json(args):
             'repetition_penalty',
             'temperature',
             'max_output_length',
+            'min_output_length',
             'reduce_metrics',
             'database_dir',
         ]
