@@ -163,10 +163,9 @@ def parse_argv(parser):
         default=[0],
         help='ngrams of this size cannot be repeated in the output. 0 disables it.',
     )
-    parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
+    parser.add_argument('--max_output_length', type=int, help='maximum output length for generation')
     parser.add_argument(
         '--min_output_length',
-        default=3,
         type=int,
         help='maximum output length for generation; '
         'default is 3 for most multilingual models: BOS, language code, and one token. otherwise it is 2',
