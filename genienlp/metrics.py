@@ -518,7 +518,7 @@ def computeBITOD(greedy, answer, tgt_lang):
     subtask_metrics_dict = defaultdict(tuple)
 
     subtasks = ['dst', 'api', 'response']
-    subtask_metrics = [['em'], ['em'], ['casedbleu']]
+    subtask_metrics = [['em'], ['em'], ['em']]
     subtask_weights = [1, 1, 1]
 
     for t in range(len(subtasks)):
@@ -532,7 +532,7 @@ def computeBITOD(greedy, answer, tgt_lang):
         subtask_metrics_dict[subtasks[t]] = (sub_metrics, len(golds), subtask_weights[t])
 
     # TODO  how should we aggregate?
-    bitod_score, JGA, response_bleu, api_em = 0.0, 0.0, 0.0, 0.0
+    bitod_score, JGA, response_em, api_em = 0.0, 0.0, 0.0, 0.0
     weighted_num_examples = 0
     for subtask, (sub_metrics, num_ex, weight) in subtask_metrics_dict.items():
         if subtask == 'dst':
@@ -542,13 +542,13 @@ def computeBITOD(greedy, answer, tgt_lang):
             bitod_score += weight * (sub_metrics['em'] * num_ex)
             api_em = sub_metrics['em']
         elif subtask == 'response':
-            bitod_score += weight * (sub_metrics['casedbleu'] * num_ex)
-            response_bleu = sub_metrics['casedbleu']
+            bitod_score += weight * (sub_metrics['em'] * num_ex)
+            response_em = sub_metrics['em']
         weighted_num_examples += weight * num_ex
 
     bitod_score /= weighted_num_examples
 
-    return bitod_score, JGA, response_bleu, api_em
+    return bitod_score, JGA, response_em, api_em
 
 
 def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
@@ -571,10 +571,10 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
     if not isinstance(answer[0], list):
         answer = [[a] for a in answer]
     if 'bitod_score' in requested_metrics:
-        requested_metrics += ['JGA', 'response_bleu', 'api_em']
-        bitod_score, JGA, response_bleu, api_em = computeBITOD(greedy, answer, lang)
-        metric_keys += ['bitod_score', 'JGA', 'response_bleu', 'api_em']
-        metric_values += [bitod_score, JGA, response_bleu, api_em]
+        requested_metrics += ['JGA', 'response_em', 'api_em']
+        bitod_score, JGA, response_em, api_em = computeBITOD(greedy, answer, lang)
+        metric_keys += ['bitod_score', 'JGA', 'response_em', 'api_em']
+        metric_values += [bitod_score, JGA, response_em, api_em]
     if 'lfem' in requested_metrics:
         lfem, answer = computeLFEM(greedy, answer)
         metric_keys += ['lfem']
