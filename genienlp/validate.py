@@ -40,7 +40,7 @@ import ujson
 from BiToD.evaluate import r_en_API_MAP
 from BiToD.knowledgebase import api
 from BiToD.preprocess import API_MAP, knowledge2span, read_require_slots, state2span
-from BiToD.utils import span2state, state2constraints
+from BiToD.utils import action2span, span2action, span2state, state2constraints
 from dateparser.languages import default_loader
 from transformers import MarianTokenizer
 
@@ -146,6 +146,7 @@ def generate_with_seq2seq_model_for_dialogue(
     hyperparameter_idx = 0
 
     cur_dial_id = ''
+    knowledge = None
 
     device = model.device
 
@@ -258,6 +259,23 @@ def generate_with_seq2seq_model_for_dialogue(
         partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
 
         # post-process predictions
+        lang = numericalizer._tokenizer.src_lang[:2]
+        if (
+            train_target == 'response'
+            and re.search(rf'\( HKMTR {lang} \)', partial_batch_prediction)
+            and 'shortest_path' in partial_batch_prediction
+        ):
+            action_dict = span2action(partial_batch_prediction, api_names)
+            domain = f'HKMTR {lang}'
+            metro_slots = set(item['slot'] for item in action_dict[domain])
+            for slot in ['estimated_time', 'price']:
+                if knowledge and slot in knowledge[domain] and slot not in metro_slots:
+                    action_dict[domain].append(
+                        {'act': 'offer', 'slot': slot, 'relation': 'equal_to', 'value': [knowledge[domain][slot]]}
+                    )
+
+            partial_batch_prediction = action2span(action_dict[domain], domain, lang)
+
         partial_batch_prediction = task.postprocess_prediction(batch_example_ids[0], partial_batch_prediction)
 
         # put them into the right array
