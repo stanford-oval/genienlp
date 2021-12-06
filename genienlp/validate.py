@@ -263,13 +263,29 @@ def generate_with_seq2seq_model_for_dialogue(
         if (
             train_target == 'response'
             and re.search(rf'\( HKMTR {lang} \)', partial_batch_prediction)
-            and 'shortest_path' in partial_batch_prediction
+            and 'offer shortest_path equal_to' in partial_batch_prediction
         ):
             action_dict = span2action(partial_batch_prediction, api_names)
             domain = f'HKMTR {lang}'
             metro_slots = set(item['slot'] for item in action_dict[domain])
             for slot in ['estimated_time', 'price']:
                 if knowledge and slot in knowledge[domain] and slot not in metro_slots:
+                    action_dict[domain].append(
+                        {'act': 'offer', 'slot': slot, 'relation': 'equal_to', 'value': [knowledge[domain][slot]]}
+                    )
+
+            partial_batch_prediction = action2span(action_dict[domain], domain, lang)
+
+        if (
+            train_target == 'response'
+            and re.search(r'\( weathers search \)', partial_batch_prediction)
+            and 'offer weather equal_to' in partial_batch_prediction
+        ):
+            action_dict = span2action(partial_batch_prediction, api_names)
+            domain = 'weathers search'
+            weather_slots = set(item['slot'] for item in action_dict[domain])
+            for slot in ['max_temp', 'min_temp']:
+                if knowledge and slot in knowledge[domain] and slot not in weather_slots:
                     action_dict[domain].append(
                         {'act': 'offer', 'slot': slot, 'relation': 'equal_to', 'value': [knowledge[domain][slot]]}
                     )
