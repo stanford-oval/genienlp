@@ -8,8 +8,8 @@ import torch
 import ujson
 from BiToD.evaluate import r_en_API_MAP
 from BiToD.knowledgebase import api
-from BiToD.knowledgebase.en_zh_mappings import API_MAP
-from BiToD.utils import knowledge2span, read_require_slots, span2state, state2constraints, state2span
+from BiToD.knowledgebase.en_zh_mappings import api_names, required_slots
+from BiToD.utils import knowledge2span, span2state, state2constraints, state2span
 from termcolor import colored
 
 from genienlp.data_utils.example import NumericalizedExamples, SequentialField
@@ -75,10 +75,6 @@ def generate_with_seq2seq_model_for_dialogue_interactive(e2e_model, nlg_model, e
     if e2e_args.nlg_type == 'neural':
         nlg_numericalizer = nlg_model.numericalizer
         nlg_args = nlg_model.args
-
-    required_slots = read_require_slots()
-    required_slots = {API_MAP[k]: v for k, v in required_slots.items()}
-    api_names = list(required_slots.keys())
 
     dial_id = 'none'
     turn_id = 1
