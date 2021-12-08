@@ -39,7 +39,8 @@ import torch
 import ujson
 from BiToD.evaluate import r_en_API_MAP
 from BiToD.knowledgebase import api
-from BiToD.preprocess import API_MAP, knowledge2span, read_require_slots, state2span
+from BiToD.knowledgebase.en_zh_mappings import api_names, required_slots
+from BiToD.preprocess import knowledge2span, state2span
 from BiToD.utils import action2span, span2action, span2state, state2constraints
 from dateparser.languages import default_loader
 from transformers import MarianTokenizer
@@ -149,10 +150,6 @@ def generate_with_seq2seq_model_for_dialogue(
     knowledge = None
 
     device = model.device
-
-    required_slots = read_require_slots()
-    required_slots = {API_MAP[k]: v for k, v in required_slots.items()}
-    api_names = list(required_slots.keys())
 
     special_tokens = numericalizer._tokenizer.all_special_tokens
 
