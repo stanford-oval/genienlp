@@ -101,10 +101,13 @@ def generate_with_model(
 
 def replace_capturing_group(input, re_pattern, replacement):
     # replace first captured group in the input with replacement using regex re_pattern
-    whole_match = re_pattern.search(input).group(0).strip()
-    captured_match = re_pattern.search(input).group(1).strip()
-    new_whole_match = whole_match.replace(captured_match, replacement)
-    new_input = re.sub(re_pattern, new_whole_match, input)
+    if re_pattern.search(input):
+        whole_match = re_pattern.search(input).group(0).strip()
+        captured_match = re_pattern.search(input).group(1).strip()
+        new_whole_match = whole_match.replace(captured_match, replacement)
+        new_input = re.sub(re_pattern, new_whole_match, input)
+    else:
+        new_input = input
     return new_input
 
 
@@ -345,10 +348,11 @@ def generate_with_seq2seq_model_for_dialogue(
                             f'Message = No item available for api_name: {api_name}, constraints: {constraints},'
                             f' processed_query: {msg[2]}, for turn: {dial_id}/{turn_id}'
                         )
-                        gold_dial_state = span2state(state_re.search(contexts[-1]).group(1).strip(), api_names)
-                        logger.warning(
-                            f'state_diff: {list(dictdiffer.diff(dialogue_state[api_name], gold_dial_state[api_name]))}'
-                        )
+                        if state_re.search(contexts[-1]):
+                            gold_dial_state = span2state(state_re.search(contexts[-1]).group(1).strip(), api_names)
+                            logger.warning(
+                                f'state_diff: {list(dictdiffer.diff(dialogue_state[api_name], gold_dial_state[api_name]))}'
+                            )
 
                         new_knowledge_text = f'( {api_name} ) Message = No item available.'
                     else:
