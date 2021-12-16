@@ -1,6 +1,7 @@
 from collections import Counter
 
 import jsonlines
+from tqdm import tqdm
 
 from genienlp.ned.bootleg import BatchBootlegEntityDisambiguator
 
@@ -36,14 +37,14 @@ def main(args):
 
     bootleg = BatchBootlegEntityDisambiguator(args)
 
-    lines = jsonlines.open(args.input_file, 'r')
+    lines = list(jsonlines.open(args.input_file, 'r'))
 
     all_titles = Counter()
     all_new_titles = Counter()
 
     fout = open(args.output_file, 'w')
 
-    for count, bootleg_line in enumerate(lines):
+    for count, bootleg_line in enumerate(tqdm(lines)):
         if count >= args.subsample:
             break
 
