@@ -580,9 +580,6 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
 
-    min_output_length = numericalizer.args.min_output_length
-    max_output_length = numericalizer.args.max_output_length
-
     logger.info(
         f'context lengths (min, mean, max): {np.min(context_lengths)}, {int(np.mean(context_lengths))}, {np.max(context_lengths)}'
     )
@@ -603,6 +600,9 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
         min_batch_length = np.min(context_lengths) + np.min(answer_lengths)
     else:
         min_batch_length = 1
+
+    min_output_length = numericalizer.args.min_output_length
+    max_output_length = numericalizer.args.max_output_length
 
     if min_batch_length > batch_size:
         raise ValueError(
