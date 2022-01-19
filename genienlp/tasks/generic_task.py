@@ -436,7 +436,7 @@ class BiTOD(BaseTask):
             | special_tokens_v11
             | special_tokens_v13
         )
-        self._metrics = ['em', 'casedbleu']
+        self._metrics = ['bitod_score']
 
     def utterance_field(self):
         return 'context'
