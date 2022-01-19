@@ -294,16 +294,18 @@ def find_span_type(program, begin_index, end_index):
 
     return span_type, end_index
 
+
 def find_span(haystack, needle):
-    for i in range(len(haystack)-len(needle)+1):
+    for i in range(len(haystack) - len(needle) + 1):
         found = True
         for j in range(len(needle)):
-            if haystack[i+j] != needle[j]:
+            if haystack[i + j] != needle[j]:
                 found = False
                 break
         if found:
             return i
     return None
+
 
 def requote_program(program):
 

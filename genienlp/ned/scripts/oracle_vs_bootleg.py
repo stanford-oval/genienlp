@@ -19,10 +19,11 @@ def parse_argv(parser):
     parser.add_argument('--almond_type_mapping_path', type=str)
     parser.add_argument('--ned_normalize_types', type=str, choices=['no', 'soft', 'strict'], default='strict')
 
+
 def main(args):
 
     args.root = '.'
-    #args.bootleg_prob_threshold = 0.01
+    # args.bootleg_prob_threshold = 0.01
     args.bootleg_prob_threshold = 0.3
     args.max_types_per_qid = 2
     args.max_qids_per_entity = 1
@@ -112,8 +113,7 @@ def main(args):
                     false_positive[bootleg_type] += 1
                     mispredicted_entities[bootleg_type][bootleg_entity] += 1
 
-    keys = list(set(strict_true_positive.keys()) | set(soft_true_positive.keys()) | \
-        set(false_negative.keys()))
+    keys = list(set(strict_true_positive.keys()) | set(soft_true_positive.keys()) | set(false_negative.keys()))
     keys.sort()
 
     for k in keys:

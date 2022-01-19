@@ -28,15 +28,14 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import logging
 import os
-import re
 
 import marisa_trie
 import ujson
 
 from ..data_utils.almond_utils import quoted_pattern_with_space
 from ..ned.ned_utils import has_overlap, is_banned, normalize_text
-from .abstract import AbstractEntityDisambiguator
 from ..util import find_span
+from .abstract import AbstractEntityDisambiguator
 
 logger = logging.getLogger(__name__)
 
@@ -217,39 +216,41 @@ class EntityAndTypeOracleEntityDisambiguator(BaseEntityDisambiguator):
     def _get_entity_type(self, current_domain, current_function, answer_tokens, string_begin, string_end):
         # identify the type of this string based on the surrounding tokens
         type = None
-        if string_begin >= 3 and answer_tokens[string_begin-2] == '(' and answer_tokens[string_begin-3] == 'Location':
+        if string_begin >= 3 and answer_tokens[string_begin - 2] == '(' and answer_tokens[string_begin - 3] == 'Location':
             # new Location ( " ...
             type = 'Location'
-        elif string_begin >= 3 and answer_tokens[string_begin-2] == '(' and answer_tokens[string_begin-3].startswith('^^'):
+        elif string_begin >= 3 and answer_tokens[string_begin - 2] == '(' and answer_tokens[string_begin - 3].startswith('^^'):
             # null ^^com.foo ( " ...
-            prefix, suffix = answer_tokens[string_begin-3].rsplit(':', 1)
+            prefix, suffix = answer_tokens[string_begin - 3].rsplit(':', 1)
             if prefix != '^^tt':
                 type = prefix.rsplit('.', 1)[-1] + ' ' + suffix
             else:
                 type = suffix
 
-            if (
-                type == 'Person'
-                and string_begin >= 6 and answer_tokens[string_begin-6] in ('director', 'creator', 'actor')
-            ):
+            if type == 'Person' and string_begin >= 6 and answer_tokens[string_begin - 6] in ('director', 'creator', 'actor'):
                 # (director|creator|actor) == null ^^org.schema:Person ( " ...
-                type = current_domain + ' ' + answer_tokens[string_begin-6]
-        elif string_begin >= 3 and answer_tokens[string_begin-2] == '=~' and answer_tokens[string_begin-3] == 'id':
+                type = current_domain + ' ' + answer_tokens[string_begin - 6]
+        elif string_begin >= 3 and answer_tokens[string_begin - 2] == '=~' and answer_tokens[string_begin - 3] == 'id':
             type = current_domain + ' ' + current_function
-        elif string_begin >= 5 and answer_tokens[string_begin-2] == '=' and answer_tokens[string_begin-3] == 'name' \
-            and answer_tokens[string_begin-4] == '(' and answer_tokens[string_begin-5].startswith('@'):
+        elif (
+            string_begin >= 5
+            and answer_tokens[string_begin - 2] == '='
+            and answer_tokens[string_begin - 3] == 'name'
+            and answer_tokens[string_begin - 4] == '('
+            and answer_tokens[string_begin - 5].startswith('@')
+        ):
             type = current_domain + ' name'
-        elif string_begin >= 3 and answer_tokens[string_begin-2] in ('=', '==', '=~'):
+        elif string_begin >= 3 and answer_tokens[string_begin - 2] in ('=', '==', '=~'):
             # foo == " ...
             # foo = "
-            type = current_domain + ' ' + answer_tokens[string_begin-3]
-        elif string_begin >= 5 and answer_tokens[string_begin-5] in ('contains', 'contains~'):
+            type = current_domain + ' ' + answer_tokens[string_begin - 3]
+        elif string_begin >= 5 and answer_tokens[string_begin - 5] in ('contains', 'contains~'):
             # contains ( foo , " ...
-            type = current_domain + ' ' + answer_tokens[string_begin-3]
-        elif string_begin >= 2 and answer_tokens[string_begin-2] in (',', '['):
+            type = current_domain + ' ' + answer_tokens[string_begin - 3]
+        elif string_begin >= 2 and answer_tokens[string_begin - 2] in (',', '['):
             # in_array ( foo , [ " ...
             # traverse back until reach beginning of list
-            i = string_begin-2
+            i = string_begin - 2
             while answer_tokens[i] != '[' and i > 0:
                 i -= 1
             if i > 4 and answer_tokens[i - 4] in ('in_array', 'in_array~'):
@@ -274,7 +275,7 @@ class EntityAndTypeOracleEntityDisambiguator(BaseEntityDisambiguator):
             if token == '"':
                 if string_begin is None:
                     # opening a quoted string
-                    string_begin = i+1
+                    string_begin = i + 1
                 else:
                     # closing a quoted string
                     if i == string_begin:
@@ -290,7 +291,16 @@ class EntityAndTypeOracleEntityDisambiguator(BaseEntityDisambiguator):
                         continue
 
                     type = self._get_entity_type(current_domain, current_function, answer_tokens, string_begin, string_end)
-                    if type and type.split(' ')[-1] in ('title', 'message', 'description', 'status', 'query', 'contents', 'keyword', 'text'):
+                    if type and type.split(' ')[-1] in (
+                        'title',
+                        'message',
+                        'description',
+                        'status',
+                        'query',
+                        'contents',
+                        'keyword',
+                        'text',
+                    ):
                         # free text
                         string_begin = None
                         continue
@@ -314,13 +324,13 @@ class EntityAndTypeOracleEntityDisambiguator(BaseEntityDisambiguator):
                 # or
                 # @com.foo . bar
                 j = i
-                if answer_tokens[j+1] == '(':
+                if answer_tokens[j + 1] == '(':
                     # we have a device name, skip to the closing parenthesis
                     j += 2
                     while j < len(answer_tokens) and answer_tokens[j] != ')':
                         j += 1
-                if j+2 < len(answer_tokens):
-                    current_function = answer_tokens[j+2]
+                if j + 2 < len(answer_tokens):
+                    current_function = answer_tokens[j + 2]
 
         return entity2type
 
