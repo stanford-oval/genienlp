@@ -226,7 +226,7 @@ class TransformerSeq2Seq(GenieModel):
 
         pad_token_id = self.numericalizer.pad_id
         attention_mask = self.model._prepare_attention_mask_for_generation(
-            input_ids=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer.eos_id
+            inputs=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer.eos_id
         )
         truncated_predictions = predictions[:, 1:]  # remove the BOS token since it is not actually being generated
 
