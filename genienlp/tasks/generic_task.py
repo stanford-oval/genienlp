@@ -426,7 +426,7 @@ class BiTOD(BaseTask):
         special_tokens_v7 = {'ACTS:'}
         special_tokens_v9 = {'USER_ACTS:'}
         special_tokens_v11 = {'<endofknowledge>', '<endofhistory>', '<endofstate>'}
-        special_tokens_v13 = {'PREV_AGENT_ACTS'}
+        special_tokens_v13 = {'AGENT_ACTS_PREV'}
         self.special_tokens = (
             special_tokens_v1
             | special_tokens_v2
