@@ -169,6 +169,7 @@ class TransformerSeq2Seq(GenieModel):
         self,
         batch,
         max_output_length,
+        min_output_length,
         num_outputs,
         temperature,
         repetition_penalty,
@@ -187,7 +188,7 @@ class TransformerSeq2Seq(GenieModel):
         generated = self.model.generate(
             input_ids=input_ids,
             max_length=max_output_length,
-            min_length=3,  # generate at least one token after BOS and language code
+            min_length=min_output_length,
             bos_token_id=self.numericalizer.init_id,
             pad_token_id=self.numericalizer.pad_id,
             early_stopping=False,

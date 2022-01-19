@@ -164,7 +164,13 @@ def parse_argv(parser):
         default=[0],
         help='ngrams of this size cannot be repeated in the output. 0 disables it.',
     )
-    parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
+    parser.add_argument('--max_output_length', type=int, help='maximum output length for generation')
+    parser.add_argument(
+        '--min_output_length',
+        type=int,
+        help='maximum output length for generation; '
+        'default is 3 for most multilingual models: BOS, language code, and one token. otherwise it is 2',
+    )
 
     # These are used for confidence calibration
     parser.add_argument(
@@ -535,10 +541,18 @@ def main(args):
 
     if args.override_valid_metrics:
         assert len(args.override_valid_metrics) == len(args.tasks)
+        new_metrics = []
         for task, metrics in zip(args.tasks, args.override_valid_metrics):
-            # backward compatibility for models validated on sacrebleu (now casedbleu)
-            metrics = [m if m != 'sacrebleu' else 'casedbleu' for m in metrics]
-            task.metrics = metrics
+            for m in metrics:
+                # remove loss from validation metrics
+                if m == 'loss':
+                    continue
+                # backward compatibility for models validated on sacrebleu (now casedbleu)
+                if m == 'sacrebleu':
+                    m = 'casedblue'
+                new_metrics.append(m)
+
+            task.metrics = new_metrics
 
     if len(devices) > 1:
         logger.info(f'Independent multi-GPU generation on following devices: {devices}')

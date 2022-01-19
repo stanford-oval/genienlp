@@ -45,6 +45,8 @@ from torch.functional import Tensor
 from transformers import MarianConfig, MBartConfig
 from transformers.models.mbart50.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
 
+from genienlp.tasks.generic_dataset import all_tokens_fn, input_tokens_fn
+
 from .data_utils.almond_utils import token_type_regex
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
@@ -585,6 +587,32 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
         f'answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}'
     )
 
+    if dataset.batch_size_fn == input_tokens_fn:
+        min_batch_length = np.min(context_lengths)
+    elif dataset.batch_size_fn == all_tokens_fn:
+        min_batch_length = np.min(context_lengths) + np.min(answer_lengths)
+    else:
+        min_batch_length = 1
+
+    min_output_length = numericalizer.args.min_output_length
+    max_output_length = numericalizer.args.max_output_length
+
+    if min_batch_length > batch_size:
+        raise ValueError(
+            f'The minimum example length in your dataset is {np.min(context_lengths) + np.min(answer_lengths)} but your batch size is {batch_size}.'
+            f' Thus no examples will be processed. Consider increasing batch_size'
+        )
+    if np.min(answer_lengths) < min_output_length:
+        raise ValueError(
+            f'The minimum output length in your dataset is {np.min(answer_lengths)} but you have set --min_output_length to {min_output_length}.'
+            f' Consider reducing that'
+        )
+    if np.max(answer_lengths) > max_output_length:
+        raise ValueError(
+            f'The maximum output length in your dataset is {np.max(answer_lengths)} but you have set --max_output_length to {max_output_length}.'
+            f' Consider increasing that'
+        )
+
     sampler = LengthSortedIterator(
         all_features,
         batch_size=batch_size,
@@ -834,6 +862,7 @@ def load_config_json(args):
             'repetition_penalty',
             'temperature',
             'max_output_length',
+            'min_output_length',
             'reduce_metrics',
             'database_dir',
         ]

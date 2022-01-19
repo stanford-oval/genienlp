@@ -247,7 +247,8 @@ def do_validate(
 
         deca_metric = val_task.metrics[0]
         if deca_metric == 'loss':
-            deca_score += val_loss
+            # negative since lower loss corresponds to better performance
+            deca_score += -1.0 * val_loss
         else:
             deca_score += metric_dict[deca_metric]
 

@@ -7,9 +7,9 @@ i=0
 for hparams in \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random" \
       "--model TransformerSeq2Seq --pretrained_model sshleifer/bart-tiny-random --preprocess_special_tokens --almond_detokenize_sentence" \
-      "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50 --num_beams 4 --num_beam_groups 4 --num_outputs 4 --diversity_penalty 1.0" \
-      "--model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embeddings=50  --override_question ." \
-      "--model TransformerLSTM --pretrained_model xlm-roberta-base --trainable_decoder_embeddings=50 --eval_set_name aux" ;
+      "--model TransformerLSTM --pretrained_model bert-base-cased --min_output_length 2 --trainable_decoder_embeddings=50 --num_beams 4 --num_beam_groups 4 --num_outputs 4 --diversity_penalty 1.0" \
+      "--model TransformerLSTM --pretrained_model bert-base-cased --min_output_length 2 --trainable_decoder_embeddings=50  --override_question ." \
+      "--model TransformerLSTM --pretrained_model xlm-roberta-base --min_output_length 2 --trainable_decoder_embeddings=50 --eval_set_name aux" ;
 do
 
     # train
