@@ -138,6 +138,7 @@ def generate_with_seq2seq_model_for_dialogue(
 
     state_re = re.compile('<state> (.*?)(?:$|<)')
     knowledge_re = re.compile('<knowledge> (.*?)(?:$|<)')
+    actions_re = re.compile('<actions> (.*?)(?:$|<)')
 
     bitod_preds = dict()
 
@@ -173,6 +174,7 @@ def generate_with_seq2seq_model_for_dialogue(
             dialogue_state = {}
             new_state_text = 'null'
             new_knowledge_text = 'null'
+            new_actions_text = 'null'
             active_api = None
             bitod_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
 
@@ -215,12 +217,22 @@ def generate_with_seq2seq_model_for_dialogue(
             # replace state
             input_text = replace_capturing_group(contexts[-1], state_re, new_state_text)
 
-        elif train_target == 'response':
+        elif train_target == 'da':
             # replace state
             input_text = replace_capturing_group(contexts[-1], state_re, new_state_text)
 
             # replace knowledge
             input_text = replace_capturing_group(input_text, knowledge_re, new_knowledge_text)
+
+        elif train_target == 'rg':
+            # replace state
+            # input_text = replace_capturing_group(contexts[-1], state_re, new_state_text)
+
+            # replace knowledge
+            # input_text = replace_capturing_group(input_text, knowledge_re, new_knowledge_text)
+
+            # replace actions
+            input_text = replace_capturing_group(contexts[-1], actions_re, new_actions_text)
 
         else:
             raise ValueError(f'Invalid train_target: {train_target}')
@@ -261,7 +273,7 @@ def generate_with_seq2seq_model_for_dialogue(
         # post-process predictions
         lang = numericalizer._tokenizer.src_lang[:2]
         if (
-            train_target == 'response'
+            train_target == 'acts'
             and re.search(rf'\( HKMTR {lang} \)', partial_batch_prediction)
             and 'offer shortest_path equal_to' in partial_batch_prediction
         ):
@@ -277,7 +289,7 @@ def generate_with_seq2seq_model_for_dialogue(
             partial_batch_prediction = action2span(action_dict[domain], domain, lang)
 
         if (
-            train_target == 'response'
+            train_target == 'acts'
             and re.search(r'\( weathers search \)', partial_batch_prediction)
             and 'offer weather equal_to' in partial_batch_prediction
         ):
@@ -376,7 +388,13 @@ def generate_with_seq2seq_model_for_dialogue(
             bitod_preds[dial_id]["turns"][str(turn_id)]["api"] = new_knowledge_text
             ####
 
-        if train_target == 'response':
+        elif train_target == 'da':
+            new_actions_text = predictions[-1]
+            #### save latest actions
+            bitod_preds[dial_id]["turns"][str(turn_id)]["actions"] = predictions[-1]
+            ####
+
+        elif train_target == 'rg':
             #### save latest response
             bitod_preds[dial_id]["turns"][str(turn_id)]["response"] = predictions[-1]
             ####
