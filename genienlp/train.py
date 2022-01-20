@@ -664,7 +664,6 @@ def main(args):
         for task, train_set, val_set in zip(tasks, train_sets, val_sets):
             ned_dump_entity_type_pairs(train_set, args.data, 'train', task.utterance_field)
             ned_dump_entity_type_pairs(val_set, args.data, 'eval', task.utterance_field)
-        return
 
     ########## initialize model
     best_decascore = None
