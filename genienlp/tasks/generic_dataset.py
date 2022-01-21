@@ -1988,8 +1988,11 @@ class BiTODDataset(CQA):
 
         super().__init__(examples, **kwargs)
 
+        # do not sort eval/ test set so we can compute individual scores for each subtask (bitod_score)
+        self.eval_sort_key_fn = None
+
+        # in e2e evaluation use 1 batch at a time
         if kwargs.get('e2e_evaluation', False):
-            self.eval_sort_key_fn = None
             self.eval_batch_size_fn = default_batch_fn
 
     @classmethod

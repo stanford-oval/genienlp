@@ -381,7 +381,7 @@ def generate_with_seq2seq_model_for_dialogue(
                 pass
             else:
                 logger.error(
-                    f'API call should be either yes or no but got {do_api_call}. Seems model is still training so we assume it\'s a no'
+                    f'API call should be either yes or no but got {do_api_call}. Seems model is not trained for enough steps. For now we assume it\'s a no'
                 )
 
             #### save latest api results
