@@ -273,7 +273,7 @@ def generate_with_seq2seq_model_for_dialogue(
         # post-process predictions
         lang = numericalizer._tokenizer.src_lang[:2]
         if (
-            train_target == 'acts'
+            train_target == 'da'
             and re.search(rf'\( HKMTR {lang} \)', partial_batch_prediction)
             and 'offer shortest_path equal_to' in partial_batch_prediction
         ):
@@ -289,7 +289,7 @@ def generate_with_seq2seq_model_for_dialogue(
             partial_batch_prediction = action2span(action_dict[domain], domain, lang)
 
         if (
-            train_target == 'acts'
+            train_target == 'da'
             and re.search(r'\( weathers search \)', partial_batch_prediction)
             and 'offer weather equal_to' in partial_batch_prediction
         ):
