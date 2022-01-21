@@ -389,9 +389,9 @@ def generate_with_seq2seq_model_for_dialogue(
             ####
 
         elif train_target == 'da':
-            new_actions_text = predictions[-1]
+            new_actions_text = predictions[-1][0]
             #### save latest actions
-            bitod_preds[dial_id]["turns"][str(turn_id)]["actions"] = predictions[-1]
+            bitod_preds[dial_id]["turns"][str(turn_id)]["actions"] = predictions[-1][0]
             ####
 
         elif train_target == 'rg':
