@@ -191,3 +191,9 @@ home assistant
 key words
 keywords
 list of books
+end of
+price
+fan
+bing
+power on
+release year

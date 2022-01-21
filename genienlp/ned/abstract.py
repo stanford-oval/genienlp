@@ -86,9 +86,9 @@ class AbstractEntityDisambiguator(object):
         for normalized_type, titles in self.almond_type_mapping.items():
             for title in titles:
                 if re.search(r'[.?*]', title):
-                    inclusions.append((title, normalized_type))
+                    inclusions.append((re.compile(fnmatch.translate(title)), normalized_type))
                 else:
-                    matches.append((title, normalized_type))
+                    matches.append((re.compile(fnmatch.translate(title)), normalized_type))
 
         # do wildcard matching only after going through all exact matches
         self.wiki2normalized_type.extend(matches)
@@ -98,7 +98,7 @@ class AbstractEntityDisambiguator(object):
         norm_type = None
         type = type.lower()
         for pair in self.wiki2normalized_type:
-            if fnmatch.fnmatch(type, pair[0]):
+            if pair[0].fullmatch(type):
                 norm_type = pair[1]
                 break
         return norm_type

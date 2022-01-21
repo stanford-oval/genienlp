@@ -28,13 +28,13 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import logging
 import os
-import re
 
 import marisa_trie
 import ujson
 
 from ..data_utils.almond_utils import quoted_pattern_with_space
 from ..ned.ned_utils import has_overlap, is_banned, normalize_text
+from ..util import find_span
 from .abstract import AbstractEntityDisambiguator
 
 logger = logging.getLogger(__name__)
@@ -184,6 +184,7 @@ class EntityOracleEntityDisambiguator(BaseEntityDisambiguator):
 class EntityAndTypeOracleEntityDisambiguator(BaseEntityDisambiguator):
     def __init__(self, args):
         super().__init__(args)
+        self._unrecognized_types = set()
 
     def find_type_ids(self, tokens, answer, aliases=None):
         entity2type = self.collect_answer_entity_types(tokens, answer)
@@ -212,86 +213,124 @@ class EntityAndTypeOracleEntityDisambiguator(BaseEntityDisambiguator):
 
         return tokens_type_ids
 
+    def _get_entity_type(self, current_domain, current_function, answer_tokens, string_begin, string_end):
+        # identify the type of this string based on the surrounding tokens
+        type = None
+        if string_begin >= 3 and answer_tokens[string_begin - 2] == '(' and answer_tokens[string_begin - 3] == 'Location':
+            # new Location ( " ...
+            type = 'Location'
+        elif string_begin >= 3 and answer_tokens[string_begin - 2] == '(' and answer_tokens[string_begin - 3].startswith('^^'):
+            # null ^^com.foo ( " ...
+            prefix, suffix = answer_tokens[string_begin - 3].rsplit(':', 1)
+            if prefix != '^^tt':
+                type = prefix.rsplit('.', 1)[-1] + ' ' + suffix
+            else:
+                type = suffix
+
+            if type == 'Person' and string_begin >= 6 and answer_tokens[string_begin - 6] in ('director', 'creator', 'actor'):
+                # (director|creator|actor) == null ^^org.schema:Person ( " ...
+                type = current_domain + ' ' + answer_tokens[string_begin - 6]
+        elif string_begin >= 3 and answer_tokens[string_begin - 2] == '=~' and answer_tokens[string_begin - 3] == 'id':
+            type = current_domain + ' ' + current_function
+        elif (
+            string_begin >= 5
+            and answer_tokens[string_begin - 2] == '='
+            and answer_tokens[string_begin - 3] == 'name'
+            and answer_tokens[string_begin - 4] == '('
+            and answer_tokens[string_begin - 5].startswith('@')
+        ):
+            type = current_domain + ' name'
+        elif string_begin >= 3 and answer_tokens[string_begin - 2] in ('=', '==', '=~'):
+            # foo == " ...
+            # foo = "
+            type = current_domain + ' ' + answer_tokens[string_begin - 3]
+        elif string_begin >= 5 and answer_tokens[string_begin - 5] in ('contains', 'contains~'):
+            # contains ( foo , " ...
+            type = current_domain + ' ' + answer_tokens[string_begin - 3]
+        elif string_begin >= 2 and answer_tokens[string_begin - 2] in (',', '['):
+            # in_array ( foo , [ " ...
+            # traverse back until reach beginning of list
+            i = string_begin - 2
+            while answer_tokens[i] != '[' and i > 0:
+                i -= 1
+            if i > 4 and answer_tokens[i - 4] in ('in_array', 'in_array~'):
+                if answer_tokens[i - 2] == 'id':
+                    type = current_domain + ' ' + current_function
+                else:
+                    type = current_domain + ' ' + answer_tokens[i - 2]
+
+        if type:
+            type = type.replace('_', ' ')
+        return type
+
     def collect_answer_entity_types(self, tokens, answer):
         entity2type = dict()
-        sentence = ' '.join(tokens)
 
-        answer_entities = quoted_pattern_with_space.findall(answer)
-        for ent in answer_entities:
-            # skip examples with sentence-annotation entity mismatch. hopefully there's not a lot of them.
-            # this is usually caused by paraphrasing where it adds "-" after entity name: "korean-style restaurants"
-            # or add "'" before or after an entity
-            if not re.search(rf'(^|\s){ent}($|\s)', sentence):
-                continue
+        string_begin = None
+        answer_tokens = answer.split(' ')
+        current_domain = None
+        current_function = None
 
-            # ** this should change if thingtalk syntax changes **
-            # ( ... [Book|Music|...] ( ) filter id =~ " position and affirm " ) ...'
-            # ... ^^org.schema.Book:Person ( " james clavell " ) ...
-            # ... contains~ ( [award|genre|...] , " booker " ) ...
-            # ... inLanguage =~ " persian " ...
-
-            idx = answer.index('" ' + ent + ' "')
-
-            type = None
-            tokens_before_entity = answer[:idx].split()
-
-            if tokens_before_entity[-2] == 'Location':
-                type = 'Location'
-
-            elif tokens_before_entity[-1] in ['>=', '==', '<='] and tokens_before_entity[-2] in [
-                'ratingValue',
-                'reviewCount',
-                'checkoutTime',
-                'checkinTime',
-                'contentRating',
-            ]:
-                type = tokens_before_entity[-2]
-
-            elif tokens_before_entity[-1] == '=~':
-                if tokens_before_entity[-2] in ['id', 'value']:
-                    # travers previous tokens until find filter
-                    i = -3
-                    while tokens_before_entity[i] != 'filter' and -(i - 3) < len(tokens_before_entity):
-                        i -= 1
-                    type = tokens_before_entity[i - 3]
+        for i, token in enumerate(answer_tokens):
+            if token == '"':
+                if string_begin is None:
+                    # opening a quoted string
+                    string_begin = i + 1
                 else:
-                    type = tokens_before_entity[-2]
+                    # closing a quoted string
+                    if i == string_begin:
+                        string_begin = None
+                        continue
+                    # skip examples with sentence-annotation entity mismatch. hopefully there's not a lot of them.
+                    # this is usually caused by paraphrasing where it adds "-" after entity name: "korean-style restaurants"
+                    # or add "'" before or after an entity
+                    string_end = i
+                    entity = answer_tokens[string_begin:string_end]
+                    if find_span(tokens, entity) is None:
+                        string_begin = None
+                        continue
 
-            elif tokens_before_entity[-4] == 'contains~':
-                type = tokens_before_entity[-2]
+                    type = self._get_entity_type(current_domain, current_function, answer_tokens, string_begin, string_end)
+                    if type and type.split(' ')[-1] in (
+                        'title',
+                        'message',
+                        'description',
+                        'status',
+                        'query',
+                        'contents',
+                        'keyword',
+                        'text',
+                    ):
+                        # free text
+                        string_begin = None
+                        continue
 
-            elif tokens_before_entity[-2].startswith('^^'):
-                type = tokens_before_entity[-2].rsplit(':', 1)[1]
-                if (
-                    type == 'Person'
-                    and tokens_before_entity[-3] == 'null'
-                    and tokens_before_entity[-5] in ['director', 'creator', 'actor']
-                ):
-                    type = tokens_before_entity[-5]
-
-            elif tokens_before_entity[-1] == ',' and tokens_before_entity[-2] in ['award']:
-                type = 'award'
-
-            elif tokens_before_entity[-1] in [',', '[']:
-                # traverse back until reach beginning of list
-                i = -1
-                while tokens_before_entity[i] != '[' and -(i - 2) < len(tokens_before_entity):
-                    i -= 1
-                if tokens_before_entity[i - 1] == ',':
-                    type = tokens_before_entity[i - 2]
-                else:
-                    type = 'keywords'
-
-            if type:
-                norm_type = self.normalize_types(type)
-                assert norm_type in self.type_vocab_to_typeqid, f'{norm_type}, {answer}'
-            else:
-                print(f'{type}, {answer}')
-                continue
-
-            entity2type[ent] = norm_type
-
-            self.all_schema_types.add(norm_type)
+                    if type:
+                        norm_type = self.normalize_types(type)
+                        if norm_type:
+                            assert norm_type in self.type_vocab_to_typeqid, f'{norm_type}, {answer}'
+                            entity2type[' '.join(entity)] = norm_type
+                            self.all_schema_types.add(norm_type)
+                        elif type not in self._unrecognized_types:
+                            logger.info("skipped unrecognized type '%s' in %s", type, answer)
+                            self._unrecognized_types.add(type)
+                    else:
+                        logger.warn('could not identify type: %s', answer)
+                    string_begin = None
+            elif token.startswith('@'):
+                current_domain = answer_tokens[i].rsplit('.', 1)[1]
+                # parse:
+                # @com.foo ( ... ) . bar
+                # or
+                # @com.foo . bar
+                j = i
+                if answer_tokens[j + 1] == '(':
+                    # we have a device name, skip to the closing parenthesis
+                    j += 2
+                    while j < len(answer_tokens) and answer_tokens[j] != ')':
+                        j += 1
+                if j + 2 < len(answer_tokens):
+                    current_function = answer_tokens[j + 2]
 
         return entity2type
 
