@@ -129,6 +129,7 @@ def remove_items_lower_than_threshold(array, thresholds):
 def parse_argv(parser):
     parser.add_argument('--path', type=str, required=True, help='Folder to load the model from')
     parser.add_argument('--input_file', type=str, required=True, help='Input file to read from')
+    parser.add_argument('--tasks', dest='task_names', nargs='+', required=True, help='task names for prediction')
     parser.add_argument('--output_file', type=str, required=True, help='Output file')
     parser.add_argument('--top_tokens', type=int, required=True, help='Number of tokens to consider')
     parser.add_argument('--top_mistakes', type=int, required=True, help='Number of mistakes to consider')
@@ -156,13 +157,20 @@ def main(args):
     model.to(device)
     model.eval()
 
-    args.tasks = list(get_tasks(['almond_dialogue_nlu'], args).values())[0]
+    args.tasks = list(get_tasks(args.task_names, args).values())[0]
 
     all_examples = []
     all_answers = []
     with open(args.input_file) as file:
         for line in file:
-            example_id, context, question, answer = tuple([a.strip() for a in line.split('\t')])
+            line = tuple([a.strip() for a in line.split('\t')])
+            if len(line) == 4:
+                example_id, context, question, answer = line
+            elif len(line) == 3:
+                example_id, context, answer = line
+                question = ''
+            else:
+                raise ValueError
             ex = Example.from_raw(str(example_id), context, question, answer, preprocess=args.tasks.preprocess_field, lower=args.lower)
             all_examples.append(ex)
             all_answers.append(answer)
