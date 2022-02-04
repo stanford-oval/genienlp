@@ -541,7 +541,7 @@ class ReverseAlmond(BaseAlmondTask):
 
     def __init__(self, name, args):
         super().__init__(name, args)
-        self._metrics = ['blue', 'em']
+        self._metrics = ['bleu', 'em']
 
     @property
     def utterance_field(self):
