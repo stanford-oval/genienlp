@@ -56,7 +56,7 @@ setuptools.setup(
         'dateparser>=1.0.0',
         'datasets==1.18.2',
         'seqeval==1.2.2',
-        'transformers==4.15.0',
+        'transformers==4.16.2',
         'sentence-transformers==2.1.0',
         'pathos==0.2.8',
         # for kf:
