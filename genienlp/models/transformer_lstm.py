@@ -181,9 +181,7 @@ class TransformerLSTM(GenieModel):
     def get_output_embeddings(self):
         return self.decoder.decoder_embeddings
 
-    def prepare_inputs_for_generation(
-        self, input_ids, attention_mask, use_cache, batch, generation_dict, encoder_output, past=None
-    ):
+    def prepare_inputs_for_generation(self, input_ids, batch, generation_dict, encoder_output, past=None, **kwargs):
         expansion_factor = input_ids.shape[0] // len(batch.example_id)
         return {
             "batch": batch,
