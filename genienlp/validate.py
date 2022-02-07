@@ -34,15 +34,10 @@ import re
 import sys
 from collections import defaultdict
 
-import dictdiffer
 import torch
 import ujson
-from BiToD.evaluate import r_en_API_MAP
-from BiToD.knowledgebase import api
-from BiToD.knowledgebase.en_zh_mappings import api_names, required_slots
-from BiToD.preprocess import knowledge2span, state2span
-from BiToD.utils import action2span, span2action, span2state, state2constraints
 from dateparser.languages import default_loader
+from dialogues import Bitod
 from transformers import MarianTokenizer
 
 from .data_utils.example import NumericalizedExamples, SequentialField
@@ -133,13 +128,7 @@ def generate_with_seq2seq_model_for_dialogue(
         contexts
     """
 
-    # history_re = re.compile('<history> (.*?)(?:$|<)')
-    # last_system_re = re.compile('SYSTEM: (.*?)(?:USER:|$)')
-
-    state_re = re.compile('<state> (.*?)(?:$|<)')
-    knowledge_re = re.compile('<knowledge> (.*?)(?:$|<)')
-    actions_re = re.compile('<actions> (.*?)(?:$|<)')
-
+    dataset = Bitod()
     bitod_preds = dict()
 
     predictions = []
@@ -204,7 +193,7 @@ def generate_with_seq2seq_model_for_dialogue(
             answers += batch_answer
 
         if train_target == 'dst':
-            input_text = replace_capturing_group(contexts[-1], state_re, new_state_text)
+            input_text = replace_capturing_group(contexts[-1], dataset.state_re, new_state_text)
 
             ## we always use gold history following common practice
             ## if you want to use predicted response instead of gold uncomment the following
@@ -212,17 +201,17 @@ def generate_with_seq2seq_model_for_dialogue(
             # input_text = replace_match(input_text, last_system_re, last_sys_pred)
 
         elif train_target == 'api':
-            new_state_text = state2span(dialogue_state, required_slots)
+            new_state_text = dataset.state2span(dialogue_state)
 
             # replace state
-            input_text = replace_capturing_group(contexts[-1], state_re, new_state_text)
+            input_text = replace_capturing_group(contexts[-1], dataset.state_re, new_state_text)
 
         elif train_target == 'da':
             # replace state
-            input_text = replace_capturing_group(contexts[-1], state_re, new_state_text)
+            input_text = replace_capturing_group(contexts[-1], dataset.state_re, new_state_text)
 
             # replace knowledge
-            input_text = replace_capturing_group(input_text, knowledge_re, new_knowledge_text)
+            input_text = replace_capturing_group(input_text, dataset.knowledge_re, new_knowledge_text)
 
         elif train_target == 'rg':
             # replace state
@@ -232,7 +221,7 @@ def generate_with_seq2seq_model_for_dialogue(
             # input_text = replace_capturing_group(input_text, knowledge_re, new_knowledge_text)
 
             # replace actions
-            input_text = replace_capturing_group(contexts[-1], actions_re, new_actions_text)
+            input_text = replace_capturing_group(contexts[-1], dataset.actions_re, new_actions_text)
 
         else:
             raise ValueError(f'Invalid train_target: {train_target}')
@@ -270,39 +259,10 @@ def generate_with_seq2seq_model_for_dialogue(
 
         partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
 
-        # post-process predictions
-        lang = numericalizer._tokenizer.src_lang[:2]
-        if (
-            train_target == 'da'
-            and re.search(rf'\( HKMTR {lang} \)', partial_batch_prediction)
-            and 'offer shortest_path equal_to' in partial_batch_prediction
-        ):
-            action_dict = span2action(partial_batch_prediction, api_names)
-            domain = f'HKMTR {lang}'
-            metro_slots = set(item['slot'] for item in action_dict[domain])
-            for slot in ['estimated_time', 'price']:
-                if knowledge and slot in knowledge[domain] and slot not in metro_slots:
-                    action_dict[domain].append(
-                        {'act': 'offer', 'slot': slot, 'relation': 'equal_to', 'value': [knowledge[domain][slot]]}
-                    )
-
-            partial_batch_prediction = action2span(action_dict[domain], domain, lang)
-
-        if (
-            train_target == 'da'
-            and re.search(r'\( weathers search \)', partial_batch_prediction)
-            and 'offer weather equal_to' in partial_batch_prediction
-        ):
-            action_dict = span2action(partial_batch_prediction, api_names)
-            domain = 'weathers search'
-            weather_slots = set(item['slot'] for item in action_dict[domain])
-            for slot in ['max_temp', 'min_temp']:
-                if knowledge and slot in knowledge[domain] and slot not in weather_slots:
-                    action_dict[domain].append(
-                        {'act': 'offer', 'slot': slot, 'relation': 'equal_to', 'value': [knowledge[domain][slot]]}
-                    )
-
-            partial_batch_prediction = action2span(action_dict[domain], domain, lang)
+        if train_target == 'da':
+            partial_batch_prediction = dataset.postprocess_prediction(
+                partial_batch_prediction, knowledge, lang=numericalizer._tokenizer.src_lang[:2]
+            )
 
         partial_batch_prediction = task.postprocess_prediction(batch_example_ids[0], partial_batch_prediction)
 
@@ -314,7 +274,7 @@ def generate_with_seq2seq_model_for_dialogue(
         if train_target == 'dst':
             # update dialogue_state
             lev = predictions[-1][0].strip()
-            state_update = span2state(lev, api_names)
+            state_update = dataset.span2state(lev)
             for api_name in state_update:
                 active_api = api_name
                 if api_name not in dialogue_state:
@@ -324,7 +284,7 @@ def generate_with_seq2seq_model_for_dialogue(
 
             #### save latest state
             state_to_record = copy.deepcopy(dialogue_state)
-            state_to_record = {r_en_API_MAP.get(k, k): v for k, v in state_to_record.items()}
+            state_to_record = {dataset.domain2api_name(k): v for k, v in state_to_record.items()}
             bitod_preds[dial_id]["turns"][str(turn_id)]["state"] = state_to_record
             ####
 
@@ -337,43 +297,11 @@ def generate_with_seq2seq_model_for_dialogue(
                 api_name = active_api
 
                 if api_name in dialogue_state:
-                    constraints = state2constraints(dialogue_state[api_name])
-                    # domain = api_name.split(" ")[0]
-                    knowledge = defaultdict(dict)
-
-                    msg = [0, 0, 0]
-                    try:
-                        msg = api.call_api(
-                            r_en_API_MAP.get(api_name, api_name),
-                            constraints=[constraints],
-                            lang=numericalizer._tokenizer.src_lang,
-                        )
-                    except Exception as e:
-                        logger.error(f'Error: {e}')
-                        logger.error(
-                            f'Failed API call with api_name: {api_name}, constraints: {constraints},'
-                            f' processed_query: {msg[2]}, for turn: {dial_id}/{turn_id}'
-                        )
-
-                    if int(msg[1]) <= 0:
-                        logger.warning(
-                            f'Message = No item available for api_name: {api_name}, constraints: {constraints},'
-                            f' processed_query: {msg[2]}, for turn: {dial_id}/{turn_id}'
-                        )
-                        if state_re.search(contexts[-1]):
-                            gold_dial_state = span2state(state_re.search(contexts[-1]).group(1).strip(), api_names)
-                            logger.warning(
-                                f'state_diff: {list(dictdiffer.diff(dialogue_state[api_name], gold_dial_state[api_name]))}'
-                            )
-
-                        new_knowledge_text = f'( {api_name} ) Message = No item available.'
-                    else:
-                        # always choose highest ranking results (having deterministic api results)
-                        knowledge[api_name].update(msg[0])
-                        new_knowledge_text = knowledge2span(knowledge)
-
+                    constraints, new_knowledge_text = dataset.make_api_call(
+                        dialogue_state, api_name, numericalizer._tokenizer.src_lang, dial_id, turn_id
+                    )
                     #### save latest api constraints
-                    bitod_preds[dial_id]["API"][r_en_API_MAP.get(api_name, api_name)] = copy.deepcopy(constraints)
+                    bitod_preds[dial_id]["API"][dataset.domain2api_name(api_name)] = copy.deepcopy(constraints)
                     ####
 
             elif do_api_call == 'no':
