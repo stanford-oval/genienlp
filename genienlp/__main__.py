@@ -30,19 +30,7 @@
 
 import argparse
 
-from . import (
-    arguments,
-    cache_embeddings,
-    calibrate,
-    export,
-    kfserver,
-    predict,
-    run_bootleg,
-    run_dialogue_loop,
-    server,
-    train,
-    write_kf_metrics,
-)
+from . import arguments, cache_embeddings, calibrate, export, kfserver, predict, run_bootleg, server, train, write_kf_metrics
 from .ned.scripts import analyze_bootleg_results, oracle_vs_bootleg
 from .paraphrase import run_generation, run_lm_finetuning
 from .paraphrase.scripts import clean_paraphrasing_dataset, dialog_to_tsv, split_dataset, transform_dataset
@@ -106,8 +94,6 @@ subcommands = {
     # kf commands
     'kfserver': ('Export KFServing interface to predict', server.parse_argv, kfserver.main),
     'write-kf-metrics': ('Write KF evaluation metrics', write_kf_metrics.parse_argv, write_kf_metrics.main),
-    # bitod
-    'run-dialogue-loop': ('Interact with dialogue agent', run_dialogue_loop.parse_argv, run_dialogue_loop.main),
 }
 
 

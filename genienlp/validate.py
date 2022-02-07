@@ -214,11 +214,6 @@ def generate_with_seq2seq_model_for_dialogue(
             input_text = replace_capturing_group(input_text, dataset.knowledge_re, new_knowledge_text)
 
         elif train_target == 'rg':
-            # replace state
-            # input_text = replace_capturing_group(contexts[-1], state_re, new_state_text)
-
-            # replace knowledge
-            # input_text = replace_capturing_group(input_text, knowledge_re, new_knowledge_text)
 
             # replace actions
             input_text = replace_capturing_group(contexts[-1], dataset.actions_re, new_actions_text)
@@ -295,7 +290,6 @@ def generate_with_seq2seq_model_for_dialogue(
             if do_api_call == 'yes':
                 # make api call
                 api_name = active_api
-
                 if api_name in dialogue_state:
                     constraints, new_knowledge_text = dataset.make_api_call(
                         dialogue_state, api_name, numericalizer._tokenizer.src_lang, dial_id, turn_id
@@ -303,7 +297,6 @@ def generate_with_seq2seq_model_for_dialogue(
                     #### save latest api constraints
                     bitod_preds[dial_id]["API"][dataset.domain2api_name(api_name)] = copy.deepcopy(constraints)
                     ####
-
             elif do_api_call == 'no':
                 # do nothing
                 pass
