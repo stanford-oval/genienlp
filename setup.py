@@ -57,7 +57,7 @@ setuptools.setup(
         'datasets==1.18.3',
         'seqeval==1.2.2',
         'transformers==4.16.2',
-        'sentence-transformers==2.1.0',
+        'sentence-transformers==2.2.0',
         'pathos==0.2.8',
         # for kf:
         'kfserving>=0.5.0',
