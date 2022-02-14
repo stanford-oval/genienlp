@@ -952,6 +952,8 @@ def load_config_json(args):
                 setattr(args, r, 10000)
             elif r == 'label_smoothing':
                 setattr(args, r, 0.0)
+            elif r == 'min_output_length':
+                setattr(args, r, 3)
             elif r == 'no_separator':
                 setattr(args, r, True)  # old models don't use a separator
             else:
