@@ -444,19 +444,21 @@ class BiTOD(BaseTask):
         return 'context'
 
     def _make_example(self, turn, **kwargs):
-        dial_id, turn_id, context, answer, train_target = (
+        dial_id, turn_id, input_text, output_text, train_target = (
             turn['dial_id'],
             turn['turn_id'],
             turn['input_text'],
             turn['output_text'],
             turn['train_target'],
         )
-        question = ''
+
+        if kwargs.get('train_target', False) and train_target != kwargs['train_target']:
+            return None
 
         example_id = '/'.join([dial_id, str(turn_id), train_target])
 
         return Example.from_raw(
-            self.name + '/' + str(example_id), context, question, answer, preprocess=self.preprocess_field, lower=False
+            self.name + '/' + str(example_id), input_text, '', output_text, preprocess=self.preprocess_field, lower=False
         )
 
     def get_splits(self, root, **kwargs):
@@ -465,35 +467,22 @@ class BiTOD(BaseTask):
 
 
 @register_task('bitod_nlg')
-class BiTODNLG(BaseTask):
+class BiTODNLG(BiTOD):
     def __init__(self, name, args):
         super().__init__(name, args)
-        self.special_tokens = {}
         self._metrics = ['casedbleu']
 
-    def utterance_field(self):
-        return 'context'
+    def get_splits(self, root, **kwargs):
+        kwargs['train_target'] = 'rg'
+        return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
 
-    def _make_example(self, turn, **kwargs):
-        if 'response' not in turn:
-            return None
 
-        dial_id, turn_id, answer, train_target, response = (
-            turn['dial_id'],
-            turn['turn_id'],
-            turn['output_text'],
-            turn['train_target'],
-            turn['response'],
-        )
-        question = ''
-
-        assert train_target == 'response'
-
-        example_id = '/'.join([dial_id, str(turn_id), train_target])
-
-        return Example.from_raw(
-            self.name + '/' + str(example_id), answer, question, response, preprocess=self.preprocess_field, lower=False
-        )
+@register_task('bitod_dst')
+class BiTODDST(BiTOD):
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self._metrics = ['em']
 
     def get_splits(self, root, **kwargs):
+        kwargs['train_target'] = 'dst'
         return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
