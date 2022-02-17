@@ -515,7 +515,7 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
 
 
-def computeBITOD(greedy, answer, tgt_lang):
+def computeBITOD(greedy, answer, tgt_lang, example_ids):
     num_examples = len(answer)
     subtask_metrics_dict = defaultdict(tuple)
 
@@ -532,7 +532,7 @@ def computeBITOD(greedy, answer, tgt_lang):
             golds.append(answer[i])
 
         metrics_to_compute = subtask2metrics[task]
-        sub_metrics, _ = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang)
+        sub_metrics, _ = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, example_ids)
         subtask_metrics_dict[task] = (sub_metrics, len(golds))
 
     # TODO  how should we aggregate?
@@ -552,18 +552,23 @@ def computeBITOD(greedy, answer, tgt_lang):
     return results
 
 
-def computeJGA(greedy, answer):
+def computeJGA(greedy, answer, example_ids):
     dataset = Bitod()
     hit = 0
-    greedy_state = defaultdict()
-    answer_state = defaultdict()
-    for g, a in zip(greedy, answer):
+    cur_dial_id = None
+    for id_, g, a in zip(example_ids, greedy, answer):
+        dial_id = id_.split('/')[1]
+        if dial_id != cur_dial_id:
+            cur_dial_id = dial_id
+            greedy_state = defaultdict()
+            answer_state = defaultdict()
+
+        a = a[0]
+        a = dataset.span2state(a)
+        g = dataset.span2state(g)
 
         dataset.update_state(a, answer_state)
         dataset.update_state(g, greedy_state)
-
-        answer_state = dataset.span2state(answer_state)
-        greedy_state = dataset.span2state(greedy_state)
 
         convert_lists_to_set(answer_state)
         convert_lists_to_set(greedy_state)
@@ -571,10 +576,10 @@ def computeJGA(greedy, answer):
         if answer_state == greedy_state:
             hit += 1
 
-    return hit / len(greedy)
+    return hit / len(greedy) * 100
 
 
-def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
+def compute_metrics(greedy, answer, requested_metrics: Iterable, lang, example_ids):
     """
     Inputs:
         requested_metrics: contains a subset of the following metrics
@@ -595,12 +600,12 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
         answer = [[a] for a in answer]
     if 'bitod_score' in requested_metrics:
         requested_metrics += ['JGA', 'API_em', 'DA_em', 'BLEU']
-        results = computeBITOD(greedy, answer, lang)
+        results = computeBITOD(greedy, answer, lang, example_ids)
         metric_keys += results.keys()
         metric_values += results.values()
     if 'jga' in requested_metrics:
-        JGA = computeJGA(greedy, answer)
-        metric_keys += ['JGA']
+        JGA = computeJGA(greedy, answer, example_ids)
+        metric_keys += ['jga']
         metric_values += [JGA]
     if 'lfem' in requested_metrics:
         lfem, answer = computeLFEM(greedy, answer)
@@ -719,10 +724,10 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
     return metric_dict, answer
 
 
-def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics, lang):
+def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics, lang, example_ids):
     metrics = OrderedDict()
     for i in range(len(predictions[0])):
-        partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute, lang)
+        partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute, lang, example_ids)
         for k, v in partial_metrics.items():
             if reduce_metrics == 'max':
                 metrics[k] = max(metrics.get(k, 0), v)
