@@ -1979,7 +1979,7 @@ class BiTODDataset(CQA):
         with open(path) as fin:
             data = ujson.load(fin)['data']
             for turn in data:
-                processed = make_example(turn)
+                processed = make_example(turn, train_target=kwargs['train_target'])
                 if processed:
                     examples.append(processed)
 
