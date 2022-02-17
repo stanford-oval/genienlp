@@ -519,41 +519,37 @@ def computeBITOD(greedy, answer, tgt_lang):
     num_examples = len(answer)
     subtask_metrics_dict = defaultdict(tuple)
 
-    subtasks = ['dst', 'api', 'da', 'rg']
-    subtask_metrics = [['jga'], ['em'], ['em'], ['casedbleu']]
-    subtask_weights = [1, 1, 1, 1]
+    subtask2metrics = OrderedDict({'dst': 'jga', 'api': 'em', 'da': 'em', 'rg': 'casedbleu'})
+    subtask2weights = OrderedDict({'dst': 1.0, 'api': 1.0, 'da': 1.0, 'rg': 1.0})
 
-    for t in range(len(subtasks)):
+    results = OrderedDict({'bitod_score': 0.0, 'JGA': 0.0, 'API_em': 0.0, 'DA_em': 0.0, 'BLEU': 0.0})
+    subtask2result_key = OrderedDict({'dst': 'JGA', 'api': 'API_em', 'da': 'DA_em', 'rg': 'BLEU'})
+
+    for k, task in enumerate(subtask2metrics):
         preds, golds = [], []
-        for i in range(t, num_examples, len(subtasks)):
+        for i in range(k, num_examples, len(subtask2metrics)):
             preds.append(greedy[i])
             golds.append(answer[i])
 
-        metrics_to_compute = subtask_metrics[t]
-        sub_metrics, _ = compute_metrics(preds, golds, metrics_to_compute, tgt_lang)
-        subtask_metrics_dict[subtasks[t]] = (sub_metrics, len(golds), subtask_weights[t])
+        metrics_to_compute = subtask2metrics[task]
+        sub_metrics, _ = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang)
+        subtask_metrics_dict[task] = (sub_metrics, len(golds))
 
     # TODO  how should we aggregate?
-    bitod_score, JGA, API_em, DA_em, BLEU = 0.0, 0.0, 0.0, 0.0, 0.0
     weighted_num_examples = 0
-    for subtask, (sub_metrics, num_ex, weight) in subtask_metrics_dict.items():
-        if subtask == 'dst':
-            bitod_score += weight * (sub_metrics['em'] * num_ex)
-            JGA = sub_metrics['em']
-        elif subtask == 'api':
-            bitod_score += weight * (sub_metrics['em'] * num_ex)
-            API_em = sub_metrics['em']
-        elif subtask == 'da':
-            bitod_score += weight * (sub_metrics['em'] * num_ex)
-            DA_em = sub_metrics['em']
-        elif subtask == 'rg':
-            bitod_score += weight * (sub_metrics['casedbleu'] * num_ex)
-            BLEU = sub_metrics['casedbleu']
+    for subtask, (sub_metrics, num_ex) in subtask_metrics_dict.items():
+        metric = subtask2metrics[subtask]
+        weight = subtask2weights[subtask]
+        result_key = subtask2result_key[subtask]
+
+        results[result_key] += sub_metrics[metric]
+        results['bitod_score'] += weight * (sub_metrics[metric] * num_ex)
+
         weighted_num_examples += weight * num_ex
 
-    bitod_score /= weighted_num_examples
+    results['bitod_score'] /= weighted_num_examples
 
-    return bitod_score, JGA, API_em, DA_em, BLEU
+    return results
 
 
 def computeJGA(greedy, answer):
@@ -599,9 +595,9 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
         answer = [[a] for a in answer]
     if 'bitod_score' in requested_metrics:
         requested_metrics += ['JGA', 'API_em', 'DA_em', 'BLEU']
-        bitod_score, JGA, API_em, DA_em, BLEU = computeBITOD(greedy, answer, lang)
-        metric_keys += ['bitod_score', 'JGA', 'API_em', 'DA_em', 'BLEU']
-        metric_values += [bitod_score, JGA, API_em, DA_em, BLEU]
+        results = computeBITOD(greedy, answer, lang)
+        metric_keys += results.keys()
+        metric_values += results.values()
     if 'jga' in requested_metrics:
         JGA = computeJGA(greedy, answer)
         metric_keys += ['JGA']
