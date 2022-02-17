@@ -39,6 +39,8 @@ from typing import Iterable
 import numpy as np
 import sacrebleu
 from datasets import load_metric
+from dialogues import Bitod
+from dialogues.bitod.src.evaluate import convert_lists_to_set
 from pyrouge import Rouge155
 from seqeval import metrics as seq_metrics
 from seqeval import scheme as seq_scheme
@@ -518,7 +520,7 @@ def computeBITOD(greedy, answer, tgt_lang):
     subtask_metrics_dict = defaultdict(tuple)
 
     subtasks = ['dst', 'api', 'da', 'rg']
-    subtask_metrics = [['em'], ['em'], ['em'], ['casedbleu']]
+    subtask_metrics = [['jga'], ['em'], ['em'], ['casedbleu']]
     subtask_weights = [1, 1, 1, 1]
 
     for t in range(len(subtasks)):
@@ -554,6 +556,28 @@ def computeBITOD(greedy, answer, tgt_lang):
     return bitod_score, JGA, API_em, DA_em, BLEU
 
 
+def computeJGA(greedy, answer):
+    dataset = Bitod()
+    hit = 0
+    greedy_state = defaultdict()
+    answer_state = defaultdict()
+    for g, a in zip(greedy, answer):
+
+        dataset.update_state(a, answer_state)
+        dataset.update_state(g, greedy_state)
+
+        answer_state = dataset.span2state(answer_state)
+        greedy_state = dataset.span2state(greedy_state)
+
+        convert_lists_to_set(answer_state)
+        convert_lists_to_set(greedy_state)
+
+        if answer_state == greedy_state:
+            hit += 1
+
+    return hit / len(greedy)
+
+
 def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
     """
     Inputs:
@@ -578,6 +602,10 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
         bitod_score, JGA, API_em, DA_em, BLEU = computeBITOD(greedy, answer, lang)
         metric_keys += ['bitod_score', 'JGA', 'API_em', 'DA_em', 'BLEU']
         metric_values += [bitod_score, JGA, API_em, DA_em, BLEU]
+    if 'jga' in requested_metrics:
+        JGA = computeJGA(greedy, answer)
+        metric_keys += ['JGA']
+        metric_values += [JGA]
     if 'lfem' in requested_metrics:
         lfem, answer = computeLFEM(greedy, answer)
         metric_keys += ['lfem']

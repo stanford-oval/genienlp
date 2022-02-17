@@ -270,12 +270,8 @@ def generate_with_seq2seq_model_for_dialogue(
             # update dialogue_state
             lev = predictions[-1][0].strip()
             state_update = dataset.span2state(lev)
-            for api_name in state_update:
-                active_api = api_name
-                if api_name not in dialogue_state:
-                    dialogue_state[api_name] = state_update[api_name]
-                else:
-                    dialogue_state[api_name].update(state_update[api_name])
+            active_api = list(state_update.keys())[-1]
+            dataset.update_state(state_update, dialogue_state)
 
             #### save latest state
             state_to_record = copy.deepcopy(dialogue_state)
