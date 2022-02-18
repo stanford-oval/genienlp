@@ -161,7 +161,7 @@ def generate_with_seq2seq_model_for_dialogue(
             # new dialogue
             cur_dial_id = dial_id
             dialogue_state = {}
-            new_state_text = 'null'
+            # new_state_text = 'null'
             new_knowledge_text = 'null'
             new_actions_text = 'null'
             active_api = None
@@ -192,6 +192,8 @@ def generate_with_seq2seq_model_for_dialogue(
             ]
             answers += batch_answer
 
+        new_state_text = dataset.state2span(dialogue_state)
+
         if train_target == 'dst':
             input_text = replace_capturing_group(contexts[-1], dataset.state_re, new_state_text)
 
@@ -201,7 +203,6 @@ def generate_with_seq2seq_model_for_dialogue(
             # input_text = replace_match(input_text, last_system_re, last_sys_pred)
 
         elif train_target == 'api':
-            new_state_text = dataset.state2span(dialogue_state)
 
             # replace state
             input_text = replace_capturing_group(contexts[-1], dataset.state_re, new_state_text)
