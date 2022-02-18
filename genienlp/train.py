@@ -96,6 +96,7 @@ def prepare_data(args, logger):
         for task in args.train_tasks:
             logger.info(f'Loading {task.name}')
             kwargs = {'test': None, 'validation': None}
+            kwargs['train'] = args.train_set_name
             kwargs.update(train_eval_shared_kwargs)
             kwargs['all_dirs'] = args.train_src_languages
             kwargs['cached_path'] = os.path.join(args.cache, task.name)
