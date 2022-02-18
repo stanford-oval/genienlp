@@ -270,7 +270,8 @@ def generate_with_seq2seq_model_for_dialogue(
             # update dialogue_state
             lev = predictions[-1][0].strip()
             state_update = dataset.span2state(lev)
-            active_api = list(state_update.keys())[-1]
+            if state_update:
+                active_api = list(state_update.keys())[-1]
             dataset.update_state(state_update, dialogue_state)
 
             #### save latest state
