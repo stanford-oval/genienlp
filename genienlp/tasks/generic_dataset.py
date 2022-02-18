@@ -1999,7 +1999,7 @@ class BiTODDataset(CQA):
     def return_splits(cls, path='.data', train='train', validation='valid', test='test', **kwargs):
         train_path, validation_path, test_path = None, None, None
         if train:
-            train_path = os.path.join(path, 'train.json')
+            train_path = os.path.join(path, f'{train}.json')
         if validation:
             validation_path = os.path.join(path, f'{validation}.json')
         if test:
