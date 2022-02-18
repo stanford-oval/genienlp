@@ -471,12 +471,13 @@ def run(args, device):
             # TODO change to jsonl format
             with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                 for i in range(len(generation_output.example_ids)):
-                    line = (
-                        generation_output.example_ids[i]
-                        + '\t'
-                        + '\t'.join(generation_output.predictions[i])
-                        + '\t'
-                        + generation_output.answers[i]
+                    line = '\t'.join(
+                        [
+                            generation_output.example_ids[i],
+                            '\t'.join(generation_output.predictions[i]),
+                            generation_output.answers[i],
+                            generation_output.contexts[i],
+                        ]
                     )  # all outputs separated by '\t'
                     if args.calibrator_paths is not None:
                         for score in generation_output.confidence_scores:
@@ -486,12 +487,13 @@ def run(args, device):
             if args.translate_return_raw_outputs:
                 with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                     for i in range(len(generation_output.example_ids)):
-                        line = (
-                            generation_output.example_ids[i]
-                            + '\t'
-                            + '\t'.join(generation_output.raw_predictions[i])
-                            + '\t'
-                            + generation_output.answers[i]
+                        line = '\t'.join(
+                            [
+                                generation_output.example_ids[i],
+                                '\t'.join(generation_output.raw_predictions[i]),
+                                generation_output.answers[i],
+                                generation_output.contexts[i],
+                            ]
                         )  # all outputs separated by '\t'
                         prediction_file.write(line + '\n')
 

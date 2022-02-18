@@ -221,6 +221,9 @@ def generate_with_seq2seq_model_for_dialogue(
         else:
             raise ValueError(f'Invalid train_target: {train_target}')
 
+        # replace old context with updated
+        contexts[-1] = input_text
+
         tokenized_contexts = numericalizer.encode_batch([input_text], field_name='context', features=None)[0]
 
         numericalized_turn = NumericalizedExamples(
