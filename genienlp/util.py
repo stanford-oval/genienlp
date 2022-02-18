@@ -618,7 +618,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
 
     if min_batch_length > batch_size:
         raise ValueError(
-            f'The minimum example length in your dataset is {np.min(context_lengths) + np.min(answer_lengths)} but your batch size is {batch_size}.'
+            f'The minimum batch length in your dataset is {min_batch_length} but your batch size is {batch_size}.'
             f' Thus no examples will be processed. Consider increasing batch_size'
         )
     if np.min(answer_lengths) < min_output_length:
