@@ -527,13 +527,16 @@ def computeBITOD(greedy, answer, tgt_lang, example_ids):
 
     for k, task in enumerate(subtask2metrics):
         preds, golds = [], []
-        for i in range(k, num_examples, len(subtask2metrics)):
-            preds.append(greedy[i])
-            golds.append(answer[i])
+        for i in range(num_examples):
+            id_ = example_ids[i]
+            if id_.endswith(f'/{task}'):
+                preds.append(greedy[i])
+                golds.append(answer[i])
 
-        metrics_to_compute = subtask2metrics[task]
-        sub_metrics, _ = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, example_ids)
-        subtask_metrics_dict[task] = (sub_metrics, len(golds))
+        if golds:
+            metrics_to_compute = subtask2metrics[task]
+            sub_metrics, _ = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, example_ids)
+            subtask_metrics_dict[task] = (sub_metrics, len(golds))
 
     # TODO  how should we aggregate?
     weighted_num_examples = 0
@@ -579,7 +582,7 @@ def computeJGA(greedy, answer, example_ids):
     return hit / len(greedy) * 100
 
 
-def compute_metrics(greedy, answer, requested_metrics: Iterable, lang, example_ids):
+def compute_metrics(greedy, answer, requested_metrics: Iterable, lang, example_ids=None):
     """
     Inputs:
         requested_metrics: contains a subset of the following metrics
