@@ -868,7 +868,8 @@ def load_config_json(args):
             'eval_tgt_languages',
         ]
 
-        # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
+        # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict.
+        # NOTE: do not set default values for these arguments in predict cause the defaults will always override training arguments
         overwrite = [
             'val_batch_size',
             'num_beams',
@@ -884,6 +885,7 @@ def load_config_json(args):
             'min_output_length',
             'reduce_metrics',
             'database_dir',
+            'bitod_valid_subtasks',
         ]
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
@@ -959,6 +961,9 @@ def load_config_json(args):
             else:
                 # use default value
                 setattr(args, r, None)
+
+        if args.bitod_valid_subtasks is None:
+            setattr(args, 'bitod_valid_subtasks', ['dst', 'api', 'da'])
 
         # backward compatibility for models trained with genienlp before NED Refactoring (2)
         if args.max_features_size is None:

@@ -34,7 +34,6 @@ from collections import Counter, OrderedDict, defaultdict
 from contextlib import closing
 from multiprocessing import Pool, cpu_count
 from subprocess import PIPE, Popen
-from typing import Iterable
 
 import numpy as np
 import sacrebleu
@@ -515,7 +514,7 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
 
 
-def computeBITOD(greedy, answer, tgt_lang, example_ids):
+def computeBITOD(greedy, answer, tgt_lang, args, example_ids):
     num_examples = len(answer)
     subtask_metrics_dict = defaultdict(tuple)
 
@@ -526,6 +525,8 @@ def computeBITOD(greedy, answer, tgt_lang, example_ids):
     subtask2result_key = OrderedDict({'dst': 'JGA', 'api': 'API_em', 'da': 'DA_em', 'rg': 'BLEU'})
 
     for k, task in enumerate(subtask2metrics):
+        if task not in args.bitod_valid_subtasks:
+            continue
         preds, golds = [], []
         for i in range(num_examples):
             id_ = example_ids[i]
@@ -535,7 +536,7 @@ def computeBITOD(greedy, answer, tgt_lang, example_ids):
 
         if golds:
             metrics_to_compute = subtask2metrics[task]
-            sub_metrics, _ = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, example_ids)
+            sub_metrics, _ = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, args, example_ids)
             subtask_metrics_dict[task] = (sub_metrics, len(golds))
 
     # TODO  how should we aggregate?
@@ -582,7 +583,7 @@ def computeJGA(greedy, answer, example_ids):
     return hit / len(greedy) * 100
 
 
-def compute_metrics(greedy, answer, requested_metrics: Iterable, lang, example_ids=None):
+def compute_metrics(greedy, answer, requested_metrics, lang, args, example_ids=None):
     """
     Inputs:
         requested_metrics: contains a subset of the following metrics
@@ -603,7 +604,7 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang, example_i
         answer = [[a] for a in answer]
     if 'bitod_score' in requested_metrics:
         requested_metrics += ['JGA', 'API_em', 'DA_em', 'BLEU']
-        results = computeBITOD(greedy, answer, lang, example_ids)
+        results = computeBITOD(greedy, answer, lang, args, example_ids)
         metric_keys += results.keys()
         metric_values += results.values()
     if 'jga' in requested_metrics:
@@ -727,12 +728,20 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang, example_i
     return metric_dict, answer
 
 
-def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics, lang, example_ids):
+def calculate_and_reduce_metrics(generation_output, metrics_to_compute, args, lang):
     metrics = OrderedDict()
+    predictions = generation_output.predictions
     for i in range(len(predictions[0])):
-        partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute, lang, example_ids)
+        partial_metrics, _ = compute_metrics(
+            [p[i] for p in predictions],
+            generation_output.answers,
+            metrics_to_compute,
+            lang,
+            args,
+            generation_output.example_ids,
+        )
         for k, v in partial_metrics.items():
-            if reduce_metrics == 'max':
+            if args.reduce_metrics == 'max':
                 metrics[k] = max(metrics.get(k, 0), v)
             else:
                 raise ValueError('Invalid reduce_metrics argument')

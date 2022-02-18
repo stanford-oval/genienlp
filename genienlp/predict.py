@@ -246,10 +246,12 @@ def parse_argv(parser):
         help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
     )
 
+    parser.add_argument('--bitod_e2e_evaluation', action='store_true', help='Evaluate model end-to-end')
     parser.add_argument(
-        '--bitod_e2e_evaluation',
-        action='store_true',
-        help='',
+        '--bitod_valid_subtasks',
+        nargs='+',
+        type=str,
+        help='Evaluate only on these subtasks when calculating bitod_score; rg is not included by default',
     )
 
 
@@ -504,12 +506,10 @@ def run(args, device):
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
                 metrics = calculate_and_reduce_metrics(
-                    generation_output.predictions,
-                    generation_output.answers,
+                    generation_output,
                     metrics_to_compute,
-                    args.reduce_metrics,
+                    args,
                     tgt_lang,
-                    generation_output.example_ids,
                 )
 
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:

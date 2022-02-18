@@ -543,10 +543,13 @@ def parse_argv(parser):
         help='Debugging flag for hf datasets where validation will be performed on train set',
     )
 
+    parser.add_argument('--bitod_e2e_evaluation', action='store_true', help='Evaluate model end-to-end')
     parser.add_argument(
-        '--bitod_e2e_evaluation',
-        action='store_true',
-        help='',
+        '--bitod_valid_subtasks',
+        nargs='+',
+        type=str,
+        default=['dst', 'api', 'da'],
+        help='Evaluate only on these subtasks when calculating bitod_score; rg is not included by default',
     )
 
 

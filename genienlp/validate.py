@@ -676,9 +676,7 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
         # loss is already calculated
         metrics_to_return = [metric for metric in task.metrics if metric != 'loss']
 
-        metrics = calculate_and_reduce_metrics(
-            output.predictions, output.answers, metrics_to_return, args.reduce_metrics, model.tgt_lang, output.example_ids
-        )
+        metrics = calculate_and_reduce_metrics(output, metrics_to_return, args, model.tgt_lang)
 
         results = {'beam search': output.predictions, 'answer': output.answers, 'context': output.contexts}
 
