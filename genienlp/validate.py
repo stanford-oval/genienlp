@@ -162,6 +162,7 @@ def generate_with_seq2seq_model_for_dialogue(
             cur_dial_id = dial_id
             dialogue_state = {}
             # new_state_text = 'null'
+            knowledge = defaultdict(dict)
             new_knowledge_text = 'null'
             new_actions_text = 'null'
             active_api = None
@@ -285,7 +286,10 @@ def generate_with_seq2seq_model_for_dialogue(
             ####
 
         elif train_target == 'api':
-            new_knowledge_text = 'null'
+            if 'HKMTR' not in active_api:
+                new_knowledge_text = "null"
+                knowledge = defaultdict(dict)
+
             do_api_call = predictions[-1][0].strip()
 
             if do_api_call == 'yes':
@@ -293,11 +297,12 @@ def generate_with_seq2seq_model_for_dialogue(
                 api_name = active_api
                 if api_name in dialogue_state:
                     constraints, new_knowledge_text = dataset.make_api_call(
-                        dialogue_state, api_name, numericalizer._tokenizer.src_lang, dial_id, turn_id
+                        dialogue_state, knowledge, api_name, numericalizer._tokenizer.src_lang, dial_id, turn_id
                     )
                     #### save latest api constraints
                     bitod_preds[dial_id]["API"][dataset.domain2api_name(api_name)] = copy.deepcopy(constraints)
                     ####
+
             elif do_api_call == 'no':
                 # do nothing
                 pass
