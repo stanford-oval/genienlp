@@ -211,6 +211,11 @@ def parse_argv(parser):
         help='If True, will use mixed precision for prediction.'
         'This reduces memory consumption and is especially faster on GPUs like NVIDIA V100 and T4. May slightly change the generated output.',
     )
+    parser.add_argument(
+        '--one_output_per_line',
+        action='store_true',
+        help='If true, each of the `num_outputs` output will be written to a separate line, while other columns are duplicated to fill these extra lines.',
+    )
 
     # TODO Update other tasks to use this argument too; so we can use predict for pure text generation (i.e. without reporting accuracy metrics)
     parser.add_argument(
@@ -461,17 +466,26 @@ def run(args, device):
             # TODO change to jsonl format
             with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                 for i in range(len(generation_output.example_ids)):
-                    line = (
-                        generation_output.example_ids[i]
-                        + '\t'
-                        + '\t'.join(generation_output.predictions[i])
-                        + '\t'
-                        + generation_output.answers[i]
-                    )  # all outputs separated by '\t'
+                    if args.one_output_per_line:
+                        lines = [(
+                            generation_output.example_ids[i]
+                            + '\t'
+                            + prediction
+                            + '\t'
+                            + generation_output.answers[i]
+                        ) for prediction in generation_output.predictions[i]]  # one line per generation output
+                    else:
+                        lines = [(
+                            generation_output.example_ids[i]
+                            + '\t'
+                            + '\t'.join(generation_output.predictions[i])
+                            + '\t'
+                            + generation_output.answers[i]
+                        )]  # one line with all generation outputs separated by '\t'
                     if args.calibrator_paths is not None:
                         for score in generation_output.confidence_scores:
-                            line += '\t' + str(score[i])
-                    prediction_file.write(line + '\n')
+                            lines = [line + '\t' + str(score[i]) for line in lines] # append score to all lines
+                    prediction_file.write('\n'.join(lines) + '\n')
 
             if args.translate_return_raw_outputs:
                 with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
