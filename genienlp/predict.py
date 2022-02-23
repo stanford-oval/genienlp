@@ -253,6 +253,18 @@ def parse_argv(parser):
         type=str,
         help='Evaluate only on these subtasks when calculating bitod_score; rg is not included by default',
     )
+    parser.add_argument(
+        '--bitod_valid_submetrics',
+        nargs='+',
+        type=str,
+        help='Specify metrics to use for each of subtasks in bitod_valid_subtasks.',
+    )
+    parser.add_argument(
+        '--bitod_valid_subweights',
+        nargs='+',
+        type=float,
+        help='Specify weights to use for each of subtasks in bitod_valid_subtasks.',
+    )
 
 
 def set_default_values(args):

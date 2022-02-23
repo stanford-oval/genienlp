@@ -518,37 +518,30 @@ def computeBITOD(greedy, answer, tgt_lang, args, example_ids):
     num_examples = len(answer)
     subtask_metrics_dict = defaultdict(tuple)
 
-    subtask2metrics = OrderedDict({'dst': 'jga', 'api': 'em', 'da': 'em', 'rg': 'casedbleu'})
-    subtask2weights = OrderedDict({'dst': 1.0, 'api': 1.0, 'da': 1.0, 'rg': 1.0})
-
     results = OrderedDict({'bitod_score': 0.0, 'JGA': 0.0, 'API_em': 0.0, 'DA_em': 0.0, 'BLEU': 0.0})
     subtask2result_key = OrderedDict({'dst': 'JGA', 'api': 'API_em', 'da': 'DA_em', 'rg': 'BLEU'})
 
-    for k, task in enumerate(subtask2metrics):
-        if task not in args.bitod_valid_subtasks:
-            continue
+    for k, subtask in enumerate(args.bitod_valid_subtasks):
         preds, golds = [], []
         for i in range(num_examples):
             id_ = example_ids[i]
-            if id_.endswith(f'/{task}'):
+            if id_.endswith(f'/{subtask}'):
                 preds.append(greedy[i])
                 golds.append(answer[i])
 
         if golds:
-            metrics_to_compute = subtask2metrics[task]
+            metrics_to_compute = args.bitod_valid_submetrics[subtask]
             sub_metrics, _ = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, args, example_ids)
-            subtask_metrics_dict[task] = (sub_metrics, len(golds))
+            subtask_metrics_dict[subtask] = (sub_metrics[metrics_to_compute], len(golds))
 
     # TODO  how should we aggregate?
     weighted_num_examples = 0
-    for subtask, (sub_metrics, num_ex) in subtask_metrics_dict.items():
-        metric = subtask2metrics[subtask]
-        weight = subtask2weights[subtask]
+    for subtask, (sub_result, num_ex) in subtask_metrics_dict.items():
+        weight = args.bitod_valid_subweights[subtask]
         result_key = subtask2result_key[subtask]
 
-        results[result_key] += sub_metrics[metric]
-        results['bitod_score'] += weight * (sub_metrics[metric] * num_ex)
-
+        results[result_key] += sub_result
+        results['bitod_score'] += weight * (sub_result * num_ex)
         weighted_num_examples += weight * num_ex
 
     results['bitod_score'] /= weighted_num_examples
