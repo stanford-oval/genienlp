@@ -550,7 +550,6 @@ def computeBITOD(greedy, answer, tgt_lang, args, example_ids):
 
 
 def computeJGA(greedy, answer, example_ids):
-    file = open('out_dst', 'w')
     dataset = Bitod()
     hit = 0
     cur_dial_id = None
@@ -574,9 +573,6 @@ def computeJGA(greedy, answer, example_ids):
 
         if answer_state == greedy_state:
             hit += 1
-            file.write('TRUE' + '\n')
-        else:
-            file.write('FALSE' + '\n')
 
     return hit / len(greedy) * 100
 
