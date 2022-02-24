@@ -43,6 +43,8 @@ try:
 except RuntimeError:
     pass
 
+import sys
+
 import torch
 
 from . import models
@@ -61,17 +63,17 @@ from .util import (
     set_seed,
     split_folder_on_disk,
 )
-from .validate import generate_with_model
+from .validate import GenerationOutput, generate_with_model
 
 logger = logging.getLogger(__name__)
 
 
 def parse_argv(parser):
-    parser.add_argument('--path', type=str, required=True, help='Folder to load the model from')
+    parser.add_argument('--path', type=str, required='--pred_file' not in sys.argv, help='Folder to load the model from')
     parser.add_argument(
         '--evaluate',
         type=str,
-        required=True,
+        required='--pred_file' not in sys.argv,
         choices=['train', 'valid', 'test'],
         help='Which dataset to do predictions for (train, dev or test)',
     )
@@ -103,6 +105,12 @@ def parse_argv(parser):
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
     parser.add_argument('--cache', default='.cache', type=str, help='where to save cached files')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets')
+
+    parser.add_argument(
+        '--pred_file',
+        type=str,
+        help='If provided, we just compute evaluation metrics on it and bypass model prediction. File should be in tsv format with id, pred, target columns',
+    )
 
     parser.add_argument(
         '--pred_languages',
@@ -428,8 +436,6 @@ def run(args, device):
     log_model_size(logger, model, args.model)
     model.to(device)
 
-    decaScore = []
-    task_scores = defaultdict(list)
     model.eval()
 
     eval_dir = os.path.join(args.eval_dir, args.evaluate)
@@ -512,37 +518,13 @@ def run(args, device):
                         prediction_file.write(line + '\n')
 
             if len(generation_output.answers) > 0:
-                metrics_to_compute = task.metrics
-                metrics_to_compute += args.extra_metrics
-                metrics_to_compute = [metric for metric in task.metrics if metric not in ['loss']]
-                if args.main_metric_only:
-                    metrics_to_compute = [metrics_to_compute[0]]
-                metrics = calculate_and_reduce_metrics(
-                    generation_output,
-                    metrics_to_compute,
-                    args,
-                    tgt_lang,
-                )
+                task_scores = compute_metrics_on_file(prediction_file_name, results_file_name, task, args, tgt_lang)
 
-                with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
-                    results_file.write(json.dumps(metrics) + '\n')
+    log_final_results(args, task_scores)
 
-                if not args.silent:
-                    for i, (c, p, a) in enumerate(
-                        zip(generation_output.contexts, generation_output.predictions, generation_output.answers)
-                    ):
-                        log_string = f'\nContext {i+1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
-                        if args.calibrator_paths is not None:
-                            log_string += f'Confidence {i+1} : '
-                            for score in generation_output.confidence_scores:
-                                log_string += f'{score[i]:.3f}, '
-                            log_string += '\n'
-                        logger.info(log_string)
 
-                logger.info(metrics)
-
-                task_scores[task].append((len(generation_output.answers), metrics[task.metrics[0]]))
-
+def log_final_results(args, task_scores):
+    decaScore = []
     for task in task_scores.keys():
         decaScore.append(
             sum([length * score for length, score in task_scores[task]]) / sum([length for length, score in task_scores[task]])
@@ -554,6 +536,56 @@ def run(args, device):
     logger.info('-------------------')
     logger.info(f'DecaScore:  {sum(decaScore)}\n')
     logger.info(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
+
+
+def compute_metrics_on_file(task_scores, pred_file, results_file_name, task, args, tgt_lang):
+    generation_output = GenerationOutput()
+    ids, contexts, preds, targets, confidence_scores = [], [], [], [], []
+    with open(pred_file) as fin:
+        for line in fin:
+            id_, pred, target, context, *conf_scores = line.strip('\n').split('\t')
+            ids.append(id_)
+            contexts.append(context)
+            preds.append(pred)
+            targets.append(target)
+            confidence_scores.append(conf_scores)
+
+        generation_output.example_ids = ids
+        generation_output.contexts = contexts
+        generation_output.predictions = preds
+        generation_output.answers = targets
+        generation_output.confidence_scores = confidence_scores
+
+    metrics_to_compute = task.metrics
+    metrics_to_compute += args.extra_metrics
+    metrics_to_compute = [metric for metric in task.metrics if metric not in ['loss']]
+    if args.main_metric_only:
+        metrics_to_compute = [metrics_to_compute[0]]
+    metrics = calculate_and_reduce_metrics(
+        generation_output,
+        metrics_to_compute,
+        args,
+        tgt_lang,
+    )
+
+    with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
+        results_file.write(json.dumps(metrics) + '\n')
+
+    if not args.silent:
+        for i, (c, p, a) in enumerate(
+            zip(generation_output.contexts, generation_output.predictions, generation_output.answers)
+        ):
+            log_string = f'\nContext {i + 1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
+            if args.calibrator_paths is not None:
+                log_string += f'Confidence {i + 1} : '
+                for score in generation_output.confidence_scores:
+                    log_string += f'{score[i]:.3f}, '
+                log_string += '\n'
+            logger.info(log_string)
+
+    logger.info(metrics)
+
+    task_scores[task].append((len(generation_output.answers), metrics[task.metrics[0]]))
 
 
 def main(args):
@@ -584,6 +616,17 @@ def main(args):
                 new_metrics.append(m)
 
             task.metrics = new_metrics
+
+    if args.pred_file and os.path.exists(args.pred_file):
+        task_scores = defaultdict(list)
+        eval_dir = os.path.join(args.eval_dir, args.evaluate)
+        os.makedirs(eval_dir, exist_ok=True)
+        tgt_lang = args.pred_tgt_languages[0]
+        for task in args.tasks:
+            results_file_name = os.path.join(eval_dir, task.name + '.results.json')
+            compute_metrics_on_file(task_scores, args.pred_file, results_file_name, task, args, tgt_lang)
+            log_final_results(args, task_scores)
+        return
 
     if len(devices) > 1:
         logger.info(f'Independent multi-GPU generation on following devices: {devices}')

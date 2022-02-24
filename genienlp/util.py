@@ -232,7 +232,7 @@ class ConfidenceFeatures:
         )
 
 
-class GenerationOutput:
+class GenerationOutput(object):
     """
     Contains all the information that the generation function may need to output
     """
