@@ -516,28 +516,28 @@ def computeDialogue(greedy, answer):
 
 def computeBITOD(greedy, answer, tgt_lang, args, example_ids):
     num_examples = len(answer)
-    subtask_metrics_dict = defaultdict(tuple)
+    subtask_metrics_dict = OrderedDict()
 
     results = OrderedDict({'bitod_score': 0.0, 'JGA': 0.0, 'API_em': 0.0, 'DA_em': 0.0, 'BLEU': 0.0})
     subtask2result_key = OrderedDict({'dst': 'JGA', 'api': 'API_em', 'da': 'DA_em', 'rg': 'BLEU'})
 
     for k, subtask in enumerate(args.bitod_valid_subtasks):
-        preds, golds = [], []
+        ids, preds, golds = [], [], []
         for i in range(num_examples):
             id_ = example_ids[i]
             if id_.endswith(f'/{subtask}'):
+                ids.append(id_)
                 preds.append(greedy[i])
                 golds.append(answer[i])
 
         if golds:
-            metrics_to_compute = args.bitod_valid_submetrics[subtask]
-            sub_metrics, _ = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, args, example_ids)
-            subtask_metrics_dict[subtask] = (sub_metrics[metrics_to_compute], len(golds))
+            metrics_to_compute = args.bitod_valid_submetrics[k]
+            sub_metrics, _ = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, args, ids)
+            subtask_metrics_dict[subtask] = (sub_metrics[metrics_to_compute], len(golds), args.bitod_valid_subweights[k])
 
     # TODO  how should we aggregate?
     weighted_num_examples = 0
-    for subtask, (sub_result, num_ex) in subtask_metrics_dict.items():
-        weight = args.bitod_valid_subweights[subtask]
+    for subtask, (sub_result, num_ex, weight) in subtask_metrics_dict.items():
         result_key = subtask2result_key[subtask]
 
         results[result_key] += sub_result
@@ -550,9 +550,11 @@ def computeBITOD(greedy, answer, tgt_lang, args, example_ids):
 
 
 def computeJGA(greedy, answer, example_ids):
+    file = open('out_dst', 'w')
     dataset = Bitod()
     hit = 0
     cur_dial_id = None
+    assert len(example_ids) == len(greedy) == len(answer)
     for id_, g, a in zip(example_ids, greedy, answer):
         dial_id = id_.split('/')[1]
         if dial_id != cur_dial_id:
@@ -572,6 +574,9 @@ def computeJGA(greedy, answer, example_ids):
 
         if answer_state == greedy_state:
             hit += 1
+            file.write('TRUE' + '\n')
+        else:
+            file.write('FALSE' + '\n')
 
     return hit / len(greedy) * 100
 

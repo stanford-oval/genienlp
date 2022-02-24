@@ -437,6 +437,7 @@ def run(args, device):
     model.to(device)
 
     model.eval()
+    task_scores = defaultdict(list)
 
     eval_dir = os.path.join(args.eval_dir, args.evaluate)
     os.makedirs(eval_dir, exist_ok=True)
@@ -518,7 +519,15 @@ def run(args, device):
                         prediction_file.write(line + '\n')
 
             if len(generation_output.answers) > 0:
-                task_scores = compute_metrics_on_file(prediction_file_name, results_file_name, task, args, tgt_lang)
+                compute_metrics_on_file(
+                    task_scores,
+                    prediction_file_name,
+                    results_file_name,
+                    task,
+                    args,
+                    tgt_lang,
+                    confidence_scores=generation_output.confidence_scores,
+                )
 
     log_final_results(args, task_scores)
 
@@ -538,17 +547,16 @@ def log_final_results(args, task_scores):
     logger.info(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
 
 
-def compute_metrics_on_file(task_scores, pred_file, results_file_name, task, args, tgt_lang):
+def compute_metrics_on_file(task_scores, pred_file, results_file_name, task, args, tgt_lang, confidence_scores=None):
     generation_output = GenerationOutput()
-    ids, contexts, preds, targets, confidence_scores = [], [], [], [], []
+    ids, contexts, preds, targets = [], [], [], []
     with open(pred_file) as fin:
         for line in fin:
-            id_, pred, target, context, *conf_scores = line.strip('\n').split('\t')
+            id_, *pred, target, context = line.strip('\n').split('\t')
             ids.append(id_)
             contexts.append(context)
             preds.append(pred)
             targets.append(target)
-            confidence_scores.append(conf_scores)
 
         generation_output.example_ids = ids
         generation_output.contexts = contexts
@@ -598,9 +606,6 @@ def main(args):
     args.tasks = list(get_tasks(args.task_names, args).values())
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
-    logger.info(f'Loading from {args.best_checkpoint}')
-
-    devices = get_devices(args.devices)
 
     if args.override_valid_metrics:
         assert len(args.override_valid_metrics) == len(args.tasks)
@@ -627,6 +632,9 @@ def main(args):
             compute_metrics_on_file(task_scores, args.pred_file, results_file_name, task, args, tgt_lang)
             log_final_results(args, task_scores)
         return
+
+    logger.info(f'Loading from {args.best_checkpoint}')
+    devices = get_devices(args.devices)
 
     if len(devices) > 1:
         logger.info(f'Independent multi-GPU generation on following devices: {devices}')
