@@ -62,7 +62,7 @@ def generate_with_model(
     disable_progbar=True,
     eval_dir=None,
 ):
-    if args.bitod_e2e_evaluation:
+    if args.e2e_dialogue_evaluation:
         return generate_with_seq2seq_model_for_dialogue(
             model,
             data_iterator,
@@ -129,7 +129,7 @@ def generate_with_seq2seq_model_for_dialogue(
     """
 
     dataset = Bitod()
-    bitod_preds = dict()
+    e2e_dialogue_preds = dict()
 
     predictions = []
     example_ids = []
@@ -166,7 +166,7 @@ def generate_with_seq2seq_model_for_dialogue(
             new_knowledge_text = 'null'
             new_actions_text = 'null'
             active_api = None
-            bitod_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
+            e2e_dialogue_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
 
         batch_context = []
         batch_tokens = numericalizer.convert_ids_to_tokens(turn.context.value.data, skip_special_tokens=False)
@@ -282,7 +282,7 @@ def generate_with_seq2seq_model_for_dialogue(
             #### save latest state
             state_to_record = copy.deepcopy(dialogue_state)
             state_to_record = {dataset.domain2api_name(k): v for k, v in state_to_record.items()}
-            bitod_preds[dial_id]["turns"][str(turn_id)]["state"] = state_to_record
+            e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["state"] = state_to_record
             ####
 
         elif train_target == 'api':
@@ -300,7 +300,7 @@ def generate_with_seq2seq_model_for_dialogue(
                         dialogue_state, knowledge, api_name, numericalizer._tokenizer.src_lang, dial_id, turn_id
                     )
                     #### save latest api constraints
-                    bitod_preds[dial_id]["API"][dataset.domain2api_name(api_name)] = copy.deepcopy(constraints)
+                    e2e_dialogue_preds[dial_id]["API"][dataset.domain2api_name(api_name)] = copy.deepcopy(constraints)
                     ####
 
             elif do_api_call == 'no':
@@ -312,22 +312,22 @@ def generate_with_seq2seq_model_for_dialogue(
                 )
 
             #### save latest api results
-            bitod_preds[dial_id]["turns"][str(turn_id)]["api"] = new_knowledge_text
+            e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["api"] = new_knowledge_text
             ####
 
         elif train_target == 'da':
             new_actions_text = predictions[-1][0]
             #### save latest actions
-            bitod_preds[dial_id]["turns"][str(turn_id)]["actions"] = predictions[-1][0]
+            e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["actions"] = predictions[-1][0]
             ####
 
         elif train_target == 'rg':
             #### save latest response
-            bitod_preds[dial_id]["turns"][str(turn_id)]["response"] = predictions[-1]
+            e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["response"] = predictions[-1]
             ####
 
-    with open(os.path.join(eval_dir, 'bitod_preds.json'), 'w') as fout:
-        ujson.dump(bitod_preds, fout, indent=2, ensure_ascii=False)
+    with open(os.path.join(eval_dir, 'e2e_dialogue_preds.json'), 'w') as fout:
+        ujson.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
 
     if original_order is not None:
         # sort back to the original order

@@ -438,7 +438,7 @@ class BiTOD(BaseTask):
             | special_tokens_v13
             | special_tokens_v2_10
         )
-        self._metrics = ['bitod_score']
+        self._metrics = ['e2e_dialogue_score']
 
     def utterance_field(self):
         return 'context'
@@ -462,11 +462,11 @@ class BiTOD(BaseTask):
         )
 
     def get_splits(self, root, **kwargs):
-        kwargs['e2e_evaluation'] = self.args.bitod_e2e_evaluation
+        kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
         return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
 
 
-@register_task('bitod_nlg')
+@register_task('e2e_dialogue_nlg')
 class BiTODNLG(BiTOD):
     def __init__(self, name, args):
         super().__init__(name, args)
@@ -474,11 +474,11 @@ class BiTODNLG(BiTOD):
 
     def get_splits(self, root, **kwargs):
         kwargs['train_target'] = 'rg'
-        kwargs['e2e_evaluation'] = self.args.bitod_e2e_evaluation
+        kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
         return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
 
 
-@register_task('bitod_dst')
+@register_task('e2e_dialogue_dst')
 class BiTODDST(BiTOD):
     def __init__(self, name, args):
         super().__init__(name, args)
@@ -486,5 +486,5 @@ class BiTODDST(BiTOD):
 
     def get_splits(self, root, **kwargs):
         kwargs['train_target'] = 'dst'
-        kwargs['e2e_evaluation'] = self.args.bitod_e2e_evaluation
+        kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
         return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)

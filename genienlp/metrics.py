@@ -518,10 +518,10 @@ def computeBITOD(greedy, answer, tgt_lang, args, example_ids):
     num_examples = len(answer)
     subtask_metrics_dict = OrderedDict()
 
-    results = OrderedDict({'bitod_score': 0.0, 'JGA': 0.0, 'API_em': 0.0, 'DA_em': 0.0, 'BLEU': 0.0})
+    results = OrderedDict({'e2e_dialogue_score': 0.0, 'JGA': 0.0, 'API_em': 0.0, 'DA_em': 0.0, 'BLEU': 0.0})
     subtask2result_key = OrderedDict({'dst': 'JGA', 'api': 'API_em', 'da': 'DA_em', 'rg': 'BLEU'})
 
-    for k, subtask in enumerate(args.bitod_valid_subtasks):
+    for k, subtask in enumerate(args.e2e_dialogue_valid_subtasks):
         ids, preds, golds = [], [], []
         for i in range(num_examples):
             id_ = example_ids[i]
@@ -531,9 +531,13 @@ def computeBITOD(greedy, answer, tgt_lang, args, example_ids):
                 golds.append(answer[i])
 
         if golds:
-            metrics_to_compute = args.bitod_valid_submetrics[k]
+            metrics_to_compute = args.e2e_dialogue_valid_submetrics[k]
             sub_metrics, _ = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, args, ids)
-            subtask_metrics_dict[subtask] = (sub_metrics[metrics_to_compute], len(golds), args.bitod_valid_subweights[k])
+            subtask_metrics_dict[subtask] = (
+                sub_metrics[metrics_to_compute],
+                len(golds),
+                args.e2e_dialogue_valid_subweights[k],
+            )
 
     # TODO  how should we aggregate?
     weighted_num_examples = 0
@@ -541,10 +545,10 @@ def computeBITOD(greedy, answer, tgt_lang, args, example_ids):
         result_key = subtask2result_key[subtask]
 
         results[result_key] += sub_result
-        results['bitod_score'] += weight * (sub_result * num_ex)
+        results['e2e_dialogue_score'] += weight * (sub_result * num_ex)
         weighted_num_examples += weight * num_ex
 
-    results['bitod_score'] /= weighted_num_examples
+    results['e2e_dialogue_score'] /= weighted_num_examples
 
     return results
 
@@ -596,7 +600,7 @@ def compute_metrics(greedy, answer, requested_metrics, lang, args, example_ids=N
     metric_values = []
     if not isinstance(answer[0], list):
         answer = [[a] for a in answer]
-    if 'bitod_score' in requested_metrics:
+    if 'e2e_dialogue_score' in requested_metrics:
         requested_metrics += ['JGA', 'API_em', 'DA_em', 'BLEU']
         results = computeBITOD(greedy, answer, lang, args, example_ids)
         metric_keys += results.keys()

@@ -254,24 +254,28 @@ def parse_argv(parser):
         help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
     )
 
-    parser.add_argument('--bitod_e2e_evaluation', action='store_true', help='Evaluate model end-to-end')
     parser.add_argument(
-        '--bitod_valid_subtasks',
-        nargs='+',
-        type=str,
-        help='Evaluate only on these subtasks when calculating bitod_score; rg is not included by default',
+        '--e2e_dialogue_evaluation',
+        action='store_true',
+        help='Evaluate model on a dialogue dataset end-to-end; i.e. model predictions are used as input instead of gold',
     )
     parser.add_argument(
-        '--bitod_valid_submetrics',
+        '--e2e_dialogue_valid_subtasks',
         nargs='+',
         type=str,
-        help='Specify metrics to use for each of subtasks in bitod_valid_subtasks.',
+        help='Evaluate only on these subtasks when calculating e2e_dialogue_score; rg is not included by default',
     )
     parser.add_argument(
-        '--bitod_valid_subweights',
+        '--e2e_dialogue_valid_submetrics',
+        nargs='+',
+        type=str,
+        help='Specify metrics to use for each of subtasks in e2e_dialogue_valid_subtasks.',
+    )
+    parser.add_argument(
+        '--e2e_dialogue_valid_subweights',
         nargs='+',
         type=float,
-        help='Specify weights to use for each of subtasks in bitod_valid_subtasks.',
+        help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
 
 
@@ -282,7 +286,7 @@ def set_default_values(args):
     if args.confidence_feature_path is None:
         args.confidence_feature_path = os.path.join(args.path, 'confidence_features.pkl')
 
-    if args.bitod_e2e_evaluation and args.val_batch_size[0] != 1:
+    if args.e2e_dialogue_evaluation and args.val_batch_size[0] != 1:
         logger.warning('When evaluating bitod end2end val_batch_size should be 1 so we load data turn by turn')
         args.val_batch_size = [1]
 

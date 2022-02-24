@@ -543,27 +543,31 @@ def parse_argv(parser):
         help='Debugging flag for hf datasets where validation will be performed on train set',
     )
 
-    parser.add_argument('--bitod_e2e_evaluation', action='store_true', help='Evaluate model end-to-end')
     parser.add_argument(
-        '--bitod_valid_subtasks',
+        '--e2e_dialogue_evaluation',
+        action='store_true',
+        help='Evaluate model on a dialogue dataset end-to-end; i.e. model predictions are used as input instead of gold',
+    )
+    parser.add_argument(
+        '--e2e_dialogue_valid_subtasks',
         nargs='+',
         type=str,
         default=['dst', 'api', 'da'],
-        help='Evaluate only on these subtasks when calculating bitod_score; rg is not included by default',
+        help='Evaluate only on these subtasks when calculating e2e_dialogue_score; rg is not included by default',
     )
     parser.add_argument(
-        '--bitod_valid_submetrics',
+        '--e2e_dialogue_valid_submetrics',
         nargs='+',
         type=str,
         default=['jga', 'em', 'em'],
-        help='Specify metrics to use for each of subtasks in bitod_valid_subtasks.',
+        help='Specify metrics to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
     parser.add_argument(
-        '--bitod_valid_subweights',
+        '--e2e_dialogue_valid_subweights',
         nargs='+',
         type=float,
         default=[1.0, 1.0, 1.0],
-        help='Specify weights to use for each of subtasks in bitod_valid_subtasks.',
+        help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
 
 
@@ -654,18 +658,18 @@ def post_parse_general(args):
 
 
 def post_parse_train_specific(args):
-    if args.bitod_e2e_evaluation and args.val_batch_size[0] != 1:
+    if args.e2e_dialogue_evaluation and args.val_batch_size[0] != 1:
         logger.warning('When evaluating bitod end2end val_batch_size should be 1 so we load data turn by turn')
         args.val_batch_size = [1]
 
-    if len(args.bitod_valid_subtasks) != len(args.bitod_valid_submetrics):
+    if len(args.e2e_dialogue_valid_subtasks) != len(args.e2e_dialogue_valid_submetrics):
         raise ValueError(
-            'Length of bitod_valid_subtasks and bitod_valid_submetrics arguments should be equal (i.e. one metric per subtask)'
+            'Length of e2e_dialogue_valid_subtasks and e2e_dialogue_valid_submetrics arguments should be equal (i.e. one metric per subtask)'
         )
 
-    if len(args.bitod_valid_subtasks) != len(args.bitod_valid_subweights):
+    if len(args.e2e_dialogue_valid_subtasks) != len(args.e2e_dialogue_valid_subweights):
         raise ValueError(
-            'Length of bitod_valid_subtasks and bitod_valid_subweights arguments should be equal (i.e. one weight per subtask)'
+            'Length of e2e_dialogue_valid_subtasks and e2e_dialogue_valid_subweights arguments should be equal (i.e. one weight per subtask)'
         )
 
     if len(args.val_batch_size) < len(args.val_task_names):

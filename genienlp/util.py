@@ -885,8 +885,8 @@ def load_config_json(args):
             'min_output_length',
             'reduce_metrics',
             'database_dir',
-            'bitod_valid_subtasks',
-            'bitod_valid_submetrics' 'bitod_valid_subweights',
+            'e2e_dialogue_valid_subtasks',
+            'e2e_dialogue_valid_submetrics' 'e2e_dialogue_valid_subweights',
         ]
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
@@ -897,7 +897,7 @@ def load_config_json(args):
             'do_alignment',
             'align_preserve_input_quotation',
             'align_remove_output_quotation',
-            'bitod_e2e_evaluation',
+            'e2e_dialogue_evaluation',
         ]
         for o in overwrite_actions:
             # if argument is True in predict overwrite train; if False retrieve from train
@@ -963,12 +963,12 @@ def load_config_json(args):
                 # use default value
                 setattr(args, r, None)
 
-        if args.bitod_valid_subtasks is None:
-            setattr(args, 'bitod_valid_subtasks', ['dst', 'api', 'da'])
-        if args.bitod_valid_submetrics is None:
-            setattr(args, 'bitod_valid_submetrics', ['jga', 'em', 'em'])
-        if args.bitod_valid_subweights is None:
-            setattr(args, 'bitod_valid_subweights', [1.0, 1.0, 1.0])
+        if args.e2e_dialogue_valid_subtasks is None:
+            setattr(args, 'e2e_dialogue_valid_subtasks', ['dst', 'api', 'da'])
+        if args.e2e_dialogue_valid_submetrics is None:
+            setattr(args, 'e2e_dialogue_valid_submetrics', ['jga', 'em', 'em'])
+        if args.e2e_dialogue_valid_subweights is None:
+            setattr(args, 'e2e_dialogue_valid_subweights', [1.0, 1.0, 1.0])
 
         # backward compatibility for models trained with genienlp before NED Refactoring (2)
         if args.max_features_size is None:
