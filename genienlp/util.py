@@ -886,7 +886,8 @@ def load_config_json(args):
             'reduce_metrics',
             'database_dir',
             'e2e_dialogue_valid_subtasks',
-            'e2e_dialogue_valid_submetrics' 'e2e_dialogue_valid_subweights',
+            'e2e_dialogue_valid_submetrics',
+            'e2e_dialogue_valid_subweights',
         ]
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
