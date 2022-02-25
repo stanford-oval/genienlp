@@ -514,7 +514,7 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
 
 
-def computeBITOD(greedy, answer, tgt_lang, args, example_ids):
+def compute_e2e_dialogue_score(greedy, answer, tgt_lang, args, example_ids):
     num_examples = len(answer)
     subtask_metrics_dict = OrderedDict()
 
@@ -602,13 +602,13 @@ def compute_metrics(greedy, answer, requested_metrics, lang, args, example_ids=N
         answer = [[a] for a in answer]
     if 'e2e_dialogue_score' in requested_metrics:
         requested_metrics += ['JGA', 'API_em', 'DA_em', 'BLEU']
-        results = computeBITOD(greedy, answer, lang, args, example_ids)
+        results = compute_e2e_dialogue_score(greedy, answer, lang, args, example_ids)
         metric_keys += results.keys()
         metric_values += results.values()
     if 'jga' in requested_metrics:
-        JGA = computeJGA(greedy, answer, example_ids)
+        jga = computeJGA(greedy, answer, example_ids)
         metric_keys += ['jga']
-        metric_values += [JGA]
+        metric_values += [jga]
     if 'lfem' in requested_metrics:
         lfem, answer = computeLFEM(greedy, answer)
         metric_keys += ['lfem']
