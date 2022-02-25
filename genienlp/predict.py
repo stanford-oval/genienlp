@@ -109,7 +109,7 @@ def parse_argv(parser):
     parser.add_argument(
         '--pred_file',
         type=str,
-        help='If provided, we just compute evaluation metrics on it and bypass model prediction. File should be in tsv format with id, pred, target columns',
+        help='If provided, we just compute evaluation metrics on this file and bypass model prediction. File should be in tsv format with id, pred, answer columns',
     )
 
     parser.add_argument(
@@ -287,7 +287,7 @@ def set_default_values(args):
         args.confidence_feature_path = os.path.join(args.path, 'confidence_features.pkl')
 
     if args.e2e_dialogue_evaluation and args.val_batch_size[0] != 1:
-        logger.warning('When evaluating bitod end2end val_batch_size should be 1 so we load data turn by turn')
+        logger.warning('When evaluating bitod end-to-end, val_batch_size should be 1 so we load the data turn by turn')
         args.val_batch_size = [1]
 
 
