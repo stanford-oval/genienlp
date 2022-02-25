@@ -635,7 +635,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     sampler = LengthSortedIterator(
         all_features,
         batch_size=batch_size,
-        sort=True,
+        sort=bool(sort_key_fn),
         shuffle_and_repeat=train,
         sort_key_fn=sort_key_fn,
         batch_size_fn=batch_size_fn,
