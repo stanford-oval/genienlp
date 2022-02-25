@@ -201,8 +201,10 @@ def parse_argv(parser):
         "--reduce_metrics",
         type=str,
         default='max',
-        choices=['max'],
-        help='How to calculate the metric when there are multiple outputs per input.',
+        choices=['max', 'top_k'],
+        help='How to calculate the metric when there are multiple outputs per input.'
+        '`max` chooses the best set of generation hyperparameters and reports the metric for that.'
+        '`top_k` chooses the best generation output per input, and uses that to output the metric. For example, combining this with the exact match metric gives what is commonly known as the top-k accuracy. Note that the output is meaningless if used with corpus-level metrics.',
     )
 
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.

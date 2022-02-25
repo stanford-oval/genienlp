@@ -145,8 +145,10 @@ def parse_argv(parser):
         "--reduce_metrics",
         type=str,
         default='max',
-        choices=['max'],
-        help='How to calculate the metric when there are multiple outputs per input.',
+        choices=['max', 'top_k'],
+        help='How to calculate the metric when there are multiple outputs per input.'
+        '`max` chooses the best set of generation hyperparameters and reports the metric for that.'
+        '`top_k` chooses the best generation output per input, and uses that to output the metric. For example, combining this with the exact match metric gives what is commonly known as the top-k accuracy. Note that the output is meaningless if used with corpus-level metrics.',
     )
 
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
@@ -217,6 +219,11 @@ def parse_argv(parser):
         action='store_true',
         help='If True, will use mixed precision for prediction.'
         'This reduces memory consumption and is especially faster on GPUs like NVIDIA V100 and T4. May slightly change the generated output.',
+    )
+    parser.add_argument(
+        '--one_output_per_line',
+        action='store_true',
+        help='If true, each of the `num_outputs` output will be written to a separate line, while other columns are duplicated to fill these extra lines.',
     )
 
     # TODO Update other tasks to use this argument too; so we can use predict for pure text generation (i.e. without reporting accuracy metrics)
@@ -496,31 +503,65 @@ def run(args, device):
             # TODO change to jsonl format
             with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                 for i in range(len(generation_output.example_ids)):
-                    line = '\t'.join(
-                        [
-                            generation_output.example_ids[i],
-                            '\t'.join(generation_output.predictions[i]),
-                            generation_output.answers[i],
-                            generation_output.contexts[i],
-                        ]
-                    )  # all outputs separated by '\t'
+                    if args.one_output_per_line:
+                        lines = [
+                            (
+                                generation_output.example_ids[i]
+                                + '\t'
+                                + prediction
+                                + '\t'
+                                + generation_output.answers[i]
+                                + '\t'
+                                + generation_output.contexts[i]
+                            )
+                            for prediction in generation_output.predictions[i]
+                        ]  # one line per generation output
+                    else:
+                        lines = [
+                            (
+                                generation_output.example_ids[i]
+                                + '\t'
+                                + '\t'.join(generation_output.predictions[i])
+                                + '\t'
+                                + generation_output.answers[i]
+                                + '\t'
+                                + generation_output.contexts[i]
+                            )
+                        ]  # one line with all generation outputs separated by '\t'
                     if args.calibrator_paths is not None:
                         for score in generation_output.confidence_scores:
-                            line += '\t' + str(score[i])
-                    prediction_file.write(line + '\n')
+                            lines = [line + '\t' + str(score[i]) for line in lines]  # append score to all lines
+                    prediction_file.write('\n'.join(lines) + '\n')
 
             if args.translate_return_raw_outputs:
                 with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                     for i in range(len(generation_output.example_ids)):
-                        line = '\t'.join(
-                            [
-                                generation_output.example_ids[i],
-                                '\t'.join(generation_output.raw_predictions[i]),
-                                generation_output.answers[i],
-                                generation_output.contexts[i],
-                            ]
-                        )  # all outputs separated by '\t'
-                        prediction_file.write(line + '\n')
+                        if args.one_output_per_line:
+                            lines = [
+                                (
+                                    generation_output.example_ids[i]
+                                    + '\t'
+                                    + raw_prediction
+                                    + '\t'
+                                    + generation_output.answers[i]
+                                    + '\t'
+                                    + generation_output.contexts[i]
+                                )
+                                for raw_prediction in generation_output.raw_predictions[i]
+                            ]  # one line per generation output
+                        else:
+                            lines = [
+                                (
+                                    generation_output.example_ids[i]
+                                    + '\t'
+                                    + '\t'.join(generation_output.raw_predictions[i])
+                                    + '\t'
+                                    + generation_output.answers[i]
+                                    + '\t'
+                                    + generation_output.contexts[i]
+                                )
+                            ]  # one line with all outputs separated by '\t'
+                        prediction_file.write('\n'.join(lines) + '\n')
 
             if len(generation_output.answers) > 0:
                 compute_metrics_on_file(
