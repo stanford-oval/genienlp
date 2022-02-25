@@ -473,7 +473,7 @@ def run(args, device):
                             + prediction
                             + '\t'
                             + generation_output.answers[i]
-                        ) for prediction in generation_output.predictions[i]]  # one line per generation output
+                        ) for prediction in generation_output.predictions[i]] # one line per generation output
                     else:
                         lines = [(
                             generation_output.example_ids[i]
@@ -490,14 +490,23 @@ def run(args, device):
             if args.translate_return_raw_outputs:
                 with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                     for i in range(len(generation_output.example_ids)):
-                        line = (
-                            generation_output.example_ids[i]
-                            + '\t'
-                            + '\t'.join(generation_output.raw_predictions[i])
-                            + '\t'
-                            + generation_output.answers[i]
-                        )  # all outputs separated by '\t'
-                        prediction_file.write(line + '\n')
+                        if args.one_output_per_line:
+                            lines = [(
+                                generation_output.example_ids[i]
+                                + '\t'
+                                + raw_prediction
+                                + '\t'
+                                + generation_output.answers[i]
+                            ) for raw_prediction in generation_output.raw_predictions[i]] # one line per generation output
+                        else:
+                            lines = [(
+                                generation_output.example_ids[i]
+                                + '\t'
+                                + '\t'.join(generation_output.raw_predictions[i])
+                                + '\t'
+                                + generation_output.answers[i]
+                            )]  # one line with all outputs separated by '\t'
+                        prediction_file.write('\n'.join(lines) + '\n')
 
             if len(generation_output.answers) > 0:
                 metrics_to_compute = task.metrics
