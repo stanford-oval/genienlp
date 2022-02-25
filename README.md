@@ -85,18 +85,19 @@ use standard input/output instead of TCP.
 
 ### Calibrating a trained model
 
-Calibrate the confidence scores of a trained model:
+Calibrate the confidence scores of a trained model. This is usually done on the validation set. After calibration, you can use the confidence scores `genienlp predict` outputs to identifying how confident the model is about each one of its predictions.
 
 1. Calculate and save confidence features of the evaluation set in a pickle file:
 
    ```bash
-   genienlp predict --tasks almond --data <datadir> --path <model_dir> --save_confidence_features --confidence_feature_path <confidence_feature_file> --mc_dropout_num 1
+   genienlp predict --tasks almond --data <datadir> --path <model_dir> --evaluate valid --eval_dir <output> --save_confidence_features --confidence_feature_path <confidence_feature_file> --mc_dropout_num 1
    ```
 2. Train a boosted tree to map confidence features to a score between 0 and 1:
 
    ```bash
    genienlp calibrate --confidence_path <confidence_feature_file> --save <calibrator_directory> --name_prefix <calibrator_name>
    ````
+   Optionally, you can add `--plot` to this command to get 3 plots descirbing the quality of the calibrator. Note that you need to install the `matplotlib` package (version `>3`) first.
 3. Now if you provide `--calibrator_paths` during prediction, it will output confidence scores for each output:
 
    ```bash
