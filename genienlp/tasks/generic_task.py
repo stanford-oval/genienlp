@@ -466,7 +466,7 @@ class BiTOD(BaseTask):
         return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
 
 
-@register_task('e2e_dialogue_nlg')
+@register_task('bitod_nlg')
 class BiTODNLG(BiTOD):
     def __init__(self, name, args):
         super().__init__(name, args)
@@ -478,7 +478,7 @@ class BiTODNLG(BiTOD):
         return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
 
 
-@register_task('e2e_dialogue_dst')
+@register_task('bitod_dst')
 class BiTODDST(BiTOD):
     def __init__(self, name, args):
         super().__init__(name, args)
