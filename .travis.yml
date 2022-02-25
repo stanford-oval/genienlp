@@ -41,6 +41,11 @@ jobs:
       script:
         - bash ./tests/test_translation.sh
     -
+      name: "E2E Dialogues tests"
+      stage: test
+      script:
+        - bash ./tests/test_e2e_dialogues.sh
+    -
       name: "NED tests"
       stage: test
       script:

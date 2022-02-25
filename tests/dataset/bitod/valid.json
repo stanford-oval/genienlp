@@ -1,0 +1,256 @@
+{
+ "data": [
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 1,
+   "dialog_history": "USER: Hey, can you help me with hotel booking?",
+   "input_text": "DST: <state> null <endofstate> <history> USER: Hey, can you help me with hotel booking? <endofhistory>",
+   "output_text": "( hotels search )",
+   "train_target": "dst"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 1,
+   "dialog_history": "USER: Hey, can you help me with hotel booking?",
+   "input_text": "API: <knowledge> null <endofknowledge> <state> ( hotels search ) <endofstate> <history> USER: Hey, can you help me with hotel booking? <endofhistory>",
+   "output_text": "no",
+   "train_target": "api"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 1,
+   "dialog_history": "USER: Hey, can you help me with hotel booking?",
+   "input_text": "DA: <knowledge> null <endofknowledge> <state> ( hotels search ) <endofstate> <history> USER: Hey, can you help me with hotel booking? <endofhistory>",
+   "output_text": "( hotels search ) request location , request rating",
+   "train_target": "da"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 1,
+   "dialog_history": "USER: Hey, can you help me with hotel booking?",
+   "input_text": "RG: <actions> ( hotels search ) request location , request rating <endofactions> <history> USER: Hey, can you help me with hotel booking? <endofhistory>",
+   "output_text": "Sure! Do you have a destination in mind, and did you have a certain hotel rating in mind?",
+   "train_target": "rg"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 2,
+   "dialog_history": "AGENT_ACTS: ( hotels search ) request location , request rating USER: No specific destination, but I do want a hotel that's at least 4 stars.",
+   "input_text": "DST: <state> ( hotels search ) <endofstate> <history> AGENT_ACTS: ( hotels search ) request location , request rating USER: No specific destination, but I do want a hotel that's at least 4 stars. <endofhistory>",
+   "output_text": "( hotels search ) location equal_to \" don't care \" , rating at_least \" 4 \"",
+   "train_target": "dst"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 2,
+   "dialog_history": "AGENT_ACTS: ( hotels search ) request location , request rating USER: No specific destination, but I do want a hotel that's at least 4 stars.",
+   "input_text": "API: <knowledge> null <endofknowledge> <state> ( hotels search ) location equal_to \" don't care \" , rating at_least \" 4 \" <endofstate> <history> AGENT_ACTS: ( hotels search ) request location , request rating USER: No specific destination, but I do want a hotel that's at least 4 stars. <endofhistory>",
+   "output_text": "no",
+   "train_target": "api"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 2,
+   "dialog_history": "AGENT_ACTS: ( hotels search ) request location , request rating USER: No specific destination, but I do want a hotel that's at least 4 stars.",
+   "input_text": "DA: <knowledge> null <endofknowledge> <state> ( hotels search ) location equal_to \" don't care \" , rating at_least \" 4 \" <endofstate> <history> AGENT_DA: ( hotels search ) request location , request rating USER: No specific destination, but I do want a hotel that's at least 4 stars. <endofhistory>",
+   "output_text": "( hotels search ) request stars",
+   "train_target": "da"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 2,
+   "dialog_history": "AGENT_ACTS: ( hotels search ) request location , request rating USER: No specific destination, but I do want a hotel that's at least 4 stars.",
+   "input_text": "RG: <actions> ( hotels search ) request stars <endofactions> <history> AGENT_ACTS: ( hotels search ) request location , request rating USER: No specific destination, but I do want a hotel that's at least 4 stars. <endofhistory>",
+   "output_text": "How many stars would be your ideal?",
+   "train_target": "rg"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 3,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request location , request rating AGENT_ACTS: ( hotels search ) request stars USER: 5 stars.",
+   "input_text": "DST: <state> ( hotels search ) location equal_to \" don't care \" , rating at_least \" 4 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) request location , request rating AGENT_ACTS: ( hotels search ) request stars USER: 5 stars. <endofhistory>",
+   "output_text": "( hotels search ) stars equal_to \" 5 \"",
+   "train_target": "dst"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 3,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request location , request rating AGENT_ACTS: ( hotels search ) request stars USER: 5 stars.",
+   "input_text": "API: <knowledge> null <endofknowledge> <state> ( hotels search ) location equal_to \" don't care \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) request location , request rating AGENT_ACTS: ( hotels search ) request stars USER: 5 stars. <endofhistory>",
+   "output_text": "no",
+   "train_target": "api"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 3,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request location , request rating AGENT_ACTS: ( hotels search ) request stars USER: 5 stars.",
+   "input_text": "DA: <knowledge> null <endofknowledge> <state> ( hotels search ) location equal_to \" don't care \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) request location , request rating AGENT_DA: ( hotels search ) request stars USER: 5 stars. <endofhistory>",
+   "output_text": "( hotels search ) request price_level",
+   "train_target": "da"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 3,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request location , request rating AGENT_ACTS: ( hotels search ) request stars USER: 5 stars.",
+   "input_text": "RG: <actions> ( hotels search ) request price_level <endofactions> <history> AGENT_ACTS_PREV: ( hotels search ) request location , request rating AGENT_ACTS: ( hotels search ) request stars USER: 5 stars. <endofhistory>",
+   "output_text": "What's your budget?",
+   "train_target": "rg"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 4,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request stars AGENT_ACTS: ( hotels search ) request price_level USER: I'm looking for a moderate room price.",
+   "input_text": "DST: <state> ( hotels search ) location equal_to \" don't care \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) request stars AGENT_ACTS: ( hotels search ) request price_level USER: I'm looking for a moderate room price. <endofhistory>",
+   "output_text": "( hotels search ) price_level equal_to \" moderate \"",
+   "train_target": "dst"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 4,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request stars AGENT_ACTS: ( hotels search ) request price_level USER: I'm looking for a moderate room price.",
+   "input_text": "API: <knowledge> null <endofknowledge> <state> ( hotels search ) location equal_to \" don't care \" , price_level equal_to \" moderate \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) request stars AGENT_ACTS: ( hotels search ) request price_level USER: I'm looking for a moderate room price. <endofhistory>",
+   "output_text": "yes",
+   "train_target": "api"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 4,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request stars AGENT_ACTS: ( hotels search ) request price_level USER: I'm looking for a moderate room price.",
+   "input_text": "DA: <knowledge> ( hotels search ) available_options \" 26 \" , location \" Mong Kok | Kowloon | Yau Tsim Mong District \" , name \" Cordis, Hong Kong \" , price_level \" moderate \" , price_per_night \" 839 HKD \" , rating \" 10 \" , stars \" 5 \" <endofknowledge> <state> ( hotels search ) location equal_to \" don't care \" , price_level equal_to \" moderate \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) request stars AGENT_DA: ( hotels search ) request price_level USER: I'm looking for a moderate room price. <endofhistory>",
+   "output_text": "( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \"",
+   "train_target": "da"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels search",
+   "turn_id": 4,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request stars AGENT_ACTS: ( hotels search ) request price_level USER: I'm looking for a moderate room price.",
+   "input_text": "RG: <actions> ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" <endofactions> <history> AGENT_ACTS_PREV: ( hotels search ) request stars AGENT_ACTS: ( hotels search ) request price_level USER: I'm looking for a moderate room price. <endofhistory>",
+   "output_text": "We have 26 hotels with availability here, and my recommendation would be Cordis, Hong Kong which has a 10 star rating.",
+   "train_target": "rg"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 5,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request price_level AGENT_ACTS: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" USER: I'll take it. I need to check in on November 23rd.",
+   "input_text": "DST: <state> ( hotels search ) location equal_to \" don't care \" , price_level equal_to \" moderate \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) request price_level AGENT_ACTS: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" USER: I'll take it. I need to check in on November 23rd. <endofhistory>",
+   "output_text": "( hotels booking ) name equal_to \" Cordis, Hong Kong \" , start_day equal_to \" 23 \" , start_month equal_to \" 11 \"",
+   "train_target": "dst"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 5,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request price_level AGENT_ACTS: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" USER: I'll take it. I need to check in on November 23rd.",
+   "input_text": "API: <knowledge> null <endofknowledge> <state> ( hotels booking ) name equal_to \" Cordis, Hong Kong \" , number_of_nights #unknown , number_of_rooms #unknown , start_day equal_to \" 23 \" , start_month equal_to \" 11 \" , user_name #unknown , ( hotels search ) location equal_to \" don't care \" , price_level equal_to \" moderate \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) request price_level AGENT_ACTS: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" USER: I'll take it. I need to check in on November 23rd. <endofhistory>",
+   "output_text": "no",
+   "train_target": "api"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 5,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request price_level AGENT_ACTS: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" USER: I'll take it. I need to check in on November 23rd.",
+   "input_text": "DA: <knowledge> null <endofknowledge> <state> ( hotels booking ) name equal_to \" Cordis, Hong Kong \" , number_of_nights #unknown , number_of_rooms #unknown , start_day equal_to \" 23 \" , start_month equal_to \" 11 \" , user_name #unknown , ( hotels search ) location equal_to \" don't care \" , price_level equal_to \" moderate \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) request price_level AGENT_DA: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" USER: I'll take it. I need to check in on November 23rd. <endofhistory>",
+   "output_text": "( hotels booking ) request number_of_nights",
+   "train_target": "da"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 5,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) request price_level AGENT_ACTS: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" USER: I'll take it. I need to check in on November 23rd.",
+   "input_text": "RG: <actions> ( hotels booking ) request number_of_nights <endofactions> <history> AGENT_ACTS_PREV: ( hotels search ) request price_level AGENT_ACTS: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" USER: I'll take it. I need to check in on November 23rd. <endofhistory>",
+   "output_text": "How many nights do you plan to stay?",
+   "train_target": "rg"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 6,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" AGENT_ACTS: ( hotels booking ) request number_of_nights USER: I need 9 nights booked. My name is David.",
+   "input_text": "DST: <state> ( hotels booking ) name equal_to \" Cordis, Hong Kong \" , number_of_nights #unknown , number_of_rooms #unknown , start_day equal_to \" 23 \" , start_month equal_to \" 11 \" , user_name #unknown , ( hotels search ) location equal_to \" don't care \" , price_level equal_to \" moderate \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" AGENT_ACTS: ( hotels booking ) request number_of_nights USER: I need 9 nights booked. My name is David. <endofhistory>",
+   "output_text": "( hotels booking ) number_of_nights equal_to \" 9 \" , user_name equal_to \" David \"",
+   "train_target": "dst"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 6,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" AGENT_ACTS: ( hotels booking ) request number_of_nights USER: I need 9 nights booked. My name is David.",
+   "input_text": "API: <knowledge> null <endofknowledge> <state> ( hotels booking ) name equal_to \" Cordis, Hong Kong \" , number_of_nights equal_to \" 9 \" , number_of_rooms #unknown , start_day equal_to \" 23 \" , start_month equal_to \" 11 \" , user_name equal_to \" David \" , ( hotels search ) location equal_to \" don't care \" , price_level equal_to \" moderate \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" AGENT_ACTS: ( hotels booking ) request number_of_nights USER: I need 9 nights booked. My name is David. <endofhistory>",
+   "output_text": "no",
+   "train_target": "api"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 6,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" AGENT_ACTS: ( hotels booking ) request number_of_nights USER: I need 9 nights booked. My name is David.",
+   "input_text": "DA: <knowledge> null <endofknowledge> <state> ( hotels booking ) name equal_to \" Cordis, Hong Kong \" , number_of_nights equal_to \" 9 \" , number_of_rooms #unknown , start_day equal_to \" 23 \" , start_month equal_to \" 11 \" , user_name equal_to \" David \" , ( hotels search ) location equal_to \" don't care \" , price_level equal_to \" moderate \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" AGENT_DA: ( hotels booking ) request number_of_nights USER: I need 9 nights booked. My name is David. <endofhistory>",
+   "output_text": "( hotels booking ) request number_of_rooms",
+   "train_target": "da"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 6,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" AGENT_ACTS: ( hotels booking ) request number_of_nights USER: I need 9 nights booked. My name is David.",
+   "input_text": "RG: <actions> ( hotels booking ) request number_of_rooms <endofactions> <history> AGENT_ACTS_PREV: ( hotels search ) offer available_options equal_to \" 26 \" , offer name equal_to \" Cordis, Hong Kong \" , offer rating equal_to \" 10 \" AGENT_ACTS: ( hotels booking ) request number_of_nights USER: I need 9 nights booked. My name is David. <endofhistory>",
+   "output_text": "Of course, David. How many rooms?",
+   "train_target": "rg"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 7,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels booking ) request number_of_nights AGENT_ACTS: ( hotels booking ) request number_of_rooms USER: eight rooms please.",
+   "input_text": "DST: <state> ( hotels booking ) name equal_to \" Cordis, Hong Kong \" , number_of_nights equal_to \" 9 \" , number_of_rooms #unknown , start_day equal_to \" 23 \" , start_month equal_to \" 11 \" , user_name equal_to \" David \" , ( hotels search ) location equal_to \" don't care \" , price_level equal_to \" moderate \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels booking ) request number_of_nights AGENT_ACTS: ( hotels booking ) request number_of_rooms USER: eight rooms please. <endofhistory>",
+   "output_text": "( hotels booking ) number_of_rooms equal_to \" eight \"",
+   "train_target": "dst"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 7,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels booking ) request number_of_nights AGENT_ACTS: ( hotels booking ) request number_of_rooms USER: eight rooms please.",
+   "input_text": "API: <knowledge> null <endofknowledge> <state> ( hotels booking ) name equal_to \" Cordis, Hong Kong \" , number_of_nights equal_to \" 9 \" , number_of_rooms equal_to \" eight \" , start_day equal_to \" 23 \" , start_month equal_to \" 11 \" , user_name equal_to \" David \" , ( hotels search ) location equal_to \" don't care \" , price_level equal_to \" moderate \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels booking ) request number_of_nights AGENT_ACTS: ( hotels booking ) request number_of_rooms USER: eight rooms please. <endofhistory>",
+   "output_text": "no",
+   "train_target": "api"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 7,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels booking ) request number_of_nights AGENT_ACTS: ( hotels booking ) request number_of_rooms USER: eight rooms please.",
+   "input_text": "DA: <knowledge> null <endofknowledge> <state> ( hotels booking ) name equal_to \" Cordis, Hong Kong \" , number_of_nights equal_to \" 9 \" , number_of_rooms equal_to \" eight \" , start_day equal_to \" 23 \" , start_month equal_to \" 11 \" , user_name equal_to \" David \" , ( hotels search ) location equal_to \" don't care \" , price_level equal_to \" moderate \" , rating at_least \" 4 \" , stars equal_to \" 5 \" <endofstate> <history> AGENT_ACTS_PREV: ( hotels booking ) request number_of_nights AGENT_DA: ( hotels booking ) request number_of_rooms USER: eight rooms please. <endofhistory>",
+   "output_text": "( hotels booking ) confirm name equal_to \" Cordis, Hong Kong \" , confirm number_of_nights equal_to \" 9 \" , confirm number_of_rooms equal_to \" eight \" , confirm start_date equal_to \" November 23 \"",
+   "train_target": "da"
+  },
+  {
+   "dial_id": "ec909032-d5fd-4dee-8dd2-53a895a98824",
+   "task": "hotels booking",
+   "turn_id": 7,
+   "dialog_history": "AGENT_ACTS_PREV: ( hotels booking ) request number_of_nights AGENT_ACTS: ( hotels booking ) request number_of_rooms USER: eight rooms please.",
+   "input_text": "RG: <actions> ( hotels booking ) confirm name equal_to \" Cordis, Hong Kong \" , confirm number_of_nights equal_to \" 9 \" , confirm number_of_rooms equal_to \" eight \" , confirm start_date equal_to \" November 23 \" <endofactions> <history> AGENT_ACTS_PREV: ( hotels booking ) request number_of_nights AGENT_ACTS: ( hotels booking ) request number_of_rooms USER: eight rooms please. <endofhistory>",
+   "output_text": "Okay, just to confirm: You would like to book eight rooms at the Cordis, Hong Kong hotel for 9 nights with a check-in date of November 23rd?",
+   "train_target": "rg"
+  }
+ ]
+}
