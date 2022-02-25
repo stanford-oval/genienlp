@@ -41,6 +41,7 @@ class BaseTask(object):
 
     def __init__(self, name, args):
         self.name = name
+        self.args = args
         self._metrics = ['em', 'nem', 'nf1']
         # special task-specific tokens that should not be subword tokenized
         self.special_tokens = set()
@@ -63,7 +64,6 @@ class BaseTask(object):
         """
         Load the train, test, eval datasets for this task
 
-        :param field: the text.Field to use for tokenization, preprocessing and vocabulary construction
         :param root: the base directory where data is stored
         :param kwargs: other arguments to pass to the Dataset
         :return: a list of text.Dataset

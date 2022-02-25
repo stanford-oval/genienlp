@@ -49,6 +49,7 @@ class HFTask(BaseTask):
 class AmbigQA(HFTask):
     def __init__(self, name, args):
         super().__init__(name, args)
+        self.special_tokens = {'<q>', '<p>', '<u>'}
 
     @property
     def metrics(self):

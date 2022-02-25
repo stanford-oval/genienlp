@@ -68,5 +68,7 @@ setuptools.setup(
         'scikit-learn>=0.23,<2.0',
         'dill~=0.3',
         'xgboost~=1.3',
+        # dialogues
+        'dialogues @ git+https://github.com/Mehrad0711/dialogues',
     ],
 )

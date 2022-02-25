@@ -27,17 +27,26 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import copy
+import logging
+import os
+import re
 import sys
+from collections import defaultdict
 
 import torch
+import ujson
 from dateparser.languages import default_loader
+from dialogues import Bitod
 from transformers import MarianTokenizer
 
+from .data_utils.example import NumericalizedExamples, SequentialField
 from .data_utils.progbar import progress_bar
 from .metrics import calculate_and_reduce_metrics
 from .models import TransformerForSequenceClassification, TransformerForTokenClassification
 from .util import GenerationOutput, merge_translated_sentences
+
+logger = logging.getLogger(__name__)
 
 
 def generate_with_model(
@@ -51,9 +60,22 @@ def generate_with_model(
     original_order=None,
     confidence_estimators=None,
     disable_progbar=True,
+    eval_dir=None,
 ):
+    if args.e2e_dialogue_evaluation:
+        return generate_with_seq2seq_model_for_dialogue(
+            model,
+            data_iterator,
+            numericalizer,
+            task,
+            args,
+            eval_dir,
+            output_predictions_only=output_predictions_only,
+            original_order=original_order,
+            disable_progbar=disable_progbar,
+        )
 
-    if isinstance(model, TransformerForTokenClassification) or isinstance(model, TransformerForSequenceClassification):
+    elif isinstance(model, (TransformerForTokenClassification, TransformerForSequenceClassification)):
         return generate_with_classification_model(
             model, data_iterator, numericalizer, task, original_order=original_order, disable_progbar=disable_progbar
         )
@@ -70,6 +92,259 @@ def generate_with_model(
             confidence_estimators=confidence_estimators,
             disable_progbar=disable_progbar,
         )
+
+
+def replace_capturing_group(input, re_pattern, replacement):
+    # replace first captured group in the input with replacement using regex re_pattern
+    if re_pattern.search(input):
+        whole_match = re_pattern.search(input).group(0).strip()
+        captured_match = re_pattern.search(input).group(1).strip()
+        new_whole_match = whole_match.replace(captured_match, replacement)
+        new_input = re.sub(re_pattern, new_whole_match, input)
+    else:
+        new_input = input
+    return new_input
+
+
+def generate_with_seq2seq_model_for_dialogue(
+    model,
+    data_iterator,
+    numericalizer,
+    task,
+    args,
+    eval_dir,
+    output_predictions_only=False,
+    original_order=None,
+    disable_progbar=True,
+) -> GenerationOutput:
+    """
+    Inputs:
+        original_order: List of indices. If provided, we will sort the results according to this order
+        confidence_estimator: if provided, will use it to calculate and output confidence scores
+    Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
+        loss
+        predictions: a List of Lists of strings
+        answers
+        contexts
+    """
+
+    dataset = Bitod()
+    e2e_dialogue_preds = dict()
+
+    predictions = []
+    example_ids = []
+    answers = []
+    contexts = []
+
+    # TODO: handle multiple responses
+    hyperparameter_idx = 0
+
+    cur_dial_id = ''
+    knowledge = None
+
+    device = model.device
+
+    special_tokens = numericalizer._tokenizer.all_special_tokens
+
+    for k, turn in enumerate(progress_bar(data_iterator, desc='Generating', disable=disable_progbar)):
+        batch_size = len(turn.example_id)
+        assert batch_size == 1
+        batch_prediction = []
+        batch_example_ids = turn.example_id
+
+        example_ids += batch_example_ids
+
+        task_name, dial_id, turn_id, train_target = example_ids[-1].split('/')
+        turn_id = int(turn_id)
+
+        if cur_dial_id != dial_id:
+            # new dialogue
+            cur_dial_id = dial_id
+            dialogue_state = {}
+            # new_state_text = 'null'
+            knowledge = defaultdict(dict)
+            new_knowledge_text = 'null'
+            new_actions_text = 'null'
+            active_api = None
+            e2e_dialogue_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
+
+        batch_context = []
+        batch_tokens = numericalizer.convert_ids_to_tokens(turn.context.value.data, skip_special_tokens=False)
+
+        # remove only beginning and trailing special tokens
+        # otherwise the sep_token added between context and question will be lost
+        for text in batch_tokens:
+            i = 0
+            while text[i] in special_tokens:
+                i += 1
+            j = len(text) - 1
+            while text[j] in special_tokens:
+                j -= 1
+            text = text[i : j + 1]
+
+            batch_context.append(numericalizer._tokenizer.convert_tokens_to_string(text))
+
+        contexts += batch_context
+
+        if not output_predictions_only:
+            batch_answer = numericalizer.reverse(turn.answer.value.data, 'answer')
+            batch_answer = [
+                task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))
+            ]
+            answers += batch_answer
+
+        new_state_text = dataset.state2span(dialogue_state)
+
+        if train_target == 'dst':
+            input_text = replace_capturing_group(contexts[-1], dataset.state_re, new_state_text)
+
+            ## we always use gold history following common practice
+            ## if you want to use predicted response instead of gold uncomment the following
+            # last_sys_pred = predictions[-1][0].strip()
+            # input_text = replace_match(input_text, last_system_re, last_sys_pred)
+
+        elif train_target == 'api':
+
+            # replace state
+            input_text = replace_capturing_group(contexts[-1], dataset.state_re, new_state_text)
+
+        elif train_target == 'da':
+            # replace state
+            input_text = replace_capturing_group(contexts[-1], dataset.state_re, new_state_text)
+
+            # replace knowledge
+            input_text = replace_capturing_group(input_text, dataset.knowledge_re, new_knowledge_text)
+
+        elif train_target == 'rg':
+
+            # replace actions
+            input_text = replace_capturing_group(contexts[-1], dataset.actions_re, new_actions_text)
+
+        else:
+            raise ValueError(f'Invalid train_target: {train_target}')
+
+        # replace old context with updated
+        contexts[-1] = input_text
+
+        tokenized_contexts = numericalizer.encode_batch([input_text], field_name='context', features=None)[0]
+
+        numericalized_turn = NumericalizedExamples(
+            example_id=[turn.example_id[0]],
+            context=SequentialField(
+                value=torch.tensor([tokenized_contexts.value], device=device),
+                length=torch.tensor([tokenized_contexts.length], device=device),
+                limited=torch.tensor([tokenized_contexts.limited], device=device),
+                feature=None,
+            ),
+            answer=SequentialField(value=None, length=None, limited=None, feature=None),
+        )
+
+        generated = model.generate(
+            numericalized_turn,
+            max_output_length=args.max_output_length,
+            min_output_length=args.min_output_length,
+            num_outputs=args.num_outputs[hyperparameter_idx],
+            temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
+            repetition_penalty=args.repetition_penalty[hyperparameter_idx],
+            top_k=args.top_k[hyperparameter_idx],
+            top_p=args.top_p[hyperparameter_idx],
+            num_beams=args.num_beams[hyperparameter_idx],
+            num_beam_groups=args.num_beam_groups[hyperparameter_idx],
+            diversity_penalty=args.diversity_penalty[hyperparameter_idx],
+            no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
+            do_sample=args.temperature[hyperparameter_idx] != 0,
+        )
+
+        partial_batch_prediction_ids = generated.sequences
+
+        partial_batch_prediction = numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
+
+        if train_target == 'da':
+            partial_batch_prediction = dataset.postprocess_prediction(
+                partial_batch_prediction, knowledge, lang=numericalizer._tokenizer.src_lang[:2]
+            )
+
+        partial_batch_prediction = task.postprocess_prediction(batch_example_ids[0], partial_batch_prediction)
+
+        # put them into the right array
+        batch_prediction.append([partial_batch_prediction])
+
+        predictions += batch_prediction
+
+        if train_target == 'dst':
+            # update dialogue_state
+            lev = predictions[-1][0].strip()
+            state_update = dataset.span2state(lev)
+            if state_update:
+                active_api = list(state_update.keys())[-1]
+            dataset.update_state(state_update, dialogue_state)
+
+            #### save latest state
+            state_to_record = copy.deepcopy(dialogue_state)
+            state_to_record = {dataset.domain2api_name(k): v for k, v in state_to_record.items()}
+            e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["state"] = state_to_record
+            ####
+
+        elif train_target == 'api':
+            if dataset.do_knowledge_reset(active_api):
+                new_knowledge_text = "null"
+                knowledge = defaultdict(dict)
+
+            do_api_call = predictions[-1][0].strip()
+
+            if do_api_call == 'yes':
+                # make api call
+                api_name = active_api
+                if api_name in dialogue_state:
+                    constraints, new_knowledge_text = dataset.make_api_call(
+                        dialogue_state, knowledge, api_name, numericalizer._tokenizer.src_lang, dial_id, turn_id
+                    )
+                    #### save latest api constraints
+                    e2e_dialogue_preds[dial_id]["API"][dataset.domain2api_name(api_name)] = copy.deepcopy(constraints)
+                    ####
+
+            elif do_api_call == 'no':
+                # do nothing
+                pass
+            else:
+                logger.error(
+                    f'API call should be either yes or no but got {do_api_call}. Seems model is not trained for enough steps. For now we assume it\'s a no'
+                )
+
+            #### save latest api results
+            e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["api"] = new_knowledge_text
+            ####
+
+        elif train_target == 'da':
+            new_actions_text = predictions[-1][0]
+            #### save latest actions
+            e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["actions"] = predictions[-1][0]
+            ####
+
+        elif train_target == 'rg':
+            #### save latest response
+            e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["response"] = predictions[-1]
+            ####
+
+    with open(os.path.join(eval_dir, 'e2e_dialogue_preds.json'), 'w') as fout:
+        ujson.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
+
+    if original_order is not None:
+        # sort back to the original order
+        original_order, example_ids, predictions, answers, contexts = [
+            list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))
+        ]
+
+    # TODO calculate and return loss
+    loss = None
+    output = GenerationOutput(loss=loss)
+
+    if output_predictions_only:
+        output.predictions = predictions
+    else:
+        output.example_ids, output.predictions, output.answers, output.contexts = example_ids, predictions, answers, contexts
+
+    return output
 
 
 def generate_with_seq2seq_model(
@@ -407,9 +682,7 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
         # loss is already calculated
         metrics_to_return = [metric for metric in task.metrics if metric != 'loss']
 
-        metrics = calculate_and_reduce_metrics(
-            output.predictions, output.answers, metrics_to_return, args.reduce_metrics, model.tgt_lang
-        )
+        metrics = calculate_and_reduce_metrics(output, metrics_to_return, args, model.tgt_lang)
 
         results = {'model prediction': output.predictions, 'gold answer': output.answers, 'context': output.contexts}
 

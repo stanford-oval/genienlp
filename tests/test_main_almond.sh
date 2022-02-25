@@ -28,7 +28,7 @@ do
     # check TransformerSeq2Seq and TransformerLSTM
     if [ $i == 0 ] || [ $i == 2 ] ; then
       echo "Testing export"
-      genienlp export --path $workdir/model_$i --output $workdir/model_$i_exported
+      genienlp export --path $workdir/model_$i --output $workdir/model_"$i"_exported
 
       echo "Testing the server mode"
       echo '{"id": "dummy_example_1", "context": "show me .", "question": "translate to thingtalk", "answer": "now => () => notify"}' | genienlp server --path $workdir/model_$i --stdin

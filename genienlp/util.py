@@ -232,7 +232,7 @@ class ConfidenceFeatures:
         )
 
 
-class GenerationOutput:
+class GenerationOutput(object):
     """
     Contains all the information that the generation function may need to output
     """
@@ -599,9 +599,16 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
         f'answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}'
     )
 
-    if dataset.batch_size_fn == input_tokens_fn:
+    if train:
+        sort_key_fn = dataset.sort_key_fn
+        batch_size_fn = dataset.batch_size_fn
+    else:
+        sort_key_fn = getattr(dataset, 'eval_sort_key_fn', dataset.sort_key_fn)
+        batch_size_fn = getattr(dataset, 'eval_batch_size_fn', dataset.batch_size_fn)
+
+    if batch_size_fn == input_tokens_fn:
         min_batch_length = np.min(context_lengths)
-    elif dataset.batch_size_fn == all_tokens_fn:
+    elif batch_size_fn == all_tokens_fn:
         min_batch_length = np.min(context_lengths) + np.min(answer_lengths)
     else:
         min_batch_length = 1
@@ -611,7 +618,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
 
     if min_batch_length > batch_size:
         raise ValueError(
-            f'The minimum example length in your dataset is {np.min(context_lengths) + np.min(answer_lengths)} but your batch size is {batch_size}.'
+            f'The minimum batch length in your dataset is {min_batch_length} but your batch size is {batch_size}.'
             f' Thus no examples will be processed. Consider increasing batch_size'
         )
     if np.min(answer_lengths) < min_output_length:
@@ -628,10 +635,10 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     sampler = LengthSortedIterator(
         all_features,
         batch_size=batch_size,
-        sort=True,
+        sort=bool(sort_key_fn),
         shuffle_and_repeat=train,
-        sort_key_fn=dataset.sort_key_fn,
-        batch_size_fn=dataset.batch_size_fn,
+        sort_key_fn=sort_key_fn,
+        batch_size_fn=batch_size_fn,
         groups=dataset.groups,
     )
     # get the sorted data_source
@@ -861,7 +868,8 @@ def load_config_json(args):
             'eval_tgt_languages',
         ]
 
-        # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict
+        # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict.
+        # NOTE: do not set default values for these arguments in predict cause the defaults will always override training arguments
         overwrite = [
             'val_batch_size',
             'num_beams',
@@ -877,13 +885,23 @@ def load_config_json(args):
             'min_output_length',
             'reduce_metrics',
             'database_dir',
+            'e2e_dialogue_valid_subtasks',
+            'e2e_dialogue_valid_submetrics',
+            'e2e_dialogue_valid_subweights',
         ]
-        # these are true/ false arguments
-        overwrite_actions = ['do_alignment', 'align_preserve_input_quotation', 'align_remove_output_quotation']
         for o in overwrite:
             if o not in args or getattr(args, o) is None:
                 retrieve.append(o)
+
+        # these are true/ false arguments
+        overwrite_actions = [
+            'do_alignment',
+            'align_preserve_input_quotation',
+            'align_remove_output_quotation',
+            'e2e_dialogue_evaluation',
+        ]
         for o in overwrite_actions:
+            # if argument is True in predict overwrite train; if False retrieve from train
             if not getattr(args, o, False):
                 retrieve.append(o)
 
@@ -945,6 +963,13 @@ def load_config_json(args):
             else:
                 # use default value
                 setattr(args, r, None)
+
+        if args.e2e_dialogue_valid_subtasks is None:
+            setattr(args, 'e2e_dialogue_valid_subtasks', ['dst', 'api', 'da'])
+        if args.e2e_dialogue_valid_submetrics is None:
+            setattr(args, 'e2e_dialogue_valid_submetrics', ['jga', 'em', 'em'])
+        if args.e2e_dialogue_valid_subweights is None:
+            setattr(args, 'e2e_dialogue_valid_subweights', [1.0, 1.0, 1.0])
 
         # backward compatibility for models trained with genienlp before NED Refactoring (2)
         if args.max_features_size is None:

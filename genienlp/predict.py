@@ -38,18 +38,18 @@ from pprint import pformat
 
 from torch.multiprocessing import Process, set_start_method
 
-from .metrics import calculate_and_reduce_metrics
-
 try:
     set_start_method('spawn')
 except RuntimeError:
     pass
+
 
 import torch
 
 from . import models
 from .arguments import check_and_update_generation_args
 from .calibrate import ConfidenceEstimator
+from .metrics import calculate_and_reduce_metrics
 from .ned.ned_utils import init_ned_model
 from .tasks.registry import get_tasks
 from .util import (
@@ -254,6 +254,30 @@ def parse_argv(parser):
         help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
     )
 
+    parser.add_argument(
+        '--e2e_dialogue_evaluation',
+        action='store_true',
+        help='Evaluate model on a dialogue dataset end-to-end; i.e. model predictions are used as input instead of gold',
+    )
+    parser.add_argument(
+        '--e2e_dialogue_valid_subtasks',
+        nargs='+',
+        type=str,
+        help='Evaluate only on these subtasks when calculating e2e_dialogue_score; rg is not included by default',
+    )
+    parser.add_argument(
+        '--e2e_dialogue_valid_submetrics',
+        nargs='+',
+        type=str,
+        help='Specify metrics to use for each of subtasks in e2e_dialogue_valid_subtasks.',
+    )
+    parser.add_argument(
+        '--e2e_dialogue_valid_subweights',
+        nargs='+',
+        type=float,
+        help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
+    )
+
 
 def set_default_values(args):
     """
@@ -261,6 +285,10 @@ def set_default_values(args):
     """
     if args.confidence_feature_path is None:
         args.confidence_feature_path = os.path.join(args.path, 'confidence_features.pkl')
+
+    if args.e2e_dialogue_evaluation and args.val_batch_size[0] != 1:
+        logger.warning('When evaluating bitod end-to-end, val_batch_size should be 1 so we load the data turn by turn')
+        args.val_batch_size = [1]
 
 
 def check_args(args):
@@ -412,9 +440,8 @@ def run(args, device):
     log_model_size(logger, model, args.model)
     model.to(device)
 
-    decaScore = []
-    task_scores = defaultdict(list)
     model.eval()
+    task_scores = defaultdict(list)
 
     eval_dir = os.path.join(args.eval_dir, args.evaluate)
     os.makedirs(eval_dir, exist_ok=True)
@@ -459,6 +486,7 @@ def run(args, device):
                     output_confidence_features=args.save_confidence_features,
                     confidence_estimators=confidence_estimators,
                     disable_progbar=False,
+                    eval_dir=eval_dir,
                 )
 
             if args.save_confidence_features:
@@ -469,54 +497,76 @@ def run(args, device):
             with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                 for i in range(len(generation_output.example_ids)):
                     if args.one_output_per_line:
-                        lines = [(
-                            generation_output.example_ids[i]
-                            + '\t'
-                            + prediction
-                            + '\t'
-                            + generation_output.answers[i]
-                        ) for prediction in generation_output.predictions[i]] # one line per generation output
+                        lines = [
+                            (
+                                generation_output.example_ids[i]
+                                + '\t'
+                                + prediction
+                                + '\t'
+                                + generation_output.answers[i]
+                                + '\t'
+                                + generation_output.contexts[i]
+                            )
+                            for prediction in generation_output.predictions[i]
+                        ]  # one line per generation output
                     else:
-                        lines = [(
-                            generation_output.example_ids[i]
-                            + '\t'
-                            + '\t'.join(generation_output.predictions[i])
-                            + '\t'
-                            + generation_output.answers[i]
-                        )]  # one line with all generation outputs separated by '\t'
+                        lines = [
+                            (
+                                generation_output.example_ids[i]
+                                + '\t'
+                                + '\t'.join(generation_output.predictions[i])
+                                + '\t'
+                                + generation_output.answers[i]
+                                + '\t'
+                                + generation_output.contexts[i]
+                            )
+                        ]  # one line with all generation outputs separated by '\t'
                     if args.calibrator_paths is not None:
                         for score in generation_output.confidence_scores:
-                            lines = [line + '\t' + str(score[i]) for line in lines] # append score to all lines
+                            lines = [line + '\t' + str(score[i]) for line in lines]  # append score to all lines
                     prediction_file.write('\n'.join(lines) + '\n')
 
             if args.translate_return_raw_outputs:
                 with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                     for i in range(len(generation_output.example_ids)):
                         if args.one_output_per_line:
-                            lines = [(
-                                generation_output.example_ids[i]
-                                + '\t'
-                                + raw_prediction
-                                + '\t'
-                                + generation_output.answers[i]
-                            ) for raw_prediction in generation_output.raw_predictions[i]] # one line per generation output
+                            lines = [
+                                (
+                                    generation_output.example_ids[i]
+                                    + '\t'
+                                    + raw_prediction
+                                    + '\t'
+                                    + generation_output.answers[i]
+                                    + '\t'
+                                    + generation_output.contexts[i]
+                                )
+                                for raw_prediction in generation_output.raw_predictions[i]
+                            ]  # one line per generation output
                         else:
-                            lines = [(
-                                generation_output.example_ids[i]
-                                + '\t'
-                                + '\t'.join(generation_output.raw_predictions[i])
-                                + '\t'
-                                + generation_output.answers[i]
-                            )]  # one line with all outputs separated by '\t'
+                            lines = [
+                                (
+                                    generation_output.example_ids[i]
+                                    + '\t'
+                                    + '\t'.join(generation_output.raw_predictions[i])
+                                    + '\t'
+                                    + generation_output.answers[i]
+                                    + '\t'
+                                    + generation_output.contexts[i]
+                                )
+                            ]  # one line with all outputs separated by '\t'
                         prediction_file.write('\n'.join(lines) + '\n')
 
             if len(generation_output.answers) > 0:
                 metrics_to_compute = task.metrics
                 metrics_to_compute += args.extra_metrics
+                metrics_to_compute = [metric for metric in task.metrics if metric not in ['loss']]
                 if args.main_metric_only:
                     metrics_to_compute = [metrics_to_compute[0]]
                 metrics = calculate_and_reduce_metrics(
-                    generation_output.predictions, generation_output.answers, metrics_to_compute, args.reduce_metrics, tgt_lang
+                    generation_output,
+                    metrics_to_compute,
+                    args,
+                    tgt_lang,
                 )
 
                 with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
@@ -526,17 +576,21 @@ def run(args, device):
                     for i, (c, p, a) in enumerate(
                         zip(generation_output.contexts, generation_output.predictions, generation_output.answers)
                     ):
-                        log_string = f'\nContext {i+1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
+                        log_string = (
+                            f'\nContext {i + 1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
+                        )
                         if args.calibrator_paths is not None:
-                            log_string += f'Confidence {i+1} : '
+                            log_string += f'Confidence {i + 1} : '
                             for score in generation_output.confidence_scores:
                                 log_string += f'{score[i]:.3f}, '
                             log_string += '\n'
                         logger.info(log_string)
-                    logger.info(metrics)
+
+                logger.info(metrics)
 
                 task_scores[task].append((len(generation_output.answers), metrics[task.metrics[0]]))
 
+    decaScore = []
     for task in task_scores.keys():
         decaScore.append(
             sum([length * score for length, score in task_scores[task]]) / sum([length for length, score in task_scores[task]])
@@ -560,9 +614,6 @@ def main(args):
     args.tasks = list(get_tasks(args.task_names, args).values())
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
-    logger.info(f'Loading from {args.best_checkpoint}')
-
-    devices = get_devices(args.devices)
 
     if args.override_valid_metrics:
         assert len(args.override_valid_metrics) == len(args.tasks)
@@ -578,6 +629,9 @@ def main(args):
                 new_metrics.append(m)
 
             task.metrics = new_metrics
+
+    logger.info(f'Loading from {args.best_checkpoint}')
+    devices = get_devices(args.devices)
 
     if len(devices) > 1:
         logger.info(f'Independent multi-GPU generation on following devices: {devices}')
