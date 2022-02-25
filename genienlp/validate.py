@@ -286,7 +286,7 @@ def generate_with_seq2seq_model_for_dialogue(
             ####
 
         elif train_target == 'api':
-            if 'HKMTR' not in active_api:
+            if dataset.do_knowledge_reset(active_api):
                 new_knowledge_text = "null"
                 knowledge = defaultdict(dict)
 
