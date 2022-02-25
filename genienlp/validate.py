@@ -389,7 +389,8 @@ def print_results(results, num_print):
         for key_idx, key in enumerate(results.keys()):
             value = processed_values[key_idx][ex_idx]
             v = value[0] if isinstance(value, list) else value
-            print(f'{key:>11}: {repr(v)}')
+            key_width = max(len(key) for key in results)
+            print(f'{key:>{key_width}}: {repr(v)}')
         print()
     sys.stdout.flush()
 
@@ -410,7 +411,7 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
             output.predictions, output.answers, metrics_to_return, args.reduce_metrics, model.tgt_lang
         )
 
-        results = {'model prediction': output.predictions, 'answer': output.answers, 'context': output.contexts}
+        results = {'model prediction': output.predictions, 'gold answer': output.answers, 'context': output.contexts}
 
         print_results(results, num_print)
 
