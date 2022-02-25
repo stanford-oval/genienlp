@@ -90,7 +90,7 @@ Calibrate the confidence scores of a trained model:
 1. Calculate and save confidence features of the evaluation set in a pickle file:
 
    ```bash
-   genienlp predict --tasks almond --data <datadir> --path <model_dir> --save_confidence_features --confidence_feature_path <confidence_feature_file>
+   genienlp predict --tasks almond --data <datadir> --path <model_dir> --save_confidence_features --confidence_feature_path <confidence_feature_file> --mc_dropout_num 1
    ```
 2. Train a boosted tree to map confidence features to a score between 0 and 1:
 
@@ -102,6 +102,8 @@ Calibrate the confidence scores of a trained model:
    ```bash
    genienlp predict --tasks almond --data <datadir> --path <model_dir> --calibrator_paths <calibrator_directory>/<calibrator_name>.calib
    ```
+
+`--mc_dropout_num` specifies the number of additional forward passes of the model, for example, `--mc_dropout_num 5` makes subsequent inferences using this calibrator 6 times slower. If inference speed is important to you, you should use --mc_dropout_num 0` in the first command and add `--fast` to the second command so that only fast calibration methods are used. This way, you gain a lot of inference speed, and lose a little bit of calibration quality.
 
 ### Paraphrasing
 
