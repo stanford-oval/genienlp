@@ -31,10 +31,11 @@ import collections
 import os
 import re
 import string
+import logging
 from contextlib import closing
 from multiprocessing import Pool, cpu_count
 from subprocess import PIPE, Popen
-from typing import Iterable
+from typing import Iterable, Union
 
 import numpy as np
 import sacrebleu
@@ -46,6 +47,11 @@ from seqeval import scheme as seq_scheme
 from .tasks.generic_dataset import Query
 from .util import requote_program
 
+logger = logging.getLogger(__name__)
+
+# metrics that are calculated over a corpus (i.e. a list of predictions and gold answers, not single ones).
+# These metrics cannot be calculated on individual examples and then averaged.
+corpus_level_metrics = set(['bleu', 'casedbleu', 'ter', 't5_bleu', 'nmt_bleu', 'corpus_f1'])
 
 def to_lf(s, table):
     aggs = [y.lower() for y in Query.agg_ops]
@@ -513,7 +519,7 @@ def computeDialogue(greedy, answer):
     return joint_goal_em, turn_request_em, turn_goal_em, answer
 
 
-def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
+def compute_metrics(greedy: Iterable[str], answer: Union[Iterable[str], Iterable[Iterable[str]]], requested_metrics: Iterable, lang):
     """
     Inputs:
         requested_metrics: contains a subset of the following metrics
@@ -645,16 +651,34 @@ def compute_metrics(greedy, answer, requested_metrics: Iterable, lang):
 
     metric_dict = dict(zip(metric_keys, metric_values))
     metric_dict = collections.OrderedDict((key, metric_dict[key]) for key in requested_metrics)
-    return metric_dict, answer
+    return metric_dict
 
 
 def calculate_and_reduce_metrics(predictions, answers, metrics_to_compute, reduce_metrics, lang):
     metrics = collections.OrderedDict()
-    for i in range(len(predictions[0])):
-        partial_metrics, _ = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute, lang)
-        for k, v in partial_metrics.items():
-            if reduce_metrics == 'max':
+    if reduce_metrics == 'max':
+        for i in range(len(predictions[0])): # for each output (in case of mulitple outputs)
+            partial_metrics = compute_metrics([p[i] for p in predictions], answers, metrics_to_compute, lang) # calculate the metric on all first outputs, all second outputs, etc.
+            for k, v in partial_metrics.items():
                 metrics[k] = max(metrics.get(k, 0), v)
-            else:
-                raise ValueError('Invalid reduce_metrics argument')
+    elif reduce_metrics == 'top_k':
+        for m in metrics_to_compute:
+            if m in corpus_level_metrics:
+                logging.warning('You are using the corpus-level metric %s with `--reduce_metrics top_k`, which can lead to incorrect results.', m)
+        
+        for i in range(len(predictions)): # for each input
+            example_metrics = collections.OrderedDict() # keep track of metrics for one input and all of its outputs
+            for j in range(len(predictions[i])): # for each output (in case of mulitple outputs)
+                partial_metrics = compute_metrics([predictions[i][j]], [answers[i]], metrics_to_compute, lang) # calculate the metric on the j-th output of the i-th input
+                for k, v in partial_metrics.items():
+                    example_metrics[k] = max(example_metrics.get(k, 0), v)
+            # sum metrics for all examples
+            for k, v in example_metrics.items():
+                metrics[k] = metrics.get(k, 0) + example_metrics[k]
+        # convert sums to averages
+        for k, v in metrics.items():
+            metrics[k] = metrics[k] / len(predictions)
+    else:
+        raise ValueError('Invalid reduce_metrics argument')
+
     return metrics
