@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 # metrics that are calculated over a corpus (i.e. a list of predictions and gold answers, not single ones).
 # These metrics cannot be calculated on individual examples and then averaged.
-corpus_level_metrics = {'bleu', 'casedbleu', 'ter', 't5_bleu', 'nmt_bleu', 'corpus_f1'}
+corpus_level_metrics = {'bleu', 'casedbleu', 'ter', 't5_bleu', 'nmt_bleu', 'corpus_f1', 'jga'}
 
 
 def to_lf(s, table):
@@ -764,15 +764,13 @@ def calculate_and_reduce_metrics(generation_output, metrics_to_compute, args, la
         for m in metrics_to_compute:
             if m in corpus_level_metrics:
                 logging.warning(
-                    'You are using the corpus-level metric %s with `--reduce_metrics top_k`, which can lead to incorrect results.',
-                    m,
+                    f'You are using the corpus-level metric {m} with `--reduce_metrics top_k`, which can lead to incorrect results.',
                 )
-
         for i in range(len(predictions)):  # for each input
             example_metrics = OrderedDict()  # keep track of metrics for one input and all of its outputs
             for j in range(len(predictions[i])):  # for each output (in case of multiple outputs)
                 partial_metrics = compute_metrics(
-                    [predictions[i][j]], [answers[i]], metrics_to_compute, lang
+                    [predictions[i][j]], [answers[i]], metrics_to_compute, lang, args, example_ids
                 )  # calculate the metric on the j-th output of the i-th input
                 for k, v in partial_metrics.items():
                     example_metrics[k] = max(example_metrics.get(k, 0), v)
