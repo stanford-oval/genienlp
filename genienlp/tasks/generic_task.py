@@ -41,7 +41,7 @@ from .registry import register_task
 class Multi30K(BaseTask):
     @property
     def metrics(self):
-        return ['bleu', 'em', 'nem', 'nf1']
+        return ['casedbleu', 'em']
 
     def get_splits(self, root, **kwargs):
         src, trg = ['.' + x for x in self.name.split('.')[1:]]
@@ -52,7 +52,7 @@ class Multi30K(BaseTask):
 class IWSLT(BaseTask):
     @property
     def metrics(self):
-        return ['bleu', 'em', 'nem', 'nf1']
+        return ['casedbleu', 'em']
 
     def get_splits(self, root, **kwargs):
         src, trg = ['.' + x for x in self.name.split('.')[1:]]
@@ -63,7 +63,7 @@ class IWSLT(BaseTask):
 class SQuAD(BaseTask):
     @property
     def metrics(self):
-        return ['nf1', 'em', 'nem']
+        return ['em']
 
     def get_splits(self, root, **kwargs):
         return generic_dataset.SQuAD.splits(root=root, description=self.name, **kwargs)
@@ -73,7 +73,7 @@ class SQuAD(BaseTask):
 class WikiSQL(BaseTask):
     @property
     def metrics(self):
-        return ['lfem', 'em', 'nem', 'nf1']
+        return ['em']
 
     def get_splits(self, root, **kwargs):
         return generic_dataset.WikiSQL.splits(root=root, query_as_question='query_as_question' in self.name, **kwargs)
@@ -93,7 +93,7 @@ class OntoNotesNER(BaseTask):
 class WoZ(BaseTask):
     @property
     def metrics(self):
-        return ['joint_goal_em', 'turn_request_em', 'turn_goal_em', 'avg_dialogue', 'em', 'nem', 'nf1']
+        return ['em']
 
     def get_splits(self, root, **kwargs):
         return generic_dataset.WOZ.splits(description=self.name, root=root, **kwargs)
@@ -109,7 +109,7 @@ class MultiNLI(BaseTask):
 class SRL(BaseTask):
     @property
     def metrics(self):
-        return ['nf1', 'em', 'nem']
+        return ['em']
 
     def get_splits(self, root, **kwargs):
         return generic_dataset.SRL.splits(root=root, **kwargs)
@@ -130,7 +130,7 @@ class WinogradSchema(BaseTask):
 class BaseSummarizationTask(BaseTask):
     @property
     def metrics(self):
-        return ['avg_rouge', 'rouge1', 'rouge2', 'rougeL', 'em', 'nem', 'nf1']
+        return ['em']
 
 
 @register_task('cnn')
@@ -172,7 +172,7 @@ class IMDB(BaseTask):
 class ZRE(BaseTask):
     @property
     def metrics(self):
-        return ['corpus_f1', 'precision', 'recall', 'em', 'nem', 'nf1']
+        return ['em']
 
     def get_splits(self, root, **kwargs):
         return generic_dataset.ZeroShotRE.splits(root=root, **kwargs)
