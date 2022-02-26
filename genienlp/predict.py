@@ -479,7 +479,6 @@ def run(args, device):
             generation_output = generate_with_model(
                 model,
                 it,
-                model.numericalizer,
                 task,
                 args,
                 original_order=original_order,

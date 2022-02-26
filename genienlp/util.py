@@ -1002,3 +1002,15 @@ def load_config_json(args):
         args.verbose = False
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
+
+
+def replace_capturing_group(input, re_pattern, replacement):
+    # replace first captured group in the input with replacement using regex re_pattern
+    if re_pattern.search(input):
+        whole_match = re_pattern.search(input).group(0).strip()
+        captured_match = re_pattern.search(input).group(1).strip()
+        new_whole_match = whole_match.replace(captured_match, replacement)
+        new_input = re.sub(re_pattern, new_whole_match, input)
+    else:
+        new_input = input
+    return new_input

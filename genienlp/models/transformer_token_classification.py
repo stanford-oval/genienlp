@@ -29,11 +29,13 @@
 
 import logging
 
+import torch
 from transformers import AutoConfig, AutoModelForTokenClassification
 
 from ..data_utils.numericalizer import TransformerNumericalizer
+from ..data_utils.progbar import progress_bar
 from ..models.base import GenieModel
-from ..util import adjust_language_code
+from ..util import GenerationOutput, adjust_language_code
 
 logger = logging.getLogger(__name__)
 
@@ -102,3 +104,75 @@ class TransformerForTokenClassification(GenieModel):
             return outputs
         else:
             return self.model(**kwargs)
+
+    def validate(self, data_iterator, task, original_order=None, disable_progbar=True):
+        total_loss = 0.0
+        all_example_ids = []
+        all_answers = []
+        all_contexts = []
+        all_predictions = []
+
+        for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
+            batch_example_ids = batch.example_id
+
+            batch_context = self.numericalizer.reverse(batch.context.value.data, 'context')
+
+            all_example_ids += batch_example_ids
+
+            # pass labels to get loss
+            output = self.forward(
+                input_ids=batch.context.value,
+                attention_mask=(batch.context.value != self.numericalizer.pad_id),
+                labels=batch.answer.value,
+            )
+
+            labels = batch.answer.value.tolist()
+
+            logits = output.logits
+            predictions = torch.argmax(logits, dim=-1).tolist()
+
+            # logits for sequence classification is 2 dimensional
+            if logits.dim() == 2:
+                predictions = [[p] for p in predictions]
+
+            # Remove ignored index (special tokens)
+            processed_preds = []
+            processed_labels = []
+            for pred, label in zip(predictions, labels):
+                preds_list = []
+                labels_list = []
+                for p_, l_ in zip(pred, label):
+                    if l_ == self.numericalizer.answer_pad_id:
+                        continue
+                    preds_list.append(task.id2label[p_])
+                    labels_list.append(task.id2label[l_])
+
+                processed_preds.append([" ".join(preds_list)])
+                processed_labels.append(" ".join(labels_list))
+
+            all_contexts += batch_context
+            all_answers += processed_labels
+            all_predictions += processed_preds
+
+            total_loss += output.loss
+
+        total_loss /= len(all_example_ids)
+
+        if original_order is not None:
+            # sort back to the original order
+            original_order, all_example_ids, all_predictions, all_answers, all_contexts = [
+                list(a)
+                for a in tuple(
+                    zip(*sorted(list(zip(original_order, all_example_ids, all_predictions, all_answers, all_contexts))))
+                )
+            ]
+
+        output = GenerationOutput(
+            loss=total_loss,
+            example_ids=all_example_ids,
+            contexts=all_contexts,
+            answers=all_answers,
+            predictions=all_predictions,
+        )
+
+        return output

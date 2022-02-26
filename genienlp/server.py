@@ -130,10 +130,10 @@ def parse_argv(parser):
 
 
 class Server(object):
-    def __init__(self, args, numericalizer, model, device, confidence_estimators, estimator_filenames, ned_model):
+    def __init__(self, args, model, device, confidence_estimators, estimator_filenames, ned_model):
         self.args = args
         self.device = device
-        self.numericalizer = numericalizer
+        self.numericalizer = model.numericalizer
         self.model = model
         self.confidence_estimators = confidence_estimators
         self.estimator_filenames = estimator_filenames
@@ -216,7 +216,6 @@ class Server(object):
             output = generate_with_model(
                 self.model,
                 [batch],
-                self.numericalizer,
                 task,
                 args,
                 output_predictions_only=True,
@@ -239,7 +238,7 @@ class Server(object):
                         instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
                     response.append(instance)
         else:
-            output = generate_with_model(self.model, [batch], self.numericalizer, task, args, output_predictions_only=True)
+            output = generate_with_model(self.model, [batch], task, args, output_predictions_only=True)
             if sum(args.num_outputs) > 1:
                 response = []
                 for idx, predictions in enumerate(output.predictions):
@@ -384,5 +383,5 @@ def init(args):
 
 def main(args):
     model, device, confidence_estimators, estimator_filenames, ned_model = init(args)
-    server = Server(args, model.numericalizer, model, device, confidence_estimators, estimator_filenames, ned_model)
+    server = Server(args, model, device, confidence_estimators, estimator_filenames, ned_model)
     server.run()

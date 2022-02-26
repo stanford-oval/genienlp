@@ -228,12 +228,10 @@ def should_log(iteration, log_every):
     return iteration % log_every == 0
 
 
-def do_validate(
-    iteration, args, model, numericalizer, val_iters, *, train_task, round_progress, task_progress, writer, logger
-):
+def do_validate(iteration, args, model, val_iters, *, train_task, round_progress, task_progress, writer, logger):
     deca_score = 0
     for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-        output, metric_dict = validate(val_task, val_iter, model, numericalizer, args, num_print=args.num_print)
+        output, metric_dict = validate(val_task, val_iter, model, args, num_print=args.num_print)
         val_loss = output.loss
         if val_loss is not None:
             log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss_{val_loss:.4f}:'
@@ -572,7 +570,6 @@ def train(
                         iteration,
                         args,
                         model,
-                        numericalizer,
                         val_iters,
                         train_task=task,
                         round_progress=round_progress,
