@@ -515,9 +515,9 @@ class TreeConfidenceEstimator(ConfidenceEstimator):
 
     def _tune_and_train(self, train_dataset, dev_dataset, dev_labels, scale_pos_weight: float):
         # set of all possible hyperparameters
-        max_depth = [3, 5, 7, 10, 20, 30, 50]  # the maximum depth of each tree
+        max_depth = [3, 5, 7, 10, 20]  # the maximum depth of each tree
         eta = [0.02, 0.1, 0.5, 0.7]  # the training step for each iteration
-        num_round = [300]
+        num_round = [100]
 
         best_score = 0
         best_model = None
