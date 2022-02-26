@@ -677,15 +677,19 @@ def validate(task, val_iter, model, numericalizer, args, num_print=10):
             # get rid of the DataParallel wrapper
             model = model.module
 
-        output = generate_with_model(model, val_iter, numericalizer, task, args)
+        generation_output = generate_with_model(model, val_iter, numericalizer, task, args)
 
         # loss is already calculated
         metrics_to_return = [metric for metric in task.metrics if metric != 'loss']
 
-        metrics = calculate_and_reduce_metrics(output, metrics_to_return, args, model.tgt_lang)
+        metrics = calculate_and_reduce_metrics(args, generation_output, metrics_to_return, model.tgt_lang)
 
-        results = {'model prediction': output.predictions, 'gold answer': output.answers, 'context': output.contexts}
+        results = {
+            'model prediction': generation_output.predictions,
+            'gold answer': generation_output.answers,
+            'context': generation_output.contexts,
+        }
 
         print_results(results, num_print)
 
-        return output, metrics
+        return generation_output, metrics

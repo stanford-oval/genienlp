@@ -747,7 +747,7 @@ def compute_metrics(
     return metric_dict
 
 
-def calculate_and_reduce_metrics(generation_output, metrics_to_compute, args, lang):
+def calculate_and_reduce_metrics(args, generation_output, metrics_to_compute, lang):
     metrics = OrderedDict()
     example_ids = generation_output.example_ids
     predictions = generation_output.predictions

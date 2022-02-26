@@ -110,18 +110,14 @@ def parse_argv(parser):
         type=str,
         nargs='+',
         dest='pred_src_languages',
-        help='Specify dataset source languages used during prediction for multilingual tasks'
-        'multiple languages for each task should be concatenated with +',
+        help='Specify dataset source languages used during prediction for multilingual tasks',
     )
     parser.add_argument(
         '--pred_tgt_languages',
         type=str,
         nargs='+',
-        help='Specify dataset target languages used during prediction for multilingual tasks'
-        'multiple languages for each task should be concatenated with +',
+        help='Specify dataset target languages used during prediction for multilingual tasks',
     )
-
-    parser.add_argument('--separate_eval', action='store_true', help='evaluate on each language eval set separately')
 
     parser.add_argument(
         '--main_metric_only', action='store_true', help='If True, we only calculate the deca score metric for each task.'
@@ -287,22 +283,18 @@ def set_default_values(args):
         args.confidence_feature_path = os.path.join(args.path, 'confidence_features.pkl')
 
     if args.e2e_dialogue_evaluation and args.val_batch_size[0] != 1:
-        logger.warning('When evaluating bitod end-to-end, val_batch_size should be 1 so we load the data turn by turn')
+        logger.warning('When evaluating dialogues end-to-end, val_batch_size should be 1 so we load the data turn by turn')
         args.val_batch_size = [1]
 
 
 def check_args(args):
-
     if not args.pred_src_languages:
         setattr(args, 'pred_src_languages', [args.eval_src_languages])
     if not args.pred_tgt_languages:
         setattr(args, 'pred_tgt_languages', [args.eval_tgt_languages])
 
     if len(args.task_names) != len(args.pred_src_languages):
-        raise ValueError(
-            'You have to define prediction languages for each task.'
-            ' Use None for single language tasks. Also provide languages in the same order you provided the tasks.'
-        )
+        raise ValueError('You have to define prediction languages for each task in the same order you provided the tasks.')
 
     if getattr(args, 'do_ned', False) and getattr(args, 'ned_retrieve_method', None) == 'bootleg':
         with open(os.path.join(args.path, 'config.json')) as config_file:
@@ -316,7 +308,9 @@ def check_args(args):
         )
 
 
-def prepare_data(args, src_lang):
+def prepare_data(args):
+    # TODO handle multiple languages
+    src_lang = args.pred_src_languages[0]
 
     datasets = []
     paths = []
@@ -348,40 +342,32 @@ def prepare_data(args, src_lang):
             }
         )
 
-        task_splits, task_paths = task.get_splits(root=args.data, lower=args.lower, **kwargs)
-        if not isinstance(task_splits, list):
-            task_splits = [task_splits]
-            task_paths = [task_paths]
-        task_data_processed = []
-        task_path_processed = []
-        for split, path in zip(task_splits, task_paths):
-            assert (split.eval or split.test or split.train) and not split.aux
-            if split.train:
-                data = split.train
-                path = path.train
-            elif split.eval:
-                data = split.eval
-                path = path.eval
-            else:
-                data = split.test
-                path = path.test
+        split, path = task.get_splits(root=args.data, lower=args.lower, **kwargs)
+        assert (split.eval or split.test or split.train) and not split.aux
+        if split.train:
+            data = split.train
+            path = path.train
+        elif split.eval:
+            data = split.eval
+            path = path.eval
+        else:
+            data = split.test
+            path = path.test
 
-            file_name = os.path.basename(path.rsplit('.', 1)[0])
-            if (
-                args.ned_retrieve_method == 'bootleg'
-                and os.path.exists(f'{args.bootleg_output_dir}/{file_name}_bootleg/bootleg_wiki/bootleg_labels.jsonl')
-            ) or (args.ned_retrieve_method != 'bootleg'):
-                ned_model = init_ned_model(args)
-            else:
-                ned_model = init_ned_model(args, 'bootleg-annotator')
-            if ned_model:
-                ned_model.process_examples(data.examples, path, task.utterance_field)
+        file_name = os.path.basename(path.rsplit('.', 1)[0])
+        if (
+            args.ned_retrieve_method == 'bootleg'
+            and os.path.exists(f'{args.bootleg_output_dir}/{file_name}_bootleg/bootleg_wiki/bootleg_labels.jsonl')
+        ) or (args.ned_retrieve_method != 'bootleg'):
+            ned_model = init_ned_model(args)
+        else:
+            ned_model = init_ned_model(args, 'bootleg-annotator')
+        if ned_model:
+            ned_model.process_examples(data.examples, path, task.utterance_field)
 
-            task_data_processed.append(data)
-            task_path_processed.append(path)
-            logger.info(f'{task.name} has {len(data.examples)} prediction examples')
-        datasets.append(task_data_processed)
-        paths.append(task_path_processed)
+        logger.info(f'{task.name} has {len(data.examples)} prediction examples')
+        datasets.append(data)
+        paths.append(path)
 
     return datasets
 
@@ -391,36 +377,56 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
     iters = []
-    task_index = 0
     for task, bs, val_set in zip(args.tasks, args.val_batch_size, val_sets):
         task_iter = []
-        task_languages = args.pred_src_languages[task_index]
-        if task_languages is not None and args.separate_eval:
-            task_languages = task_languages.split('+')
-            assert len(task_languages) == len(val_set)
-            for index, set_ in enumerate(val_set):
-                loader, original_order = make_data_loader(
-                    set_, numericalizer, bs, device, train=False, return_original_order=True
-                )
-                task_iter.append((task, task_languages[index], loader, original_order))
-        # single language task or no separate eval
-        else:
-            loader, original_order = make_data_loader(
-                val_set[0], numericalizer, bs, device, train=False, return_original_order=True
-            )
-            task_iter.append((task, task_languages, loader, original_order))
+        loader, original_order = make_data_loader(val_set, numericalizer, bs, device, train=False, return_original_order=True)
+        task_iter.append((task, loader, original_order))
 
         iters.extend(task_iter)
-        task_index += 1
 
     return iters
 
 
-def run(args, device):
-    # TODO handle multiple languages
-    src_lang = args.pred_src_languages[0]
-    tgt_lang = args.pred_tgt_languages[0]
+def create_output_line(args, generation_output):
+    lines = []
+    for i in range(len(generation_output.example_ids)):
+        predictions = generation_output.raw_predictions if args.translate_return_raw_outputs else generation_output.predictions
+        if args.one_output_per_line:
+            lines = [
+                '\t'.join(
+                    [generation_output.example_ids[i], prediction, generation_output.answers[i], generation_output.contexts[i]]
+                )
+                for prediction in predictions[i]
+            ]  # one line per generation output
+        else:
+            lines = [
+                '\t'.join(
+                    [
+                        generation_output.example_ids[i],
+                        *predictions[i],
+                        generation_output.answers[i],
+                        generation_output.contexts[i],
+                    ]
+                )
+            ]  # one line with all generation outputs separated by '\t'
+        if args.calibrator_paths is not None:
+            for score in generation_output.confidence_scores:
+                lines = [line + '\t' + str(score[i]) for line in lines]  # append score to all lines
+    return lines
 
+
+def get_metrics_to_compute(args, task):
+    metrics_to_compute = task.metrics
+    metrics_to_compute += args.extra_metrics
+    metrics_to_compute = [metric for metric in task.metrics if metric not in ['loss']]
+    if args.main_metric_only:
+        metrics_to_compute = [metrics_to_compute[0]]
+    return metrics_to_compute
+
+
+def run(args, device):
+
+    # TODO handle multiple languages
     Model = getattr(models, args.model)
     model, _ = Model.load(
         args.path,
@@ -428,11 +434,11 @@ def run(args, device):
         args=args,
         device=device,
         tasks=args.tasks,
-        src_lang=src_lang,
-        tgt_lang=tgt_lang,
+        src_lang=args.pred_src_languages[0],
+        tgt_lang=args.pred_tgt_languages[0],
     )
 
-    val_sets = prepare_data(args, src_lang)
+    val_sets = prepare_data(args)
     model.add_new_vocab_from_data(args.tasks)
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
@@ -446,149 +452,81 @@ def run(args, device):
     eval_dir = os.path.join(args.eval_dir, args.evaluate)
     os.makedirs(eval_dir, exist_ok=True)
 
-    with torch.no_grad():
-        for task, language, it, original_order in iters:
-            logger.info(task.name)
-            # single language task
-            if language is None or 'multilingual' not in task.name:
-                prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
-                raw_prediction_file_name = os.path.join(eval_dir, task.name + '.raw.tsv')
-                results_file_name = os.path.join(eval_dir, task.name + '.results.json')
-            # multi language task
-            else:
-                prediction_file_name = os.path.join(eval_dir, task.name + '_{}.tsv'.format(language))
-                raw_prediction_file_name = os.path.join(eval_dir, task.name + '_{}.raw.tsv'.format(language))
-                results_file_name = os.path.join(eval_dir, task.name + '_{}.results.json'.format(language))
+    for index, (task, it, original_order) in enumerate(iters):
+        logger.info(task.name)
+        tgt_lang = args.pred_tgt_languages[index]
+        prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
+        raw_prediction_file_name = os.path.join(eval_dir, task.name + '.raw.tsv')
+        results_file_name = os.path.join(eval_dir, task.name + '.results.json')
 
-            for fname in [prediction_file_name, raw_prediction_file_name, results_file_name]:
-                if os.path.exists(fname):
-                    if args.overwrite:
-                        logger.warning(f'{fname} already exists -- overwriting **')
-                    else:
-                        raise OSError(f'{fname} already exists')
+        for fname in [prediction_file_name, raw_prediction_file_name, results_file_name]:
+            if os.path.exists(fname):
+                if args.overwrite:
+                    logger.warning(f'{fname} already exists -- overwriting **')
+                else:
+                    raise OSError(f'{fname} already exists')
 
-            if args.calibrator_paths is not None:
-                confidence_estimators = []
-                for path in args.calibrator_paths:
-                    estimator = ConfidenceEstimator.load(path)
-                    confidence_estimators.append(estimator)
-                    logger.info('Loading confidence estimator "%s" from %s', estimator.name, path)
-            else:
-                confidence_estimators = None
-            with torch.cuda.amp.autocast(enabled=args.mixed_precision):
-                generation_output = generate_with_model(
-                    model,
-                    it,
-                    model.numericalizer,
-                    task,
-                    args,
-                    original_order=original_order,
-                    output_confidence_features=args.save_confidence_features,
-                    confidence_estimators=confidence_estimators,
-                    disable_progbar=False,
-                    eval_dir=eval_dir,
-                )
+        if args.calibrator_paths is not None:
+            confidence_estimators = []
+            for path in args.calibrator_paths:
+                estimator = ConfidenceEstimator.load(path)
+                confidence_estimators.append(estimator)
+                logger.info('Loading confidence estimator "%s" from %s', estimator.name, path)
+        else:
+            confidence_estimators = None
 
-            if args.save_confidence_features:
-                torch.save(generation_output.confidence_features, args.confidence_feature_path)
+        with torch.no_grad(), torch.cuda.amp.autocast(enabled=args.mixed_precision):
+            generation_output = generate_with_model(
+                model,
+                it,
+                model.numericalizer,
+                task,
+                args,
+                original_order=original_order,
+                output_confidence_features=args.save_confidence_features,
+                confidence_estimators=confidence_estimators,
+                disable_progbar=False,
+                eval_dir=eval_dir,
+            )
 
-            # write into file
-            # TODO change to jsonl format
-            with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
-                for i in range(len(generation_output.example_ids)):
-                    if args.one_output_per_line:
-                        lines = [
-                            (
-                                generation_output.example_ids[i]
-                                + '\t'
-                                + prediction
-                                + '\t'
-                                + generation_output.answers[i]
-                                + '\t'
-                                + generation_output.contexts[i]
-                            )
-                            for prediction in generation_output.predictions[i]
-                        ]  # one line per generation output
-                    else:
-                        lines = [
-                            (
-                                generation_output.example_ids[i]
-                                + '\t'
-                                + '\t'.join(generation_output.predictions[i])
-                                + '\t'
-                                + generation_output.answers[i]
-                                + '\t'
-                                + generation_output.contexts[i]
-                            )
-                        ]  # one line with all generation outputs separated by '\t'
+        if args.save_confidence_features:
+            torch.save(generation_output.confidence_features, args.confidence_feature_path)
+
+        # write into file
+        # TODO change to jsonl format
+        with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
+            lines = create_output_line(args, generation_output)
+            prediction_file.write('\n'.join(lines) + '\n')
+
+        if args.translate_return_raw_outputs:
+            with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
+                lines = create_output_line(args, generation_output)
+                prediction_file.write('\n'.join(lines) + '\n')
+
+        if len(generation_output.answers) > 0:
+            metrics_to_compute = get_metrics_to_compute(args, task)
+            metrics = calculate_and_reduce_metrics(args, generation_output, metrics_to_compute, tgt_lang)
+
+            with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
+                results_file.write(json.dumps(metrics) + '\n')
+
+            if not args.silent:
+                for i, (c, p, a) in enumerate(
+                    zip(generation_output.contexts, generation_output.predictions, generation_output.answers)
+                ):
+                    log_string = '\n'.join(
+                        [f'Context {i + 1}: {c}', f'Prediction {i + 1} ({len(p)} outputs): {p}', f'Answer {i + 1}: {a}']
+                    )
                     if args.calibrator_paths is not None:
+                        log_string += f'Confidence {i + 1} : '
                         for score in generation_output.confidence_scores:
-                            lines = [line + '\t' + str(score[i]) for line in lines]  # append score to all lines
-                    prediction_file.write('\n'.join(lines) + '\n')
+                            log_string += f'{score[i]:.3f}, '
+                        log_string += '\n'
+                    logger.info(log_string)
 
-            if args.translate_return_raw_outputs:
-                with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
-                    for i in range(len(generation_output.example_ids)):
-                        if args.one_output_per_line:
-                            lines = [
-                                (
-                                    generation_output.example_ids[i]
-                                    + '\t'
-                                    + raw_prediction
-                                    + '\t'
-                                    + generation_output.answers[i]
-                                    + '\t'
-                                    + generation_output.contexts[i]
-                                )
-                                for raw_prediction in generation_output.raw_predictions[i]
-                            ]  # one line per generation output
-                        else:
-                            lines = [
-                                (
-                                    generation_output.example_ids[i]
-                                    + '\t'
-                                    + '\t'.join(generation_output.raw_predictions[i])
-                                    + '\t'
-                                    + generation_output.answers[i]
-                                    + '\t'
-                                    + generation_output.contexts[i]
-                                )
-                            ]  # one line with all outputs separated by '\t'
-                        prediction_file.write('\n'.join(lines) + '\n')
+            logger.info(metrics)
 
-            if len(generation_output.answers) > 0:
-                metrics_to_compute = task.metrics
-                metrics_to_compute += args.extra_metrics
-                metrics_to_compute = [metric for metric in task.metrics if metric not in ['loss']]
-                if args.main_metric_only:
-                    metrics_to_compute = [metrics_to_compute[0]]
-                metrics = calculate_and_reduce_metrics(
-                    generation_output,
-                    metrics_to_compute,
-                    args,
-                    tgt_lang,
-                )
-
-                with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
-                    results_file.write(json.dumps(metrics) + '\n')
-
-                if not args.silent:
-                    for i, (c, p, a) in enumerate(
-                        zip(generation_output.contexts, generation_output.predictions, generation_output.answers)
-                    ):
-                        log_string = (
-                            f'\nContext {i + 1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
-                        )
-                        if args.calibrator_paths is not None:
-                            log_string += f'Confidence {i + 1} : '
-                            for score in generation_output.confidence_scores:
-                                log_string += f'{score[i]:.3f}, '
-                            log_string += '\n'
-                        logger.info(log_string)
-
-                logger.info(metrics)
-
-                task_scores[task].append((len(generation_output.answers), metrics[task.metrics[0]]))
+            task_scores[task].append((len(generation_output.answers), metrics[task.metrics[0]]))
 
     decaScore = []
     for task in task_scores.keys():
@@ -604,6 +542,22 @@ def run(args, device):
     logger.info(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
 
 
+def update_metrics(args):
+    assert len(args.override_valid_metrics) == len(args.tasks)
+    new_metrics = []
+    for task, metrics in zip(args.tasks, args.override_valid_metrics):
+        for m in metrics:
+            # remove loss from validation metrics
+            if m == 'loss':
+                continue
+            # backward compatibility for models validated on sacrebleu (now casedbleu)
+            if m == 'sacrebleu':
+                m = 'casedblue'
+            new_metrics.append(m)
+
+        task.metrics = new_metrics
+
+
 def main(args):
     load_config_json(args)
     check_and_update_generation_args(args)
@@ -612,24 +566,10 @@ def main(args):
 
     set_seed(args)
     args.tasks = list(get_tasks(args.task_names, args).values())
+    if args.override_valid_metrics:
+        update_metrics(args)
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
-
-    if args.override_valid_metrics:
-        assert len(args.override_valid_metrics) == len(args.tasks)
-        new_metrics = []
-        for task, metrics in zip(args.tasks, args.override_valid_metrics):
-            for m in metrics:
-                # remove loss from validation metrics
-                if m == 'loss':
-                    continue
-                # backward compatibility for models validated on sacrebleu (now casedbleu)
-                if m == 'sacrebleu':
-                    m = 'casedblue'
-                new_metrics.append(m)
-
-            task.metrics = new_metrics
-
     logger.info(f'Loading from {args.best_checkpoint}')
     devices = get_devices(args.devices)
 
