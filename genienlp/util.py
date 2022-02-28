@@ -862,7 +862,6 @@ def load_config_json(args):
             'no_separator',
             'num_labels',
             'crossner_domains',
-            'hf_test_overfit',
             'override_valid_metrics',
             'eval_src_languages',
             'eval_tgt_languages',

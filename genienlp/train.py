@@ -96,7 +96,6 @@ def prepare_data(args, logger):
             kwargs = {'test': None, 'validation': None}
             kwargs['train'] = args.train_set_name
             kwargs.update(train_eval_shared_kwargs)
-            kwargs['all_dirs'] = args.train_src_languages
             kwargs['crossner_domains'] = args.crossner_domains
             if args.use_curriculum:
                 kwargs['curriculum'] = True
@@ -140,9 +139,7 @@ def prepare_data(args, logger):
             if args.eval_set_name is not None:
                 kwargs['validation'] = args.eval_set_name
             kwargs.update(train_eval_shared_kwargs)
-            kwargs['all_dirs'] = args.eval_src_languages
             kwargs['crossner_domains'] = args.crossner_domains
-            kwargs['hf_test_overfit'] = args.hf_test_overfit
 
             logger.info(f'Adding {task.name} to validation datasets')
             splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)

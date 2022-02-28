@@ -315,7 +315,6 @@ def prepare_data(args):
     if len(args.pred_src_languages) == 1 and len(args.tasks) > 1:
         args.pred_src_languages *= len(args.tasks)
     for i, task in enumerate(args.tasks):
-        task_languages = args.pred_src_languages[i]
         logger.info(f'Loading {task}')
         kwargs = {'train': None, 'validation': None, 'test': None}
         if args.evaluate == 'train':
@@ -330,11 +329,9 @@ def prepare_data(args):
         kwargs.update(
             {
                 'subsample': args.subsample,
-                'all_dirs': task_languages,
                 'num_workers': args.num_workers,
                 'src_lang': src_lang,
                 'crossner_domains': args.crossner_domains,
-                'hf_test_overfit': args.hf_test_overfit,
             }
         )
 
