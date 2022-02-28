@@ -26,11 +26,6 @@ jobs:
       script:
         - bash ./tests/test_main_almond.sh
     -
-      name: "Main tests for almond_multilingual task"
-      stage: test
-      script:
-        - bash ./tests/test_main_almond_multilingual.sh
-    -
       name: "Paraphrasing tests"
       stage: test
       script:
