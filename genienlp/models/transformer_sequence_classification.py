@@ -32,12 +32,12 @@ import logging
 from transformers import AutoModelForSequenceClassification
 
 from ..data_utils.numericalizer import TransformerNumericalizer
-from .transformer_token_classification import TransformerForTokenClassification
+from ..models.base import GenieModelForClassification
 
 logger = logging.getLogger(__name__)
 
 
-class TransformerForSequenceClassification(TransformerForTokenClassification):
+class TransformerForSequenceClassification(GenieModelForClassification):
     def __init__(self, config=None, *inputs, args, tasks, vocab_sets, save_directory=None, **kwargs):
 
         self._init_common(args, tasks, **kwargs)
@@ -62,5 +62,4 @@ class TransformerForSequenceClassification(TransformerForTokenClassification):
         )
 
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
-
         self.numericalizer.answer_pad_id = -100

@@ -36,14 +36,14 @@ from transformers import AutoConfig, AutoModel, BertConfig, PretrainedConfig, XL
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..model_utils.transformers_utils import BertModelForNER, XLMRobertaModelForNER
 from ..util import adjust_language_code
-from .base import GenieModel
+from .base import GenieModelForGeneration
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
 
 logger = logging.getLogger(__name__)
 
 
-class TransformerLSTM(GenieModel):
+class TransformerLSTM(GenieModelForGeneration):
     def __init__(self, config=None, *inputs, args, vocab_sets, tasks, save_directory=None, **kwargs):
         """
         Relevant inputs should be provided using kwargs. This method is defined this way to match parent's and siblings' method signatures.

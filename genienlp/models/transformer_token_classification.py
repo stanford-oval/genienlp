@@ -29,20 +29,19 @@
 
 import logging
 
-import torch
-from transformers import AutoConfig, AutoModelForTokenClassification
+from transformers import AutoModelForTokenClassification
 
 from ..data_utils.numericalizer import TransformerNumericalizer
-from ..data_utils.progbar import progress_bar
-from ..models.base import GenieModel
-from ..util import GenerationOutput, adjust_language_code
+from ..models.base import GenieModelForClassification
 
 logger = logging.getLogger(__name__)
 
 
-class TransformerForTokenClassification(GenieModel):
+class TransformerForTokenClassification(GenieModelForClassification):
     def __init__(self, config=None, *inputs, args, tasks, vocab_sets, save_directory=None, **kwargs):
+
         self._init_common(args, tasks, **kwargs)
+
         if save_directory is not None:
             self.model = AutoModelForTokenClassification.from_config(self.config)
         else:
@@ -64,116 +63,3 @@ class TransformerForTokenClassification(GenieModel):
 
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
         self.numericalizer.answer_pad_id = -100
-
-    def _init_common(self, args, tasks, **kwargs):
-        self.args = args
-        num_labels = 0
-        if args.num_labels is not None:
-            num_labels = args.num_labels
-        else:
-            for task in tasks:
-                # if having multiple tasks choose max num_labels
-                if hasattr(task, 'num_labels'):
-                    num_labels = max(num_labels, task.num_labels)
-
-        config = AutoConfig.from_pretrained(
-            args.pretrained_model, cache_dir=args.embeddings, num_labels=num_labels, finetuning_task='ned'
-        )
-        super().__init__(config)
-
-        if hasattr(config, 'd_model'):
-            args.dimension = config.d_model
-        else:
-            args.dimension = config.hidden_size
-
-        self.src_lang, self.tgt_lang = adjust_language_code(
-            config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
-        )
-
-    def add_new_vocab_from_data(self, tasks, resize_decoder=False):
-        super().add_new_vocab_from_data(tasks, resize_decoder)
-        self.model.resize_token_embeddings(self.numericalizer.num_tokens)
-
-    def forward(self, *input, **kwargs):
-        if self.training:
-            batch = input[0]
-            outputs = self.model(
-                batch.context.value,
-                labels=batch.answer.value,
-                attention_mask=(batch.context.value != self.numericalizer.pad_id),
-            )
-            return outputs
-        else:
-            return self.model(**kwargs)
-
-    def validate(self, data_iterator, task, original_order=None, disable_progbar=True, **kwargs):
-        total_loss = 0.0
-        all_example_ids = []
-        all_answers = []
-        all_contexts = []
-        all_predictions = []
-
-        for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
-            batch_example_ids = batch.example_id
-
-            batch_context = self.numericalizer.reverse(batch.context.value.data, 'context')
-
-            all_example_ids += batch_example_ids
-
-            # pass labels to get loss
-            output = self.forward(
-                input_ids=batch.context.value,
-                attention_mask=(batch.context.value != self.numericalizer.pad_id),
-                labels=batch.answer.value,
-            )
-
-            labels = batch.answer.value.tolist()
-
-            logits = output.logits
-            predictions = torch.argmax(logits, dim=-1).tolist()
-
-            # logits for sequence classification is 2 dimensional
-            if logits.dim() == 2:
-                predictions = [[p] for p in predictions]
-
-            # Remove ignored index (special tokens)
-            processed_preds = []
-            processed_labels = []
-            for pred, label in zip(predictions, labels):
-                preds_list = []
-                labels_list = []
-                for p_, l_ in zip(pred, label):
-                    if l_ == self.numericalizer.answer_pad_id:
-                        continue
-                    preds_list.append(task.id2label[p_])
-                    labels_list.append(task.id2label[l_])
-
-                processed_preds.append([" ".join(preds_list)])
-                processed_labels.append(" ".join(labels_list))
-
-            all_contexts += batch_context
-            all_answers += processed_labels
-            all_predictions += processed_preds
-
-            total_loss += output.loss
-
-        total_loss /= len(all_example_ids)
-
-        if original_order is not None:
-            # sort back to the original order
-            original_order, all_example_ids, all_predictions, all_answers, all_contexts = [
-                list(a)
-                for a in tuple(
-                    zip(*sorted(list(zip(original_order, all_example_ids, all_predictions, all_answers, all_contexts))))
-                )
-            ]
-
-        output = GenerationOutput(
-            loss=total_loss,
-            example_ids=all_example_ids,
-            contexts=all_contexts,
-            answers=all_answers,
-            predictions=all_predictions,
-        )
-
-        return output
