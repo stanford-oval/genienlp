@@ -130,12 +130,12 @@ class GenieModelForGeneration(GenieModel):
         if self.numericalizer._tokenizer.tgt_lang:
             tgt_lang = self.numericalizer._tokenizer.tgt_lang
         else:
-            tgt_lang = self.model.orig_tgt_lang
+            tgt_lang = self.orig_tgt_lang
 
         if self.numericalizer._tokenizer.src_lang:
             src_lang = self.numericalizer._tokenizer.src_lang
         else:
-            src_lang = self.model.orig_src_lang
+            src_lang = self.orig_src_lang
 
         date_parser = default_loader.get_locale(src_lang[:2])
 
@@ -203,7 +203,7 @@ class GenieModelForGeneration(GenieModel):
 
                     # postprocess prediction ids
                     kwargs = {
-                        'self.numericalizer': self.numericalizer,
+                        'numericalizer': self.numericalizer,
                         'cross_attentions': cross_attentions,
                         'tgt_lang': tgt_lang,
                         'date_parser': date_parser,
@@ -225,7 +225,7 @@ class GenieModelForGeneration(GenieModel):
                     partial_batch_prediction = partial_batch_words
                 else:
                     if output_confidence_features or output_confidence_scores:
-                        partial_batch_confidence_features = self.model.confidence_features(
+                        partial_batch_confidence_features = self.confidence_features(
                             batch=batch, predictions=partial_batch_prediction_ids, mc_dropout_num=self.args.mc_dropout_num
                         )
                     partial_batch_prediction = self.numericalizer.reverse(partial_batch_prediction_ids, 'answer')
