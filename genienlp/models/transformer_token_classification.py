@@ -106,7 +106,7 @@ class TransformerForTokenClassification(GenieModel):
         else:
             return self.model(**kwargs)
 
-    def validate(self, data_iterator, task, original_order=None, disable_progbar=True):
+    def validate(self, data_iterator, task, original_order=None, disable_progbar=True, **kwargs):
         total_loss = 0.0
         all_example_ids = []
         all_answers = []

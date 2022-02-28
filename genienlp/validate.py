@@ -33,7 +33,6 @@ import sys
 import torch
 
 from .metrics import calculate_and_reduce_metrics
-from .models import TransformerForSequenceClassification, TransformerForTokenClassification
 
 logger = logging.getLogger(__name__)
 
@@ -54,14 +53,11 @@ def generate_with_model(
         return model.validate_e2e_dialogues(
             data_iterator,
             task,
-            eval_dir,
+            eval_dir=eval_dir,
             output_predictions_only=output_predictions_only,
             original_order=original_order,
             disable_progbar=disable_progbar,
         )
-
-    elif isinstance(model, (TransformerForTokenClassification, TransformerForSequenceClassification)):
-        return model.validate(data_iterator, task, original_order=original_order, disable_progbar=disable_progbar)
     else:
         return model.validate(
             data_iterator,

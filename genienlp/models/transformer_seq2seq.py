@@ -450,7 +450,7 @@ class TransformerSeq2Seq(GenieModel):
         return output
 
     def validate_e2e_dialogues(
-        self, data_iterator, task, eval_dir, output_predictions_only=False, original_order=None, disable_progbar=True
+        self, data_iterator, task, eval_dir=None, output_predictions_only=False, original_order=None, disable_progbar=True
     ):
         """
         Inputs:
@@ -662,8 +662,9 @@ class TransformerSeq2Seq(GenieModel):
                 e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["response"] = predictions[-1]
                 ####
 
-        with open(os.path.join(eval_dir, 'e2e_dialogue_preds.json'), 'w') as fout:
-            ujson.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
+        if eval_dir:
+            with open(os.path.join(eval_dir, 'e2e_dialogue_preds.json'), 'w') as fout:
+                ujson.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
 
         if original_order is not None:
             # sort back to the original order
