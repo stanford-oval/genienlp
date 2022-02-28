@@ -211,7 +211,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
 
     def __init__(self, name, args):
         super().__init__(name, args)
-        self._metrics = ['bleu', 'em', 'nf1']
+        self._metrics = ['bleu', 'em']
 
     def _is_program_field(self, field_name):
         return False

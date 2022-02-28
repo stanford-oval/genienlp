@@ -42,7 +42,7 @@ class BaseTask(object):
     def __init__(self, name, args):
         self.name = name
         self.args = args
-        self._metrics = ['em', 'nem', 'nf1']
+        self._metrics = ['em', 'nem']
         # special task-specific tokens that should not be subword tokenized
         self.special_tokens = set()
         self.override_context = args.override_context
