@@ -33,7 +33,6 @@ import logging
 import os
 from typing import Iterable
 
-import torch
 import ujson
 from datasets import load_dataset
 
@@ -97,27 +96,17 @@ class CQA(Dataset):
 class JSON(CQA):
     name = 'json'
 
-    def __init__(self, path, subsample=None, lower=False, cached_path=None, skip_cache=False, **kwargs):
-        cache_name = os.path.join(cached_path, os.path.basename(path), str(subsample))
+    def __init__(self, path, subsample=None, lower=False, **kwargs):
 
         examples = []
-        if os.path.exists(cache_name) and not skip_cache:
-            logger.info(f'Loading cached data from {cache_name}')
-            examples = torch.load(cache_name)
-        else:
-            with open(os.path.expanduser(path)) as f:
-                lines = f.readlines()
-                for line in lines:
-                    ex = json.loads(line)
-                    context, question, answer = ex['context'], ex['question'], ex['answer']
-                    examples.append(
-                        Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower)
-                    )
-                    if subsample is not None and len(examples) >= subsample:
-                        break
-            os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-            logger.info(f'Caching data to {cache_name}')
-            torch.save(examples, cache_name)
+        with open(os.path.expanduser(path)) as f:
+            lines = f.readlines()
+            for line in lines:
+                ex = json.loads(line)
+                context, question, answer = ex['context'], ex['question'], ex['answer']
+                examples.append(Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower))
+                if subsample is not None and len(examples) >= subsample:
+                    break
 
         super(JSON, self).__init__(examples, **kwargs)
 
@@ -235,7 +224,7 @@ class OODDataset(CQA):
     name = 'ood'
     is_sequence_classification = True
 
-    def __init__(self, path, lower=False, cached_path=None, skip_cache=False, **kwargs):
+    def __init__(self, path, lower=False, **kwargs):
         examples = []
         question = 'Is this sentence in-domain or out-domain?'
 

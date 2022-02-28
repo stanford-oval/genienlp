@@ -28,10 +28,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
-import os
 
 import datasets
-import torch
 from datasets import load_dataset
 
 from ..tasks.generic_dataset import CQA
@@ -46,23 +44,12 @@ class HFDataset(CQA):
     def __init__(self, data, make_example, **kwargs):
 
         subsample = kwargs.get('subsample')
-        skip_cache = kwargs.pop('kwargs', True)
-
-        cache_name = os.path.join(os.path.dirname(data.cache_files[0]['filename']), data.split._name, str(subsample))
         examples = []
 
-        if os.path.exists(cache_name) and not skip_cache:
-            logger.info(f'Loading cached data from {cache_name}')
-            examples = torch.load(cache_name)
         for ex in data:
             examples.append(make_example(ex, **kwargs))
-
             if subsample is not None and len(examples) >= subsample:
                 break
-
-        os.makedirs(os.path.dirname(cache_name), exist_ok=True)
-        logger.info(f'Caching data to {cache_name}')
-        torch.save(examples, cache_name)
 
         super().__init__(examples, **kwargs)
 

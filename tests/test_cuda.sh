@@ -9,7 +9,7 @@ for hparams in \
 do
 
     # train
-    genienlp train --train_tasks almond --train_batch_tokens 100 --val_batch_size 100 --train_iterations 2 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $EMBEDDING_DIR --no_commit
+    genienlp train --train_tasks almond --train_batch_tokens 100 --val_batch_size 100 --train_iterations 2 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --embeddings $EMBEDDING_DIR --no_commit
 
     # generate a long sequence
     long_sequence=''

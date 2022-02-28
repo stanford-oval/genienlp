@@ -87,8 +87,6 @@ def prepare_data(args, logger):
 
     train_eval_shared_kwargs = {
         'subsample': args.subsample,
-        'skip_cache': args.skip_cache,
-        'cache_input_data': args.cache_input_data,
         'num_workers': args.num_workers,
     }
 
@@ -99,7 +97,6 @@ def prepare_data(args, logger):
             kwargs['train'] = args.train_set_name
             kwargs.update(train_eval_shared_kwargs)
             kwargs['all_dirs'] = args.train_src_languages
-            kwargs['cached_path'] = os.path.join(args.cache, task.name)
             kwargs['crossner_domains'] = args.crossner_domains
             if args.use_curriculum:
                 kwargs['curriculum'] = True
@@ -144,7 +141,6 @@ def prepare_data(args, logger):
                 kwargs['validation'] = args.eval_set_name
             kwargs.update(train_eval_shared_kwargs)
             kwargs['all_dirs'] = args.eval_src_languages
-            kwargs['cached_path'] = os.path.join(args.cache, task.name)
             kwargs['crossner_domains'] = args.crossner_domains
             kwargs['hf_test_overfit'] = args.hf_test_overfit
 

@@ -122,7 +122,7 @@ genienlp run-paraphrase --model_name_or_path <model_dir> --temperature 0.3 --rep
 Use the following command for training/ finetuning an NMT model:
 
 ```bash
-genienlp train --train_tasks almond_translate --data <data_directory> --train_languages <src_lang> --eval_languages <tgt_lang> --no_commit --train_iterations <iterations> --preserve_case --save <save_dir> --exist_ok --skip_cache --model TransformerSeq2Seq --pretrained_model <hf_model_name>
+genienlp train --train_tasks almond_translate --data <data_directory> --train_languages <src_lang> --eval_languages <tgt_lang> --no_commit --train_iterations <iterations> --preserve_case --save <save_dir> --exist_ok  --model TransformerSeq2Seq --pretrained_model <hf_model_name>
 ```
 
 We currently support MarianMT, MBART, MT5, and M2M100 models.<br>
@@ -131,7 +131,7 @@ To save a pretrained model in genienlp format without any finetuning, set train_
 To produce translations for an eval/ test set run the following command:
 
 ```bash
-genienlp predict --tasks almond_translate --data <data_directory> --pred_languages <src_lang> --pred_tgt_languages <tgt_lang> --path <path_to_saved_model> --eval_dir <eval_dir> --skip_cache --val_batch_size 4000 --evaluate <valid/test>  --overwrite --silent
+genienlp predict --tasks almond_translate --data <data_directory> --pred_languages <src_lang> --pred_tgt_languages <tgt_lang> --path <path_to_saved_model> --eval_dir <eval_dir>  --val_batch_size 4000 --evaluate <valid/test>  --overwrite --silent
 ```
 
 If your dataset is a document or contains long examples, pass `--translate_example_split` to break the examples down into individual sentences before translation for better results. <br>

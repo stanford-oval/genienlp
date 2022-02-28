@@ -100,9 +100,7 @@ def parse_argv(parser):
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
 
-    parser.add_argument('--skip_cache', action='store_true', help='whether use exisiting cached splits or generate new ones')
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
-    parser.add_argument('--cache', default='.cache', type=str, help='where to save cached files')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets')
 
     parser.add_argument(
@@ -331,9 +329,7 @@ def prepare_data(args):
 
         kwargs.update(
             {
-                'skip_cache': args.skip_cache,
                 'subsample': args.subsample,
-                'cached_path': os.path.join(args.cache, task.name),
                 'all_dirs': task_languages,
                 'num_workers': args.num_workers,
                 'src_lang': src_lang,

@@ -15,10 +15,10 @@ for hparams in \
 do
 
     # train
-    genienlp train --train_tasks almond_dialogue_nlu --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --database_dir $SRCDIR/database/ --data $SRCDIR/dataset/thingpedia_99/ --bootleg_output_dir $SRCDIR/dataset/thingpedia_99/bootleg/  --exist_ok --skip_cache --embeddings $EMBEDDING_DIR --no_commit --do_ned --min_entity_len 2 --max_entity_len 4 $hparams
+    genienlp train --train_tasks almond_dialogue_nlu --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --database_dir $SRCDIR/database/ --data $SRCDIR/dataset/thingpedia_99/ --bootleg_output_dir $SRCDIR/dataset/thingpedia_99/bootleg/  --exist_ok  --embeddings $EMBEDDING_DIR --no_commit --do_ned --min_entity_len 2 --max_entity_len 4 $hparams
 
     # greedy prediction
-    genienlp predict --tasks almond_dialogue_nlu --evaluate valid --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --database_dir $SRCDIR/database/ --data $SRCDIR/dataset/thingpedia_99/ --embeddings $EMBEDDING_DIR --skip_cache
+    genienlp predict --tasks almond_dialogue_nlu --evaluate valid --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --database_dir $SRCDIR/database/ --data $SRCDIR/dataset/thingpedia_99/ --embeddings $EMBEDDING_DIR
 
     # check if result file exists
     if test ! -f $workdir/model_$i/eval_results/valid/almond_dialogue_nlu.tsv ; then
