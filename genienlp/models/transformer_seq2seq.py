@@ -61,10 +61,9 @@ class TransformerSeq2Seq(GenieModel):
         If `save_directory` is None, will initialize a new model and numericalizer, otherwise, will load them from `save_directory`
         """
         config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
-        self.config = config
         super().__init__(config)
         self.args = args
-        args.dimension = config.d_model
+        args.dimension = self.config.d_model
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
 
         # tasks is not passed during initialization only in server mode
@@ -75,11 +74,11 @@ class TransformerSeq2Seq(GenieModel):
         # only used for Marian models. adjusted language codes passed to numericalizer will be None for models trained on single langauge pairs
         self.orig_src_lang, self.orig_tgt_lang = kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
         self.src_lang, self.tgt_lang = adjust_language_code(
-            config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
+            self.config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
         )
 
         if save_directory is not None:
-            self.model = AutoModelForSeq2SeqLM.from_config(config)
+            self.model = AutoModelForSeq2SeqLM.from_config(self.config)
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model, cache_dir=self.args.embeddings)
 
@@ -88,7 +87,7 @@ class TransformerSeq2Seq(GenieModel):
             args,
             max_generative_vocab=None,
             save_dir=save_directory,
-            config=config,
+            config=self.config,
             src_lang=self.src_lang,
             tgt_lang=self.tgt_lang,
             vocab_sets=vocab_sets,

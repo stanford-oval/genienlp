@@ -42,7 +42,31 @@ logger = logging.getLogger(__name__)
 
 class TransformerForTokenClassification(GenieModel):
     def __init__(self, config=None, *inputs, args, tasks, vocab_sets, save_directory=None, **kwargs):
+        self._init_common(args, tasks, **kwargs)
+        if save_directory is not None:
+            self.model = AutoModelForTokenClassification.from_config(self.config)
+        else:
+            self.model = AutoModelForTokenClassification.from_pretrained(
+                self.args.pretrained_model, cache_dir=self.args.embeddings, config=self.config
+            )
 
+        self.numericalizer = TransformerNumericalizer(
+            self.args.pretrained_model,
+            args,
+            max_generative_vocab=None,
+            save_dir=save_directory,
+            config=self.config,
+            src_lang=self.src_lang,
+            tgt_lang=self.tgt_lang,
+            vocab_sets=vocab_sets,
+            tasks=tasks,
+        )
+
+        self.model.resize_token_embeddings(self.numericalizer.num_tokens)
+        self.numericalizer.answer_pad_id = -100
+
+    def _init_common(self, args, tasks, **kwargs):
+        self.args = args
         num_labels = 0
         if args.num_labels is not None:
             num_labels = args.num_labels
@@ -55,8 +79,8 @@ class TransformerForTokenClassification(GenieModel):
         config = AutoConfig.from_pretrained(
             args.pretrained_model, cache_dir=args.embeddings, num_labels=num_labels, finetuning_task='ned'
         )
-        GenieModel.__init__(self, config)
-        self.args = args
+        super().__init__(config)
+
         if hasattr(config, 'd_model'):
             args.dimension = config.d_model
         else:
@@ -65,29 +89,6 @@ class TransformerForTokenClassification(GenieModel):
         self.src_lang, self.tgt_lang = adjust_language_code(
             config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
         )
-
-        if save_directory is not None:
-            self.model = AutoModelForTokenClassification.from_config(config)
-        else:
-            self.model = AutoModelForTokenClassification.from_pretrained(
-                self.args.pretrained_model, cache_dir=self.args.embeddings, config=config
-            )
-
-        self.numericalizer = TransformerNumericalizer(
-            self.args.pretrained_model,
-            args,
-            max_generative_vocab=None,
-            save_dir=save_directory,
-            config=config,
-            src_lang=self.src_lang,
-            tgt_lang=self.tgt_lang,
-            vocab_sets=vocab_sets,
-            tasks=tasks,
-        )
-
-        self.model.resize_token_embeddings(self.numericalizer.num_tokens)
-
-        self.numericalizer.answer_pad_id = -100
 
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):
         super().add_new_vocab_from_data(tasks, resize_decoder)
