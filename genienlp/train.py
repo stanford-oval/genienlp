@@ -204,7 +204,7 @@ def update_fraction(args, task_iteration):
     return fraction
 
 
-def should_validate(iteration, val_every, resume, start_iteration):
+def should_validate_while_training(iteration, val_every, resume, start_iteration):
     if val_every is None:
         return False
     return (iteration % val_every == 0) or (resume and iteration == start_iteration)
@@ -222,7 +222,7 @@ def should_log(iteration, log_every):
     return iteration % log_every == 0
 
 
-def validate(task, val_iter, model, args, num_print=10):
+def validate_while_training(task, val_iter, model, args, num_print=10):
     with torch.no_grad():
         model.eval()
         if isinstance(model, torch.nn.DataParallel):
@@ -247,10 +247,12 @@ def validate(task, val_iter, model, args, num_print=10):
         return generation_output, metrics
 
 
-def do_validate(iteration, args, model, val_iters, *, train_task, round_progress, task_progress, writer, logger):
+def do_validate_while_training(
+    iteration, args, model, val_iters, *, train_task, round_progress, task_progress, writer, logger
+):
     deca_score = 0
     for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-        output, metric_dict = validate(val_task, val_iter, model, args, num_print=args.num_print)
+        output, metric_dict = validate_while_training(val_task, val_iter, model, args, num_print=args.num_print)
         val_loss = output.loss
         if val_loss is not None:
             log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss_{val_loss:.4f}:'
@@ -576,7 +578,7 @@ def train(
                     local_loss = 0
 
                 # validate
-                if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
+                if should_validate_while_training(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
                     if args.print_train_examples_too:
                         results = {
                             'answer': numericalizer.reverse(batch.answer.value.data, 'answer'),
@@ -585,7 +587,7 @@ def train(
                         num_print = min(len(results['answer']), args.num_print)
                         print_results(results, num_print)
 
-                    deca_score = do_validate(
+                    deca_score = do_validate_while_training(
                         iteration,
                         args,
                         model,
