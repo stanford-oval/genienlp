@@ -21,10 +21,10 @@ for model in "Helsinki-NLP/opus-mt-en-de" "sshleifer/tiny-mbart" ; do
     cp $workdir/translation/almond/train.tsv $workdir/translation/almond/eval.tsv
 
     # train
-    genienlp train  --train_tasks almond_translate --do_alignment --train_languages en --train_tgt_languages de --eval_languages en --eval_tgt_languages de --model TransformerSeq2Seq --pretrained_model $model --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $workdir/translation/ --exist_ok --skip_cache --embeddings $EMBEDDING_DIR --no_commit
+    genienlp train  --train_tasks almond_translate --do_alignment --train_languages en --train_tgt_languages de --eval_languages en --eval_tgt_languages de --model TransformerSeq2Seq --pretrained_model $model --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $workdir/translation/ --exist_ok  --embeddings $EMBEDDING_DIR --no_commit
 
     # greedy prediction
-    genienlp predict --tasks almond_translate --evaluate valid --pred_languages en --pred_tgt_languages de --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $workdir/translation/ --embeddings $EMBEDDING_DIR --skip_cache
+    genienlp predict --tasks almond_translate --evaluate valid --pred_languages en --pred_tgt_languages de --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $workdir/translation/ --embeddings $EMBEDDING_DIR
 
     # check if result file exists and matches expected_result
     echo $expected_result | diff -u - $workdir/model_$i/eval_results/valid/almond_translate.results.json

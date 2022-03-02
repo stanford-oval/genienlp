@@ -36,14 +36,14 @@ from transformers import AutoConfig, AutoModel, BertConfig, PretrainedConfig, XL
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..model_utils.transformers_utils import BertModelForNER, XLMRobertaModelForNER
 from ..util import adjust_language_code
-from .base import GenieModel
+from .base import GenieModelForGeneration
 from .identity_encoder import IdentityEncoder
 from .mqan_decoder import MQANDecoder
 
 logger = logging.getLogger(__name__)
 
 
-class TransformerLSTM(GenieModel):
+class TransformerLSTM(GenieModelForGeneration):
     def __init__(self, config=None, *inputs, args, vocab_sets, tasks, save_directory=None, **kwargs):
         """
         Relevant inputs should be provided using kwargs. This method is defined this way to match parent's and siblings' method signatures.
@@ -58,6 +58,7 @@ class TransformerLSTM(GenieModel):
 
         encoder_embeddings = args.pretrained_model
         config = AutoConfig.from_pretrained(encoder_embeddings, cache_dir=args.embeddings)
+        self.config = config
         args.dimension = config.hidden_size
 
         # tasks is not passed during initialization only in server mode
@@ -66,7 +67,7 @@ class TransformerLSTM(GenieModel):
             self.set_generation_output_options(tasks)
 
         self.src_lang, self.tgt_lang = adjust_language_code(
-            config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
+            self.config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
         )
 
         self.numericalizer = TransformerNumericalizer(
@@ -74,7 +75,7 @@ class TransformerLSTM(GenieModel):
             args,
             max_generative_vocab=args.max_generative_vocab,
             save_dir=save_directory,
-            config=config,
+            config=self.config,
             src_lang=self.src_lang,
             tgt_lang=self.tgt_lang,
             vocab_sets=vocab_sets,
@@ -84,35 +85,37 @@ class TransformerLSTM(GenieModel):
         logger.info('Initializing encoder and decoder embeddings')
 
         if args.do_ned:
-            if type(config) == BertConfig:
+            if type(self.config) == BertConfig:
                 if save_directory is not None:
-                    self.encoder_embeddings = BertModelForNER(config, args.num_db_types, args.db_unk_id)
+                    self.encoder_embeddings = BertModelForNER(self.config, args.num_db_types, args.db_unk_id)
                 else:
-                    self.encoder_embeddings = BertModelForNER(config, args.num_db_types, args.db_unk_id).from_pretrained(
+                    self.encoder_embeddings = BertModelForNER(self.config, args.num_db_types, args.db_unk_id).from_pretrained(
                         encoder_embeddings, num_db_types=args.num_db_types, db_unk_id=args.db_unk_id, cache_dir=args.embeddings
                     )
-            elif type(config) == XLMRobertaConfig:
+            elif type(self.config) == XLMRobertaConfig:
                 if save_directory is not None:
-                    self.encoder_embeddings = XLMRobertaModelForNER(config, args.num_db_types, args.db_unk_id)
+                    self.encoder_embeddings = XLMRobertaModelForNER(self.config, args.num_db_types, args.db_unk_id)
                 else:
-                    self.encoder_embeddings = XLMRobertaModelForNER(config, args.num_db_types, args.db_unk_id).from_pretrained(
+                    self.encoder_embeddings = XLMRobertaModelForNER(
+                        self.config, args.num_db_types, args.db_unk_id
+                    ).from_pretrained(
                         encoder_embeddings, num_db_types=args.num_db_types, db_unk_id=args.db_unk_id, cache_dir=args.embeddings
                     )
             else:
                 raise ValueError('Model is not supported for using entity embeddings for NER')
         else:
             if save_directory is not None:
-                self.encoder_embeddings = AutoModel.from_config(config)
+                self.encoder_embeddings = AutoModel.from_config(self.config)
             else:
                 self.encoder_embeddings = AutoModel.from_pretrained(
-                    encoder_embeddings, config=config, cache_dir=args.embeddings
+                    encoder_embeddings, config=self.config, cache_dir=args.embeddings
                 )
 
         self.encoder_embeddings.resize_token_embeddings(self.numericalizer.num_tokens)
 
         logger.info(f'Vocabulary has {self.numericalizer.num_tokens} tokens')
 
-        self.encoder = IdentityEncoder(self.numericalizer, args, config, self.encoder_embeddings)
+        self.encoder = IdentityEncoder(self.numericalizer, args, self.config, self.encoder_embeddings)
         self.decoder = MQANDecoder(self.numericalizer, args)
 
     def add_new_vocab_from_data(self, tasks, resize_decoder=False):

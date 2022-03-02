@@ -28,28 +28,17 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import logging
 import os
-from collections import defaultdict
 
 import torch
 
 from genienlp.data_utils.almond_utils import split_text_into_sentences
 
-from ..data_utils.almond_utils import (
-    ISO_to_LANG,
-    detokenize_cjk_chars,
-    is_device,
-    is_entity,
-    is_entity_marker,
-    process_id,
-    tokenize_cjk_chars,
-)
+from ..data_utils.almond_utils import detokenize_cjk_chars, is_device, is_entity, is_entity_marker, tokenize_cjk_chars
 from ..data_utils.example import Example
 from ..model_utils.translation import align_and_replace, compute_attention
 from ..paraphrase.data_utils import input_heuristics, output_heuristics
 from .almond_dataset import AlmondDataset
-from .base_dataset import Split
 from .base_task import BaseTask
-from .generic_dataset import CQA, all_tokens_fn, default_batch_fn, input_then_output_len
 from .registry import register_task
 
 logger = logging.getLogger(__name__)
@@ -222,7 +211,7 @@ class NaturalSeq2Seq(BaseAlmondTask):
 
     def __init__(self, name, args):
         super().__init__(name, args)
-        self._metrics = ['bleu', 'em', 'nf1']
+        self._metrics = ['bleu', 'em']
 
     def _is_program_field(self, field_name):
         return False
@@ -706,172 +695,3 @@ class AlmondDialoguePolicy(BaseAlmondTask):
 
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
-
-
-class BaseAlmondMultiLingualTask(BaseAlmondTask):
-    """Base task for MultiLingual Almond"""
-
-    def get_train_processed_ids(self, split):
-        all_ids = []
-        for ex in split.examples:
-            all_ids.append(process_id(ex))
-        return all_ids
-
-    def combine_datasets(self, datasets, all_paths, sort_key_fn, batch_size_fn, used_fields, groups):
-        splits = defaultdict()
-        # paths = defaultdict()
-
-        for field in used_fields:
-            # choose one path and replace dir name with 'combined'
-            # paths[field] = '/'.join([getattr(all_paths[0], field).rsplit('/', 2)[0], 'combined', getattr(all_paths[0], field).rsplit('/', 2)[2]])
-
-            all_examples = []
-            for dataset in datasets:
-                all_examples.extend(getattr(dataset, field).examples)
-
-            splits[field] = CQA(all_examples, sort_key_fn=sort_key_fn, batch_size_fn=batch_size_fn, groups=groups)
-
-        return Split(train=splits.get('train'), eval=splits.get('eval'), test=splits.get('test'), aux=splits.get('aux'))
-        # Split(train=paths.get('train'), eval=paths.get('eval'), test=paths.get('test'), aux=paths.get('aux'))
-
-    def get_splits(self, root, **kwargs):
-        all_datasets = []
-        all_paths = []
-        # number of directories to read data from
-        all_dirs = kwargs['all_dirs'].split('+')
-
-        for dir in all_dirs:
-            splits, paths = AlmondDataset.return_splits(
-                path=os.path.join(root, 'almond/{}'.format(dir)), make_example=self._make_example, **kwargs
-            )
-            all_datasets.append(splits)
-            all_paths.append(paths)
-
-        used_fields = [field for field in all_datasets[0]._fields if getattr(all_datasets[0], field) is not None]
-
-        assert len(all_datasets) >= 1
-        if getattr(self.args, 'sentence_batching', False):
-            for field in used_fields:
-                lengths = list(map(lambda dataset: len(getattr(dataset, field)), all_datasets))
-                assert len(set(lengths)) == 1, 'When using sentence batching your datasets should have the same size.'
-            if 'train' in used_fields:
-                ids_sets = list(map(lambda dataset: set(self.get_train_processed_ids(dataset.train)), all_datasets))
-                id_set_base = set(ids_sets[0])
-                for id_set in ids_sets:
-                    assert set(id_set) == id_set_base, 'When using sentence batching your datasets should have matching ids'
-
-            sort_key_fn = process_id
-            batch_size_fn = default_batch_fn
-        else:
-            # use default values for `sort_key_fn` and `batch_size_fn`
-            sort_key_fn = input_then_output_len
-            batch_size_fn = all_tokens_fn
-
-        groups = len(all_datasets) if getattr(self.args, 'sentence_batching', False) else None
-
-        if getattr(self.args, 'separate_eval', False) and (all_datasets[0].eval or all_datasets[0].test):
-            return all_datasets, all_paths
-        # TODO fix handling paths for multilingual
-        else:
-            return (
-                self.combine_datasets(all_datasets, all_paths, sort_key_fn, batch_size_fn, used_fields, groups),
-                all_paths[0],
-            )
-
-
-@register_task('almond_multilingual')
-class AlmondMultiLingual(BaseAlmondMultiLingualTask):
-    def __init__(self, name, args):
-        super().__init__(name, args)
-        self._metrics = ['em', 'sm', 'bleu']
-
-    def _is_program_field(self, field_name):
-        return field_name == 'answer'
-
-    @property
-    def utterance_field(self):
-        return 'context'
-
-    def _make_example(self, parts, dir_name, **kwargs):
-        if self._almond_has_multiple_programs:
-            example_id, sentence, target_code = parts[:3]
-        else:
-            example_id, sentence, target_code = parts
-        language = ISO_to_LANG.get(dir_name, 'English').lower()
-        if self.args.almond_lang_as_question:
-            question = 'translate from {} to thingtalk'.format(language)
-        else:
-            question = 'translate from english to thingtalk'
-        context = sentence
-        answer = target_code
-        return Example.from_raw(
-            self.name + '/' + dir_name + '/' + example_id,
-            context,
-            question,
-            answer,
-            preprocess=self.preprocess_field,
-            lower=False,
-        )
-
-
-@register_task('almond_dialogue_multilingual_nlu')
-class AlmondDialogMultiLingualNLU(BaseAlmondMultiLingualTask):
-    """Multi-turn NLU task (user and agent) for MultiLingual Almond dialogues"""
-
-    def __init__(self, name, args):
-        super().__init__(name, args)
-        self._metrics = ['em', 'sm', 'bleu']
-
-    def _is_program_field(self, field_name):
-        return field_name in ('answer', 'context')
-
-    @property
-    def utterance_field(self):
-        return 'question'
-
-    def _make_example(self, parts, dir_name=None, **kwargs):
-        if self._almond_has_multiple_programs:
-            example_id, context, sentence, target_code = parts
-        else:
-            example_id, context, sentence, target_code = parts[:4]
-        answer = target_code
-        question = sentence
-        return Example.from_raw(
-            self.name + '/' + dir_name + '/' + example_id,
-            context,
-            question,
-            answer,
-            preprocess=self.preprocess_field,
-            lower=False,
-        )
-
-
-@register_task('almond_dialogue_multilingual_nlg')
-class AlmondDialogMultiLingualNLG(BaseAlmondTask):
-    """Multi-turn NLG task (agent) for MultiLingual Almond dialogues"""
-
-    def __init__(self, name, args):
-        super().__init__(name, args)
-        self._metrics = ['bleu']
-
-    def _is_program_field(self, field_name):
-        return field_name == 'context'
-
-    @property
-    def utterance_field(self):
-        return 'question'
-
-    def _make_example(self, parts, dir_name=None, **kwargs):
-        # the question is irrelevant for this task
-        example_id, context, sentence, target_code = parts
-        question = 'what should the agent say ?'
-        context = context + ' ' + target_code
-        answer = sentence
-        return Example.from_raw(
-            self.name + '/' + dir_name + '/' + example_id,
-            context,
-            question,
-            answer,
-            preprocess=self.preprocess_field,
-            lower=False,
-        )

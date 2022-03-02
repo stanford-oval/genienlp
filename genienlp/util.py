@@ -34,9 +34,10 @@ import os
 import random
 import re
 import shutil
+import sys
 import time
 from json.decoder import JSONDecodeError
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 import torch
@@ -230,32 +231,6 @@ class ConfidenceFeatures:
             + str(self.label)
             + '>'
         )
-
-
-class GenerationOutput(object):
-    """
-    Contains all the information that the generation function may need to output
-    """
-
-    def __init__(
-        self,
-        loss: Optional[float] = None,
-        example_ids: Optional[List] = None,
-        predictions: Optional[List] = None,
-        raw_predictions: Optional[List] = None,
-        answers: Optional[List] = None,
-        contexts: Optional[List] = None,
-        confidence_features: Optional[List] = None,
-        confidence_scores: Optional[List] = None,
-    ):
-        self.loss = loss
-        self.example_ids = example_ids
-        self.predictions = predictions
-        self.raw_predictions = raw_predictions
-        self.answers = answers
-        self.contexts = contexts
-        self.confidence_features = confidence_features
-        self.confidence_scores = confidence_scores
 
 
 def remove_thingtalk_quotes(thingtalk):
@@ -862,7 +837,6 @@ def load_config_json(args):
             'no_separator',
             'num_labels',
             'crossner_domains',
-            'hf_test_overfit',
             'override_valid_metrics',
             'eval_src_languages',
             'eval_tgt_languages',
@@ -1002,3 +976,45 @@ def load_config_json(args):
         args.verbose = False
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
+
+
+def replace_capturing_group(input, re_pattern, replacement):
+    # replace first captured group in the input with replacement using regex re_pattern
+    if re_pattern.search(input):
+        whole_match = re_pattern.search(input).group(0).strip()
+        captured_match = re_pattern.search(input).group(1).strip()
+        new_whole_match = whole_match.replace(captured_match, replacement)
+        new_input = re.sub(re_pattern, new_whole_match, input)
+    else:
+        new_input = input
+    return new_input
+
+
+def print_results(results, num_print):
+    print()
+
+    values = list(results.values())
+    num_examples = len(values[0])
+
+    # examples are sorted by length
+    # to get good diversity, get half of examples from second quartile
+    start = int(num_examples / 4)
+    end = start + int(num_print / 2)
+    first_list = [val[start:end] for val in values]
+
+    # and the other half from fourth quartile
+    start = int(3 * num_examples / 4)
+    end = start + num_print - int(num_print / 2)
+    second_list = [val[start:end] for val in values]
+
+    # join examples
+    processed_values = [first + second for first, second in zip(first_list, second_list)]
+
+    for ex_idx in range(len(processed_values[0])):
+        for key_idx, key in enumerate(results.keys()):
+            value = processed_values[key_idx][ex_idx]
+            v = value[0] if isinstance(value, list) else value
+            key_width = max(len(key) for key in results)
+            print(f'{key:>{key_width}}: {repr(v)}')
+        print()
+    sys.stdout.flush()

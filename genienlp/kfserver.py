@@ -39,9 +39,9 @@ logger = logging.getLogger(__name__)
 
 
 class KFModelServer(kfserving.KFModel):
-    def __init__(self, name, args, numericalizer, model, device, confidence_estimators, estimator_filenames, ned_model):
+    def __init__(self, name, args, model, device, confidence_estimators, estimator_filenames, ned_model):
         super().__init__(name)
-        self.server = Server(args, numericalizer, model, device, confidence_estimators, estimator_filenames, ned_model)
+        self.server = Server(args, model, device, confidence_estimators, estimator_filenames, ned_model)
 
     def load(self):
         log_model_size(logger, self.server.model, self.server.args.model)
@@ -57,7 +57,7 @@ class KFModelServer(kfserving.KFModel):
 def main(args):
     model, device, confidence_estimators, estimator_filenames, ned_model = init(args)
     model_server = KFModelServer(
-        args.inference_name, args, model.numericalizer, model, device, confidence_estimators, estimator_filenames, ned_model
+        args.inference_name, args, model, device, confidence_estimators, estimator_filenames, ned_model
     )
     model_server.load()
     kfserving.KFServer(workers=1).start([model_server])

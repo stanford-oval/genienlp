@@ -16,10 +16,10 @@ tasks=(
 for i in ${!hparams[*]};
 do
     # train
-    genienlp train --train_tasks ${tasks[i]} --train_batch_tokens 100 --val_batch_size 300 --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/bitod --exist_ok --skip_cache --embeddings $EMBEDDING_DIR --no_commit ${hparams[i]}
+    genienlp train --train_tasks ${tasks[i]} --train_batch_tokens 100 --val_batch_size 300 --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/bitod --exist_ok  --embeddings $EMBEDDING_DIR --no_commit ${hparams[i]}
 
     # greedy prediction
-    genienlp predict --tasks ${tasks[i]} --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/bitod --embeddings $EMBEDDING_DIR --skip_cache --extra_metrics e2e_dialogue_score
+    genienlp predict --tasks ${tasks[i]} --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/bitod --embeddings $EMBEDDING_DIR  --extra_metrics e2e_dialogue_score
 
     # check if result file exists
     if test ! -f $workdir/model_$i/eval_results/test/${tasks[i]}.tsv ; then

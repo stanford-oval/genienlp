@@ -14,10 +14,10 @@ for hparams in \
 do
 
     # train
-    genienlp train --train_tasks almond --train_batch_tokens 100 --val_batch_size 100 --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok --skip_cache --embeddings $EMBEDDING_DIR --no_commit
+    genienlp train --train_tasks almond --train_batch_tokens 100 --val_batch_size 100 --train_iterations 4 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok  --embeddings $EMBEDDING_DIR --no_commit
 
     # greedy prediction
-    genienlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $EMBEDDING_DIR --skip_cache
+    genienlp predict --tasks almond --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $EMBEDDING_DIR
 
     # check if result file exists
     if test ! -f $workdir/model_$i/eval_results/test/almond.tsv ; then

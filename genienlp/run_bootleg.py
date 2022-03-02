@@ -48,7 +48,6 @@ def parse_argv(parser):
     parser.add_argument('--save', required=True, type=str, help='where to save results.')
     parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to save embeddings.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
-    parser.add_argument('--cache', default='.cache/', type=str, help='where to save cached files')
 
     parser.add_argument(
         '--train_languages',
@@ -177,19 +176,9 @@ def parse_argv(parser):
         '--exist_ok', action='store_true', help='Ok if the save directory already exists, i.e. overwrite is ok'
     )
 
-    parser.add_argument('--skip_cache', action='store_true', help='whether to use existing cached splits or generate new ones')
-    parser.add_argument(
-        '--cache_input_data', action='store_true', help='Cache examples from input data for faster subsequent trainings'
-    )
-
     # token classification task args
     parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')
     parser.add_argument('--crossner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
-    parser.add_argument(
-        '--hf_test_overfit',
-        action='store_true',
-        help='Debugging flag for hf datasets where validation will be performed on train set',
-    )
 
 
 def bootleg_dump_entities(args, logger):
@@ -197,10 +186,7 @@ def bootleg_dump_entities(args, logger):
 
     bootleg_shared_kwargs = {
         'subsample': args.subsample,
-        'skip_cache': args.skip_cache,
-        'cache_input_data': args.cache_input_data,
         'num_workers': args.num_workers,
-        'all_dirs': args.train_src_languages,
         'crossner_domains': args.crossner_domains,
     }
 
@@ -212,7 +198,6 @@ def bootleg_dump_entities(args, logger):
 
         kwargs = {'train': None, 'validation': None, 'test': None}
         kwargs.update(bootleg_shared_kwargs)
-        kwargs['cached_path'] = os.path.join(args.cache, task.name)
         for split in args.bootleg_data_splits:
             if split == 'train':
                 del kwargs['train']  # deleting keys means use the default file name

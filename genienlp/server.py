@@ -46,7 +46,6 @@ from .data_utils.example import Example, NumericalizedExamples
 from .ned.ned_utils import init_ned_model
 from .tasks.registry import get_tasks
 from .util import adjust_language_code, get_devices, load_config_json, log_model_size, set_seed
-from .validate import generate_with_model
 
 logger = logging.getLogger(__name__)
 
@@ -130,10 +129,10 @@ def parse_argv(parser):
 
 
 class Server(object):
-    def __init__(self, args, numericalizer, model, device, confidence_estimators, estimator_filenames, ned_model):
+    def __init__(self, args, model, device, confidence_estimators, estimator_filenames, ned_model):
         self.args = args
         self.device = device
-        self.numericalizer = numericalizer
+        self.numericalizer = model.numericalizer
         self.model = model
         self.confidence_estimators = confidence_estimators
         self.estimator_filenames = estimator_filenames
@@ -213,12 +212,9 @@ class Server(object):
 
     def _predict_batch(self, batch, task, args):
         if args.calibrator_paths is not None:
-            output = generate_with_model(
-                self.model,
+            output = self.model.validate(
                 [batch],
-                self.numericalizer,
                 task,
-                args,
                 output_predictions_only=True,
                 confidence_estimators=self.confidence_estimators,
             )
@@ -239,7 +235,11 @@ class Server(object):
                         instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
                     response.append(instance)
         else:
-            output = generate_with_model(self.model, [batch], self.numericalizer, task, args, output_predictions_only=True)
+            output = self.model.validate(
+                [batch],
+                task,
+                output_predictions_only=True,
+            )
             if sum(args.num_outputs) > 1:
                 response = []
                 for idx, predictions in enumerate(output.predictions):
@@ -384,5 +384,5 @@ def init(args):
 
 def main(args):
     model, device, confidence_estimators, estimator_filenames, ned_model = init(args)
-    server = Server(args, model.numericalizer, model, device, confidence_estimators, estimator_filenames, ned_model)
+    server = Server(args, model, device, confidence_estimators, estimator_filenames, ned_model)
     server.run()

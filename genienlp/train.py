@@ -43,6 +43,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from . import arguments, models
 from .arguments import save_args
+from .metrics import calculate_and_reduce_metrics
 from .model_utils.optimizer import init_opt
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
@@ -54,9 +55,9 @@ from .util import (
     log_model_size,
     make_data_loader,
     ned_dump_entity_type_pairs,
+    print_results,
     set_seed,
 )
-from .validate import print_results, validate
 
 
 def initialize_logger(args):
@@ -87,8 +88,6 @@ def prepare_data(args, logger):
 
     train_eval_shared_kwargs = {
         'subsample': args.subsample,
-        'skip_cache': args.skip_cache,
-        'cache_input_data': args.cache_input_data,
         'num_workers': args.num_workers,
     }
 
@@ -98,8 +97,6 @@ def prepare_data(args, logger):
             kwargs = {'test': None, 'validation': None}
             kwargs['train'] = args.train_set_name
             kwargs.update(train_eval_shared_kwargs)
-            kwargs['all_dirs'] = args.train_src_languages
-            kwargs['cached_path'] = os.path.join(args.cache, task.name)
             kwargs['crossner_domains'] = args.crossner_domains
             if args.use_curriculum:
                 kwargs['curriculum'] = True
@@ -143,10 +140,7 @@ def prepare_data(args, logger):
             if args.eval_set_name is not None:
                 kwargs['validation'] = args.eval_set_name
             kwargs.update(train_eval_shared_kwargs)
-            kwargs['all_dirs'] = args.eval_src_languages
-            kwargs['cached_path'] = os.path.join(args.cache, task.name)
             kwargs['crossner_domains'] = args.crossner_domains
-            kwargs['hf_test_overfit'] = args.hf_test_overfit
 
             logger.info(f'Adding {task.name} to validation datasets')
             splits, paths = task.get_splits(args.data, lower=args.lower, **kwargs)
@@ -210,7 +204,7 @@ def update_fraction(args, task_iteration):
     return fraction
 
 
-def should_validate(iteration, val_every, resume, start_iteration):
+def should_validate_while_training(iteration, val_every, resume, start_iteration):
     if val_every is None:
         return False
     return (iteration % val_every == 0) or (resume and iteration == start_iteration)
@@ -228,12 +222,37 @@ def should_log(iteration, log_every):
     return iteration % log_every == 0
 
 
-def do_validate(
-    iteration, args, model, numericalizer, val_iters, *, train_task, round_progress, task_progress, writer, logger
+def validate_while_training(task, val_iter, model, args, num_print=10):
+    with torch.no_grad():
+        model.eval()
+        if isinstance(model, torch.nn.DataParallel):
+            # get rid of the DataParallel wrapper
+            model = model.module
+
+        validation_output = model.validate(val_iter, task)
+
+        # loss is already calculated
+        metrics_to_return = [metric for metric in task.metrics if metric != 'loss']
+
+        metrics = calculate_and_reduce_metrics(args, validation_output, metrics_to_return, model.tgt_lang)
+
+        results = {
+            'model prediction': validation_output.predictions,
+            'gold answer': validation_output.answers,
+            'context': validation_output.contexts,
+        }
+
+        print_results(results, num_print)
+
+        return validation_output, metrics
+
+
+def do_validate_while_training(
+    iteration, args, model, val_iters, *, train_task, round_progress, task_progress, writer, logger
 ):
     deca_score = 0
     for val_task_idx, (val_task, val_iter) in enumerate(val_iters):
-        output, metric_dict = validate(val_task, val_iter, model, numericalizer, args, num_print=args.num_print)
+        output, metric_dict = validate_while_training(val_task, val_iter, model, args, num_print=args.num_print)
         val_loss = output.loss
         if val_loss is not None:
             log_entry = f'{args.timestamp}:{elapsed_time(logger)}:iteration_{iteration}:{round_progress}train_{train_task.name}:{task_progress}val_{val_task.name}:val_loss_{val_loss:.4f}:'
@@ -559,7 +578,7 @@ def train(
                     local_loss = 0
 
                 # validate
-                if should_validate(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
+                if should_validate_while_training(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
                     if args.print_train_examples_too:
                         results = {
                             'answer': numericalizer.reverse(batch.answer.value.data, 'answer'),
@@ -568,11 +587,10 @@ def train(
                         num_print = min(len(results['answer']), args.num_print)
                         print_results(results, num_print)
 
-                    deca_score = do_validate(
+                    deca_score = do_validate_while_training(
                         iteration,
                         args,
                         model,
-                        numericalizer,
                         val_iters,
                         train_task=task,
                         round_progress=round_progress,

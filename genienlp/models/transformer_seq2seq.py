@@ -26,7 +26,6 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 import logging
 from typing import List
 
@@ -36,22 +35,21 @@ from transformers import AutoConfig, AutoModelForSeq2SeqLM, MBartTokenizer, MBar
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..model_utils.transformers_utils import MULTILINGUAL_TOKENIZERS
 from ..util import ConfidenceFeatures, adjust_language_code
-from .base import GenieModel
+from .base import GenieModelForGeneration
 from .common import LabelSmoothingCrossEntropy
 
 logger = logging.getLogger(__name__)
 
 
-class TransformerSeq2Seq(GenieModel):
+class TransformerSeq2Seq(GenieModelForGeneration):
     def __init__(self, config=None, *inputs, args, tasks, vocab_sets, save_directory=None, **kwargs):
         """
         If `save_directory` is None, will initialize a new model and numericalizer, otherwise, will load them from `save_directory`
         """
         config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
-        self.config = config
         super().__init__(config)
         self.args = args
-        args.dimension = config.d_model
+        args.dimension = self.config.d_model
         self._is_bart_large = self.args.pretrained_model == 'facebook/bart-large'
 
         # tasks is not passed during initialization only in server mode
@@ -62,11 +60,11 @@ class TransformerSeq2Seq(GenieModel):
         # only used for Marian models. adjusted language codes passed to numericalizer will be None for models trained on single langauge pairs
         self.orig_src_lang, self.orig_tgt_lang = kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
         self.src_lang, self.tgt_lang = adjust_language_code(
-            config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
+            self.config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
         )
 
         if save_directory is not None:
-            self.model = AutoModelForSeq2SeqLM.from_config(config)
+            self.model = AutoModelForSeq2SeqLM.from_config(self.config)
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model, cache_dir=self.args.embeddings)
 
@@ -75,7 +73,7 @@ class TransformerSeq2Seq(GenieModel):
             args,
             max_generative_vocab=None,
             save_dir=save_directory,
-            config=config,
+            config=self.config,
             src_lang=self.src_lang,
             tgt_lang=self.tgt_lang,
             vocab_sets=vocab_sets,
