@@ -43,6 +43,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from . import arguments, models
 from .arguments import save_args
+from .metrics import calculate_and_reduce_metrics
 from .model_utils.optimizer import init_opt
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
@@ -54,9 +55,9 @@ from .util import (
     log_model_size,
     make_data_loader,
     ned_dump_entity_type_pairs,
+    print_results,
     set_seed,
 )
-from .validate import print_results, validate
 
 
 def initialize_logger(args):
@@ -219,6 +220,31 @@ def should_log(iteration, log_every):
     if log_every is None:
         return False
     return iteration % log_every == 0
+
+
+def validate(task, val_iter, model, args, num_print=10):
+    with torch.no_grad():
+        model.eval()
+        if isinstance(model, torch.nn.DataParallel):
+            # get rid of the DataParallel wrapper
+            model = model.module
+
+        generation_output = model.validate(val_iter, task)
+
+        # loss is already calculated
+        metrics_to_return = [metric for metric in task.metrics if metric != 'loss']
+
+        metrics = calculate_and_reduce_metrics(args, generation_output, metrics_to_return, model.tgt_lang)
+
+        results = {
+            'model prediction': generation_output.predictions,
+            'gold answer': generation_output.answers,
+            'context': generation_output.contexts,
+        }
+
+        print_results(results, num_print)
+
+        return generation_output, metrics
 
 
 def do_validate(iteration, args, model, val_iters, *, train_task, round_progress, task_progress, writer, logger):

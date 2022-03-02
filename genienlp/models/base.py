@@ -102,6 +102,33 @@ class GenieModelForGeneration(GenieModel):
         self,
         data_iterator,
         task,
+        eval_dir=None,
+        output_predictions_only=False,
+        output_confidence_features=False,
+        original_order=None,
+        confidence_estimators=None,
+        disable_progbar=True,
+        **kwargs,
+    ):
+        if self.args.e2e_dialogue_evaluation:
+            return self.validate_e2e_dialogues(
+                data_iterator, task, eval_dir, output_predictions_only, original_order, disable_progbar
+            )
+        else:
+            return self.validate_batch(
+                data_iterator,
+                task,
+                output_predictions_only,
+                output_confidence_features,
+                original_order,
+                confidence_estimators,
+                disable_progbar,
+            )
+
+    def validate_batch(
+        self,
+        data_iterator,
+        task,
         output_predictions_only=False,
         output_confidence_features=False,
         original_order=None,

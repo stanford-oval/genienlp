@@ -34,6 +34,7 @@ import os
 import random
 import re
 import shutil
+import sys
 import time
 from json.decoder import JSONDecodeError
 from typing import List, Optional
@@ -1013,3 +1014,33 @@ def replace_capturing_group(input, re_pattern, replacement):
     else:
         new_input = input
     return new_input
+
+
+def print_results(results, num_print):
+    print()
+
+    values = list(results.values())
+    num_examples = len(values[0])
+
+    # examples are sorted by length
+    # to get good diversity, get half of examples from second quartile
+    start = int(num_examples / 4)
+    end = start + int(num_print / 2)
+    first_list = [val[start:end] for val in values]
+
+    # and the other half from fourth quartile
+    start = int(3 * num_examples / 4)
+    end = start + num_print - int(num_print / 2)
+    second_list = [val[start:end] for val in values]
+
+    # join examples
+    processed_values = [first + second for first, second in zip(first_list, second_list)]
+
+    for ex_idx in range(len(processed_values[0])):
+        for key_idx, key in enumerate(results.keys()):
+            value = processed_values[key_idx][ex_idx]
+            v = value[0] if isinstance(value, list) else value
+            key_width = max(len(key) for key in results)
+            print(f'{key:>{key_width}}: {repr(v)}')
+        print()
+    sys.stdout.flush()

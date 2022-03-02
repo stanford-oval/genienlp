@@ -287,7 +287,7 @@ def compute_metrics(
         requested_metrics: contains a subset of the following metrics
             em (exact match)
             sm (structure match): valid if the output is ThingTalk code. Whether the gold answer and prediction are identical if we ignore parameter values of ThingTalk programs
-            #TODO add all
+            # TODO add all
         lang: the language of the predictions and answers. Used for BERTScore.
         args: arguments
         example_ids: used to calculate some of e2e dialogue metrics that need to know span of each dialogue such as JGA

@@ -62,7 +62,6 @@ from .util import (
     set_seed,
     split_folder_on_disk,
 )
-from .validate import generate_with_model
 
 logger = logging.getLogger(__name__)
 
@@ -472,16 +471,14 @@ def run(args, device):
             confidence_estimators = None
 
         with torch.no_grad(), torch.cuda.amp.autocast(enabled=args.mixed_precision):
-            generation_output = generate_with_model(
-                model,
+            generation_output = model.validate(
                 it,
                 task,
-                args,
-                original_order=original_order,
+                eval_dir=eval_dir,
                 output_confidence_features=args.save_confidence_features,
+                original_order=original_order,
                 confidence_estimators=confidence_estimators,
                 disable_progbar=False,
-                eval_dir=eval_dir,
             )
 
         if args.save_confidence_features:
