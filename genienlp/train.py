@@ -232,9 +232,9 @@ def validate_while_training(task, val_iter, model, args, num_print=10):
         validation_output = model.validate(val_iter, task)
 
         # loss is already calculated
-        metrics_to_return = [metric for metric in task.metrics if metric != 'loss']
+        metrics_to_compute = [metric for metric in task.metrics if metric != 'loss']
 
-        metrics = calculate_and_reduce_metrics(args, validation_output, metrics_to_return, model.tgt_lang)
+        metrics = calculate_and_reduce_metrics(args, validation_output, metrics_to_compute, model.tgt_lang)
 
         results = {
             'model prediction': validation_output.predictions,
@@ -579,7 +579,9 @@ def train(
                     local_loss = 0
 
                 # validate
-                if should_validate_while_training(iteration, val_every, val_after, resume=args.resume, start_iteration=start_iteration):
+                if should_validate_while_training(
+                    iteration, val_every, val_after, resume=args.resume, start_iteration=start_iteration
+                ):
                     if args.print_train_examples_too:
                         results = {
                             'answer': numericalizer.reverse(batch.answer.value.data, 'answer'),
