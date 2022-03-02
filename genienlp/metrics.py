@@ -378,11 +378,11 @@ def compute_metrics(
     return metric_dict
 
 
-def calculate_and_reduce_metrics(args, generation_output, metrics_to_compute, lang):
+def calculate_and_reduce_metrics(args, validation_output, metrics_to_compute, lang):
     metrics = OrderedDict()
-    example_ids = generation_output.example_ids
-    predictions = generation_output.predictions
-    answers = generation_output.answers
+    example_ids = validation_output.example_ids
+    predictions = validation_output.predictions
+    answers = validation_output.answers
 
     if args.reduce_metrics == 'max':
         for i in range(len(predictions[0])):  # for each output (in case of multiple outputs)

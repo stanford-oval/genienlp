@@ -37,7 +37,7 @@ import shutil
 import sys
 import time
 from json.decoder import JSONDecodeError
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 import torch
@@ -231,32 +231,6 @@ class ConfidenceFeatures:
             + str(self.label)
             + '>'
         )
-
-
-class GenerationOutput(object):
-    """
-    Contains all the information that the generation function may need to output
-    """
-
-    def __init__(
-        self,
-        loss: Optional[float] = None,
-        example_ids: Optional[List] = None,
-        predictions: Optional[List] = None,
-        raw_predictions: Optional[List] = None,
-        answers: Optional[List] = None,
-        contexts: Optional[List] = None,
-        confidence_features: Optional[List] = None,
-        confidence_scores: Optional[List] = None,
-    ):
-        self.loss = loss
-        self.example_ids = example_ids
-        self.predictions = predictions
-        self.raw_predictions = raw_predictions
-        self.answers = answers
-        self.contexts = contexts
-        self.confidence_features = confidence_features
-        self.confidence_scores = confidence_scores
 
 
 def remove_thingtalk_quotes(thingtalk):

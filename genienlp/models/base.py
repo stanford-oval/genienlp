@@ -31,6 +31,7 @@ import copy
 import logging
 import os
 from collections import defaultdict
+from typing import List, Optional
 
 import torch
 import ujson
@@ -41,7 +42,7 @@ from transformers import AutoConfig, MarianTokenizer, PreTrainedModel
 from ..data_utils.example import NumericalizedExamples, SequentialField
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..data_utils.progbar import progress_bar
-from ..util import GenerationOutput, adjust_language_code, merge_translated_sentences, replace_capturing_group
+from ..util import adjust_language_code, merge_translated_sentences, replace_capturing_group
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,32 @@ class GenieModel(PreTrainedModel):
         self._output_attentions = any(getattr(task, 'need_attention_scores', False) for task in tasks)
         self._output_scores = False
         self._output_hidden_states = False
+
+
+class ValidationOutput(object):
+    """
+    Contains all the information that model's validate() method may output
+    """
+
+    def __init__(
+        self,
+        loss: Optional[float] = None,
+        example_ids: Optional[List] = None,
+        predictions: Optional[List] = None,
+        raw_predictions: Optional[List] = None,
+        answers: Optional[List] = None,
+        contexts: Optional[List] = None,
+        confidence_features: Optional[List] = None,
+        confidence_scores: Optional[List] = None,
+    ):
+        self.loss = loss
+        self.example_ids = example_ids
+        self.predictions = predictions
+        self.raw_predictions = raw_predictions
+        self.answers = answers
+        self.contexts = contexts
+        self.confidence_features = confidence_features
+        self.confidence_scores = confidence_scores
 
 
 # TransformerSeq2Seq and TransformerLSTM will inherit from this model
@@ -324,7 +351,7 @@ class GenieModelForGeneration(GenieModel):
                 self.numericalizer._tokenizer.tgt_lang,
             )
 
-        output = GenerationOutput(loss=total_loss)
+        output = ValidationOutput(loss=total_loss)
 
         if output_predictions_only:
             output.predictions = predictions
@@ -576,7 +603,7 @@ class GenieModelForGeneration(GenieModel):
 
         # TODO calculate and return loss
         loss = None
-        output = GenerationOutput(loss=loss)
+        output = ValidationOutput(loss=loss)
 
         if output_predictions_only:
             output.predictions = predictions
@@ -696,7 +723,7 @@ class GenieModelForClassification(GenieModel):
                 )
             ]
 
-        output = GenerationOutput(
+        output = ValidationOutput(
             loss=total_loss,
             example_ids=all_example_ids,
             contexts=all_contexts,

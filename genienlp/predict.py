@@ -379,16 +379,16 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
     return iters
 
 
-def create_output_lines(args, index, generation_output):
-    predictions = generation_output.raw_predictions if args.translate_return_raw_outputs else generation_output.predictions
+def create_output_lines(args, index, validation_output):
+    predictions = validation_output.raw_predictions if args.translate_return_raw_outputs else validation_output.predictions
     if args.one_output_per_line:
         lines = [
             '\t'.join(
                 [
-                    generation_output.example_ids[index],
+                    validation_output.example_ids[index],
                     prediction,
-                    generation_output.answers[index],
-                    generation_output.contexts[index],
+                    validation_output.answers[index],
+                    validation_output.contexts[index],
                 ]
             )
             for prediction in predictions[index]
@@ -397,15 +397,15 @@ def create_output_lines(args, index, generation_output):
         lines = [
             '\t'.join(
                 [
-                    generation_output.example_ids[index],
+                    validation_output.example_ids[index],
                     *predictions[index],
-                    generation_output.answers[index],
-                    generation_output.contexts[index],
+                    validation_output.answers[index],
+                    validation_output.contexts[index],
                 ]
             )
         ]  # one line with all generation outputs separated by '\t'
     if args.calibrator_paths is not None:
-        for score in generation_output.confidence_scores:
+        for score in validation_output.confidence_scores:
             lines = [line + '\t' + str(score[index]) for line in lines]  # append score to all lines
     return lines
 
@@ -471,7 +471,7 @@ def run(args, device):
             confidence_estimators = None
 
         with torch.no_grad(), torch.cuda.amp.autocast(enabled=args.mixed_precision):
-            generation_output = model.validate(
+            validation_output = model.validate(
                 it,
                 task,
                 eval_dir=eval_dir,
@@ -482,45 +482,45 @@ def run(args, device):
             )
 
         if args.save_confidence_features:
-            torch.save(generation_output.confidence_features, args.confidence_feature_path)
+            torch.save(validation_output.confidence_features, args.confidence_feature_path)
 
         # write into file
         # TODO change to jsonl format
         with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
-            for i in range(len(generation_output.example_ids)):
-                lines = create_output_lines(args, i, generation_output)
+            for i in range(len(validation_output.example_ids)):
+                lines = create_output_lines(args, i, validation_output)
                 prediction_file.write('\n'.join(lines) + '\n')
 
         if args.translate_return_raw_outputs:
             with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
-                for i in range(len(generation_output.example_ids)):
-                    lines = create_output_lines(args, i, generation_output)
+                for i in range(len(validation_output.example_ids)):
+                    lines = create_output_lines(args, i, validation_output)
                     prediction_file.write('\n'.join(lines) + '\n')
 
-        if len(generation_output.answers) > 0:
+        if len(validation_output.answers) > 0:
             metrics_to_compute = get_metrics_to_compute(args, task)
-            metrics = calculate_and_reduce_metrics(args, generation_output, metrics_to_compute, tgt_lang)
+            metrics = calculate_and_reduce_metrics(args, validation_output, metrics_to_compute, tgt_lang)
 
             with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
                 results_file.write(json.dumps(metrics) + '\n')
 
             if not args.silent:
                 for i, (c, p, a) in enumerate(
-                    zip(generation_output.contexts, generation_output.predictions, generation_output.answers)
+                    zip(validation_output.contexts, validation_output.predictions, validation_output.answers)
                 ):
                     log_string = '\n'.join(
                         [f'Context {i + 1}: {c}', f'Prediction {i + 1} ({len(p)} outputs): {p}', f'Answer {i + 1}: {a}']
                     )
                     if args.calibrator_paths is not None:
                         log_string += f'Confidence {i + 1} : '
-                        for score in generation_output.confidence_scores:
+                        for score in validation_output.confidence_scores:
                             log_string += f'{score[i]:.3f}, '
                         log_string += '\n'
                     logger.info(log_string)
 
             logger.info(metrics)
 
-            task_scores[task].append((len(generation_output.answers), metrics[task.metrics[0]]))
+            task_scores[task].append((len(validation_output.answers), metrics[task.metrics[0]]))
 
     decaScore = []
     for task in task_scores.keys():

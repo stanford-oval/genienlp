@@ -229,22 +229,22 @@ def validate_while_training(task, val_iter, model, args, num_print=10):
             # get rid of the DataParallel wrapper
             model = model.module
 
-        generation_output = model.validate(val_iter, task)
+        validation_output = model.validate(val_iter, task)
 
         # loss is already calculated
         metrics_to_return = [metric for metric in task.metrics if metric != 'loss']
 
-        metrics = calculate_and_reduce_metrics(args, generation_output, metrics_to_return, model.tgt_lang)
+        metrics = calculate_and_reduce_metrics(args, validation_output, metrics_to_return, model.tgt_lang)
 
         results = {
-            'model prediction': generation_output.predictions,
-            'gold answer': generation_output.answers,
-            'context': generation_output.contexts,
+            'model prediction': validation_output.predictions,
+            'gold answer': validation_output.answers,
+            'context': validation_output.contexts,
         }
 
         print_results(results, num_print)
 
-        return generation_output, metrics
+        return validation_output, metrics
 
 
 def do_validate_while_training(
