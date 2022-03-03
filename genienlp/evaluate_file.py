@@ -88,12 +88,6 @@ def parse_argv(parser):
     parser.add_argument('--extra_metrics', nargs='+', default=[], help='include these additional metrics in reported results')
 
     parser.add_argument(
-        '--one_output_per_line',
-        action='store_true',
-        help='If true, each of the `num_outputs` output will be written to a separate line, while other columns are duplicated to fill these extra lines.',
-    )
-
-    parser.add_argument(
         '--e2e_dialogue_valid_subtasks',
         nargs='+',
         type=str,
