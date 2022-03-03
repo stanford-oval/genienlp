@@ -96,10 +96,9 @@ def align_and_replace(
     tgt_lang,
     tokenizer,
     remove_output_quotation,
+    src_quotation_symbol,
     date_parser=None,
 ):
-    src_quotation_symbol = '"'
-
     # M2M100Tokenizer has missing tokens in its fixed vocabulary and encodes them as unknown (https://github.com/pytorch/fairseq/issues/3463)
     # until that's fixed we treat unknown tokens as individual words by prepending SPIECE_UNDERLINE
     if isinstance(tokenizer, M2M100Tokenizer):

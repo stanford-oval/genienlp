@@ -534,6 +534,12 @@ def parse_argv(parser):
         action='store_true',
         help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
     )
+    parser.add_argument(
+        '--align_span_symbol',
+        default='"',
+        type=str,
+        help='The symbol we use to wrap spans of words in the input that need to be preserved in the output.',
+    )
 
     # token classification task args
     parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')

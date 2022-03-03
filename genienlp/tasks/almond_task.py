@@ -305,7 +305,7 @@ class Translate(NaturalSeq2Seq):
 
         self.all_ids.add(field_name + '-' + example_id)
 
-        src_quotation_symbol = '"'
+        src_quotation_symbol = self.args.align_span_symbol
         src_tokens = sentence.split(" ")
         src_spans_ind = [index for index, token in enumerate(src_tokens) if token == src_quotation_symbol]
 
@@ -373,7 +373,7 @@ class Translate(NaturalSeq2Seq):
         src_char_spans = None
         if split_sentence:
             if self.need_attention_scores:
-                src_quotation_symbol = '"'
+                src_quotation_symbol = self.args.align_span_symbol
                 src_char_spans_ind = [index for index, char in enumerate(context) if char == src_quotation_symbol]
                 src_char_spans = [
                     (src_char_spans_ind[i], src_char_spans_ind[i + 1]) for i in range(0, len(src_char_spans_ind), 2)
@@ -484,6 +484,7 @@ class Translate(NaturalSeq2Seq):
                         tgt_lang,
                         tokenizer,
                         self.args.align_remove_output_quotation,
+                        self.args.align_span_symbol,
                         date_parser=date_parser,
                     )
                 except Exception as e:

@@ -246,6 +246,11 @@ def parse_argv(parser):
         action='store_true',
         help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
     )
+    parser.add_argument(
+        '--align_span_symbol',
+        type=str,
+        help='The symbol we use to wrap spans of words in the input that need to be preserved in the output.',
+    )
 
     parser.add_argument(
         '--e2e_dialogue_evaluation',

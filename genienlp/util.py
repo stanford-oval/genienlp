@@ -855,6 +855,7 @@ def load_config_json(args):
             'top_k',
             'repetition_penalty',
             'temperature',
+            'align_span_symbol',
             'max_output_length',
             'min_output_length',
             'reduce_metrics',
@@ -908,6 +909,8 @@ def load_config_json(args):
                 setattr(args, r, [0])
             elif r in ['override_valid_metrics']:
                 setattr(args, r, [])
+            elif r == 'align_span_symbol':
+                setattr(args, r, '"')
             elif r == 'database_type':
                 setattr(args, r, 'json')
             elif r == 'att_pooling':
