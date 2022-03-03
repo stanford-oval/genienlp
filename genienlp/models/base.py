@@ -556,9 +556,9 @@ class GenieModelForGeneration(GenieModel):
                 ####
 
             elif train_target == 'api':
-                if dataset.do_knowledge_reset(active_api):
-                    new_knowledge_text = "null"
-                    knowledge = defaultdict(dict)
+                # if dataset.do_knowledge_reset(active_api):
+                #     new_knowledge_text = "null"
+                #     knowledge = defaultdict(dict)
 
                 do_api_call = predictions[-1][0].strip()
 
