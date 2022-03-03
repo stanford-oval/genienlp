@@ -170,6 +170,9 @@ def main(args):
     args.almond_detokenize_sentence = None
     args.do_alignment = None
 
+    if args.main_metric_only and args.extra_metrics:
+        raise ValueError('Please remove --main_metric_only from your arguments so the requested extra metrics can be shown.')
+
     set_seed(args)
     args.tasks = list(get_tasks(args.task_names, args).values())
 
