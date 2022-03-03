@@ -204,10 +204,10 @@ def update_fraction(args, task_iteration):
     return fraction
 
 
-def should_validate_while_training(iteration, val_every, resume, start_iteration):
+def should_validate_while_training(iteration, val_every, val_after, resume, start_iteration):
     if val_every is None:
         return False
-    return (iteration % val_every == 0) or (resume and iteration == start_iteration)
+    return (iteration % val_every == 0 and iteration >= val_after) or (resume and iteration == start_iteration)
 
 
 def should_save(iteration, save_every):
@@ -232,9 +232,9 @@ def validate_while_training(task, val_iter, model, args, num_print=10):
         validation_output = model.validate(val_iter, task)
 
         # loss is already calculated
-        metrics_to_return = [metric for metric in task.metrics if metric != 'loss']
+        metrics_to_compute = [metric for metric in task.metrics if metric != 'loss']
 
-        metrics = calculate_and_reduce_metrics(args, validation_output, metrics_to_return, model.tgt_lang)
+        metrics = calculate_and_reduce_metrics(args, validation_output, metrics_to_compute, model.tgt_lang)
 
         results = {
             'model prediction': validation_output.predictions,
@@ -402,6 +402,7 @@ def train(
     *,
     log_every,
     val_every,
+    val_after,
     save_every,
     rounds,
     val_sets,
@@ -578,7 +579,9 @@ def train(
                     local_loss = 0
 
                 # validate
-                if should_validate_while_training(iteration, val_every, resume=args.resume, start_iteration=start_iteration):
+                if should_validate_while_training(
+                    iteration, val_every, val_after, resume=args.resume, start_iteration=start_iteration
+                ):
                     if args.print_train_examples_too:
                         results = {
                             'answer': numericalizer.reverse(batch.answer.value.data, 'answer'),
@@ -775,6 +778,7 @@ def main(args):
         writer=writer,
         log_every=args.log_every,
         val_every=args.val_every,
+        val_after=args.val_after,
         save_every=args.save_every,
         rounds=len(train_sets) > 1,
         start_iteration=start_iteration,

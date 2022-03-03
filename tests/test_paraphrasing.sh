@@ -12,7 +12,7 @@ for hparams in \
     genienlp train --train_tasks almond_natural_seq2seq --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $SRCDIR/dataset/  $hparams --exist_ok  --embeddings $EMBEDDING_DIR --no_commit
 
     # greedy prediction
-    genienlp predict --tasks almond_paraphrase --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $EMBEDDING_DIR
+    genienlp predict --tasks almond_paraphrase --evaluate test --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $SRCDIR/dataset/ --embeddings $EMBEDDING_DIR --extra_metrics rouge1 rougeL
 
     # check if result file exists
     if test ! -f $workdir/model_$i/eval_results/test/almond_paraphrase.tsv || test ! -f $workdir/model_$i/eval_results/test/almond_paraphrase.results.json; then

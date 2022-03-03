@@ -26,8 +26,13 @@ for model in "Helsinki-NLP/opus-mt-en-de" "sshleifer/tiny-mbart" ; do
     # greedy prediction
     genienlp predict --tasks almond_translate --evaluate valid --pred_languages en --pred_tgt_languages de --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $workdir/translation/ --embeddings $EMBEDDING_DIR
 
+    # compute same metrics using evaluate-file command
+    genienlp evaluate-file --tasks almond_translate --pred_languages en --pred_tgt_languages de --overwrite --pred_file $workdir/model_$i/eval_results/valid/almond_translate.tsv --eval_dir $workdir/model_$i/eval_results_again/valid/
+
     # check if result file exists and matches expected_result
     echo $expected_result | diff -u - $workdir/model_$i/eval_results/valid/almond_translate.results.json
+    echo $expected_result | diff -u - $workdir/model_$i/eval_results_again/valid/almond_translate.results.json
+
 
     rm -rf $workdir/generated_"$base_model"_aligned.tsv
 

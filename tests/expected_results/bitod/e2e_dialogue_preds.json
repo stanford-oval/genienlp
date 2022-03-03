@@ -1,0 +1,33 @@
+{
+  "ec909032-d5fd-4dee-8dd2-53a895a98824": {
+    "turns": {
+      "1": {
+        "state": {},
+        "api": "null",
+        "actions": "Two Vergeblich null Twist Null <API> sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet",
+        "response": [
+          "Zwei Vergeblich null Twist Null sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet swe"
+        ]
+      },
+      "2": {
+        "state": {},
+        "api": "null",
+        "actions": "Sweat Vermehren null Sweat Vermehren null Sweat Vermehren null Sweat Vermehren sweat Vermehren _ Sweat ( Hotels suchen ) Anfrage Ort , Anfrage Bewertung sweat Kein bestimmtes Ziel, aber ich will ein Hotel, das mindestens 4 Sterne. Response: . Response: . Response: sweat Vermehren DA: ACTS: . <endofknowledge> sweat Vermehren DA: DA: DA: . DA: sweat Vermehren DA: DA: DA: . DA: sweat Vermehren DA: DA: . DA: sweat Vermehren DA: sweat Vermehren DA: DA: sweat DA: sweat",
+        "response": [
+          "Vermehren Sweat Vermehren null Sweat Vermehren null Sweat Vermehren null Sweat Vermehren sweat Vermehren _ Sweat ( Hotels suchen ) Anfrage Ort , Anfrage Bewertung Schweiß Kein Ziel, aber ich will ein Hotel, das mindestens 4 Sterne. #unknown . #unknown . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . "
+        ]
+      },
+      "3": {
+        "state": {
+          "hotels_en_US_search": {}
+        },
+        "api": "null",
+        "actions": "swiste swiste swiste swiste swiste swiste swiste swiste swiste swistes : ( hotels search ) swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes SYSTEM: swistes swistes swistes swistes swiste",
+        "response": [
+          "Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swiste"
+        ]
+      }
+    },
+    "API": {}
+  }
+}

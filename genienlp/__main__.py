@@ -30,7 +30,19 @@
 
 import argparse
 
-from . import arguments, cache_embeddings, calibrate, export, kfserver, predict, run_bootleg, server, train, write_kf_metrics
+from . import (
+    arguments,
+    cache_embeddings,
+    calibrate,
+    evaluate_file,
+    export,
+    kfserver,
+    predict,
+    run_bootleg,
+    server,
+    train,
+    write_kf_metrics,
+)
 from .ned.scripts import analyze_bootleg_results, oracle_vs_bootleg
 from .paraphrase import run_generation, run_lm_finetuning
 from .paraphrase.scripts import clean_paraphrasing_dataset, dialog_to_tsv, split_dataset, transform_dataset
@@ -40,7 +52,16 @@ subcommands = {
     # main commands
     'train': ('Train a model', arguments.parse_argv, train.main),
     'export': ('Export a trained model for serving', export.parse_argv, export.main),
-    'predict': ('Evaluate a model, or compute predictions on a test dataset', predict.parse_argv, predict.main),
+    'predict': (
+        'Evaluate a model by computing evaluation metrics on its predictions for a test dataset',
+        predict.parse_argv,
+        predict.main,
+    ),
+    'evaluate-file': (
+        'Evaluate a file containing predictions and gold values by computing evaluation metrics for it',
+        evaluate_file.parse_argv,
+        evaluate_file.main,
+    ),
     'server': ('Export RPC interface to predict', server.parse_argv, server.main),
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
     'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.parse_argv, run_lm_finetuning.main),

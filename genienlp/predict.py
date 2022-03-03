@@ -304,6 +304,9 @@ def check_args(args):
             'Currently example splitting can only be used in pure generation mode. Please use --translate_no_answer and --translate_example_split flags together'
         )
 
+    if args.main_metric_only and args.extra_metrics:
+        raise ValueError('Please remove --main_metric_only from your arguments so the requested extra metrics can be shown.')
+
 
 def prepare_data(args):
     # TODO handle multiple languages

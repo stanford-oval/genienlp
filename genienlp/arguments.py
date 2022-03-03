@@ -154,6 +154,10 @@ def parse_argv(parser):
     )
     parser.add_argument('--val_every', default=1000, type=int, help='how often to run validation in # of iterations')
     parser.add_argument(
+        '--val_after', default=0, type=int, help='start validating model (at or) after certain # of iterations'
+    )
+
+    parser.add_argument(
         '--val_batch_size',
         nargs='+',
         default=[4000],

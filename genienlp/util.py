@@ -939,11 +939,11 @@ def load_config_json(args):
                 setattr(args, r, None)
 
         if args.e2e_dialogue_valid_subtasks is None:
-            setattr(args, 'e2e_dialogue_valid_subtasks', ['dst', 'api', 'da'])
+            setattr(args, 'e2e_dialogue_valid_subtasks', ['dst', 'api', 'da', 'rg'])
         if args.e2e_dialogue_valid_submetrics is None:
-            setattr(args, 'e2e_dialogue_valid_submetrics', ['jga', 'em', 'em'])
+            setattr(args, 'e2e_dialogue_valid_submetrics', ['jga', 'em', 'em', 'casedbleu'])
         if args.e2e_dialogue_valid_subweights is None:
-            setattr(args, 'e2e_dialogue_valid_subweights', [1.0, 1.0, 1.0])
+            setattr(args, 'e2e_dialogue_valid_subweights', [1.0, 1.0, 1.0, 1.0])
 
         # backward compatibility for models trained with genienlp before NED Refactoring (2)
         if args.max_features_size is None:

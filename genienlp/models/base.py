@@ -409,6 +409,11 @@ class GenieModelForGeneration(GenieModel):
         device = self.device
         args = self.args
 
+        if self.numericalizer._tokenizer.src_lang:
+            src_lang = self.numericalizer._tokenizer.src_lang
+        else:
+            src_lang = self.orig_src_lang
+
         special_tokens = self.numericalizer._tokenizer.all_special_tokens
 
         for k, turn in enumerate(progress_bar(data_iterator, desc='Generating', disable=disable_progbar)):
@@ -526,7 +531,7 @@ class GenieModelForGeneration(GenieModel):
 
             if train_target == 'da':
                 partial_batch_prediction = dataset.postprocess_prediction(
-                    partial_batch_prediction, knowledge, lang=self.numericalizer._tokenizer.src_lang[:2]
+                    partial_batch_prediction, knowledge, lang=src_lang[:2]
                 )
 
             partial_batch_prediction = task.postprocess_prediction(batch_example_ids[0], partial_batch_prediction)
