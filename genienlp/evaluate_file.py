@@ -50,14 +50,6 @@ def parse_argv(parser):
         help='Name of dataset to run prediction for; will be ignored if --evaluate is test',
     )
     parser.add_argument('--tasks', dest='task_names', nargs='+', required=True, help='task names for prediction')
-    parser.add_argument('--extra_metrics', nargs='+', default=[], help='include these additional metrics in reported results')
-    parser.add_argument(
-        '--devices',
-        default=None,
-        nargs='+',
-        type=int,
-        help='a list of devices that can be used for prediction. By default, all devices will be used.',
-    )
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
@@ -93,6 +85,7 @@ def parse_argv(parser):
         '`max` chooses the best set of generation hyperparameters and reports the metric for that.'
         '`top_k` chooses the best generation output per input, and uses that to output the metric. For example, combining this with the exact match metric gives what is commonly known as the top-k accuracy. Note that the output is meaningless if used with corpus-level metrics.',
     )
+    parser.add_argument('--extra_metrics', nargs='+', default=[], help='include these additional metrics in reported results')
 
     parser.add_argument(
         '--one_output_per_line',
