@@ -286,6 +286,16 @@ class BiTOD(BaseTask):
         special_tokens_v11 = {'<endofknowledge>', '<endofhistory>', '<endofstate>'}
         special_tokens_v13 = {'AGENT_ACTS_PREV'}
         special_tokens_v2_10 = {'<actions>', '<endofactions>', 'DA:', 'RG:'}
+        special_tokens_v2_15 = {
+            '[user_acts]',
+            '[endofuser_acts]',
+            '[user]',
+            '[endofuser]',
+            '[agent_acts]',
+            '[endofagent_acts]',
+            '[agent_acts_prev]',
+            '[endofagent_acts_prev]',
+        }
         self.special_tokens = (
             special_tokens_v1
             | special_tokens_v2
@@ -295,6 +305,7 @@ class BiTOD(BaseTask):
             | special_tokens_v11
             | special_tokens_v13
             | special_tokens_v2_10
+            | special_tokens_v2_15
         )
         self._metrics = ['e2e_dialogue_score']
 
