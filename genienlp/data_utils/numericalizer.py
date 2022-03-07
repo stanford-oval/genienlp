@@ -57,6 +57,8 @@ from transformers import (
     MBartTokenizerFast,
     T5Tokenizer,
     T5TokenizerFast,
+    XGLMTokenizer,
+    XGLMTokenizerFast,
     XLMRobertaTokenizer,
     XLMRobertaTokenizerFast,
 )
@@ -204,6 +206,8 @@ class TransformerNumericalizer(object):
                 MBart50TokenizerFast,
                 MarianTokenizer,
                 M2M100Tokenizer,
+                XGLMTokenizer,
+                XGLMTokenizerFast,
             ),
         ):
             self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
