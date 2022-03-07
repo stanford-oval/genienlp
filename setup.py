@@ -69,6 +69,6 @@ setuptools.setup(
         'dill~=0.3',
         'xgboost~=1.3',
         # dialogues
-        'dialogues @ git+https://github.com/Mehrad0711/dialogues',
+        'dialogues==0.0.2',
     ],
 )
