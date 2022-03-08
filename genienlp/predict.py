@@ -387,8 +387,12 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
     return iters
 
 
-def create_output_lines(args, index, validation_output):
-    predictions = validation_output.raw_predictions if args.translate_return_raw_outputs else validation_output.predictions
+def create_output_lines(args, index, validation_output, raw_outputs=False):
+    if raw_outputs and args.translate_return_raw_outputs:
+        predictions = validation_output.raw_predictions
+    else:
+        predictions = validation_output.predictions
+
     if args.one_output_per_line:
         lines = [
             '\t'.join(
@@ -502,7 +506,7 @@ def run(args, device):
         if args.translate_return_raw_outputs:
             with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                 for i in range(len(validation_output.example_ids)):
-                    lines = create_output_lines(args, i, validation_output)
+                    lines = create_output_lines(args, i, validation_output, raw_outputs=True)
                     prediction_file.write('\n'.join(lines) + '\n')
 
         if len(validation_output.answers) > 0:
