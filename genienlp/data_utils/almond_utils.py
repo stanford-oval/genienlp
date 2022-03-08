@@ -74,6 +74,21 @@ NUMBER_MAPPING = {
     'fa': ('۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'),
 }
 
+ENGLISH_MONTH_MAPPING = {
+    '1': ('Jan', 'January'),
+    '2': ('Feb', 'February'),
+    '3': ('Mar', 'March'),
+    '4': ('Apr', 'April'),
+    '5': ('May',),
+    '6': ('Jun', 'June'),
+    '7': ('Jul', 'July'),
+    '8': ('Aug', 'August'),
+    '9': ('Sep', 'September'),
+    '10': ('Oct', 'October'),
+    '11': ('Nov', 'November'),
+    '12': ('Dec', 'December'),
+}
+
 
 CJK_RANGES = [
     (ord(u"\u3300"), ord(u"\u33ff")),
@@ -245,7 +260,6 @@ def return_sentences(text, regex_pattern, src_char_spans, is_cjk=False):
 
 
 def split_text_into_sentences(text, lang, src_char_spans):
-    # text = '''the . " ${field} " . of . " ${value} " .'''
     if lang in ['en']:
         sentences = return_sentences(text, '(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.!?])\s', src_char_spans)
     elif lang in ['zh', 'ja', 'ko']:
