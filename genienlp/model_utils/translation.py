@@ -34,7 +34,7 @@ from dateparser.conf import Settings
 from num2words import CONVERTER_CLASSES, num2words
 from transformers import SPIECE_UNDERLINE, M2M100Tokenizer
 
-from genienlp.data_utils.almond_utils import NUMBER_MAPPING
+from genienlp.data_utils.almond_utils import ENGLISH_MONTH_MAPPING, NUMBER_MAPPING
 
 logger = logging.getLogger(__name__)
 
@@ -129,14 +129,20 @@ def align_and_replace(
     # if translation preserved input entities we won't align them anymore
     for cur_match, spans in src_matches_counter.items():
         # expanded_matches keep current match and any possible known transformation of current match
-        expanded_matches = [cur_match]
+        expanded_matches = [list(cur_match)]
 
         # translation turned digit into words
         if len(cur_match) == 1 and cur_match[0].isdigit():
             # int converts arabic digits to english
             match = int(cur_match[0])
             if tgt_lang in CONVERTER_CLASSES or tgt_lang[:2] in CONVERTER_CLASSES:
-                expanded_matches.append([num2words(match, lang=tgt_lang, to='cardinal')])
+                tgt_word = num2words(match, lang=tgt_lang, to='cardinal')
+                expanded_matches.append([tgt_word])
+
+                if str(match) in ENGLISH_MONTH_MAPPING:
+                    for val in ENGLISH_MONTH_MAPPING[str(match)]:
+                        expanded_matches.append([val])
+                        expanded_matches.append([val.lower()])
 
             if any(tgt_lang.startswith(lang) for lang in ['fa', 'ar']):
                 match = str(match)
@@ -146,6 +152,13 @@ def align_and_replace(
                     index = src_numbers.index(match)
                     tgt_number = tgt_numbers[index]
                     expanded_matches.append([tgt_number])
+
+            new_expanded_matches = []
+            for values in expanded_matches:
+                new_expanded_matches.append(values)
+                for punc in '!！?？。.,':
+                    new_expanded_matches.append(values[:-1] + [values[-1] + punc])
+            expanded_matches = new_expanded_matches
 
         # find translation of dates
         elif date_parser:
