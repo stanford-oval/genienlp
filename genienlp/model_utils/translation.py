@@ -245,10 +245,21 @@ def align_and_replace(
             output_tokens.extend(tgt_words[curr:tgt_start])
         # +1 since it's inclusive
         replacement = ' '.join(src_words[src_start : src_end + 1])
-        if remove_output_quotation:
-            output_tokens.append(replacement)
-        else:
-            output_tokens.append(src_quotation_symbol + ' ' + replacement + ' ' + src_quotation_symbol)
+
+        is_punced = False
+        for punc in '!！?？。.,':
+            if tgt_words[tgt_end].endswith(punc):
+                if remove_output_quotation:
+                    replacement = replacement + ' ' + punc
+                else:
+                    replacement = src_quotation_symbol + ' ' + replacement + ' ' + src_quotation_symbol + ' ' + punc
+                is_punced = True
+                break
+
+        if not (is_punced or remove_output_quotation):
+            replacement = src_quotation_symbol + ' ' + replacement + ' ' + src_quotation_symbol
+
+        output_tokens.append(replacement)
         # +1 since it's inclusive
         curr = tgt_end + 1
     if curr < len(tgt_words):
