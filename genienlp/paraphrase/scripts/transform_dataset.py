@@ -1,8 +1,8 @@
 import csv
 import re
 
+from ...data_utils.almond_utils import lower_case, remove_thingtalk_quotes, tokenize
 from ...data_utils.progbar import progress_bar
-from ...util import lower_case, remove_thingtalk_quotes, tokenize
 
 special_token_pattern = re.compile("(^|(?<= ))" + "[A-Z]+_[0-9]" + "($|(?= ))")
 

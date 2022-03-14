@@ -270,7 +270,7 @@ def parse_argv(parser):
     parser.add_argument(
         '--model_parallel_hf',
         action='store_true',
-        help='Use model parallelization by spliting model weights across available gpus',
+        help='Use model parallelization by splitting model weights across available gpus',
     )
 
 
@@ -449,7 +449,7 @@ def run(args, devices):
     # model.to(device)
     if args.model_parallel_hf:
         model.to('cpu')
-        parallelize(model.model, num_gpus=len(devices), fp16=args.mixed_precision)
+        parallelize(model.model, num_gpus=len(devices), fp16=args.mixed_precision, verbose='detail')
 
     model = model.cuda()
 
@@ -582,6 +582,9 @@ def main(args):
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
     devices = get_devices(args.devices)
+
+    logger.info(f'Multi device generation on: {devices}')
+    run(args, devices)
 
     if len(devices) > 1:
         if args.model_parallel_hf:

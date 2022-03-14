@@ -8,6 +8,8 @@ import shutil
 import numpy as np
 import torch
 
+import genienlp.data_utils.almond_utils
+
 from ..metrics import computeBLEU
 from ..model_utils.transformers_utils import MARIAN_GROUP_MEMBERS
 from ..util import FAIRSEQ_LANGUAGE_CODES, get_mbart_lang
@@ -233,7 +235,7 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
         tgt_strings = re.sub(r"\s\s", " ", tgt_strings)
 
     with tokenizer.as_target_tokenizer():
-        tgt_tokens = tokenizer.tokenize(tgt_strings)
+        tgt_tokens = genienlp.data_utils.almond_utils.tokenize(tgt_strings)
 
     src_spans_ind = [
         index for index, token in enumerate(src_tokens) if any([symbol in token for symbol in src_quotation_symbols])
