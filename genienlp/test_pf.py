@@ -1,14 +1,13 @@
 import argparse
 import logging
-import os
 from pprint import pformat
 
 import torch
 from parallelformers import parallelize
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-from genienlp import models
 from genienlp.arguments import check_and_update_generation_args
-from genienlp.predict import check_args, prepare_data, prepare_data_iterators, set_default_values
+from genienlp.predict import check_args, set_default_values
 from genienlp.tasks.registry import get_tasks
 from genienlp.util import get_devices, load_config_json, log_model_size, set_seed
 
@@ -232,54 +231,80 @@ def parse_argv(parser):
     )
 
 
+#
+# def run(args, devices):
+#     device = devices[0]
+#
+#     # TODO handle multiple languages
+#     Model = getattr(models, args.model)
+#     model, _ = Model.load(
+#         args.path,
+#         model_checkpoint_file=args.checkpoint_name,
+#         args=args,
+#         device='cpu',
+#         tasks=args.tasks,
+#         src_lang=args.pred_src_languages[0],
+#         tgt_lang=args.pred_tgt_languages[0],
+#     )
+#     val_sets = prepare_data(args)
+#
+#     model.add_new_vocab_from_data(args.tasks)
+#
+#     logger.error('*******Start parallel hf********')
+#     if args.model_parallel_hf:
+#         # model.to('cpu')
+#         parallelize(model.model, num_gpus=len(devices), fp16=args.mixed_precision, verbose='detail')
+#     logger.error('*******Finish parallel hf********')
+#
+#     model = model.cuda()
+#
+#     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
+#
+#     log_model_size(logger, model, args.model)
+#
+#     model.eval()
+#
+#     eval_dir = os.path.join(args.eval_dir, args.evaluate)
+#     os.makedirs(eval_dir, exist_ok=True)
+#
+#     for index, (task, it, original_order) in enumerate(iters):
+#         logger.info(task.name)
+#
+#         with torch.no_grad(), torch.cuda.amp.autocast(enabled=args.mixed_precision):
+#             validation_output = model.validate(
+#                 it,
+#                 task,
+#                 eval_dir=eval_dir,
+#                 original_order=original_order,
+#                 disable_progbar=False,
+#             )
+#
+#     return validation_output
+
+
 def run(args, devices):
-    device = devices[0]
 
-    # TODO handle multiple languages
-    Model = getattr(models, args.model)
-    model, _ = Model.load(
-        args.path,
-        model_checkpoint_file=args.checkpoint_name,
-        args=args,
-        device='cpu',
-        tasks=args.tasks,
-        src_lang=args.pred_src_languages[0],
-        tgt_lang=args.pred_tgt_languages[0],
+    model = AutoModelForSeq2SeqLM.from_pretrained(args.pretrained_model).eval()
+    tokenizer = AutoTokenizer.from_pretrained(args.pretrained_model)
+
+    tokens = tokenizer(
+        "Kevin is <mask> man in the <mask>. Today He is working with his friend.",
+        return_tensors="pt",
     )
-    val_sets = prepare_data(args)
 
-    model.add_new_vocab_from_data(args.tasks)
+    for t in tokens:
+        if torch.is_tensor(tokens[t]):
+            tokens[t] = tokens[t].cuda()
 
     logger.error('*******Start parallel hf********')
     if args.model_parallel_hf:
         # model.to('cpu')
-        parallelize(model.model, num_gpus=len(devices), fp16=args.mixed_precision, verbose='detail')
+        parallelize(model, num_gpus=len(devices), fp16=args.mixed_precision, verbose='detail')
     logger.error('*******Finish parallel hf********')
 
     model = model.cuda()
 
-    iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
-
     log_model_size(logger, model, args.model)
-
-    model.eval()
-
-    eval_dir = os.path.join(args.eval_dir, args.evaluate)
-    os.makedirs(eval_dir, exist_ok=True)
-
-    for index, (task, it, original_order) in enumerate(iters):
-        logger.info(task.name)
-
-        with torch.no_grad(), torch.cuda.amp.autocast(enabled=args.mixed_precision):
-            validation_output = model.validate(
-                it,
-                task,
-                eval_dir=eval_dir,
-                original_order=original_order,
-                disable_progbar=False,
-            )
-
-    return validation_output
 
 
 if __name__ == '__main__':
