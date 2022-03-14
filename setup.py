@@ -51,6 +51,7 @@ setuptools.setup(
         'transformers==4.17.0',
         'datasets==1.18.4',
         'parallelformers>=1.2',
+        'oslo-core>=2.0',
         'pathos==0.2.8',
         # for sts:
         'sentence-transformers==2.2.0',

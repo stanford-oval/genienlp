@@ -27,15 +27,25 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import copy
 import json
 import logging
 import os
+import shutil
 from collections import defaultdict
 from pprint import pformat
 
+# multiprocessing with CUDA
+from torch.multiprocessing import Process, set_start_method
+
+try:
+    set_start_method('spawn')
+except RuntimeError:
+    pass
+
+
+import oslo
 import torch
-from parallelformers import parallelize
 
 from . import models
 from .arguments import check_and_update_generation_args
@@ -43,16 +53,16 @@ from .calibrate import ConfidenceEstimator
 from .metrics import calculate_and_reduce_metrics
 from .ned.ned_utils import init_ned_model
 from .tasks.registry import get_tasks
-from .util import get_devices, load_config_json, log_model_size, make_data_loader, set_seed
-
-# multiprocessing with CUDA
-# from torch.multiprocessing import Process, set_start_method
-#
-# try:
-#     set_start_method('spawn')
-# except RuntimeError:
-#     pass
-
+from .util import (
+    combine_folders_on_disk,
+    get_devices,
+    get_part_path,
+    load_config_json,
+    log_model_size,
+    make_data_loader,
+    set_seed,
+    split_folder_on_disk,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -449,7 +459,9 @@ def run(args, devices):
     # model.to(device)
     if args.model_parallel_hf:
         model.to('cpu')
-        parallelize(model.model, num_gpus=len(devices), fp16=args.mixed_precision)
+        model.model = oslo.initialize(
+            model.model, config={"model_parallelism": {"enable": True, "tensor_parallel_size": len(devices)}}
+        )
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
 
@@ -586,30 +598,29 @@ def main(args):
             logger.info(f'Multi device generation on: {devices}')
             run(args, devices)
         else:
-            pass
-            # logger.info(f'Independent multi-GPU generation on following devices: {devices}')
-            # all_processes = []
-            # all_data_folders = split_folder_on_disk(args.data, len(devices))
-            # if args.do_ned and args.ned_retrieve_method == 'bootleg':
-            #     all_bootleg_data_folders = split_folder_on_disk(args.bootleg_output_dir, len(devices))
-            #
-            # for device_id in range(len(devices)):
-            #     copy_args = copy.copy(args)
-            #     copy_args.data = all_data_folders[device_id]
-            #     if args.do_ned and args.ned_retrieve_method == 'bootleg':
-            #         copy_args.bootleg_output_dir = all_bootleg_data_folders[device_id]
-            #     copy_args.eval_dir = get_part_path(args.eval_dir, device_id)
-            #
-            #     p = Process(target=run, args=(copy_args, devices[device_id]))
-            #     all_processes.append(p)
-            #     p.start()
-            #
-            # for p in all_processes:
-            #     p.join()
-            #
-            # for folder in all_data_folders:
-            #     shutil.rmtree(folder)
-            # combine_folders_on_disk(args.eval_dir, len(devices), line_group_size=1, delete=True)
+            logger.info(f'Independent multi-GPU generation on following devices: {devices}')
+            all_processes = []
+            all_data_folders = split_folder_on_disk(args.data, len(devices))
+            if args.do_ned and args.ned_retrieve_method == 'bootleg':
+                all_bootleg_data_folders = split_folder_on_disk(args.bootleg_output_dir, len(devices))
+
+            for device_id in range(len(devices)):
+                copy_args = copy.copy(args)
+                copy_args.data = all_data_folders[device_id]
+                if args.do_ned and args.ned_retrieve_method == 'bootleg':
+                    copy_args.bootleg_output_dir = all_bootleg_data_folders[device_id]
+                copy_args.eval_dir = get_part_path(args.eval_dir, device_id)
+
+                p = Process(target=run, args=(copy_args, devices[device_id]))
+                all_processes.append(p)
+                p.start()
+
+            for p in all_processes:
+                p.join()
+
+            for folder in all_data_folders:
+                shutil.rmtree(folder)
+            combine_folders_on_disk(args.eval_dir, len(devices), line_group_size=1, delete=True)
 
     else:
         logger.info(f'Single device generation on: {devices[0]}')
