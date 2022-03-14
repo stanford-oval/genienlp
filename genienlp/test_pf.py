@@ -252,7 +252,7 @@ def run(args, devices):
 
     logger.error('*******Start parallel hf********')
     if args.model_parallel_hf:
-        model.to('cpu')
+        # model.to('cpu')
         parallelize(model.model, num_gpus=len(devices), fp16=args.mixed_precision, verbose='detail')
     logger.error('*******Finish parallel hf********')
 
