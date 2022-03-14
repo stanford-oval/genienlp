@@ -225,9 +225,16 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--model_parallel_hf',
+        '--backend',
+        type=str,
+    )
+    parser.add_argument(
+        '--init_method',
+        type=str,
+    )
+    parser.add_argument(
+        '--daemon',
         action='store_true',
-        help='Use model parallelization by splitting model weights across available gpus',
     )
 
 
@@ -297,9 +304,14 @@ def run(args, devices):
             tokens[t] = tokens[t].cuda()
 
     logger.error('*******Start parallel hf********')
-    if args.model_parallel_hf:
-        # model.to('cpu')
-        parallelize(model, num_gpus=len(devices), fp16=args.mixed_precision, verbose='detail')
+    parallelize(
+        model,
+        num_gpus=len(devices),
+        fp16=args.mixed_precision,
+        init_method=args.init_method,
+        backend=args.backend,
+        daemon=args.daemon,
+    )
     logger.error('*******Finish parallel hf********')
 
     model = model.cuda()
