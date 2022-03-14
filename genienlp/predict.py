@@ -437,7 +437,7 @@ def run(args, devices):
         args.path,
         model_checkpoint_file=args.checkpoint_name,
         args=args,
-        device=device,
+        device='cpu',
         tasks=args.tasks,
         src_lang=args.pred_src_languages[0],
         tgt_lang=args.pred_tgt_languages[0],
