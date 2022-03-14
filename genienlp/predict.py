@@ -36,6 +36,7 @@ from collections import defaultdict
 from pprint import pformat
 
 # multiprocessing with CUDA
+from torch.distributed.launcher import LaunchConfig, elastic_launch
 from torch.multiprocessing import Process, set_start_method
 
 try:
@@ -447,7 +448,7 @@ def run(args, devices):
         args.path,
         model_checkpoint_file=args.checkpoint_name,
         args=args,
-        device='cpu',
+        device=device,
         tasks=args.tasks,
         src_lang=args.pred_src_languages[0],
         tgt_lang=args.pred_tgt_languages[0],
@@ -458,7 +459,7 @@ def run(args, devices):
 
     # model.to(device)
     if args.model_parallel_hf:
-        model.to('cpu')
+        # model.to('cpu')
         model.model = oslo.initialize(
             model.model, config={"model_parallelism": {"enable": True, "tensor_parallel_size": len(devices)}}
         )
@@ -625,3 +626,8 @@ def main(args):
     else:
         logger.info(f'Single device generation on: {devices[0]}')
         run(args, [devices[0]])
+
+
+if __name__ == "__main__":
+    config = LaunchConfig(min_nodes=1, max_nodes=1, nproc_per_node=2, rdzv_endpoint="localhost:0", rdzv_backend="c10d")
+    outputs = elastic_launch(config, main)("my args")
