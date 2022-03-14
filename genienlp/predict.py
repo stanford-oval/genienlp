@@ -451,6 +451,8 @@ def run(args, devices):
         model.to('cpu')
         parallelize(model.model, num_gpus=len(devices), fp16=args.mixed_precision)
 
+    model = model.cuda()
+
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
 
     log_model_size(logger, model, args.model)
