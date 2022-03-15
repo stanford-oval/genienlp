@@ -38,7 +38,7 @@ from dialogues.bitod.src.evaluate import convert_lists_to_set
 from seqeval import metrics as seq_metrics
 from seqeval import scheme as seq_scheme
 
-from .util import requote_program
+from .data_utils.almond_utils import requote_program
 
 logger = logging.getLogger(__name__)
 

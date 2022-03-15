@@ -63,6 +63,8 @@ from transformers import (
     XLMRobertaTokenizerFast,
 )
 
+import genienlp.data_utils.almond_utils
+
 from ..util import get_devices
 from .decoder_vocab import DecoderVocabulary
 from .example import Entity, SequentialField
@@ -299,9 +301,9 @@ class TransformerNumericalizer(object):
             decoder_words = Counter()
             for dataset in vocab_sets:
                 for example in dataset:
-                    decoder_words.update(self._tokenizer.tokenize(example.context))
-                    decoder_words.update(self._tokenizer.tokenize(example.question))
-                    decoder_words.update(self._tokenizer.tokenize(example.answer))
+                    decoder_words.update(genienlp.data_utils.almond_utils.tokenize(example.context))
+                    decoder_words.update(genienlp.data_utils.almond_utils.tokenize(example.question))
+                    decoder_words.update(genienlp.data_utils.almond_utils.tokenize(example.answer))
 
             # add the required special tokens, if not present already
             # note: if the tokens are not present, it means they are not used natively
@@ -657,7 +659,7 @@ class TransformerNumericalizer(object):
             if extract_word_pieces:
                 for i in range(batch_size):
                     text = sentences[i]
-                    wp_tokenized = self._tokenizer.tokenize(text)
+                    wp_tokenized = genienlp.data_utils.almond_utils.tokenize(text)
                     all_wp_tokenized.append(wp_tokenized)
 
                     # None indicates encoding single instance not paired inputs

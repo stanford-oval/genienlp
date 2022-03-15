@@ -31,12 +31,20 @@ import os
 
 import torch
 
-from genienlp.data_utils.almond_utils import split_text_into_sentences
+import genienlp.data_utils.almond_utils
 
-from ..data_utils.almond_utils import detokenize_cjk_chars, is_device, is_entity, is_entity_marker, tokenize_cjk_chars
+from ..data_utils.almond_utils import (
+    detokenize_cjk_chars,
+    input_heuristics,
+    is_device,
+    is_entity,
+    is_entity_marker,
+    output_heuristics,
+    split_text_into_sentences,
+    tokenize_cjk_chars,
+)
 from ..data_utils.example import Example
 from ..model_utils.translation import align_and_replace, compute_attention
-from ..paraphrase.data_utils import input_heuristics, output_heuristics
 from .almond_dataset import AlmondDataset
 from .base_task import BaseTask
 from .registry import register_task
@@ -418,7 +426,7 @@ class Translate(NaturalSeq2Seq):
         all_tgt_tokens = numericalizer.convert_ids_to_tokens(batch_tgt_ids, skip_special_tokens=False)
 
         # remove input_prefix from the beginning of src_tokens and shift layer_attention
-        len_prefix_wp = len(tokenizer.tokenize(numericalizer.input_prefix))
+        len_prefix_wp = len(genienlp.data_utils.almond_utils.tokenize(numericalizer.input_prefix))
         all_src_tokens = [tokens[len_prefix_wp:] for tokens in all_src_tokens]
         cross_attentions = cross_attentions[:, :, :, len_prefix_wp:]
 

@@ -47,6 +47,7 @@ except RuntimeError:
 
 import oslo
 import torch
+from torch.multiprocessing import set_start_method
 
 from . import models
 from .arguments import check_and_update_generation_args
@@ -64,6 +65,11 @@ from .util import (
     set_seed,
     split_folder_on_disk,
 )
+
+try:
+    set_start_method('spawn')
+except RuntimeError:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +287,7 @@ def parse_argv(parser):
     parser.add_argument(
         '--model_parallel_hf',
         action='store_true',
-        help='Use model parallelization by spliting model weights across available gpus',
+        help='Use model parallelization by splitting model weights across available gpus',
     )
 
 
@@ -448,7 +454,7 @@ def run(args, devices):
         args.path,
         model_checkpoint_file=args.checkpoint_name,
         args=args,
-        device=device,
+        device='cpu',
         tasks=args.tasks,
         src_lang=args.pred_src_languages[0],
         tgt_lang=args.pred_tgt_languages[0],
@@ -463,6 +469,8 @@ def run(args, devices):
         model.model = oslo.initialize(
             model.model, config={"model_parallelism": {"enable": True, "tensor_parallel_size": len(devices)}}
         )
+
+    model = model.cuda()
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
 
@@ -593,6 +601,9 @@ def main(args):
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
     devices = get_devices(args.devices)
+
+    logger.info(f'Multi device generation on: {devices}')
+    run(args, devices)
 
     if len(devices) > 1:
         if args.model_parallel_hf:

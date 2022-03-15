@@ -32,10 +32,12 @@ import re
 import numpy as np
 from torch.multiprocessing import Process, set_start_method
 
-from ..data_utils.almond_utils import tokenize_cjk_chars
+import genienlp.data_utils.almond_utils
+
+from ..data_utils.almond_utils import output_heuristics, tokenize_cjk_chars
 from ..data_utils.progbar import prange
 from ..model_utils.translation import compute_attention
-from .data_utils import create_features_from_tsv_file, output_heuristics
+from .data_utils import create_features_from_tsv_file
 from .model_utils import compute_metrics, force_replace_quoted_params, replace_quoted_params
 
 try:
@@ -671,7 +673,7 @@ def run_single_process_generation(args, config):
                         src_tokens = src_tokens[:-1]
 
                     # remove language code from the beginning of src_tokens and shift layer_attention
-                    len_prefix_wp = len(tokenizer.tokenize(model_input_prefix))
+                    len_prefix_wp = len(genienlp.data_utils.almond_utils.tokenize(model_input_prefix))
                     src_tokens = src_tokens[len_prefix_wp:]
                     sample_layer_attention = sample_layer_attention[:, :, len_prefix_wp:]
 

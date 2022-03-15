@@ -4,8 +4,10 @@ import random
 import re
 import sys
 
+import genienlp.data_utils.almond_utils
+
+from ...data_utils.almond_utils import detokenize
 from ...data_utils.progbar import progress_bar
-from ...util import detokenize
 
 csv.field_size_limit(sys.maxsize)
 
@@ -204,7 +206,7 @@ def main(args):
                         second = normalize(detokenize(second))
                     first = first.strip()
                     second = second.strip()
-                    if args.lower_case:
+                    if genienlp.data_utils.almond_utils.lower_case:
                         first = first.lower()
                         second = second.lower()
                     if first == '' or second == '' or first.lower() == second.lower():

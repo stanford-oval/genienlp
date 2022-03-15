@@ -38,8 +38,7 @@ import torch
 import xgboost as xgb
 from sklearn.metrics import accuracy_score, auc, confusion_matrix, precision_recall_curve
 from sklearn.model_selection import train_test_split
-
-from .util import ConfidenceFeatures
+from torch.functional import Tensor
 
 logger = logging.getLogger(__name__)
 
@@ -300,6 +299,126 @@ def accuracy_at_pass_rate(labels, confidence_scores):
         all_accuracies.append(accuracy)
 
     return all_pass_rates, all_accuracies
+
+
+class ConfidenceFeatures:
+    """
+    Contains all necessary features that are useful for calculating confidence of a single generated output
+    """
+
+    def __init__(
+        self,
+        drop_logits: List[Tensor],
+        drop_probs: List[Tensor],
+        gold_answer: Tensor,
+        prediction: Tensor,
+        nodrop_logits: Tensor,
+        nodrop_probs: Tensor,
+        nodrop_entropies: Tensor,
+        context: Tensor,
+        nodrop_top1_probs: Tensor = None,
+        nodrop_top2_probs: Tensor = None,
+        drop_top1_probs: List[Tensor] = None,
+        drop_top2_probs: List[Tensor] = None,
+    ):
+        """
+        Inputs:
+            droplogits: logits after MC dropout
+            gold_answer: includes BOS and EOS tokens, but no PAD tokens
+            prediction: includes BOS and EOS tokens, but no PAD tokens
+            nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
+            nodrop_top1_probs, nodrop_top2_probs: highest and second highest probabilities of the next token, given that the previous token was from `prediction`
+        """
+
+        # store the results of MC dropout if provided
+        self.drop_logits = drop_logits
+        self.drop_probs = drop_probs
+        self.drop_top1_probs = drop_top1_probs
+        self.drop_top2_probs = drop_top2_probs
+
+        if drop_logits is not None:
+            self.drop_logits = torch.stack(drop_logits, dim=0).cpu()
+        if drop_probs is not None:
+            self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
+        if drop_top1_probs is not None:
+            self.drop_top1_probs = torch.stack(drop_top1_probs, dim=0).cpu()
+        if drop_top2_probs is not None:
+            self.drop_top2_probs = torch.stack(drop_top2_probs, dim=0).cpu()
+
+        # store the results of non-dropout forward pass, if provided
+        self.nodrop_logits = nodrop_logits
+        self.nodrop_probs = nodrop_probs
+        self.nodrop_entropies = nodrop_entropies
+        self.nodrop_top1_probs = nodrop_top1_probs
+        self.nodrop_top2_probs = nodrop_top2_probs
+
+        if nodrop_logits is not None:
+            self.nodrop_logits = nodrop_logits.cpu()
+        if nodrop_probs is not None:
+            self.nodrop_probs = nodrop_probs.cpu()
+        if nodrop_entropies is not None:
+            self.nodrop_entropies = nodrop_entropies.cpu()
+        if nodrop_top1_probs is not None:
+            self.nodrop_top1_probs = nodrop_top1_probs.cpu()
+        if nodrop_top2_probs is not None:
+            self.nodrop_top2_probs = nodrop_top2_probs.cpu()
+
+        self.prediction = prediction
+        self.gold_answer = gold_answer
+        self.first_mistake = ConfidenceFeatures.find_first_mistake(gold_answer, prediction)
+        self.label = self.first_mistake == -1
+        self.context = context
+
+    @property
+    def mc_dropout_num(self):
+        if self.drop_logits is None:
+            return 0
+        else:
+            return self.drop_logits.shape[0]
+
+    @staticmethod
+    def find_first_mistake(gold_answer: Tensor, prediction: Tensor):
+        """
+        Inputs:
+            gold_answer: includes BOS and EOS tokens, but no PAD tokens
+            prediction: includes BOS and EOS tokens, but no PAD tokens
+        Returns:
+            The index of the first token where `gold_answer` and `prediction` differ, or -1 if they are equal. Ignores BOS, so the minimum possible value is 0.
+        """
+        # print('gold_answer = ', gold_answer)
+        # print('prediction = ', prediction)
+        # skip BOS
+        gold_answer = gold_answer[1:]
+        prediction = prediction[1:]
+
+        for i in range(min(len(gold_answer), len(prediction))):
+            if gold_answer[i] != prediction[i]:
+                return i
+        if len(gold_answer) != len(prediction):
+            # one is a strict prefix of the other
+            return min(len(gold_answer), len(prediction))
+        return -1
+
+    def __repr__(self) -> str:
+        return (
+            '<Confidence: drop_logits='
+            + str(self.drop_logits)
+            + ', drop_probs='
+            + str(self.drop_probs)
+            + ', first_mistake='
+            + str(self.first_mistake)
+            + ', nodrop_logits='
+            + str(self.nodrop_logits)
+            + ', nodrop_probs='
+            + str(self.nodrop_probs)
+            + ', nodrop_entropies='
+            + str(self.nodrop_entropies)
+            + ', context='
+            + str(self.context)
+            + ', label='
+            + str(self.label)
+            + '>'
+        )
 
 
 def oracle_score(confidence: ConfidenceFeatures):

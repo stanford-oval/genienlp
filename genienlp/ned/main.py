@@ -32,9 +32,8 @@ import os
 import marisa_trie
 import ujson
 
-from ..data_utils.almond_utils import quoted_pattern_with_space
+from ..data_utils.almond_utils import find_span, quoted_pattern_with_space
 from ..ned.ned_utils import has_overlap, is_banned, normalize_text
-from ..util import find_span
 from .abstract import AbstractEntityDisambiguator
 
 logger = logging.getLogger(__name__)
