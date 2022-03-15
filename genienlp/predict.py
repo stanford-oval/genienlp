@@ -34,8 +34,8 @@ import os
 from collections import defaultdict
 from pprint import pformat
 
-import torch
-from parallelformers import parallelize
+# multiprocessing with CUDA
+from torch.multiprocessing import set_start_method
 
 from . import models
 from .arguments import check_and_update_generation_args
@@ -45,14 +45,13 @@ from .ned.ned_utils import init_ned_model
 from .tasks.registry import get_tasks
 from .util import get_devices, load_config_json, log_model_size, make_data_loader, set_seed
 
-# multiprocessing with CUDA
-# from torch.multiprocessing import Process, set_start_method
-#
-# try:
-#     set_start_method('spawn')
-# except RuntimeError:
-#     pass
+try:
+    set_start_method('spawn')
+except RuntimeError:
+    pass
 
+import torch
+from parallelformers import parallelize
 
 logger = logging.getLogger(__name__)
 

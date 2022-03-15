@@ -332,9 +332,9 @@ if __name__ == '__main__':
     set_seed(args)
     args.tasks = list(get_tasks(args.task_names, args).values())
 
-    logger.info(f'Arguments:\n{pformat(vars(args))}')
-    logger.info(f'Loading from {args.best_checkpoint}')
+    logger.error(f'Arguments:\n{pformat(vars(args))}')
+    logger.error(f'Loading from {args.best_checkpoint}')
     devices = get_devices(args.devices)
 
-    logger.info(f'Multi device generation on: {devices}')
+    logger.error(f'Multi device generation on: {devices}')
     run(args, devices)
