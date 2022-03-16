@@ -303,9 +303,6 @@ class Translate(NaturalSeq2Seq):
                     line_id, out, *_ = line.strip('\n').split('\t')
                     # task_name, id_ = line_id.split('/', 1)
                     id_ = line_id
-                    out_dict = json.loads(out)
-                    if 'NULL' in out_dict:
-                        out_dict.pop('NULL')
                     self.id2align_dict[id_] = json.loads(out)
 
         # only requires cross_attention scores for alignment
@@ -400,8 +397,6 @@ class Translate(NaturalSeq2Seq):
 
         if translate_only_entities:
             entities = re.findall(quoted_pattern_with_space, context)
-            if not entities:
-                entities = ['NULL']
             for i, ent in enumerate(entities):
                 ex_id = self.name + '/' + example_id + f'#{i}'
                 examples.append(
@@ -513,7 +508,9 @@ class Translate(NaturalSeq2Seq):
             if self.need_attention_scores:
                 src_spans = self.id2span[example_id]
                 example_id = example_id.rsplit('@', 1)[0]
-                entity_dict = self.id2align_dict[example_id]
+                entity_dict = None
+                if example_id in self.id2align_dict:
+                    entity_dict = self.id2align_dict[example_id]
                 try:
                     text = align_and_replace(
                         src_tokens,
