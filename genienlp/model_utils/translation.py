@@ -183,6 +183,9 @@ def align_and_replace(
         if date_parser:
             expanded_matches.append(date_parser.translate(' '.join(cur_match), settings=Settings()).split(' '))
 
+        # longest match first
+        expanded_matches = sorted(expanded_matches, key=lambda words: len(' '.join(words)), reverse=True)
+
         for match in expanded_matches:
             count, beg_indices = count_substring(tgt_words, match)
             # we found matching spans in target so just update tgt_token_spans to make sure we don't overwrite them later
