@@ -67,6 +67,7 @@ GENERATION_ARGUMENTS = {
     'align_preserve_input_quotation',
     'align_remove_output_quotation',
     'translate_example_split',
+    'translate_only_entities',
 }
 
 
@@ -151,7 +152,7 @@ class Server(object):
         generation_options = request.get('options', {})
         for k, v in generation_options.items():
             if k not in GENERATION_ARGUMENTS:
-                logger.warning(f'{k} is not a generation option and cannot be overriden')
+                logger.warning(f'{k} is not a generation option and cannot be overridden')
                 continue
             setattr(args, k, v)
 

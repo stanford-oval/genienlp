@@ -226,7 +226,7 @@ def create_examples_from_file(args):
         batch = batch[0]
         examples = make_process_example(batch, dir_name, **kwargs)
         if isinstance(examples, list):
-            # account for extra examples created when using --translate_example_split
+            # account for extra examples created when using --translate_example_split or --translate_only_entities
             chunk_size += len(examples) - 1
             chunk_examples.extend(examples)
         else:

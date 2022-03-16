@@ -223,6 +223,11 @@ def parse_argv(parser):
         action='store_true',
         help='split examples with multiple sentences into individual examples',
     )
+    parser.add_argument(
+        '--translate_only_entities',
+        action='store_true',
+        help='translate entities and use them for alignment',
+    )
 
     parser.add_argument(
         '--translate_return_raw_outputs',
@@ -276,6 +281,12 @@ def parse_argv(parser):
         help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
 
+    parser.add_argument(
+        '--align_helper_file',
+        type=str,
+        help='dictionary path',
+    )
+
 
 def set_default_values(args):
     """
@@ -308,6 +319,9 @@ def check_args(args):
         raise ValueError(
             'Currently example splitting can only be used in pure generation mode. Please use --translate_no_answer and --translate_example_split flags together'
         )
+
+    if args.translate_return_raw_outputs and not args.do_alignment:
+        raise ValueError('If not using alignment, you need not to pass --translate_return_raw_outputs')
 
     if args.main_metric_only and args.extra_metrics:
         raise ValueError('Please remove --main_metric_only from your arguments so the requested extra metrics can be shown.')

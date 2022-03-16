@@ -98,6 +98,7 @@ def align_and_replace(
     remove_output_quotation,
     src_quotation_symbol,
     date_parser=None,
+    entity_dict=None,
 ):
     # M2M100Tokenizer has missing tokens in its fixed vocabulary and encodes them as unknown (https://github.com/pytorch/fairseq/issues/3463)
     # until that's fixed we treat unknown tokens as individual words by prepending SPIECE_UNDERLINE
@@ -142,7 +143,6 @@ def align_and_replace(
                 if str(match) in ENGLISH_MONTH_MAPPING:
                     for val in ENGLISH_MONTH_MAPPING[str(match)]:
                         expanded_matches.append([val])
-                        expanded_matches.append([val.lower()])
 
             if any(tgt_lang.startswith(lang) for lang in ['fa', 'ar']):
                 match = str(match)
@@ -163,6 +163,14 @@ def align_and_replace(
         # find translation of dates
         elif date_parser:
             expanded_matches.append(date_parser.translate(' '.join(cur_match), settings=Settings()).split(' '))
+
+        if entity_dict:
+            cur_word = ' '.join(cur_match)
+            tgt_ents = entity_dict.get(cur_word, None)
+            if tgt_ents:
+                for ent in tgt_ents:
+                    tgt_match = ent.split(' ')
+                    expanded_matches.append(tgt_match)
 
         for match in expanded_matches:
             count, beg_indices = count_substring(tgt_words, match)
