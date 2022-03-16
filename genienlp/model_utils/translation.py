@@ -161,17 +161,6 @@ def align_and_replace(
                     new_expanded_matches.append(values[:-1] + [values[-1] + punc])
             expanded_matches = new_expanded_matches
 
-        # find translation of dates
-        elif date_parser:
-            expanded_matches.append(date_parser.translate(' '.join(cur_match), settings=Settings()).split(' '))
-
-        if entity_dict:
-            cur_word = ' '.join(cur_match)
-            tgt_ents = entity_dict.get(cur_word, [])
-            for ent in tgt_ents:
-                tgt_match = ent.split(' ')
-                expanded_matches.append(tgt_match)
-
         translation_dict = None
         if tgt_lang[:2] == 'en':
             translation_dict = zh2en_VALUE_MAP
@@ -183,6 +172,17 @@ def align_and_replace(
             for ent in tgt_ents:
                 tgt_match = ent.split(' ')
                 expanded_matches.append(tgt_match)
+
+        if entity_dict:
+            cur_word = ' '.join(cur_match)
+            tgt_ents = entity_dict.get(cur_word, [])
+            for ent in tgt_ents:
+                tgt_match = ent.split(' ')
+                expanded_matches.append(tgt_match)
+
+        # find translation of dates
+        if date_parser:
+            expanded_matches.append(date_parser.translate(' '.join(cur_match), settings=Settings()).split(' '))
 
         for match in expanded_matches:
             count, beg_indices = count_substring(tgt_words, match)
