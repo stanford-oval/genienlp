@@ -153,13 +153,6 @@ def align_and_replace(
                     tgt_number = tgt_numbers[index]
                     expanded_matches.append([tgt_number])
 
-            new_expanded_matches = []
-            for values in expanded_matches:
-                new_expanded_matches.append(values)
-                for punc in '!！?？。.,':
-                    new_expanded_matches.append(values[:-1] + [values[-1] + punc])
-            expanded_matches = new_expanded_matches
-
         # translation_dict = None
         # if tgt_lang[:2] == 'en':
         #     translation_dict = zh2en_VALUE_MAP
@@ -185,6 +178,13 @@ def align_and_replace(
 
         # longest match first
         expanded_matches = sorted(expanded_matches, key=lambda words: len(' '.join(words)), reverse=True)
+
+        new_expanded_matches = []
+        for values in expanded_matches:
+            new_expanded_matches.append(values)
+            for punc in '!！?？。.,':
+                new_expanded_matches.append(values[:-1] + [values[-1] + punc])
+        expanded_matches = new_expanded_matches
 
         for match in expanded_matches:
             count, beg_indices = count_substring(tgt_words, match)
