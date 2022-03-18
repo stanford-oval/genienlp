@@ -322,21 +322,23 @@ class Translate(NaturalSeq2Seq):
         src_spans_ind = [index for index, token in enumerate(src_tokens) if token == src_quotation_symbol]
 
         if len(src_spans_ind) % 2 != 0:
-            raise ValueError(f'Corrupted span in sentence: [{sentence}]')
-
-        if self.args.align_preserve_input_quotation:
-            src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
+            logger.error(f'Corrupted text span in the input: {sentence} with example_id: {example_id}')
+            src_spans_flatten = []
         else:
-            src_tokens = [token for token in src_tokens if token != src_quotation_symbol]
-            src_spans = [
-                (src_spans_ind[i] + 1 - (i + 1), src_spans_ind[i + 1] - 1 - (i + 1)) for i in range(0, len(src_spans_ind), 2)
-            ]
+            if self.args.align_preserve_input_quotation:
+                src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
+            else:
+                src_tokens = [token for token in src_tokens if token != src_quotation_symbol]
+                src_spans = [
+                    (src_spans_ind[i] + 1 - (i + 1), src_spans_ind[i + 1] - 1 - (i + 1))
+                    for i in range(0, len(src_spans_ind), 2)
+                ]
 
-        # remove illegal src_spans (caused by inputs such as " ")
-        src_spans = [span for span in src_spans if span[0] <= span[1]]
+            # remove illegal src_spans (caused by inputs such as " ")
+            src_spans = [span for span in src_spans if span[0] <= span[1]]
 
-        sentence = " ".join(src_tokens)
-        src_spans_flatten = [val for tup in src_spans for val in tup]
+            sentence = " ".join(src_tokens)
+            src_spans_flatten = [val for tup in src_spans for val in tup]
 
         # append question spans to context spans
         if example_id in self.id2span:
@@ -387,10 +389,15 @@ class Translate(NaturalSeq2Seq):
         src_char_spans = None
         if split_sentence:
             if self.need_attention_scores:
-                src_char_spans_ind = [index for index, char in enumerate(context) if char == src_quotation_symbol]
-                src_char_spans = [
-                    (src_char_spans_ind[i], src_char_spans_ind[i + 1]) for i in range(0, len(src_char_spans_ind), 2)
-                ]
+                try:
+                    src_char_spans_ind = [index for index, char in enumerate(context) if char == src_quotation_symbol]
+                    src_char_spans = [
+                        (src_char_spans_ind[i], src_char_spans_ind[i + 1]) for i in range(0, len(src_char_spans_ind), 2)
+                    ]
+                except Exception as e:
+                    logger.error(str(e))
+                    logger.error(f'Corrupted text span in the input: {parts}')
+                    src_char_spans = []
             contexts = split_text_into_sentences(context, src_lang, src_char_spans)
 
         examples = []
