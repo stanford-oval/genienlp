@@ -296,7 +296,7 @@ class Translate(NaturalSeq2Seq):
         self.all_ids = set()
         self._metrics = ['casedbleu']
 
-        align_helper_file = self.args.align_helper_file
+        align_helper_file = getattr(self.args, 'align_helper_file', None)
         if align_helper_file and os.path.exists(align_helper_file):
             with open(align_helper_file) as fin:
                 for line in fin:
