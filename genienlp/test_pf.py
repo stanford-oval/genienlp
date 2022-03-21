@@ -224,18 +224,18 @@ def parse_argv(parser):
         help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
 
-    parser.add_argument(
-        '--backend',
-        type=str,
-    )
-    parser.add_argument(
-        '--init_method',
-        type=str,
-    )
-    parser.add_argument(
-        '--daemon',
-        action='store_true',
-    )
+    # parser.add_argument(
+    #     '--backend',
+    #     type=str,
+    # )
+    # parser.add_argument(
+    #     '--init_method',
+    #     type=str,
+    # )
+    # parser.add_argument(
+    #     '--daemon',
+    #     action='store_true',
+    # )
 
 
 #
@@ -308,9 +308,9 @@ def run(args, devices):
         model,
         num_gpus=len(devices),
         fp16=args.mixed_precision,
-        init_method=args.init_method,
-        backend=args.backend,
-        daemon=args.daemon,
+        # init_method=args.init_method,
+        # backend=args.backend,
+        # daemon=args.daemon,
     )
     logger.error('*******Finish parallel hf********')
 
