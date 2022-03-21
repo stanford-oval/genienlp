@@ -582,9 +582,6 @@ def main(args):
     logger.info(f'Loading from {args.best_checkpoint}')
     devices = get_devices(args.devices)
 
-    logger.info(f'Multi device generation on: {devices}')
-    run(args, devices)
-
     if len(devices) > 1:
         if args.model_parallel_hf:
             logger.info(f'Multi device generation on: {devices}')
