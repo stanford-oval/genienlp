@@ -54,7 +54,7 @@ setuptools.setup(
         'requests~=2.22',
         'num2words>=0.5.10',
         'dateparser>=1.0.0',
-        'datasets==1.18.4',
+        'datasets==2.0.0',
         'seqeval==1.2.2',
         'transformers==4.17.0',
         'sentence-transformers==2.2.0',
