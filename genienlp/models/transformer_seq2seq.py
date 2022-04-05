@@ -116,6 +116,9 @@ class TransformerSeq2Seq(GenieModelForGeneration):
             forced_bos_token_id = self.numericalizer._tokenizer.lang_code_to_id[tgt_lang]
             self.config.forced_bos_token_id = forced_bos_token_id
 
+        if self._is_bart_large:
+            self.config.forced_bos_token_id = None
+
     def forward(self, *input, **kwargs):
         if self.training or kwargs.get('train', False):
             batch = input[0]
