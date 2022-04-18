@@ -63,7 +63,7 @@ setuptools.setup(
         'kfserving>=0.5.0',
         'ray==1.6.0',
         # for NED:
-        'bootleg==1.0.5',
+        'bootleg==1.1.0',
         # for calibration:
         'scikit-learn>=0.23,<2.0',
         'dill~=0.3',
