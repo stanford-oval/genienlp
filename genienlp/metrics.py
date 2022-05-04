@@ -237,10 +237,10 @@ def computeJGA(greedy, answer, example_ids):
         dataset.update_state(a, answer_state)
         dataset.update_state(g, greedy_state)
 
-        convert_lists_to_set(answer_state)
-        convert_lists_to_set(greedy_state)
+        answer_state_sets = convert_lists_to_set(answer_state)
+        greedy_state_sets = convert_lists_to_set(greedy_state)
 
-        if answer_state == greedy_state:
+        if answer_state_sets == greedy_state_sets:
             hit += 1
 
     return hit / len(greedy) * 100
