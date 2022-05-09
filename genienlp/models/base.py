@@ -42,7 +42,7 @@ from transformers import AutoConfig, MarianTokenizer, PreTrainedModel
 from ..data_utils.example import NumericalizedExamples, SequentialField
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..data_utils.progbar import progress_bar
-from ..util import adjust_language_code, merge_translated_entities, merge_translated_sentences, replace_capturing_group
+from ..util import adjust_language_code, merge_translated_sentences, replace_capturing_group
 
 logger = logging.getLogger(__name__)
 
@@ -352,8 +352,8 @@ class GenieModelForGeneration(GenieModel):
             )
 
         if getattr(self.args, 'translate_only_entities', False):
-            # stitch sentences back together
-            example_ids, predictions, raw_predictions, answers, contexts, confidence_features = merge_translated_entities(
+            # stitch entities back together
+            example_ids, predictions, raw_predictions, answers, contexts, confidence_features = merge_translated_sentences(
                 example_ids,
                 predictions,
                 raw_predictions,
@@ -362,6 +362,7 @@ class GenieModelForGeneration(GenieModel):
                 confidence_features,
                 self.numericalizer._tokenizer.src_lang,
                 self.numericalizer._tokenizer.tgt_lang,
+                is_entities=True,
             )
 
         output = ValidationOutput(loss=total_loss)
