@@ -7,6 +7,36 @@ i=0
 mkdir -p $workdir/translation/almond
 cp -r $SRCDIR/dataset/translation/en-de $workdir/translation
 
+
+# translation tests (with entity_translation)
+for model in "Helsinki-NLP/opus-mt-en-de" ; do
+
+    if [[ $model == Helsinki-NLP* ]] ; then
+      base_model="marian"
+      expected_result='{"casedbleu": 64.81650488452956}'
+    fi
+
+    mv $workdir/translation/en-de/dev_"$base_model"_aligned.tsv $workdir/translation/almond/train.tsv
+    cp $workdir/translation/almond/train.tsv $workdir/translation/almond/eval.tsv
+
+    # save model
+    genienlp train  --train_tasks almond_translate --train_languages en --train_tgt_languages de --eval_languages en --eval_tgt_languages de --model TransformerSeq2Seq --pretrained_model $model --train_batch_tokens 100 --val_batch_size 100 --train_iterations 0 --preserve_case --save $workdir/model_$i --exist_ok  --embeddings $EMBEDDING_DIR --no_commit
+
+    # translate entities
+    genienlp predict --tasks almond_translate --translate_only_entities --top_p 0.9 --temperature 0.3 0.5 0.7 --evaluate valid --pred_languages en --pred_tgt_languages de --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/entities/ --data $workdir/translation/ --embeddings $EMBEDDING_DIR
+
+    # translate sentence (using entity dictionary)
+    genienlp predict --tasks almond_translate --do_alignment --align_helper_file $workdir/model_$i/entities/almond_translate.tsv --evaluate valid --pred_languages en --pred_tgt_languages de --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $workdir/translation/ --embeddings $EMBEDDING_DIR
+
+    # check if result file exists and matches expected_result
+    echo $expected_result | diff -u - $workdir/model_$i/eval_results/valid/almond_translate.results.json
+
+    rm -rf $workdir/generated_"$base_model"_aligned.tsv
+
+    i=$((i+1))
+done
+
+
 for model in "Helsinki-NLP/opus-mt-en-de" "sshleifer/tiny-mbart" ; do
 
     if [[ $model == Helsinki-NLP* ]] ; then
@@ -38,6 +68,7 @@ for model in "Helsinki-NLP/opus-mt-en-de" "sshleifer/tiny-mbart" ; do
 
     i=$((i+1))
 done
+
 
 # translation tests
 mkdir -p $workdir/translation
