@@ -56,6 +56,7 @@ from .model_utils.transformers_utils import MARIAN_GROUP_MEMBERS
 logger = logging.getLogger(__name__)
 
 ENTITY_MATCH_REGEX = re.compile('^([A-Z].*)_[0-9]+$')
+QUOTED_MATCH_REGEX = re.compile(' " (.*?) " ')
 
 
 class SpecialTokenMap:
