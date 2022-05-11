@@ -32,9 +32,10 @@ from typing import List
 import torch
 from transformers import AutoConfig, AutoModelForSeq2SeqLM, MBartTokenizer, MBartTokenizerFast
 
+from ..calibrate import ConfidenceFeatures
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..model_utils.transformers_utils import MULTILINGUAL_TOKENIZERS
-from ..util import ConfidenceFeatures, adjust_language_code
+from ..util import adjust_language_code
 from .base import GenieModelForGeneration
 from .common import LabelSmoothingCrossEntropy
 
