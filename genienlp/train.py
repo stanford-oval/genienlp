@@ -530,7 +530,7 @@ def train(
                 except RuntimeError as e:
                     # Ignore cuda OOM errors during training
                     # However, if the error happens frequently, consider decreasing batch size.
-                    if 'CUDA out of memory' in str(e):
+                    if args.allow_OOM and 'CUDA out of memory' in str(e):
                         logger.warning(e)
                         continue
                     else:
