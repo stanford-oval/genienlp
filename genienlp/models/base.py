@@ -351,6 +351,20 @@ class GenieModelForGeneration(GenieModel):
                 self.numericalizer._tokenizer.tgt_lang,
             )
 
+        if getattr(self.args, 'translate_only_entities', False):
+            # stitch entities back together
+            example_ids, predictions, raw_predictions, answers, contexts, confidence_features = merge_translated_sentences(
+                example_ids,
+                predictions,
+                raw_predictions,
+                answers,
+                contexts,
+                confidence_features,
+                self.numericalizer._tokenizer.src_lang,
+                self.numericalizer._tokenizer.tgt_lang,
+                is_entities=True,
+            )
+
         output = ValidationOutput(loss=total_loss)
 
         if output_predictions_only:
@@ -556,10 +570,6 @@ class GenieModelForGeneration(GenieModel):
                 ####
 
             elif train_target == 'api':
-                if dataset.do_knowledge_reset(active_api):
-                    new_knowledge_text = "null"
-                    knowledge = defaultdict(dict)
-
                 do_api_call = predictions[-1][0].strip()
 
                 if do_api_call == 'yes':

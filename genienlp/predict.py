@@ -223,6 +223,11 @@ def parse_argv(parser):
         action='store_true',
         help='split examples with multiple sentences into individual examples',
     )
+    parser.add_argument(
+        '--translate_only_entities',
+        action='store_true',
+        help='translate entities and use them for alignment',
+    )
 
     parser.add_argument(
         '--translate_return_raw_outputs',
@@ -245,6 +250,11 @@ def parse_argv(parser):
         '--align_remove_output_quotation',
         action='store_true',
         help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
+    )
+    parser.add_argument(
+        '--align_span_symbol',
+        type=str,
+        help='The symbol we use to wrap spans of words in the input that need to be preserved in the output.',
     )
 
     parser.add_argument(
@@ -269,6 +279,12 @@ def parse_argv(parser):
         nargs='+',
         type=float,
         help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
+    )
+
+    parser.add_argument(
+        '--align_helper_file',
+        type=str,
+        help='dictionary path',
     )
 
 
@@ -303,6 +319,9 @@ def check_args(args):
         raise ValueError(
             'Currently example splitting can only be used in pure generation mode. Please use --translate_no_answer and --translate_example_split flags together'
         )
+
+    if args.translate_return_raw_outputs and not args.do_alignment:
+        raise ValueError('If not using alignment, you need not to pass --translate_return_raw_outputs')
 
     if args.main_metric_only and args.extra_metrics:
         raise ValueError('Please remove --main_metric_only from your arguments so the requested extra metrics can be shown.')
@@ -382,8 +401,12 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
     return iters
 
 
-def create_output_lines(args, index, validation_output):
-    predictions = validation_output.raw_predictions if args.translate_return_raw_outputs else validation_output.predictions
+def create_output_lines(args, index, validation_output, raw_outputs=False):
+    if raw_outputs and args.translate_return_raw_outputs:
+        predictions = validation_output.raw_predictions
+    else:
+        predictions = validation_output.predictions
+
     if args.one_output_per_line:
         lines = [
             '\t'.join(
@@ -497,7 +520,7 @@ def run(args, device):
         if args.translate_return_raw_outputs:
             with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
                 for i in range(len(validation_output.example_ids)):
-                    lines = create_output_lines(args, i, validation_output)
+                    lines = create_output_lines(args, i, validation_output, raw_outputs=True)
                     prediction_file.write('\n'.join(lines) + '\n')
 
         if len(validation_output.answers) > 0:

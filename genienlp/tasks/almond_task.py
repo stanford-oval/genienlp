@@ -26,12 +26,14 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+import json
 import logging
 import os
+import re
 
 import torch
 
-from genienlp.data_utils.almond_utils import split_text_into_sentences
+from genienlp.data_utils.almond_utils import quoted_pattern_with_space, split_text_into_sentences
 
 from ..data_utils.almond_utils import detokenize_cjk_chars, is_device, is_entity, is_entity_marker, tokenize_cjk_chars
 from ..data_utils.example import Example
@@ -289,9 +291,19 @@ class Translate(NaturalSeq2Seq):
 
     def __init__(self, name, args):
         super().__init__(name, args)
-        self.input_spans = {}
+        self.id2span = {}
+        self.id2align_dict = {}
         self.all_ids = set()
         self._metrics = ['casedbleu']
+
+        align_helper_file = getattr(self.args, 'align_helper_file', None)
+        if align_helper_file and os.path.exists(align_helper_file):
+            with open(align_helper_file) as fin:
+                for line in fin:
+                    line_id, out, *_ = line.strip('\n').split('\t')
+                    # task_name, id_ = line_id.split('/', 1)
+                    id_ = line_id
+                    self.id2align_dict[id_] = json.loads(out)
 
         # only requires cross_attention scores for alignment
         self.need_attention_scores = bool(self.args.do_alignment)
@@ -305,32 +317,34 @@ class Translate(NaturalSeq2Seq):
 
         self.all_ids.add(field_name + '-' + example_id)
 
-        src_quotation_symbol = '"'
+        src_quotation_symbol = self.args.align_span_symbol
         src_tokens = sentence.split(" ")
         src_spans_ind = [index for index, token in enumerate(src_tokens) if token == src_quotation_symbol]
 
         if len(src_spans_ind) % 2 != 0:
-            raise ValueError(f'Corrupted span in sentence: [{sentence}]')
-
-        if self.args.align_preserve_input_quotation:
-            src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
+            logger.error(f'Corrupted text span in the input: {sentence} with example_id: {example_id}')
+            src_spans_flatten = []
         else:
-            src_tokens = [token for token in src_tokens if token != src_quotation_symbol]
-            src_spans = [
-                (src_spans_ind[i] + 1 - (i + 1), src_spans_ind[i + 1] - 1 - (i + 1)) for i in range(0, len(src_spans_ind), 2)
-            ]
+            if self.args.align_preserve_input_quotation:
+                src_spans = [(src_spans_ind[i] + 1, src_spans_ind[i + 1] - 1) for i in range(0, len(src_spans_ind), 2)]
+            else:
+                src_tokens = [token for token in src_tokens if token != src_quotation_symbol]
+                src_spans = [
+                    (src_spans_ind[i] + 1 - (i + 1), src_spans_ind[i + 1] - 1 - (i + 1))
+                    for i in range(0, len(src_spans_ind), 2)
+                ]
 
-        # remove illegal src_spans (caused by inputs such as " ")
-        src_spans = [span for span in src_spans if span[0] <= span[1]]
+            # remove illegal src_spans (caused by inputs such as " ")
+            src_spans = [span for span in src_spans if span[0] <= span[1]]
 
-        sentence = " ".join(src_tokens)
-        src_spans_flatten = [val for tup in src_spans for val in tup]
+            sentence = " ".join(src_tokens)
+            src_spans_flatten = [val for tup in src_spans for val in tup]
 
         # append question spans to context spans
-        if example_id in self.input_spans:
-            self.input_spans[example_id] += src_spans_flatten
+        if example_id in self.id2span:
+            self.id2span[example_id] += src_spans_flatten
         else:
-            self.input_spans[example_id] = src_spans_flatten
+            self.id2span[example_id] = src_spans_flatten
 
         return example_id, sentence
 
@@ -341,6 +355,7 @@ class Translate(NaturalSeq2Seq):
         # answer has to be provided by default unless doing prediction
         no_answer = getattr(self.args, 'translate_no_answer', False)
         split_sentence = getattr(self.args, 'translate_example_split', False)
+        translate_only_entities = getattr(self.args, 'translate_only_entities', False)
         src_lang = kwargs.get('src_lang', 'en')
 
         example_id = 'id-null'
@@ -370,37 +385,61 @@ class Translate(NaturalSeq2Seq):
             answer = '.'
 
         contexts = []
+        src_quotation_symbol = self.args.align_span_symbol
         src_char_spans = None
         if split_sentence:
             if self.need_attention_scores:
-                src_quotation_symbol = '"'
-                src_char_spans_ind = [index for index, char in enumerate(context) if char == src_quotation_symbol]
-                src_char_spans = [
-                    (src_char_spans_ind[i], src_char_spans_ind[i + 1]) for i in range(0, len(src_char_spans_ind), 2)
-                ]
+                try:
+                    src_char_spans_ind = [index for index, char in enumerate(context) if char == src_quotation_symbol]
+                    src_char_spans = [
+                        (src_char_spans_ind[i], src_char_spans_ind[i + 1]) for i in range(0, len(src_char_spans_ind), 2)
+                    ]
+                except Exception as e:
+                    logger.error(str(e))
+                    logger.error(f'Corrupted text span in the input: {parts}')
+                    src_char_spans = []
             contexts = split_text_into_sentences(context, src_lang, src_char_spans)
 
-        if len(contexts) > 1:
-            examples = []
-            for i, text in enumerate(contexts):
-                ex_id = self.name + '/' + example_id + f'@{i}'
-                if self.need_attention_scores:
-                    ex_id, text = self.construct_id2span_mapping(ex_id, text, 'context')
+        examples = []
+
+        if translate_only_entities:
+            entities = re.findall(quoted_pattern_with_space, context)
+            for i, ent in enumerate(entities):
+                ex_id = self.name + '/' + example_id + f'#{i}'
                 examples.append(
                     Example.from_raw(
                         ex_id,
-                        text,
+                        ent,
                         question,
                         answer,
                         preprocess=self.preprocess_field,
                         lower=False,
                     )
                 )
+
         else:
-            ex_id = self.name + '/' + example_id
-            if self.need_attention_scores:
-                ex_id, context = self.construct_id2span_mapping(ex_id, context, 'context')
-            examples = Example.from_raw(ex_id, context, question, answer, preprocess=self.preprocess_field, lower=False)
+            if len(contexts) > 1:
+                for i, text in enumerate(contexts):
+                    ex_id = self.name + '/' + example_id + f'@{i}'
+                    if self.need_attention_scores:
+                        ex_id, text = self.construct_id2span_mapping(ex_id, text, 'context')
+                    examples.append(
+                        Example.from_raw(
+                            ex_id,
+                            text,
+                            question,
+                            answer,
+                            preprocess=self.preprocess_field,
+                            lower=False,
+                        )
+                    )
+            else:
+                ex_id = self.name + '/' + example_id
+                if self.need_attention_scores:
+                    ex_id, context = self.construct_id2span_mapping(ex_id, context, 'context')
+                examples.append(
+                    Example.from_raw(ex_id, context, question, answer, preprocess=self.preprocess_field, lower=False)
+                )
 
         return examples
 
@@ -474,7 +513,11 @@ class Translate(NaturalSeq2Seq):
                 plt.show()
 
             if self.need_attention_scores:
-                src_spans = self.input_spans[example_id]
+                src_spans = self.id2span[example_id]
+                example_id = example_id.rsplit('@', 1)[0]
+                entity_dict = None
+                if example_id in self.id2align_dict:
+                    entity_dict = self.id2align_dict[example_id]
                 try:
                     text = align_and_replace(
                         src_tokens,
@@ -484,7 +527,9 @@ class Translate(NaturalSeq2Seq):
                         tgt_lang,
                         tokenizer,
                         self.args.align_remove_output_quotation,
+                        self.args.align_span_symbol,
                         date_parser=date_parser,
+                        entity_dict=entity_dict,
                     )
                 except Exception as e:
                     logger.error(str(e))

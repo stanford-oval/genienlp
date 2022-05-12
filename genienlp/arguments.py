@@ -199,6 +199,9 @@ def parse_argv(parser):
     )
     parser.add_argument('--max_generative_vocab', default=50000, type=int, help='max vocabulary for the generative softmax')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
+    parser.add_argument(
+        '--allow_OOM', action='store_true', help='Issue a warning for OOM errors during training instead of crashing'
+    )
     parser.add_argument('--preserve_case', action='store_false', dest='lower', help='whether to preserve casing for all text')
     parser.add_argument(
         "--reduce_metrics",
@@ -533,6 +536,12 @@ def parse_argv(parser):
         '--align_remove_output_quotation',
         action='store_true',
         help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
+    )
+    parser.add_argument(
+        '--align_span_symbol',
+        default='"',
+        type=str,
+        help='The symbol we use to wrap spans of words in the input that need to be preserved in the output.',
     )
 
     # token classification task args

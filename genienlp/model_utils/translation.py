@@ -34,7 +34,7 @@ from dateparser.conf import Settings
 from num2words import CONVERTER_CLASSES, num2words
 from transformers import SPIECE_UNDERLINE, M2M100Tokenizer
 
-from genienlp.data_utils.almond_utils import NUMBER_MAPPING
+from genienlp.data_utils.almond_utils import ENGLISH_MONTH_MAPPING, NUMBER_MAPPING
 
 logger = logging.getLogger(__name__)
 
@@ -96,10 +96,10 @@ def align_and_replace(
     tgt_lang,
     tokenizer,
     remove_output_quotation,
+    src_quotation_symbol,
     date_parser=None,
+    entity_dict=None,
 ):
-    src_quotation_symbol = '"'
-
     # M2M100Tokenizer has missing tokens in its fixed vocabulary and encodes them as unknown (https://github.com/pytorch/fairseq/issues/3463)
     # until that's fixed we treat unknown tokens as individual words by prepending SPIECE_UNDERLINE
     if isinstance(tokenizer, M2M100Tokenizer):
@@ -130,14 +130,19 @@ def align_and_replace(
     # if translation preserved input entities we won't align them anymore
     for cur_match, spans in src_matches_counter.items():
         # expanded_matches keep current match and any possible known transformation of current match
-        expanded_matches = [cur_match]
+        expanded_matches = [list(cur_match)]
 
         # translation turned digit into words
         if len(cur_match) == 1 and cur_match[0].isdigit():
             # int converts arabic digits to english
             match = int(cur_match[0])
             if tgt_lang in CONVERTER_CLASSES or tgt_lang[:2] in CONVERTER_CLASSES:
-                expanded_matches.append([num2words(match, lang=tgt_lang, to='cardinal')])
+                tgt_word = num2words(match, lang=tgt_lang, to='cardinal')
+                expanded_matches.append([tgt_word])
+
+                if str(match) in ENGLISH_MONTH_MAPPING:
+                    for val in ENGLISH_MONTH_MAPPING[str(match)]:
+                        expanded_matches.append([val])
 
             if any(tgt_lang.startswith(lang) for lang in ['fa', 'ar']):
                 match = str(match)
@@ -148,9 +153,38 @@ def align_and_replace(
                     tgt_number = tgt_numbers[index]
                     expanded_matches.append([tgt_number])
 
+        # translation_dict = None
+        # if tgt_lang[:2] == 'en':
+        #     translation_dict = zh2en_VALUE_MAP
+        # elif tgt_lang[:2] == 'zh':
+        #     translation_dict = en2zh_VALUE_MAP
+        # if translation_dict:
+        #     cur_word = ' '.join(cur_match)
+        #     tgt_ents = translation_dict.get(cur_word, [])
+        #     for ent in tgt_ents:
+        #         tgt_match = ent.split(' ')
+        #         expanded_matches.append(tgt_match)
+
+        if entity_dict:
+            cur_word = ' '.join(cur_match)
+            tgt_ents = entity_dict.get(cur_word, [])
+            for ent in tgt_ents:
+                tgt_match = ent.split(' ')
+                expanded_matches.append(tgt_match)
+
         # find translation of dates
-        elif date_parser:
+        if date_parser:
             expanded_matches.append(date_parser.translate(' '.join(cur_match), settings=Settings()).split(' '))
+
+        # longest match first
+        expanded_matches = sorted(expanded_matches, key=lambda words: len(' '.join(words)), reverse=True)
+
+        new_expanded_matches = []
+        for values in expanded_matches:
+            new_expanded_matches.append(values)
+            for punc in '!！?？。.,':
+                new_expanded_matches.append(values[:-1] + [values[-1] + punc])
+        expanded_matches = new_expanded_matches
 
         for match in expanded_matches:
             count, beg_indices = count_substring(tgt_words, match)
@@ -233,10 +267,21 @@ def align_and_replace(
             output_tokens.extend(tgt_words[curr:tgt_start])
         # +1 since it's inclusive
         replacement = ' '.join(src_words[src_start : src_end + 1])
-        if remove_output_quotation:
-            output_tokens.append(replacement)
-        else:
-            output_tokens.append(src_quotation_symbol + ' ' + replacement + ' ' + src_quotation_symbol)
+
+        is_punced = False
+        for punc in '!！?？。.,':
+            if tgt_words[tgt_end].endswith(punc):
+                if remove_output_quotation:
+                    replacement = replacement + ' ' + punc
+                else:
+                    replacement = src_quotation_symbol + ' ' + replacement + ' ' + src_quotation_symbol + ' ' + punc
+                is_punced = True
+                break
+
+        if not (is_punced or remove_output_quotation):
+            replacement = src_quotation_symbol + ' ' + replacement + ' ' + src_quotation_symbol
+
+        output_tokens.append(replacement)
         # +1 since it's inclusive
         curr = tgt_end + 1
     if curr < len(tgt_words):

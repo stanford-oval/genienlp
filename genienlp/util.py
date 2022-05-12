@@ -656,15 +656,24 @@ def ned_dump_entity_type_pairs(dataset, path, name, utterance_field):
 
 
 def merge_translated_sentences(
-    example_ids, predictions, raw_predictions, answers, contexts, confidence_features, src_lang, tgt_lang
+    example_ids, predictions, raw_predictions, answers, contexts, confidence_features, src_lang, tgt_lang, is_entities=False
 ):
-    new_example_ids = []
-    new_predictions = []
-    new_raw_predictions = []
-    new_answers = []
-    new_contexts = []
-    new_confidence_features = []
-    cur_pred, cur_raw_pred, cur_context, cur_answer = [], [], [], []
+    new_example_ids, new_predictions, new_raw_predictions, new_answers, new_contexts, new_confidence_features = (
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+    )
+    cur_raw_pred, cur_context, cur_answer = [], [], []
+    if is_entities:
+        cur_pred = {}
+        split_token = '#'
+    else:
+        cur_pred = []
+        split_token = '@'
+
     i = 0
     src_concat_token = '' if src_lang in ['zh', 'ja', 'ko'] else ' '
     tgt_concat_token = '' if tgt_lang in ['zh', 'ja', 'ko'] else ' '
@@ -677,11 +686,14 @@ def merge_translated_sentences(
             contexts[i],
             confidence_features[i],
         )
-        if '@' in ex_id:
-            id_, split_id = ex_id.rsplit('@', 1)
+        if split_token in ex_id:
+            id_, split_id = ex_id.rsplit(split_token, 1)
             cur_id = id_
             while id_ == cur_id:
-                cur_pred.append(pred)
+                if is_entities:
+                    cur_pred[ctxt] = list(set(pred))
+                else:
+                    cur_pred.append(pred)
                 cur_raw_pred.append(raw_pred)
                 cur_context.append(ctxt)
                 cur_answer.append(ans)
@@ -695,34 +707,47 @@ def merge_translated_sentences(
                         contexts[i],
                         confidence_features[i],
                     )
-                    if '@' in ex_id:
-                        id_, split_id = ex_id.rsplit('@', 1)
+                    if split_token in ex_id:
+                        id_, split_id = ex_id.rsplit(split_token, 1)
                     else:
                         id_ = ex_id
                 else:
                     break
 
             new_example_ids.append(cur_id)
-            new_predictions.append(
-                [tgt_concat_token.join([cur_pred[j][0] for j in range(len(cur_pred))]) for i in range(len(cur_pred[0]))]
-            )
-            new_raw_predictions.append(
-                [
-                    tgt_concat_token.join([cur_raw_pred[j][0] for j in range(len(cur_raw_pred))])
-                    for i in range(len(cur_raw_pred[0]))
-                ]
-            )
+            if is_entities:
+                new_predictions.append([json.dumps(cur_pred, ensure_ascii=False)])
+                new_raw_predictions.append([json.dumps(cur_pred, ensure_ascii=False)])
+            else:
+                new_predictions.append(
+                    [tgt_concat_token.join([cur_pred[j][0] for j in range(len(cur_pred))]) for i in range(len(cur_pred[0]))]
+                )
+                new_raw_predictions.append(
+                    [
+                        tgt_concat_token.join([cur_raw_pred[j][0] for j in range(len(cur_raw_pred))])
+                        for i in range(len(cur_raw_pred[0]))
+                    ]
+                )
+
             new_contexts.append(src_concat_token.join(cur_context))
             new_answers.append(src_concat_token.join(cur_answer))
             new_confidence_features.append(cf_feat)
 
             # reset block
-            cur_pred, cur_raw_pred, cur_context, cur_answer = [], [], [], []
+            cur_raw_pred, cur_context, cur_answer = [], [], []
+            if is_entities:
+                cur_pred = {}
+            else:
+                cur_pred = []
 
         else:
             new_example_ids.append(ex_id)
-            new_predictions.append(pred)
-            new_raw_predictions.append(raw_pred)
+            if is_entities:
+                new_predictions.append([json.dumps({ctxt: list(set(pred))}, ensure_ascii=False)])
+                new_raw_predictions.append([json.dumps({ctxt: list(set(pred))}, ensure_ascii=False)])
+            else:
+                new_predictions.append(pred)
+                new_raw_predictions.append(raw_pred)
             new_contexts.append(ctxt)
             new_answers.append(ans)
             new_confidence_features.append(cf_feat)
@@ -855,6 +880,7 @@ def load_config_json(args):
             'top_k',
             'repetition_penalty',
             'temperature',
+            'align_span_symbol',
             'max_output_length',
             'min_output_length',
             'reduce_metrics',
@@ -908,6 +934,8 @@ def load_config_json(args):
                 setattr(args, r, [0])
             elif r in ['override_valid_metrics']:
                 setattr(args, r, [])
+            elif r == 'align_span_symbol':
+                setattr(args, r, '"')
             elif r == 'database_type':
                 setattr(args, r, 'json')
             elif r == 'att_pooling':

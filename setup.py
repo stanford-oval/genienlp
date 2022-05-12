@@ -48,17 +48,19 @@ setuptools.setup(
     install_requires=[
         'numpy>=1.14.5',
         'torch>=1.9.0,<1.12.0',
+        'transformers==4.17.0',
+        'datasets==2.1.0',
+        'pathos==0.2.8',
+        # for sts:
+        'sentence-transformers==2.2.0',
+        # for alignment:
+        'num2words>=0.5.10',
+        'dateparser>=1.0.0',
+        # for metrics:
         'rouge_score>=0.0.4',
         'sacrebleu>=1,<3',
         'bert-score~=0.3',
-        'requests~=2.22',
-        'num2words>=0.5.10',
-        'dateparser>=1.0.0',
-        'datasets==2.1.0',
         'seqeval==1.2.2',
-        'transformers==4.17.0',
-        'sentence-transformers==2.2.0',
-        'pathos==0.2.8',
         # for kf:
         'kfserving>=0.5.0',
         'ray==1.6.0',
@@ -68,7 +70,7 @@ setuptools.setup(
         'scikit-learn>=0.23,<2.0',
         'dill~=0.3',
         'xgboost~=1.3',
-        # dialogues
-        'dialogues @ git+https://github.com/Mehrad0711/dialogues',
+        # for e2e dialogues:
+        'dialogues @ git+https://github.com/Mehrad0711/dialogues@9fd1f422db3956a20b087940c68a4e3c96845f8a',
     ],
 )

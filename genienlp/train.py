@@ -516,16 +516,25 @@ def train(
                 round_progress = f'round_{rnd}:' if rounds else ''
 
                 # param update
-                loss, grad_norm = train_step(
-                    model,
-                    batch,
-                    iteration,
-                    opt,
-                    devices,
-                    lr_scheduler=lr_scheduler,
-                    grad_clip=args.grad_clip,
-                    gradient_accumulation_steps=args.gradient_accumulation_steps,
-                )
+                try:
+                    loss, grad_norm = train_step(
+                        model,
+                        batch,
+                        iteration,
+                        opt,
+                        devices,
+                        lr_scheduler=lr_scheduler,
+                        grad_clip=args.grad_clip,
+                        gradient_accumulation_steps=args.gradient_accumulation_steps,
+                    )
+                except RuntimeError as e:
+                    # Ignore cuda OOM errors during training
+                    # However, if the error happens frequently, consider decreasing batch size.
+                    if args.allow_OOM and 'CUDA out of memory' in str(e):
+                        logger.warning(e)
+                        continue
+                    else:
+                        raise e
                 if loss is None:
                     logger.info('Encountered NAN loss during training. Continue training ignoring the current batch')
                     continue
