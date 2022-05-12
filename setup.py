@@ -48,7 +48,7 @@ setuptools.setup(
     install_requires=[
         'numpy>=1.14.5',
         'torch>=1.9.0,<1.12.0',
-        'transformers==4.17.0',
+        'transformers==4.18.0',
         'datasets==2.1.0',
         'pathos==0.2.8',
         # for sts:
