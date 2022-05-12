@@ -548,10 +548,6 @@ class Translate(NaturalSeq2Seq):
 
         return partial_batch_prediction_ids, all_text_outputs
 
-    # def get_splits(self, root, **kwargs):
-    #     kwargs['translate_only_entities'] = self.args.translate_only_entities
-    #     return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
-
 
 @register_task('contextual_almond')
 class ContextualAlmond(BaseAlmondTask):
