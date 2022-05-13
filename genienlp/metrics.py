@@ -217,7 +217,7 @@ def compute_e2e_dialogue_score(greedy, answer, tgt_lang, args, example_ids, cont
 
         results[result_key] += sub_result
         results['e2e_dialogue_score'] += weight * (sub_result * num_ex)
-        weighted_num_examples += weight * num_ex
+        weighted_num_examples += abs(weight) * num_ex
 
     results['e2e_dialogue_score'] /= weighted_num_examples
 
