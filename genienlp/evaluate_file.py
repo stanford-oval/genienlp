@@ -31,7 +31,6 @@
 import json
 import logging
 import os
-from collections import defaultdict
 from pprint import pformat
 
 from .metrics import calculate_and_reduce_metrics
@@ -52,10 +51,8 @@ def parse_argv(parser):
     parser.add_argument('--tasks', dest='task_names', nargs='+', required=True, help='task names for prediction')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
-    parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
 
     parser.add_argument('--eval_dir', type=str, required=False, help='use this directory to store eval results')
-    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets')
 
     parser.add_argument(
         '--pred_languages',
@@ -110,7 +107,7 @@ def parse_argv(parser):
     )
 
 
-def compute_metrics_on_file(task_scores, pred_file, results_file_name, task, args, tgt_lang):
+def compute_metrics_on_file(pred_file, results_file_name, task, args, tgt_lang):
     ids, contexts, preds, targets = [], [], [], []
     with open(pred_file) as fin:
         for line in fin:
@@ -137,16 +134,7 @@ def compute_metrics_on_file(task_scores, pred_file, results_file_name, task, arg
     with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
         results_file.write(json.dumps(metrics) + '\n')
 
-    if not args.silent:
-        for i, (c, p, a) in enumerate(
-            zip(validation_output.contexts, validation_output.predictions, validation_output.answers)
-        ):
-            log_string = f'\nContext {i + 1}: {c}\nPrediction {i + 1} ({len(p)} outputs): {p}\nAnswer {i + 1}: {a}\n'
-            logger.info(log_string)
-
     logger.info(metrics)
-
-    task_scores[task].append((len(validation_output.answers), metrics[task.metrics[0]]))
 
 
 def main(args):
@@ -165,7 +153,6 @@ def main(args):
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
 
-    task_scores = defaultdict(list)
     if not args.eval_dir:
         eval_dir = os.path.dirname(args.pred_file)
     else:
@@ -175,4 +162,4 @@ def main(args):
 
     for task in args.tasks:
         results_file_name = os.path.join(eval_dir, task.name + '.results.json')
-        compute_metrics_on_file(task_scores, args.pred_file, results_file_name, task, args, tgt_lang)
+        compute_metrics_on_file(args.pred_file, results_file_name, task, args, tgt_lang)
