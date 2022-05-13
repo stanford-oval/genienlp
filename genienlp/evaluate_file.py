@@ -51,6 +51,7 @@ def parse_argv(parser):
     parser.add_argument('--tasks', dest='task_names', nargs='+', required=True, help='task names for prediction')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
+    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the prediction file')
 
     parser.add_argument('--eval_dir', type=str, required=False, help='use this directory to store eval results')
 
@@ -109,6 +110,7 @@ def parse_argv(parser):
 
 def compute_metrics_on_file(pred_file, results_file_name, task, args, tgt_lang):
     ids, contexts, preds, targets = [], [], [], []
+    count = 0
     with open(pred_file) as fin:
         for line in fin:
             id_, *pred, target, context = line.strip('\n').split('\t')
@@ -116,6 +118,9 @@ def compute_metrics_on_file(pred_file, results_file_name, task, args, tgt_lang):
             contexts.append(context)
             preds.append(pred)
             targets.append(target)
+            count += 1
+            if count >= args.subsample:
+                break
 
     validation_output = ValidationOutput(example_ids=ids, contexts=contexts, predictions=preds, answers=targets)
 
