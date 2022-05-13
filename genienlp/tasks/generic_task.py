@@ -340,7 +340,7 @@ class BiTODNLG(BiTOD):
 class BiTODDST(BiTOD):
     def __init__(self, name, args):
         super().__init__(name, args)
-        self._metrics = ['jga', 'em']
+        self._metrics = ['em', 'jga']
 
     def get_splits(self, root, **kwargs):
         kwargs['train_target'] = 'dst'
