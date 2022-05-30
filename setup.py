@@ -50,7 +50,7 @@ setuptools.setup(
         'torch>=1.9.0,<1.12.0',
         'transformers==4.19.2',
         'datasets==2.2.2',
-        'pathos==0.2.8',
+        'pathos==0.2.9',
         # for sts:
         'sentence-transformers==2.2.0',
         # for alignment:
