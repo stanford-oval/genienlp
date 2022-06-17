@@ -713,7 +713,7 @@ def load_config_json(args):
         if args.e2e_dialogue_valid_subtasks is None:
             setattr(args, 'e2e_dialogue_valid_subtasks', ['dst', 'api', 'da', 'rg'])
         if args.e2e_dialogue_valid_submetrics is None:
-            setattr(args, 'e2e_dialogue_valid_submetrics', ['jga', 'em', 'em', 'casedbleu'])
+            setattr(args, 'e2e_dialogue_valid_submetrics', ['dst_em', 'em', 'da_em', 'casedbleu'])
         if args.e2e_dialogue_valid_subweights is None:
             setattr(args, 'e2e_dialogue_valid_subweights', [1.0, 1.0, 1.0, 1.0])
 
