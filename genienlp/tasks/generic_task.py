@@ -32,7 +32,7 @@ from collections import OrderedDict
 from ..data_utils.example import Example
 from .almond_task import BaseAlmondTask
 from .base_task import BaseTask
-from .generic_dataset import BiTODDataset, CrossNERDataset, OODDataset
+from .generic_dataset import CrossNERDataset, E2EDialogueDataset, OODDataset
 from .registry import register_task
 
 
@@ -253,8 +253,65 @@ class OODTask(BaseTask):
         return OODDataset.splits(root=root, **kwargs)
 
 
+class E2EDialogueTask(BaseTask):
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self._metrics = ['e2e_dialogue_score']
+
+    def utterance_field(self):
+        return 'context'
+
+    def _make_example(self, turn, **kwargs):
+        dial_id, turn_id, input_text, output_text, train_target = (
+            turn['dial_id'],
+            turn['turn_id'],
+            turn['input_text'],
+            turn['output_text'],
+            turn['train_target'],
+        )
+
+        if kwargs.get('train_target', False) and train_target != kwargs['train_target']:
+            return None
+
+        example_id = '/'.join([dial_id, str(turn_id), train_target])
+
+        return Example.from_raw(
+            self.name + '/' + str(example_id), input_text, '', output_text, preprocess=self.preprocess_field, lower=False
+        )
+
+    def get_splits(self, root, **kwargs):
+        kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
+        return E2EDialogueDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
+
+
+@register_task('risawoz')
+class RiSAWOZ(E2EDialogueTask):
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self.special_tokens = {
+            'USER:',
+            'SYSTEM:',
+            'AGENT_ACTS:' 'AGENT_ACTS_PREV:',
+            'USER_ACTS:',
+            'DST:',
+            'API:',
+            'DA:',
+            'RG:',
+            '<knowledge>',
+            '<endofknowledge>',
+            '<history>',
+            '<endofhistory>',
+            '<state>',
+            '<endofstate>',
+            '<actions>',
+            '<endofactions>',
+            '#unknown',
+        }
+        self._metrics = ['e2e_dialogue_score']
+
+
 @register_task('bitod')
-class BiTOD(BaseTask):
+class BiTOD(E2EDialogueTask):
     def __init__(self, name, args):
         super().__init__(name, args)
         special_tokens_v1 = {
@@ -284,7 +341,7 @@ class BiTOD(BaseTask):
         special_tokens_v7 = {'ACTS:'}
         special_tokens_v9 = {'USER_ACTS:'}
         special_tokens_v11 = {'<endofknowledge>', '<endofhistory>', '<endofstate>'}
-        special_tokens_v13 = {'AGENT_ACTS_PREV'}
+        special_tokens_v13 = {'AGENT_ACTS_PREV:'}
         special_tokens_v2_10 = {'<actions>', '<endofactions>', 'DA:', 'RG:'}
         self.special_tokens = (
             special_tokens_v1
@@ -298,31 +355,6 @@ class BiTOD(BaseTask):
         )
         self._metrics = ['e2e_dialogue_score']
 
-    def utterance_field(self):
-        return 'context'
-
-    def _make_example(self, turn, **kwargs):
-        dial_id, turn_id, input_text, output_text, train_target = (
-            turn['dial_id'],
-            turn['turn_id'],
-            turn['input_text'],
-            turn['output_text'],
-            turn['train_target'],
-        )
-
-        if kwargs.get('train_target', False) and train_target != kwargs['train_target']:
-            return None
-
-        example_id = '/'.join([dial_id, str(turn_id), train_target])
-
-        return Example.from_raw(
-            self.name + '/' + str(example_id), input_text, '', output_text, preprocess=self.preprocess_field, lower=False
-        )
-
-    def get_splits(self, root, **kwargs):
-        kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
-        return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
-
 
 @register_task('bitod_nlg')
 class BiTODNLG(BiTOD):
@@ -333,7 +365,7 @@ class BiTODNLG(BiTOD):
     def get_splits(self, root, **kwargs):
         kwargs['train_target'] = 'rg'
         kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
-        return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
+        return E2EDialogueDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
 
 
 @register_task('bitod_dst')
@@ -345,4 +377,4 @@ class BiTODDST(BiTOD):
     def get_splits(self, root, **kwargs):
         kwargs['train_target'] = 'dst'
         kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
-        return BiTODDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
+        return E2EDialogueDataset.return_splits(path=root, make_example=self._make_example, **kwargs)

@@ -258,7 +258,7 @@ class OODDataset(CQA):
         )
 
 
-class BiTODDataset(CQA):
+class E2EDialogueDataset(CQA):
     def __init__(self, path, *, make_example, **kwargs):
         subsample = kwargs.pop('subsample')
         examples = []

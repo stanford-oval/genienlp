@@ -31,6 +31,7 @@ import logging
 from collections import Counter, OrderedDict, defaultdict
 from typing import List, Union
 
+import dialogues
 import sacrebleu
 from datasets import load_metric
 from dialogues import Bitod
@@ -238,9 +239,13 @@ def computeDA_EM(greedy, answer):
     return compute_da(greedy, answer)
 
 
-def computeJGA(greedy, answer, example_ids):
+def computeJGA(greedy, answer, example_ids, task_names):
     # Inputs contain diff states, so we need to compute the full state first
-    dataset = Bitod()
+    # TODO: how to address multitask evaluation?
+    assert len(task_names) == 1
+    dataset_class = getattr(dialogues, task_names[0].capitalize())
+    dataset = dataset_class()
+
     cur_dial_id = None
     full_answer = []
     full_greedy = []
@@ -334,7 +339,7 @@ def compute_metrics(
         metric_keys += results.keys()
         metric_values += results.values()
     if 'jga' in requested_metrics:
-        jga = computeJGA(predictions, answers, example_ids)
+        jga = computeJGA(predictions, answers, example_ids, args.task_names)
         metric_keys += ['jga']
         metric_values += [jga]
     if 'ser' in requested_metrics:

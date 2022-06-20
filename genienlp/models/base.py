@@ -33,10 +33,10 @@ import os
 from collections import defaultdict
 from typing import List, Optional
 
+import dialogues
 import torch
 import ujson
 from dateparser.languages import default_loader
-from dialogues import Bitod
 from transformers import AutoConfig, MarianTokenizer, PreTrainedModel
 
 from ..data_utils.example import NumericalizedExamples, SequentialField
@@ -405,8 +405,9 @@ class GenieModelForGeneration(GenieModel):
             answers
             contexts
         """
+        dataset_class = getattr(dialogues, task.name.capitalize())
+        dataset = dataset_class()
 
-        dataset = Bitod()
         e2e_dialogue_preds = dict()
 
         predictions = []
