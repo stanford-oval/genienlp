@@ -232,7 +232,8 @@ def computeSER(greedy, inputs):
     return compute_ser(greedy, act_values)
 
 
-def computeDA(greedy, answer):
+def computeDA_EM(greedy, answer):
+    # Uses dialogues da metric which takes care of entity normalizations
     answer = [a[0] for a in answer]
     return compute_da(greedy, answer)
 
@@ -266,6 +267,7 @@ def computeJGA(greedy, answer, example_ids):
 
 def computeDST_EM(greedy, answer):
     # Calculate exact match between diff states
+    # Uses dialogues dst metric which takes care of entity normalizations
     dataset = Bitod()
     answer = [dataset.span2state(a[0]) for a in answer]
     greedy = [dataset.span2state(g) for g in greedy]
@@ -344,7 +346,7 @@ def compute_metrics(
         metric_keys += ['em']
         metric_values += [em]
     if 'da_em' in requested_metrics:
-        da_em = computeDA(predictions, answers)
+        da_em = computeDA_EM(predictions, answers)
         metric_keys += ['da_em']
         metric_values += [da_em]
     if 'dst_em' in requested_metrics:
