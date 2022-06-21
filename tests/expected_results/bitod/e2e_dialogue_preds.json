@@ -4,27 +4,29 @@
       "1": {
         "state": {},
         "api": "null",
-        "actions": "Two Vergeblich null Twist Null <API> sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet",
+        "actions": "Two herry null herry ( Hotels suchen ) herry herry herry Hey, kannst du mir bei der Hotelbuchung helfen? <endofknowledge> herry <endofknowledge> herry <endofknowledge> herry <endofknowledge> herry <endofknowledge> herry DA: herry <endofknowledge> herry <endofknowledge> herry <endofknowledge> herry <endofknowledge> herry DA: sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet s",
         "response": [
-          "Zwei Vergeblich null Twist Null sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet swe"
+          "Tüpfel ( Hotels suchen ) Anfrage Ort, Anfrage Bewertung Tüpfel Tüpfel Hey, können Sie mir helfen bei der Buchung? <endofknowledge> ? <endofknowledge> <endofknowledge> title <endofknowledge> <endofknowledge> <endofknowledge> <endofknowledge> title <endofknowledge> title <endofknowledge> title <endofknowledge> title <endofknowledge> title <endofknowledge> title <endofknowledge> title <endofknowledge> title <endofknowledge> title title title title title title title title title title title title title title title title title title title title title title title title ti"
         ]
       },
       "2": {
-        "state": {},
+        "state": {
+          "Hotels suchen": {}
+        },
         "api": "null",
-        "actions": "Sweat Vermehren null Sweat Vermehren null Sweat Vermehren null Sweat Vermehren sweat Vermehren _ Sweat ( Hotels suchen ) Anfrage Ort , Anfrage Bewertung sweat Kein bestimmtes Ziel, aber ich will ein Hotel, das mindestens 4 Sterne. Response: . Response: . Response: sweat Vermehren DA: ACTS: . <endofknowledge> sweat Vermehren DA: DA: DA: . DA: sweat Vermehren DA: DA: DA: . DA: sweat Vermehren DA: DA: . DA: sweat Vermehren DA: sweat Vermehren DA: DA: sweat DA: sweat",
+        "actions": "Sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat ",
         "response": [
-          "Vermehren Sweat Vermehren null Sweat Vermehren null Sweat Vermehren null Sweat Vermehren sweat Vermehren _ Sweat ( Hotels suchen ) Anfrage Ort , Anfrage Bewertung Schweiß Kein Ziel, aber ich will ein Hotel, das mindestens 4 Sterne. #unknown . #unknown . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . "
+          "Tüpfellig ( Hotelsuche ) Anfrage Sterne Tüpfellig ( Hotelsuche ) Anfrage Ort, Anfrage Bewertung Tüpfellig Kein bestimmtes Ziel, aber ich möchte ein Hotel, das mindestens 4 Sterne ist. <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> ."
         ]
       },
       "3": {
         "state": {
-          "hotels_en_US_search": {}
+          "Hotels suchen": {}
         },
         "api": "null",
-        "actions": "swiste swiste swiste swiste swiste swiste swiste swiste swiste swistes : ( hotels search ) swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes swistes SYSTEM: swistes swistes swistes swistes swiste",
+        "actions": "swith switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch switch",
         "response": [
-          "Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swiste Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swistes Swiste"
+          "Tüpfelbahn ( Hotelsuche ) Anfrage Preis_ <user> Tüpfelbahn Tüpfelbahn: ( Hotelsuche ) Anfrage Ort , Anfrage Rating Tüpfelbahn ( Hotelsuche ) Anfrage Sterne Tüpfelbahn 5 Sterne. <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> . <endofknowledge> "
         ]
       }
     },

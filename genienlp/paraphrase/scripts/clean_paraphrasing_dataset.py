@@ -5,7 +5,7 @@ import re
 import sys
 
 from ...data_utils.progbar import progress_bar
-from ...util import detokenize
+from ..data_utils import detokenize
 
 csv.field_size_limit(sys.maxsize)
 

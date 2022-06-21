@@ -37,222 +37,26 @@ import shutil
 import sys
 import time
 from json.decoder import JSONDecodeError
-from typing import List
 
 import numpy as np
 import torch
 import ujson
-from torch.functional import Tensor
 from transformers import MarianConfig, MBartConfig
 from transformers.models.mbart50.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
-
-from genienlp.tasks.generic_dataset import all_tokens_fn, input_tokens_fn
 
 from .data_utils.almond_utils import token_type_regex
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
 from .model_utils.transformers_utils import MARIAN_GROUP_MEMBERS
+from .tasks.generic_dataset import all_tokens_fn, input_tokens_fn
 
 logger = logging.getLogger(__name__)
 
 ENTITY_MATCH_REGEX = re.compile('^([A-Z].*)_[0-9]+$')
-
-
-class SpecialTokenMap:
-    def __init__(self, pattern, forward_func, backward_func=None):
-        """
-        Inputs:
-            pattern: a regex pattern
-            forward_func: a function with signature forward_func(str) -> str
-            backward_func: a function with signature backward_func(str) -> list[str]
-        """
-        if isinstance(forward_func, list):
-            self.forward_func = lambda x: forward_func[int(x) % len(forward_func)]
-        else:
-            self.forward_func = forward_func
-
-        if isinstance(backward_func, list):
-            self.backward_func = lambda x: backward_func[int(x) % len(backward_func)]
-        else:
-            self.backward_func = backward_func
-
-        self.pattern = pattern
-
-    def forward(self, s: str):
-        reverse_map = []
-        matches = re.finditer(self.pattern, s)
-        if matches is None:
-            return s, reverse_map
-        for match in matches:
-            occurrence = match.group(0)
-            parameter = match.group(1)
-            replacement = self.forward_func(parameter)
-            s = s.replace(occurrence, replacement)
-            reverse_map.append((self, occurrence))
-        return s, reverse_map
-
-    def backward(self, s: str, occurrence: str):
-        match = re.match(self.pattern, occurrence)
-        parameter = match.group(1)
-        if self.backward_func is None:
-            list_of_strings_to_match = [self.forward_func(parameter)]
-        else:
-            list_of_strings_to_match = sorted(self.backward_func(parameter), key=lambda x: len(x), reverse=True)
-        for string_to_match in list_of_strings_to_match:
-            l_ = [' ' + string_to_match + ' ', string_to_match + ' ', ' ' + string_to_match]
-            o_ = [' ' + occurrence + ' ', occurrence + ' ', ' ' + occurrence]
-            new_s = s
-            for i in range(len(l_)):
-                new_s = re.sub(l_[i], o_[i], s, flags=re.IGNORECASE)
-                if s != new_s:
-                    break
-            if s != new_s:
-                s = new_s
-                break
-
-        return s
-
-
-class ConfidenceFeatures:
-    """
-    Contains all necessary features that are useful for calculating confidence of a single generated output
-    """
-
-    def __init__(
-        self,
-        drop_logits: List[Tensor],
-        drop_probs: List[Tensor],
-        gold_answer: Tensor,
-        prediction: Tensor,
-        nodrop_logits: Tensor,
-        nodrop_probs: Tensor,
-        nodrop_entropies: Tensor,
-        context: Tensor,
-        nodrop_top1_probs: Tensor = None,
-        nodrop_top2_probs: Tensor = None,
-        drop_top1_probs: List[Tensor] = None,
-        drop_top2_probs: List[Tensor] = None,
-    ):
-        """
-        Inputs:
-            droplogits: logits after MC dropout
-            gold_answer: includes BOS and EOS tokens, but no PAD tokens
-            prediction: includes BOS and EOS tokens, but no PAD tokens
-            nodrop_logits: logits for this prediction that are obtained WITHOUT activating model's dropout
-            nodrop_top1_probs, nodrop_top2_probs: highest and second highest probabilities of the next token, given that the previous token was from `prediction`
-        """
-
-        # store the results of MC dropout if provided
-        self.drop_logits = drop_logits
-        self.drop_probs = drop_probs
-        self.drop_top1_probs = drop_top1_probs
-        self.drop_top2_probs = drop_top2_probs
-
-        if drop_logits is not None:
-            self.drop_logits = torch.stack(drop_logits, dim=0).cpu()
-        if drop_probs is not None:
-            self.drop_probs = torch.stack(drop_probs, dim=0).cpu()
-        if drop_top1_probs is not None:
-            self.drop_top1_probs = torch.stack(drop_top1_probs, dim=0).cpu()
-        if drop_top2_probs is not None:
-            self.drop_top2_probs = torch.stack(drop_top2_probs, dim=0).cpu()
-
-        # store the results of non-dropout forward pass, if provided
-        self.nodrop_logits = nodrop_logits
-        self.nodrop_probs = nodrop_probs
-        self.nodrop_entropies = nodrop_entropies
-        self.nodrop_top1_probs = nodrop_top1_probs
-        self.nodrop_top2_probs = nodrop_top2_probs
-
-        if nodrop_logits is not None:
-            self.nodrop_logits = nodrop_logits.cpu()
-        if nodrop_probs is not None:
-            self.nodrop_probs = nodrop_probs.cpu()
-        if nodrop_entropies is not None:
-            self.nodrop_entropies = nodrop_entropies.cpu()
-        if nodrop_top1_probs is not None:
-            self.nodrop_top1_probs = nodrop_top1_probs.cpu()
-        if nodrop_top2_probs is not None:
-            self.nodrop_top2_probs = nodrop_top2_probs.cpu()
-
-        self.prediction = prediction
-        self.gold_answer = gold_answer
-        self.first_mistake = ConfidenceFeatures.find_first_mistake(gold_answer, prediction)
-        self.label = self.first_mistake == -1
-        self.context = context
-
-    @property
-    def mc_dropout_num(self):
-        if self.drop_logits is None:
-            return 0
-        else:
-            return self.drop_logits.shape[0]
-
-    @staticmethod
-    def find_first_mistake(gold_answer: Tensor, prediction: Tensor):
-        """
-        Inputs:
-            gold_answer: includes BOS and EOS tokens, but no PAD tokens
-            prediction: includes BOS and EOS tokens, but no PAD tokens
-        Returns:
-            The index of the first token where `gold_answer` and `prediction` differ, or -1 if they are equal. Ignores BOS, so the minimum possible value is 0.
-        """
-        # print('gold_answer = ', gold_answer)
-        # print('prediction = ', prediction)
-        # skip BOS
-        gold_answer = gold_answer[1:]
-        prediction = prediction[1:]
-
-        for i in range(min(len(gold_answer), len(prediction))):
-            if gold_answer[i] != prediction[i]:
-                return i
-        if len(gold_answer) != len(prediction):
-            # one is a strict prefix of the other
-            return min(len(gold_answer), len(prediction))
-        return -1
-
-    def __repr__(self) -> str:
-        return (
-            '<Confidence: drop_logits='
-            + str(self.drop_logits)
-            + ', drop_probs='
-            + str(self.drop_probs)
-            + ', first_mistake='
-            + str(self.first_mistake)
-            + ', nodrop_logits='
-            + str(self.nodrop_logits)
-            + ', nodrop_probs='
-            + str(self.nodrop_probs)
-            + ', nodrop_entropies='
-            + str(self.nodrop_entropies)
-            + ', context='
-            + str(self.context)
-            + ', label='
-            + str(self.label)
-            + '>'
-        )
-
-
-def remove_thingtalk_quotes(thingtalk):
-    quote_values = []
-    while True:
-        # print('before: ', thingtalk)
-        l1 = thingtalk.find('"')
-        if l1 < 0:
-            break
-        l2 = thingtalk.find('"', l1 + 1)
-        if l2 < 0:
-            # ThingTalk code is not syntactic
-            return thingtalk, None
-        quote_values.append(thingtalk[l1 + 1 : l2].strip())
-        thingtalk = thingtalk[:l1] + '<temp>' + thingtalk[l2 + 1 :]
-        # print('after: ', thingtalk)
-    thingtalk = thingtalk.replace('<temp>', '""')
-    return thingtalk, quote_values
+QUOTED_MATCH_REGEX = re.compile(' " (.*?) " ')
 
 
 def find_span_type(program, begin_index, end_index):
-
     if begin_index > 1 and program[begin_index - 2] == 'location:':
         span_type = 'LOCATION'
     elif end_index == len(program) - 1 or not program[end_index + 1].startswith('^^'):
@@ -283,7 +87,6 @@ def find_span(haystack, needle):
 
 
 def requote_program(program):
-
     program = program.split(' ')
     requoted = []
 
@@ -311,64 +114,6 @@ def requote_program(program):
         i += 1
 
     return ' '.join(requoted)
-
-
-def tokenizer(s):
-    return s.split()
-
-
-def mask_special_tokens(string: str):
-    exceptions = [match.group(0) for match in re.finditer('[A-Za-z:_.]+_[0-9]+', string)]
-    for e in exceptions:
-        string = string.replace(e, '<temp>', 1)
-    return string, exceptions
-
-
-def unmask_special_tokens(string: str, exceptions: list):
-    for e in exceptions:
-        string = string.replace('<temp>', e, 1)
-    return string
-
-
-def detokenize(string: str):
-    string, exceptions = mask_special_tokens(string)
-    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "!", "'s", ")", ":", "-"]
-    for t in tokens:
-        string = string.replace(' ' + t, t)
-    string = string.replace("( ", "(")
-    string = string.replace('gon na', 'gonna')
-    string = string.replace('wan na', 'wanna')
-    string = unmask_special_tokens(string, exceptions)
-    return string
-
-
-def tokenize(string: str):
-    string, exceptions = mask_special_tokens(string)
-    tokens = ["'d", "n't", "'ve", "'m", "'re", "'ll", ".", ",", "?", "!", "'s", ")", ":"]
-    for t in tokens:
-        string = string.replace(t, ' ' + t)
-    string = string.replace("(", "( ")
-    string = string.replace('gonna', 'gon na')
-    string = string.replace('wanna', 'wan na')
-    string = unmask_special_tokens(string, exceptions)
-    string = re.sub('([A-Za-z:_.]+_[0-9]+)-', r'\1 - ', string)  # add space before and after hyphen, e.g. "NUMBER_0-hour"
-    string = re.sub('\s+', ' ', string)  # remove duplicate spaces
-    return string.strip()
-
-
-def lower_case(string):
-    string, exceptions = mask_special_tokens(string)
-    string = string.lower()
-    string = unmask_special_tokens(string, exceptions)
-    return string
-
-
-def get_number_of_lines(file_path):
-    count = 0
-    with open(file_path) as f:
-        for line in f:
-            count += 1
-    return count
 
 
 def get_part_path(path, part_idx):
@@ -632,7 +377,6 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
 
 
 def ned_dump_entity_type_pairs(dataset, path, name, utterance_field):
-
     with open(os.path.join(path, f'{name}_labels.jsonl'), 'w') as fout:
         for ex in dataset.examples:
             text = ex.question if utterance_field == 'question' else ex.context
@@ -969,7 +713,7 @@ def load_config_json(args):
         if args.e2e_dialogue_valid_subtasks is None:
             setattr(args, 'e2e_dialogue_valid_subtasks', ['dst', 'api', 'da', 'rg'])
         if args.e2e_dialogue_valid_submetrics is None:
-            setattr(args, 'e2e_dialogue_valid_submetrics', ['jga', 'em', 'em', 'casedbleu'])
+            setattr(args, 'e2e_dialogue_valid_submetrics', ['dst_em', 'em', 'da_em', 'casedbleu'])
         if args.e2e_dialogue_valid_subweights is None:
             setattr(args, 'e2e_dialogue_valid_subweights', [1.0, 1.0, 1.0, 1.0])
 

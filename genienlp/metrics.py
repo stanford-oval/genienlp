@@ -26,7 +26,7 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import copy
 import logging
 from collections import Counter, OrderedDict, defaultdict
 from typing import List, Union
@@ -34,11 +34,11 @@ from typing import List, Union
 import sacrebleu
 from datasets import load_metric
 from dialogues import Bitod
-from dialogues.bitod.src.evaluate import convert_lists_to_set
+from dialogues.bitod.src.evaluate import compute_da, compute_dst_em, compute_ser
 from seqeval import metrics as seq_metrics
 from seqeval import scheme as seq_scheme
 
-from .util import requote_program
+from .util import QUOTED_MATCH_REGEX, requote_program
 
 logger = logging.getLogger(__name__)
 
@@ -179,25 +179,31 @@ def computeNMTBLEU(outputs, targets):
     return bleu_metric.compute(predictions=outputs, references=targets)['bleu'] * 100
 
 
-def compute_e2e_dialogue_score(greedy, answer, tgt_lang, args, example_ids):
+def compute_e2e_dialogue_score(greedy, answer, tgt_lang, args, example_ids, contexts):
     num_examples = len(answer)
     subtask_metrics_dict = OrderedDict()
 
-    results = OrderedDict({'e2e_dialogue_score': 0.0, 'JGA': 0.0, 'API_em': 0.0, 'DA_em': 0.0, 'BLEU': 0.0})
-    subtask2result_key = OrderedDict({'dst': 'JGA', 'api': 'API_em', 'da': 'DA_em', 'rg': 'BLEU'})
+    new_metrics = [a.upper() + '_' + b for (a, b) in zip(args.e2e_dialogue_valid_subtasks, args.e2e_dialogue_valid_submetrics)]
+
+    results = OrderedDict({'e2e_dialogue_score': 0.0})
+    subtask2result_key = OrderedDict({})
+    for i, m in enumerate(new_metrics):
+        results[m] = 0.0
+        subtask2result_key[args.e2e_dialogue_valid_subtasks[i]] = m
 
     for k, subtask in enumerate(args.e2e_dialogue_valid_subtasks):
-        ids, preds, golds = [], [], []
+        ids, inputs, preds, golds = [], [], [], []
         for i in range(num_examples):
             id_ = example_ids[i]
             if id_.endswith(f'/{subtask}'):
                 ids.append(id_)
+                inputs.append(contexts[i])
                 preds.append(greedy[i])
                 golds.append(answer[i])
 
         if golds:
             metrics_to_compute = args.e2e_dialogue_valid_submetrics[k]
-            sub_metrics = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, args, ids)
+            sub_metrics = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, args, ids, inputs)
             subtask_metrics_dict[subtask] = (
                 sub_metrics[metrics_to_compute],
                 len(golds),
@@ -211,17 +217,33 @@ def compute_e2e_dialogue_score(greedy, answer, tgt_lang, args, example_ids):
 
         results[result_key] += sub_result
         results['e2e_dialogue_score'] += weight * (sub_result * num_ex)
-        weighted_num_examples += weight * num_ex
+        weighted_num_examples += abs(weight) * num_ex
 
     results['e2e_dialogue_score'] /= weighted_num_examples
 
     return results
 
 
+def computeSER(greedy, inputs):
+    act_values = []
+    for input in inputs:
+        act_values.append(QUOTED_MATCH_REGEX.findall(input))
+
+    return compute_ser(greedy, act_values)
+
+
+def computeDA_EM(greedy, answer):
+    # Uses dialogues da metric which takes care of entity normalizations
+    answer = [a[0] for a in answer]
+    return compute_da(greedy, answer)
+
+
 def computeJGA(greedy, answer, example_ids):
+    # Inputs contain diff states, so we need to compute the full state first
     dataset = Bitod()
-    hit = 0
     cur_dial_id = None
+    full_answer = []
+    full_greedy = []
     assert len(example_ids) == len(greedy) == len(answer)
     for id_, g, a in zip(example_ids, greedy, answer):
         dial_id = id_.split('/')[1]
@@ -237,13 +259,19 @@ def computeJGA(greedy, answer, example_ids):
         dataset.update_state(a, answer_state)
         dataset.update_state(g, greedy_state)
 
-        answer_state_sets = convert_lists_to_set(answer_state)
-        greedy_state_sets = convert_lists_to_set(greedy_state)
+        full_answer.append(copy.deepcopy(answer_state))
+        full_greedy.append(copy.deepcopy(greedy_state))
 
-        if answer_state_sets == greedy_state_sets:
-            hit += 1
+    return compute_dst_em(full_greedy, full_answer)
 
-    return hit / len(greedy) * 100
+
+def computeDST_EM(greedy, answer):
+    # Calculate exact match between diff states
+    # Uses dialogues dst metric which takes care of entity normalizations
+    dataset = Bitod()
+    answer = [dataset.span2state(a[0]) for a in answer]
+    greedy = [dataset.span2state(g) for g in greedy]
+    return compute_dst_em(greedy, answer)
 
 
 def convert_IOB2_to_IOB1(labels):
@@ -279,6 +307,7 @@ def compute_metrics(
     lang: str,
     args,
     example_ids: List[str] = None,
+    contexts: List[str] = None,
 ):
     """
     Inputs:
@@ -291,24 +320,39 @@ def compute_metrics(
         lang: the language of the predictions and answers. Used for BERTScore.
         args: arguments
         example_ids: used to calculate some of e2e dialogue metrics that need to know span of each dialogue such as JGA
+        contexts: used to calculate SER metric that need to know entities in the input
     """
     metric_keys = []
     metric_values = []
     if not isinstance(answers[0], list):
         answers = [[a] for a in answers]
     if 'e2e_dialogue_score' in requested_metrics:
-        requested_metrics += ['JGA', 'API_em', 'DA_em', 'BLEU']
-        results = compute_e2e_dialogue_score(predictions, answers, lang, args, example_ids)
+        requested_metrics += [
+            a.upper() + '_' + b for (a, b) in zip(args.e2e_dialogue_valid_subtasks, args.e2e_dialogue_valid_submetrics)
+        ]
+        results = compute_e2e_dialogue_score(predictions, answers, lang, args, example_ids, contexts)
         metric_keys += results.keys()
         metric_values += results.values()
     if 'jga' in requested_metrics:
         jga = computeJGA(predictions, answers, example_ids)
         metric_keys += ['jga']
         metric_values += [jga]
+    if 'ser' in requested_metrics:
+        ser = computeSER(predictions, contexts)
+        metric_keys += ['ser']
+        metric_values += [ser]
     if 'em' in requested_metrics:
         em = computeEM(predictions, answers)
         metric_keys += ['em']
         metric_values += [em]
+    if 'da_em' in requested_metrics:
+        da_em = computeDA_EM(predictions, answers)
+        metric_keys += ['da_em']
+        metric_values += [da_em]
+    if 'dst_em' in requested_metrics:
+        dst_em = computeDST_EM(predictions, answers)
+        metric_keys += ['dst_em']
+        metric_values += [dst_em]
     if 'pem' in requested_metrics:
         pem = computePartialEM(predictions, answers)
         metric_keys.append('pem')
@@ -383,11 +427,12 @@ def calculate_and_reduce_metrics(args, validation_output, metrics_to_compute, la
     example_ids = validation_output.example_ids
     predictions = validation_output.predictions
     answers = validation_output.answers
+    contexts = validation_output.contexts
 
     if args.reduce_metrics == 'max':
         for i in range(len(predictions[0])):  # for each output (in case of multiple outputs)
             partial_metrics = compute_metrics(
-                [p[i] for p in predictions], answers, metrics_to_compute, lang, args, example_ids
+                [p[i] for p in predictions], answers, metrics_to_compute, lang, args, example_ids, contexts
             )  # calculate the metric on all first outputs, all second outputs, etc.
             for k, v in partial_metrics.items():
                 metrics[k] = max(metrics.get(k, 0), v)
@@ -401,7 +446,7 @@ def calculate_and_reduce_metrics(args, validation_output, metrics_to_compute, la
             example_metrics = OrderedDict()  # keep track of metrics for one input and all of its outputs
             for j in range(len(predictions[i])):  # for each output (in case of multiple outputs)
                 partial_metrics = compute_metrics(
-                    [predictions[i][j]], [answers[i]], metrics_to_compute, lang, args, example_ids
+                    [predictions[i][j]], [answers[i]], metrics_to_compute, lang, args, example_ids, contexts
                 )  # calculate the metric on the j-th output of the i-th input
                 for k, v in partial_metrics.items():
                     example_metrics[k] = max(example_metrics.get(k, 0), v)

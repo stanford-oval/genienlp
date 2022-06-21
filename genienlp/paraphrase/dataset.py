@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 
 from ..data_utils.almond_utils import detokenize_cjk_chars
 from ..data_utils.progbar import progress_bar
-from ..util import get_number_of_lines
+from .data_utils import get_number_of_lines
 
 logger = logging.getLogger(__name__)
 

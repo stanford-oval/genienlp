@@ -564,7 +564,7 @@ def parse_argv(parser):
         '--e2e_dialogue_valid_submetrics',
         nargs='+',
         type=str,
-        default=['jga', 'em', 'em'],
+        default=['dst_em', 'em', 'da_em'],
         help='Specify metrics to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
     parser.add_argument(
