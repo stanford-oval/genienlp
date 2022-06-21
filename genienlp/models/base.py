@@ -450,7 +450,8 @@ class GenieModelForGeneration(GenieModel):
                 knowledge = defaultdict(dict)
                 new_knowledge_text = 'null'
                 new_actions_text = 'null'
-                active_api = None
+                api_names = []
+                state_update = {}
                 e2e_dialogue_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
 
             batch_context = []
@@ -467,7 +468,7 @@ class GenieModelForGeneration(GenieModel):
                     j -= 1
                 text = text[i : j + 1]
 
-                batch_context.append(self.numericalizer._tokenizer.convert_tokens_to_string(text))
+                batch_context.append(self.numericalizer._tokenizer.convert_tokens_to_string(text).replace(",", "，"))
 
             contexts += batch_context
 
@@ -560,8 +561,6 @@ class GenieModelForGeneration(GenieModel):
                 # update dialogue_state
                 lev = predictions[-1][0].strip()
                 state_update = dataset.span2state(lev)
-                if state_update:
-                    active_api = list(state_update.keys())[-1]
                 dataset.update_state(state_update, dialogue_state)
 
                 #### save latest state
@@ -575,14 +574,14 @@ class GenieModelForGeneration(GenieModel):
 
                 if do_api_call == 'yes':
                     # make api call
-                    api_name = active_api
-                    if api_name in dialogue_state:
-                        constraints, new_knowledge_text = dataset.make_api_call(
-                            dialogue_state, knowledge, api_name, self.numericalizer._tokenizer.src_lang, dial_id, turn_id
-                        )
-                        #### save latest api constraints
-                        e2e_dialogue_preds[dial_id]["API"][dataset.domain2api_name(api_name)] = copy.deepcopy(constraints)
-                        ####
+                    if state_update:
+                        api_names = list(state_update.keys())
+                    constraints, new_knowledge_text = dataset.make_api_call(
+                        dialogue_state, knowledge, api_names, self.numericalizer._tokenizer.src_lang, dial_id, turn_id
+                    )
+                    #### save latest api constraints
+                    e2e_dialogue_preds[dial_id]["API"] = copy.deepcopy(constraints)
+                    ####
 
                 elif do_api_call == 'no':
                     # do nothing
