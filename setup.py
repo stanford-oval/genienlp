@@ -72,6 +72,6 @@ setuptools.setup(
         'dill~=0.3',
         'xgboost~=1.3',
         # for e2e dialogues:
-        'dialogues @ git+https://github.com/Mehrad0711/dialogues@77abfa00e79f49b146a054d288ad96c82ef92298',
+        'dialogues @ git+https://github.com/Magnetic2014/dialogues@tianhao',
     ],
 )
