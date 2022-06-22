@@ -39,6 +39,7 @@ from . import (
     kfserver,
     predict,
     run_bootleg,
+    run_dialogue_loop,
     server,
     train,
     write_kf_metrics,
@@ -115,6 +116,8 @@ subcommands = {
     # kf commands
     'kfserver': ('Export KFServing interface to predict', server.parse_argv, kfserver.main),
     'write-kf-metrics': ('Write KF evaluation metrics', write_kf_metrics.parse_argv, write_kf_metrics.main),
+    # e2e dialogues
+    'run-dialogue-loop': ('Interact with a dialogue agent', run_dialogue_loop.parse_argv, run_dialogue_loop.main),
 }
 
 
