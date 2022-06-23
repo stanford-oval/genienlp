@@ -684,7 +684,8 @@ class GenieModelForGeneration(GenieModel):
         state_update = {}
         e2e_dialogue_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
 
-        history = []
+        user_history = []
+        system_history = []
 
         INIT_SYS_MESSAGE = {
             'en': 'Hello! How can I help you today?',
@@ -701,14 +702,14 @@ class GenieModelForGeneration(GenieModel):
                 if train_target == 'dst':
                     turn_id += 1
 
-                    if history:
+                    if system_history:
                         print(colored(f'{dataset.system_token} {predictions[-1][0]}', 'red', attrs=['bold']))
                     else:
                         src_lang = src_lang[:2]
                         print(colored(f'{dataset.system_token} {INIT_SYS_MESSAGE[src_lang]}', 'red', attrs=['bold']))
 
                     # construct new input
-                    raw_user_input = input(colored(dataset.user_token + ' ', 'green', attrs=['bold']))
+                    raw_user_input = input(colored('SYSTEM: ', 'green', attrs=['bold']))
                     raw_user_input = raw_user_input.strip()
                     if raw_user_input == 'RESET':
                         self.interact_e2e_dialogues(task, eval_dir=eval_dir)
@@ -719,12 +720,13 @@ class GenieModelForGeneration(GenieModel):
                         print(f'dialogue state: {dialogue_state}')
                         continue
 
-                    history.append(dataset.user_token + ' ' + raw_user_input)
+                    user_history.append(dataset.user_token + ' ' + raw_user_input)
 
                 input_text = dataset.construct_input(
                     train_target,
                     state=new_state_text,
-                    history=history,
+                    user_history=user_history,
+                    system_history=system_history,
                     knowledge=new_knowledge_text,
                     actions=new_actions_text,
                 )
@@ -802,7 +804,7 @@ class GenieModelForGeneration(GenieModel):
 
                 elif train_target == 'da':
                     new_actions_text = predictions[-1][0]
-                    history.append(dataset.system_token + ' ' + new_actions_text)
+                    system_history.append(dataset.system_token + ' ' + new_actions_text)
                     #### save latest actions
                     e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["actions"] = predictions[-1][0]
                     ####
