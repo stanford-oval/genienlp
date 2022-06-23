@@ -38,7 +38,6 @@ import dialogues
 import torch
 import ujson
 from dateparser.languages import default_loader
-from termcolor import colored
 from transformers import AutoConfig, MarianTokenizer, PreTrainedModel
 
 from ..data_utils.example import NumericalizedExamples, SequentialField
@@ -127,6 +126,24 @@ class ValidationOutput(object):
 
 # TransformerSeq2Seq and TransformerLSTM will inherit from this model
 class GenieModelForGeneration(GenieModel):
+    def numericalize_example(self, input_text, turn_id, device):
+        if isinstance(input_text, str):
+            input_text = [input_text]
+        tokenized_contexts = self.numericalizer.encode_batch(input_text, field_name='context', features=None)[0]
+
+        numericalized_turn = NumericalizedExamples(
+            example_id=[str(turn_id)],
+            context=SequentialField(
+                value=torch.tensor([tokenized_contexts.value], device=device),
+                length=torch.tensor([tokenized_contexts.length], device=device),
+                limited=torch.tensor([tokenized_contexts.limited], device=device),
+                feature=None,
+            ),
+            answer=SequentialField(value=None, length=None, limited=None, feature=None),
+        )
+
+        return numericalized_turn
+
     def validate(
         self,
         data_iterator,
@@ -410,18 +427,8 @@ class GenieModelForGeneration(GenieModel):
         dataset_class = getattr(dialogues, task.name.capitalize())
         dataset = dataset_class()
 
-        e2e_dialogue_preds = dict()
-
-        predictions = []
-        example_ids = []
-        answers = []
-        contexts = []
-
         # TODO: handle multiple responses
         hyperparameter_idx = 0
-
-        cur_dial_id = ''
-        knowledge = None
 
         device = self.device
         args = self.args
@@ -432,6 +439,14 @@ class GenieModelForGeneration(GenieModel):
             src_lang = self.orig_src_lang
 
         special_tokens = self.numericalizer._tokenizer.all_special_tokens
+
+        e2e_dialogue_preds = dict()
+        predictions = []
+        example_ids = []
+        answers = []
+        contexts = []
+
+        cur_dial_id = ''
 
         for k, turn in enumerate(progress_bar(data_iterator, desc='Generating', disable=disable_progbar)):
             batch_size = len(turn.example_id)
@@ -448,7 +463,6 @@ class GenieModelForGeneration(GenieModel):
                 # new dialogue
                 cur_dial_id = dial_id
                 dialogue_state = {}
-                # new_state_text = 'null'
                 knowledge = defaultdict(dict)
                 new_knowledge_text = 'null'
                 new_actions_text = 'null'
@@ -492,7 +506,6 @@ class GenieModelForGeneration(GenieModel):
                 # input_text = replace_match(input_text, last_system_re, last_sys_pred)
 
             elif train_target == 'api':
-
                 # replace state
                 input_text = replace_capturing_group(contexts[-1], dataset.state_re, new_state_text)
 
@@ -514,18 +527,7 @@ class GenieModelForGeneration(GenieModel):
             # replace old context with updated
             contexts[-1] = input_text
 
-            tokenized_contexts = self.numericalizer.encode_batch([input_text], field_name='context', features=None)[0]
-
-            numericalized_turn = NumericalizedExamples(
-                example_id=[turn.example_id[0]],
-                context=SequentialField(
-                    value=torch.tensor([tokenized_contexts.value], device=device),
-                    length=torch.tensor([tokenized_contexts.length], device=device),
-                    limited=torch.tensor([tokenized_contexts.limited], device=device),
-                    feature=None,
-                ),
-                answer=SequentialField(value=None, length=None, limited=None, feature=None),
-            )
+            numericalized_turn = self.numericalize_example(input_text, turn_id, device)
 
             generated = self.generate(
                 numericalized_turn,
@@ -544,7 +546,6 @@ class GenieModelForGeneration(GenieModel):
             )
 
             partial_batch_prediction_ids = generated.sequences
-
             partial_batch_prediction = self.numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
 
             if train_target == 'da':
@@ -578,8 +579,8 @@ class GenieModelForGeneration(GenieModel):
                     # make api call
                     if state_update:
                         api_names = list(state_update.keys())
-                    constraints, new_knowledge_text = dataset.make_api_call(
-                        dialogue_state, knowledge, api_names, self.numericalizer._tokenizer.src_lang, dial_id, turn_id
+                    new_knowledge_text, constraints = dataset.make_api_call(
+                        dialogue_state, knowledge, api_names, src_lang, dial_id, turn_id
                     )
                     #### save latest api constraints
                     e2e_dialogue_preds[dial_id]["API"] = copy.deepcopy(constraints)
@@ -587,10 +588,10 @@ class GenieModelForGeneration(GenieModel):
 
                 elif do_api_call == 'no':
                     # do nothing
-                    pass
+                    new_knowledge_text = 'null'
                 else:
                     logger.error(
-                        f'API call should be either yes or no but got {do_api_call}. Seems model is not trained for enough steps. For now we assume it\'s a no'
+                        f'API call should be either yes or no but got {do_api_call}. Seems model has not learnt the task yet. For now we assume it\'s a no'
                     )
 
                 #### save latest api results
@@ -634,24 +635,6 @@ class GenieModelForGeneration(GenieModel):
 
         return output
 
-    def numericalize_example(self, input_text, turn_id, device):
-        if isinstance(input_text, str):
-            input_text = [input_text]
-        tokenized_contexts = self.numericalizer.encode_batch(input_text, field_name='context', features=None)[0]
-
-        numericalized_turn = NumericalizedExamples(
-            example_id=[str(turn_id)],
-            context=SequentialField(
-                value=torch.tensor([tokenized_contexts.value], device=device),
-                length=torch.tensor([tokenized_contexts.length], device=device),
-                limited=torch.tensor([tokenized_contexts.limited], device=device),
-                feature=None,
-            ),
-            answer=SequentialField(value=None, length=None, limited=None, feature=None),
-        )
-
-        return numericalized_turn
-
     def interact_e2e_dialogues(self, task, eval_dir=None, output_predictions_only=False, original_order=None):
         """
         Inputs:
@@ -663,6 +646,9 @@ class GenieModelForGeneration(GenieModel):
             answers
             contexts
         """
+        # lazily import termcolor
+        from termcolor import colored
+
         dataset_class = getattr(dialogues, task.name.capitalize())
         dataset = dataset_class()
 
@@ -688,10 +674,9 @@ class GenieModelForGeneration(GenieModel):
         next_target = {'dst': 'api', 'api': 'da', 'da': 'rg', 'rg': 'dst'}
 
         # new dialogue
-        dial_id = 'New'
+        dial_id = ''
         turn_id = 0
         dialogue_state = {}
-        new_state_text = 'null'
         knowledge = defaultdict(dict)
         new_knowledge_text = 'null'
         new_actions_text = 'null'
@@ -713,6 +698,8 @@ class GenieModelForGeneration(GenieModel):
 
                 # becomes dst for first turn
                 train_target = next_target[train_target]
+
+                new_state_text = dataset.state2span(dialogue_state)
 
                 if train_target == 'dst':
                     turn_id += 1
@@ -737,44 +724,16 @@ class GenieModelForGeneration(GenieModel):
 
                     history.append(dataset.user_token + ' ' + raw_user_input)
 
-                    input_text = dataset.construct_input(
-                        train_target,
-                        state=new_state_text,
-                        history=history,
-                        knowledge=new_knowledge_text,
-                        actions=new_actions_text,
-                    )
-
-                elif train_target == 'api':
-                    new_state_text = dataset.state2span(dialogue_state)
-                    input_text = dataset.construct_input(
-                        train_target,
-                        state=new_state_text,
-                        history=history,
-                        knowledge=new_knowledge_text,
-                        actions=new_actions_text,
-                    )
-
-                elif train_target == 'da':
-                    input_text = dataset.construct_input(
-                        train_target,
-                        state=new_state_text,
-                        history=history,
-                        knowledge=new_knowledge_text,
-                        actions=new_actions_text,
-                    )
-
-                elif train_target == 'rg':
-                    input_text = dataset.construct_input(
-                        train_target,
-                        state=new_state_text,
-                        history=history,
-                        knowledge=new_knowledge_text,
-                        actions=new_actions_text,
-                    )
-
                 else:
                     raise ValueError(f'Invalid train_target: {train_target}')
+
+                input_text = dataset.construct_input(
+                    train_target,
+                    state=new_state_text,
+                    history=history,
+                    knowledge=new_knowledge_text,
+                    actions=new_actions_text,
+                )
 
                 numericalized_turn = self.numericalize_example(input_text, turn_id, device)
                 generated = self.generate(
@@ -828,8 +787,8 @@ class GenieModelForGeneration(GenieModel):
                         # make api call
                         if state_update:
                             api_names = list(state_update.keys())
-                        constraints, new_knowledge_text = dataset.make_api_call(
-                            dialogue_state, knowledge, api_names, self.numericalizer._tokenizer.src_lang, dial_id, turn_id
+                        new_knowledge_text, constraints = dataset.make_api_call(
+                            dialogue_state, knowledge, api_names, src_lang, dial_id, turn_id
                         )
                         #### save latest api constraints
                         e2e_dialogue_preds[dial_id]["API"] = copy.deepcopy(constraints)
@@ -837,10 +796,10 @@ class GenieModelForGeneration(GenieModel):
 
                     elif do_api_call == 'no':
                         # do nothing
-                        pass
+                        new_knowledge_text = 'null'
                     else:
                         logger.error(
-                            f'API call should be either yes or no but got {do_api_call}. Seems model is not trained for enough steps. For now we assume it\'s a no'
+                            f'API call should be either yes or no but got {do_api_call}. Seems model has not learnt the task yet. For now we assume it\'s a no'
                         )
 
                     #### save latest api results
@@ -849,12 +808,12 @@ class GenieModelForGeneration(GenieModel):
 
                 elif train_target == 'da':
                     new_actions_text = predictions[-1][0]
+                    history.append(dataset.system_token + ' ' + new_actions_text)
                     #### save latest actions
                     e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["actions"] = predictions[-1][0]
                     ####
 
                 elif train_target == 'rg':
-                    history.append(dataset.system_token + ' ' + predictions[-1][0])
                     #### save latest response
                     e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["response"] = predictions[-1]
                     ####
