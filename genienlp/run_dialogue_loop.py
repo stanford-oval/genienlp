@@ -28,6 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+import os
 from pprint import pformat
 
 import torch
@@ -52,6 +53,7 @@ def parse_argv(parser):
     parser.add_argument(
         '--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)'
     )
+    parser.add_argument('--eval_dir', type=str, help='use this directory to store eval results')
 
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
     parser.add_argument('--src_locale', default='en', help='locale tag of the input language to parse')
@@ -94,7 +96,7 @@ class DialogueLoop(object):
         self.model.set_generation_output_options([task])
 
         with torch.no_grad():
-            self.model.interact_e2e_dialogues(task)
+            self.model.interact_e2e_dialogues(task, eval_dir=self.args.eval_dir)
 
 
 def init(args):
@@ -105,6 +107,9 @@ def init(args):
 
     load_config_json(args)
     check_and_update_generation_args(args)
+
+    if args.eval_dir:
+        os.makedirs(args.eval_dir, exist_ok=True)
 
     Model = getattr(models, args.model)
     model, _ = Model.load(

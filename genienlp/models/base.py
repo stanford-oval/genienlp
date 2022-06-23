@@ -711,7 +711,7 @@ class GenieModelForGeneration(GenieModel):
                     raw_user_input = input(colored(dataset.user_token + ' ', 'green', attrs=['bold']))
                     raw_user_input = raw_user_input.strip()
                     if raw_user_input == 'RESET':
-                        self.interact_e2e_dialogues(task)
+                        self.interact_e2e_dialogues(task, eval_dir=eval_dir)
                         break
                     elif raw_user_input == 'END':
                         sys.exit(0)
