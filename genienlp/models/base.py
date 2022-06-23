@@ -670,7 +670,7 @@ class GenieModelForGeneration(GenieModel):
         else:
             src_lang = self.orig_src_lang
 
-        train_target = 'rg'
+        train_target = 'dst'
         next_target = {'dst': 'api', 'api': 'da', 'da': 'rg', 'rg': 'dst'}
 
         # new dialogue
@@ -696,9 +696,6 @@ class GenieModelForGeneration(GenieModel):
             try:
                 batch_prediction = []
 
-                # becomes dst for first turn
-                train_target = next_target[train_target]
-
                 new_state_text = dataset.state2span(dialogue_state)
 
                 if train_target == 'dst':
@@ -723,9 +720,6 @@ class GenieModelForGeneration(GenieModel):
                         continue
 
                     history.append(dataset.user_token + ' ' + raw_user_input)
-
-                else:
-                    raise ValueError(f'Invalid train_target: {train_target}')
 
                 input_text = dataset.construct_input(
                     train_target,
@@ -817,6 +811,8 @@ class GenieModelForGeneration(GenieModel):
                     #### save latest response
                     e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["response"] = predictions[-1]
                     ####
+
+                train_target = next_target[train_target]
 
             except KeyboardInterrupt:
                 break
