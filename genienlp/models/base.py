@@ -30,7 +30,6 @@
 import copy
 import logging
 import os
-import sys
 from collections import defaultdict
 from typing import List, Optional
 
@@ -670,22 +669,7 @@ class GenieModelForGeneration(GenieModel):
         else:
             src_lang = self.orig_src_lang
 
-        train_target = 'dst'
-        next_target = {'dst': 'api', 'api': 'da', 'da': 'rg', 'rg': 'dst'}
-
-        # new dialogue
-        dial_id = ''
-        turn_id = 0
-        dialogue_state = {}
-        knowledge = defaultdict(dict)
-        new_knowledge_text = 'null'
-        new_actions_text = 'null'
-        api_names = []
-        state_update = {}
-        e2e_dialogue_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
-
-        user_history = []
-        system_history = []
+        NEXT_TARGET = {'dst': 'api', 'api': 'da', 'da': 'rg', 'rg': 'dst'}
 
         INIT_SYS_MESSAGE = {
             'en': 'Hello! How can I help you today?',
@@ -693,34 +677,73 @@ class GenieModelForGeneration(GenieModel):
             'zh': '你好！ 我今天能帮到你什么？',
         }
 
+        # new dialogue
+        train_target = 'dst'
+        dial_id = '0'
+        turn_id = 0
+        dialogue_state = {}
+        knowledge = defaultdict(dict)
+        new_knowledge_text = 'null'
+        new_actions_text = 'null'
+        api_names = []
+        user_history = []
+        system_history = []
+        state_update = {}
+        e2e_dialogue_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
+
         while True:
             try:
                 batch_prediction = []
 
-                new_state_text = dataset.state2span(dialogue_state)
-
                 if train_target == 'dst':
-                    turn_id += 1
-
                     if system_history:
-                        print(colored(f'{dataset.system_token} {predictions[-1][0]}', 'red', attrs=['bold']))
+                        print(colored('SYSTEM: ' + f'{predictions[-1][0]}', 'red', attrs=['bold']))
                     else:
                         src_lang = src_lang[:2]
-                        print(colored(f'{dataset.system_token} {INIT_SYS_MESSAGE[src_lang]}', 'red', attrs=['bold']))
+                        print(colored('SYSTEM: ' + f'{INIT_SYS_MESSAGE[src_lang]}', 'red', attrs=['bold']))
 
                     # construct new input
-                    raw_user_input = input(colored('SYSTEM: ', 'green', attrs=['bold']))
-                    raw_user_input = raw_user_input.strip()
+                    raw_user_input = input(colored('USER: ', 'green', attrs=['bold'])).strip()
                     if raw_user_input == 'RESET':
-                        self.interact_e2e_dialogues(task, eval_dir=eval_dir)
+                        # next dialogue
+                        train_target = 'dst'
+                        dial_id = str(int(dial_id) + 1)
+                        turn_id = 0
+                        dialogue_state = {}
+                        knowledge = defaultdict(dict)
+                        new_knowledge_text = 'null'
+                        new_actions_text = 'null'
+                        api_names = []
+                        user_history = []
+                        system_history = []
+                        state_update = {}
+                        e2e_dialogue_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
+                        continue
+                    elif raw_user_input == 'EXIT':
                         break
-                    elif raw_user_input == 'END':
-                        sys.exit(0)
                     elif raw_user_input == 'STATE':
                         print(f'dialogue state: {dialogue_state}')
                         continue
+                    elif raw_user_input == 'KNOWLEDGE':
+                        print(f'dialogue state: {knowledge}')
+                        continue
+                    elif raw_user_input == 'USER_HISTORY':
+                        print(f'dialogue state: {user_history}')
+                        continue
+                    elif raw_user_input == 'SYSTEM_HISTORY':
+                        print(f'dialogue state: {system_history}')
+                        continue
+                    elif raw_user_input == 'ACTIONS':
+                        print(f'dialogue state: {new_actions_text}')
+                        continue
 
                     user_history.append(dataset.user_token + ' ' + raw_user_input)
+
+                    ## record user input
+                    e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["user_input"] = raw_user_input
+
+                    new_state_text = dataset.state2span(dialogue_state)
+                    turn_id += 1
 
                 input_text = dataset.construct_input(
                     train_target,
@@ -730,6 +753,9 @@ class GenieModelForGeneration(GenieModel):
                     knowledge=new_knowledge_text,
                     actions=new_actions_text,
                 )
+
+                ## record model input
+                e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["model_input"] = input_text
 
                 numericalized_turn = self.numericalize_example(input_text, turn_id, device)
                 generated = self.generate(
@@ -761,6 +787,9 @@ class GenieModelForGeneration(GenieModel):
 
                 # put them into the right array
                 batch_prediction.append([partial_batch_prediction])
+
+                # record model output
+                e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["model_output"] = partial_batch_prediction
 
                 predictions += batch_prediction
 
@@ -814,7 +843,7 @@ class GenieModelForGeneration(GenieModel):
                     e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["response"] = predictions[-1]
                     ####
 
-                train_target = next_target[train_target]
+                train_target = NEXT_TARGET[train_target]
 
             except KeyboardInterrupt:
                 break
