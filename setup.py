@@ -53,7 +53,7 @@ setuptools.setup(
         'pathos==0.2.8',
         'protobuf==3.20.1',
         # for sts:
-        'sentence-transformers==2.2.0',
+        'sentence-transformers==2.2.2',
         # for alignment:
         'num2words>=0.5.10',
         'dateparser>=1.0.0',
