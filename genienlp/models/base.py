@@ -725,16 +725,16 @@ class GenieModelForGeneration(GenieModel):
                         print(f'dialogue state: {dialogue_state}')
                         continue
                     elif raw_user_input == 'KNOWLEDGE':
-                        print(f'dialogue state: {knowledge}')
+                        print(f'knowledge: {knowledge}')
                         continue
                     elif raw_user_input == 'USER_HISTORY':
-                        print(f'dialogue state: {user_history}')
+                        print(f'user history: {user_history}')
                         continue
                     elif raw_user_input == 'SYSTEM_HISTORY':
-                        print(f'dialogue state: {system_history}')
+                        print(f'system history: {system_history}')
                         continue
                     elif raw_user_input == 'ACTIONS':
-                        print(f'dialogue state: {new_actions_text}')
+                        print(f'agent actions: {new_actions_text}')
                         continue
 
                     user_history.append(dataset.user_token + ' ' + raw_user_input)
