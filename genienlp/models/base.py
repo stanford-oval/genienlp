@@ -549,7 +549,7 @@ class GenieModelForGeneration(GenieModel):
 
             if train_target == 'da':
                 partial_batch_prediction = dataset.postprocess_prediction(
-                    partial_batch_prediction, knowledge, lang=src_lang[:2]
+                    partial_batch_prediction, knowledge=knowledge, lang=src_lang[:2]
                 )
 
             partial_batch_prediction = task.postprocess_prediction(batch_example_ids[0], partial_batch_prediction)

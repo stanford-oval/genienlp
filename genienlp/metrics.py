@@ -34,8 +34,6 @@ from typing import List, Union
 import dialogues
 import sacrebleu
 from datasets import load_metric
-from dialogues import Bitod
-from dialogues.bitod.src.evaluate import compute_da, compute_dst_em, compute_ser
 from seqeval import metrics as seq_metrics
 from seqeval import scheme as seq_scheme
 
@@ -225,18 +223,29 @@ def compute_e2e_dialogue_score(greedy, answer, tgt_lang, args, example_ids, cont
     return results
 
 
-def computeSER(greedy, inputs):
+def computeSER(greedy, inputs, task_names):
+    # TODO: how to address multitask evaluation?
+    assert len(task_names) == 1
+    dataset_class = getattr(dialogues, task_names[0].capitalize())
+    dataset = dataset_class()
+
     act_values = []
     for input in inputs:
         act_values.append(QUOTED_MATCH_REGEX.findall(input))
 
-    return compute_ser(greedy, act_values)
+    return dataset.compute_ser(greedy, act_values)
 
 
-def computeDA_EM(greedy, answer):
+def computeDA_EM(greedy, answer, task_names):
     # Uses dialogues da metric which takes care of entity normalizations
+
+    # TODO: how to address multitask evaluation?
+    assert len(task_names) == 1
+    dataset_class = getattr(dialogues, task_names[0].capitalize())
+    dataset = dataset_class()
+
     answer = [a[0] for a in answer]
-    return compute_da(greedy, answer)
+    return dataset.compute_da(greedy, answer)
 
 
 def computeJGA(greedy, answer, example_ids, task_names):
@@ -267,16 +276,19 @@ def computeJGA(greedy, answer, example_ids, task_names):
         full_answer.append(copy.deepcopy(answer_state))
         full_greedy.append(copy.deepcopy(greedy_state))
 
-    return compute_dst_em(full_greedy, full_answer)
+    return dataset.compute_dst_em(full_greedy, full_answer)
 
 
-def computeDST_EM(greedy, answer):
+def computeDST_EM(greedy, answer, task_names):
     # Calculate exact match between diff states
     # Uses dialogues dst metric which takes care of entity normalizations
-    dataset = Bitod()
+    assert len(task_names) == 1
+    dataset_class = getattr(dialogues, task_names[0].capitalize())
+    dataset = dataset_class()
+
     answer = [dataset.span2state(a[0]) for a in answer]
     greedy = [dataset.span2state(g) for g in greedy]
-    return compute_dst_em(greedy, answer)
+    return dataset.compute_dst_em(greedy, answer)
 
 
 def convert_IOB2_to_IOB1(labels):
@@ -327,6 +339,12 @@ def compute_metrics(
         example_ids: used to calculate some of e2e dialogue metrics that need to know span of each dialogue such as JGA
         contexts: used to calculate SER metric that need to know entities in the input
     """
+    task_names = None
+    if hasattr(args, 'val_task_names'):
+        task_names = args.val_task_names
+    else:
+        task_names = args.task_names
+
     metric_keys = []
     metric_values = []
     if not isinstance(answers[0], list):
@@ -339,11 +357,11 @@ def compute_metrics(
         metric_keys += results.keys()
         metric_values += results.values()
     if 'jga' in requested_metrics:
-        jga = computeJGA(predictions, answers, example_ids, args.task_names)
+        jga = computeJGA(predictions, answers, example_ids, task_names)
         metric_keys += ['jga']
         metric_values += [jga]
     if 'ser' in requested_metrics:
-        ser = computeSER(predictions, contexts)
+        ser = computeSER(predictions, contexts, task_names)
         metric_keys += ['ser']
         metric_values += [ser]
     if 'em' in requested_metrics:
@@ -351,11 +369,11 @@ def compute_metrics(
         metric_keys += ['em']
         metric_values += [em]
     if 'da_em' in requested_metrics:
-        da_em = computeDA_EM(predictions, answers)
+        da_em = computeDA_EM(predictions, answers, task_names)
         metric_keys += ['da_em']
         metric_values += [da_em]
     if 'dst_em' in requested_metrics:
-        dst_em = computeDST_EM(predictions, answers)
+        dst_em = computeDST_EM(predictions, answers, task_names)
         metric_keys += ['dst_em']
         metric_values += [dst_em]
     if 'pem' in requested_metrics:
