@@ -226,7 +226,7 @@ def compute_e2e_dialogue_score(greedy, answer, tgt_lang, args, example_ids, cont
 def computeSER(greedy, inputs, task_names):
     # TODO: how to address multitask evaluation?
     assert len(task_names) == 1
-    dataset_class = getattr(dialogues, task_names[0].capitalize())
+    dataset_class = getattr(dialogues, task_names[0].split('_', 1)[0].capitalize())
     dataset = dataset_class()
 
     act_values = []
@@ -241,7 +241,7 @@ def computeDA_EM(greedy, answer, task_names):
 
     # TODO: how to address multitask evaluation?
     assert len(task_names) == 1
-    dataset_class = getattr(dialogues, task_names[0].capitalize())
+    dataset_class = getattr(dialogues, task_names[0].split('_', 1)[0].capitalize())
     dataset = dataset_class()
 
     answer = [a[0] for a in answer]
@@ -252,7 +252,7 @@ def computeJGA(greedy, answer, example_ids, task_names):
     # Inputs contain diff states, so we need to compute the full state first
     # TODO: how to address multitask evaluation?
     assert len(task_names) == 1
-    dataset_class = getattr(dialogues, task_names[0].capitalize())
+    dataset_class = getattr(dialogues, task_names[0].split('_', 1)[0].capitalize())
     dataset = dataset_class()
 
     cur_dial_id = None
@@ -283,7 +283,7 @@ def computeDST_EM(greedy, answer, task_names):
     # Calculate exact match between diff states
     # Uses dialogues dst metric which takes care of entity normalizations
     assert len(task_names) == 1
-    dataset_class = getattr(dialogues, task_names[0].capitalize())
+    dataset_class = getattr(dialogues, task_names[0].split('_', 1)[0].capitalize())
     dataset = dataset_class()
 
     answer = [dataset.span2state(a[0]) for a in answer]
