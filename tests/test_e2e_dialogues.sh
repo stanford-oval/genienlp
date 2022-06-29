@@ -7,10 +7,12 @@
 hparams=(
         "--pretrained_model Helsinki-NLP/opus-mt-en-de"
         "--pretrained_model sshleifer/bart-tiny-random"
+        "--pretrained_model Helsinki-NLP/opus-mt-en-de"
         )
 tasks=(
       bitod
       bitod_dst
+      risawoz
       )
 
 for i in ${!hparams[*]};
