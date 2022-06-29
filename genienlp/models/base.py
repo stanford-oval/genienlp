@@ -683,6 +683,7 @@ class GenieModelForGeneration(GenieModel):
         turn_id = 0
         dialogue_state = {}
         knowledge = defaultdict(dict)
+        new_state_text = 'null'
         new_knowledge_text = 'null'
         new_actions_text = 'null'
         api_names = []
@@ -711,6 +712,7 @@ class GenieModelForGeneration(GenieModel):
                         turn_id = 0
                         dialogue_state = {}
                         knowledge = defaultdict(dict)
+                        new_state_text = 'null'
                         new_knowledge_text = 'null'
                         new_actions_text = 'null'
                         api_names = []
@@ -742,7 +744,6 @@ class GenieModelForGeneration(GenieModel):
                     ## record user input
                     e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["user_input"] = raw_user_input
 
-                    new_state_text = dataset.state2span(dialogue_state)
                     turn_id += 1
 
                 input_text = dataset.construct_input(
@@ -798,6 +799,7 @@ class GenieModelForGeneration(GenieModel):
                     lev = predictions[-1][0].strip()
                     state_update = dataset.span2state(lev)
                     dataset.update_state(state_update, dialogue_state)
+                    new_state_text = dataset.state2span(dialogue_state)
 
                     #### save latest state
                     state_to_record = copy.deepcopy(dialogue_state)
