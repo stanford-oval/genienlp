@@ -33,10 +33,10 @@ import os
 from collections import defaultdict
 from typing import List, Optional
 
+import dialogues
 import torch
 import ujson
 from dateparser.languages import default_loader
-from dialogues import Bitod
 from transformers import AutoConfig, MarianTokenizer, PreTrainedModel
 
 from ..data_utils.example import NumericalizedExamples, SequentialField
@@ -125,6 +125,24 @@ class ValidationOutput(object):
 
 # TransformerSeq2Seq and TransformerLSTM will inherit from this model
 class GenieModelForGeneration(GenieModel):
+    def numericalize_example(self, input_text, turn_id, device):
+        if isinstance(input_text, str):
+            input_text = [input_text]
+        tokenized_contexts = self.numericalizer.encode_batch(input_text, field_name='context', features=None)[0]
+
+        numericalized_turn = NumericalizedExamples(
+            example_id=[str(turn_id)],
+            context=SequentialField(
+                value=torch.tensor([tokenized_contexts.value], device=device),
+                length=torch.tensor([tokenized_contexts.length], device=device),
+                limited=torch.tensor([tokenized_contexts.limited], device=device),
+                feature=None,
+            ),
+            answer=SequentialField(value=None, length=None, limited=None, feature=None),
+        )
+
+        return numericalized_turn
+
     def validate(
         self,
         data_iterator,
@@ -405,20 +423,11 @@ class GenieModelForGeneration(GenieModel):
             answers
             contexts
         """
-
-        dataset = Bitod()
-        e2e_dialogue_preds = dict()
-
-        predictions = []
-        example_ids = []
-        answers = []
-        contexts = []
+        dataset_class = getattr(dialogues, task.name.split('_', 1)[0].capitalize())
+        dataset = dataset_class()
 
         # TODO: handle multiple responses
         hyperparameter_idx = 0
-
-        cur_dial_id = ''
-        knowledge = None
 
         device = self.device
         args = self.args
@@ -429,6 +438,14 @@ class GenieModelForGeneration(GenieModel):
             src_lang = self.orig_src_lang
 
         special_tokens = self.numericalizer._tokenizer.all_special_tokens
+
+        e2e_dialogue_preds = dict()
+        predictions = []
+        example_ids = []
+        answers = []
+        contexts = []
+
+        cur_dial_id = ''
 
         for k, turn in enumerate(progress_bar(data_iterator, desc='Generating', disable=disable_progbar)):
             batch_size = len(turn.example_id)
@@ -445,11 +462,11 @@ class GenieModelForGeneration(GenieModel):
                 # new dialogue
                 cur_dial_id = dial_id
                 dialogue_state = {}
-                # new_state_text = 'null'
                 knowledge = defaultdict(dict)
                 new_knowledge_text = 'null'
                 new_actions_text = 'null'
-                active_api = None
+                api_names = []
+                state_update = {}
                 e2e_dialogue_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
 
             batch_context = []
@@ -466,7 +483,7 @@ class GenieModelForGeneration(GenieModel):
                     j -= 1
                 text = text[i : j + 1]
 
-                batch_context.append(self.numericalizer._tokenizer.convert_tokens_to_string(text))
+                batch_context.append(self.numericalizer._tokenizer.convert_tokens_to_string(text).replace(",", "，"))
 
             contexts += batch_context
 
@@ -488,7 +505,6 @@ class GenieModelForGeneration(GenieModel):
                 # input_text = replace_match(input_text, last_system_re, last_sys_pred)
 
             elif train_target == 'api':
-
                 # replace state
                 input_text = replace_capturing_group(contexts[-1], dataset.state_re, new_state_text)
 
@@ -510,18 +526,7 @@ class GenieModelForGeneration(GenieModel):
             # replace old context with updated
             contexts[-1] = input_text
 
-            tokenized_contexts = self.numericalizer.encode_batch([input_text], field_name='context', features=None)[0]
-
-            numericalized_turn = NumericalizedExamples(
-                example_id=[turn.example_id[0]],
-                context=SequentialField(
-                    value=torch.tensor([tokenized_contexts.value], device=device),
-                    length=torch.tensor([tokenized_contexts.length], device=device),
-                    limited=torch.tensor([tokenized_contexts.limited], device=device),
-                    feature=None,
-                ),
-                answer=SequentialField(value=None, length=None, limited=None, feature=None),
-            )
+            numericalized_turn = self.numericalize_example(input_text, turn_id, device)
 
             generated = self.generate(
                 numericalized_turn,
@@ -540,12 +545,11 @@ class GenieModelForGeneration(GenieModel):
             )
 
             partial_batch_prediction_ids = generated.sequences
-
             partial_batch_prediction = self.numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
 
             if train_target == 'da':
                 partial_batch_prediction = dataset.postprocess_prediction(
-                    partial_batch_prediction, knowledge, lang=src_lang[:2]
+                    partial_batch_prediction, knowledge=knowledge, lang=src_lang[:2]
                 )
 
             partial_batch_prediction = task.postprocess_prediction(batch_example_ids[0], partial_batch_prediction)
@@ -559,8 +563,6 @@ class GenieModelForGeneration(GenieModel):
                 # update dialogue_state
                 lev = predictions[-1][0].strip()
                 state_update = dataset.span2state(lev)
-                if state_update:
-                    active_api = list(state_update.keys())[-1]
                 dataset.update_state(state_update, dialogue_state)
 
                 #### save latest state
@@ -574,21 +576,21 @@ class GenieModelForGeneration(GenieModel):
 
                 if do_api_call == 'yes':
                     # make api call
-                    api_name = active_api
-                    if api_name in dialogue_state:
-                        constraints, new_knowledge_text = dataset.make_api_call(
-                            dialogue_state, knowledge, api_name, self.numericalizer._tokenizer.src_lang, dial_id, turn_id
-                        )
-                        #### save latest api constraints
-                        e2e_dialogue_preds[dial_id]["API"][dataset.domain2api_name(api_name)] = copy.deepcopy(constraints)
-                        ####
+                    if state_update:
+                        api_names = list(state_update.keys())
+                    new_knowledge_text, constraints = dataset.make_api_call(
+                        dialogue_state, knowledge, api_names, src_lang, dial_id, turn_id
+                    )
+                    #### save latest api constraints
+                    e2e_dialogue_preds[dial_id]["API"] = copy.deepcopy(constraints)
+                    ####
 
                 elif do_api_call == 'no':
                     # do nothing
-                    pass
+                    new_knowledge_text = 'null'
                 else:
                     logger.error(
-                        f'API call should be either yes or no but got {do_api_call}. Seems model is not trained for enough steps. For now we assume it\'s a no'
+                        f'API call should be either yes or no but got {do_api_call}. Seems model has not learnt the task yet. For now we assume it\'s a no'
                     )
 
                 #### save latest api results
@@ -608,6 +610,247 @@ class GenieModelForGeneration(GenieModel):
 
         if eval_dir:
             with open(os.path.join(eval_dir, 'e2e_dialogue_preds.json'), 'w') as fout:
+                ujson.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
+
+        if original_order is not None:
+            # sort back to the original order
+            original_order, example_ids, predictions, answers, contexts = [
+                list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))
+            ]
+
+        # TODO calculate and return loss
+        loss = None
+        output = ValidationOutput(loss=loss)
+
+        if output_predictions_only:
+            output.predictions = predictions
+        else:
+            output.example_ids, output.predictions, output.answers, output.contexts = (
+                example_ids,
+                predictions,
+                answers,
+                contexts,
+            )
+
+        return output
+
+    def interact_e2e_dialogues(self, task, eval_dir=None, output_predictions_only=False, original_order=None):
+        """
+        Inputs:
+            original_order: List of indices. If provided, we will sort the results according to this order
+            confidence_estimator: if provided, will use it to calculate and output confidence scores
+        Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
+            loss
+            predictions: a List of Lists of strings
+            answers
+            contexts
+        """
+        # lazily import termcolor
+        from termcolor import colored
+
+        dataset_class = getattr(dialogues, task.name.split('_', 1)[0].capitalize())
+        dataset = dataset_class()
+
+        e2e_dialogue_preds = dict()
+
+        predictions = []
+        example_ids = []
+        answers = []
+        contexts = []
+
+        # TODO: handle multiple responses
+        hyperparameter_idx = 0
+
+        device = self.device
+        args = self.args
+
+        if self.numericalizer._tokenizer.src_lang:
+            src_lang = self.numericalizer._tokenizer.src_lang
+        else:
+            src_lang = self.orig_src_lang
+
+        NEXT_TARGET = {'dst': 'api', 'api': 'da', 'da': 'rg', 'rg': 'dst'}
+
+        INIT_SYS_MESSAGE = {
+            'en': 'Hello! How can I help you today?',
+            'fa': 'سلام! امروز چطور می توانم به شما کمک کنم؟',
+            'zh': '你好！ 我今天能帮到你什么？',
+        }
+
+        # new dialogue
+        train_target = 'dst'
+        dial_id = '0'
+        turn_id = 0
+        dialogue_state = {}
+        knowledge = defaultdict(dict)
+        new_state_text = 'null'
+        new_knowledge_text = 'null'
+        new_actions_text = 'null'
+        api_names = []
+        user_history = []
+        system_history = []
+        state_update = {}
+        e2e_dialogue_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
+
+        while True:
+            try:
+                batch_prediction = []
+
+                if train_target == 'dst':
+                    if system_history:
+                        print(colored('SYSTEM: ' + f'{predictions[-1][0]}', 'red', attrs=['bold']))
+                    else:
+                        src_lang = src_lang[:2]
+                        print(colored('SYSTEM: ' + f'{INIT_SYS_MESSAGE[src_lang]}', 'red', attrs=['bold']))
+
+                    # construct new input
+                    raw_user_input = input(colored('USER: ', 'green', attrs=['bold'])).strip()
+                    if raw_user_input == 'RESET':
+                        # next dialogue
+                        train_target = 'dst'
+                        dial_id = str(int(dial_id) + 1)
+                        turn_id = 0
+                        dialogue_state = {}
+                        knowledge = defaultdict(dict)
+                        new_state_text = 'null'
+                        new_knowledge_text = 'null'
+                        new_actions_text = 'null'
+                        api_names = []
+                        user_history = []
+                        system_history = []
+                        state_update = {}
+                        e2e_dialogue_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
+                        continue
+                    elif raw_user_input == 'EXIT':
+                        break
+                    elif raw_user_input == 'STATE':
+                        print(f'dialogue state: {dialogue_state}')
+                        continue
+                    elif raw_user_input == 'KNOWLEDGE':
+                        print(f'knowledge: {knowledge}')
+                        continue
+                    elif raw_user_input == 'USER_HISTORY':
+                        print(f'user history: {user_history}')
+                        continue
+                    elif raw_user_input == 'SYSTEM_HISTORY':
+                        print(f'system history: {system_history}')
+                        continue
+                    elif raw_user_input == 'ACTIONS':
+                        print(f'agent actions: {new_actions_text}')
+                        continue
+
+                    user_history.append(dataset.user_token + ' ' + raw_user_input)
+
+                    ## record user input
+                    e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["user_input"] = raw_user_input
+
+                    turn_id += 1
+
+                input_text = dataset.construct_input(
+                    train_target,
+                    state=new_state_text,
+                    user_history=user_history,
+                    system_history=system_history,
+                    knowledge=new_knowledge_text,
+                    actions=new_actions_text,
+                )
+
+                ## record model input
+                e2e_dialogue_preds[dial_id]["turns"][str(turn_id)][f"model_input_{train_target}"] = input_text
+
+                numericalized_turn = self.numericalize_example(input_text, turn_id, device)
+                generated = self.generate(
+                    numericalized_turn,
+                    max_output_length=args.max_output_length,
+                    min_output_length=args.min_output_length,
+                    num_outputs=args.num_outputs[hyperparameter_idx],
+                    temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
+                    repetition_penalty=args.repetition_penalty[hyperparameter_idx],
+                    top_k=args.top_k[hyperparameter_idx],
+                    top_p=args.top_p[hyperparameter_idx],
+                    num_beams=args.num_beams[hyperparameter_idx],
+                    num_beam_groups=args.num_beam_groups[hyperparameter_idx],
+                    diversity_penalty=args.diversity_penalty[hyperparameter_idx],
+                    no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
+                    do_sample=args.temperature[hyperparameter_idx] != 0,
+                )
+
+                partial_batch_prediction_ids = generated.sequences
+                partial_batch_prediction = self.numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
+
+                if train_target == 'da':
+                    partial_batch_prediction = dataset.postprocess_prediction(
+                        partial_batch_prediction, knowledge, lang=src_lang[:2]
+                    )
+
+                partial_batch_prediction = task.postprocess_prediction(turn_id, partial_batch_prediction)
+
+                # put them into the right array
+                batch_prediction.append([partial_batch_prediction])
+
+                # record model output
+                e2e_dialogue_preds[dial_id]["turns"][str(turn_id)][f"model_output_{train_target}"] = partial_batch_prediction
+
+                predictions += batch_prediction
+
+                if train_target == 'dst':
+                    # update dialogue_state
+                    lev = predictions[-1][0].strip()
+                    state_update = dataset.span2state(lev)
+                    dataset.update_state(state_update, dialogue_state)
+                    new_state_text = dataset.state2span(dialogue_state)
+
+                    #### save latest state
+                    state_to_record = copy.deepcopy(dialogue_state)
+                    state_to_record = {dataset.domain2api_name(k): v for k, v in state_to_record.items()}
+                    e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["state"] = state_to_record
+                    ####
+
+                elif train_target == 'api':
+                    do_api_call = predictions[-1][0].strip()
+
+                    if do_api_call == 'yes':
+                        # make api call
+                        if state_update:
+                            api_names = list(state_update.keys())
+                        new_knowledge_text, constraints = dataset.make_api_call(
+                            dialogue_state, knowledge, api_names, src_lang, dial_id, turn_id
+                        )
+                        #### save latest api constraints
+                        e2e_dialogue_preds[dial_id]["API"] = copy.deepcopy(constraints)
+                        ####
+
+                    elif do_api_call == 'no':
+                        # do nothing
+                        pass
+                    else:
+                        logger.error(
+                            f'API call should be either yes or no but got {do_api_call}. Seems model has not learnt the task yet. For now we assume it\'s a no'
+                        )
+
+                    #### save latest api results
+                    e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["api"] = new_knowledge_text
+                    ####
+
+                elif train_target == 'da':
+                    new_actions_text = predictions[-1][0]
+                    system_history.append(dataset.system_token + ' ' + new_actions_text)
+                    #### save latest actions
+                    e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["actions"] = predictions[-1][0]
+                    ####
+
+                elif train_target == 'rg':
+                    #### save latest response
+                    e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["response"] = predictions[-1]
+                    ####
+
+                train_target = NEXT_TARGET[train_target]
+
+            except KeyboardInterrupt:
+                break
+
+        if eval_dir:
+            with open(os.path.join(eval_dir, 'interact_e2e_dialogue_preds.json'), 'w') as fout:
                 ujson.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
 
         if original_order is not None:
