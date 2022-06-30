@@ -48,6 +48,9 @@ class BaseTask(object):
         self.override_context = args.override_context
         self.override_question = args.override_question
 
+        # dataset class name in dialogues (used for E2EDialogue tasks)
+        self.dataset_name = None
+
     @property
     def default_question(self):
         return ''

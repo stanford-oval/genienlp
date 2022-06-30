@@ -423,7 +423,7 @@ class GenieModelForGeneration(GenieModel):
             answers
             contexts
         """
-        dataset_class = getattr(dialogues, task.name.split('_', 1)[0].capitalize())
+        dataset_class = getattr(dialogues, task.dataset_name)
         dataset = dataset_class()
 
         # TODO: handle multiple responses
@@ -648,7 +648,7 @@ class GenieModelForGeneration(GenieModel):
         # lazily import termcolor
         from termcolor import colored
 
-        dataset_class = getattr(dialogues, task.name.split('_', 1)[0].capitalize())
+        dataset_class = getattr(dialogues, task.dataset_name)
         dataset = dataset_class()
 
         e2e_dialogue_preds = dict()
