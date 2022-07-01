@@ -72,6 +72,6 @@ setuptools.setup(
         'dill~=0.3',
         'xgboost~=1.3',
         # for e2e dialogues:
-        'dialogues @ git+https://github.com/stanford-oval/dialogues@wip/dev_1',
+        'dialogues @ git+https://github.com/stanford-oval/dialogues@62db4b1512516dd5c6249fc47001b0a479304c2c',
     ],
 )
