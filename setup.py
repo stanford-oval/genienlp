@@ -47,7 +47,7 @@ setuptools.setup(
     url="https://github.com/stanford-oval/genienlp",
     install_requires=[
         'numpy>=1.14.5',
-        'torch>=1.9.0,<1.12.0',
+        'torch>=1.9.0,<1.13.0',
         'transformers==4.20.1',
         'datasets==2.3.2',
         'pathos==0.2.8',
