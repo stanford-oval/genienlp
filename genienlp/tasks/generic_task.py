@@ -241,8 +241,9 @@ class CrossNERTask(BaseAlmondTask):
 @register_task('ood_task')
 class OODTask(BaseTask):
     def __init__(self, name, args):
-        self.id2label = ['0', '1']
-        self.num_labels = 2
+        self.label2id = {'ood': 0, 'ind': 1}
+        self.id2label = {v: k for k, v in self.label2id.items()}
+        self.num_labels = len(self.id2label)
         super().__init__(name, args)
 
     @property
@@ -250,4 +251,15 @@ class OODTask(BaseTask):
         return ['sc_f1', 'sc_precision', 'sc_recall']
 
     def get_splits(self, root, **kwargs):
-        return OODDataset.splits(root=root, **kwargs)
+        return OODDataset.splits(root=root, make_example=self._make_example, **kwargs)
+
+    def _make_example(self, parts, dir_name=None, **kwargs):
+        question = 'Is this sentence in-domain or out-of-domain?'
+
+        example_id, context, answer = parts[0], parts[1], parts[2]
+        answer = 'ood' if parts[2].strip() == '$ood ;' else 'ind'
+        answer = str(self.label2id[answer])
+
+        return Example.from_raw(
+            self.name + '/' + str(example_id), context, question, answer, preprocess=self.preprocess_field, lower=False
+        )
