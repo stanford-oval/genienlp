@@ -89,20 +89,29 @@ def computeROUGE(outputs, targets, rouge_types):
     return rouge_metric.compute(references=targets, predictions=outputs, rouge_types=rouge_types)
 
 
-def computeSequenceClassificationPrecision(outputs, targets):
+def computeSequenceClassificationPrecision(outputs, targets, tasks):
     targets = [target[0] for target in targets]
+    label2id = tasks[0].label2id
+    outputs = [label2id[output] for output in outputs]
+    targets = [label2id[target] for target in targets]
     precision_metric = load_metric('precision')
     return precision_metric.compute(references=targets, predictions=outputs)['precision']
 
 
-def computeSequenceClassificationRecall(outputs, targets):
+def computeSequenceClassificationRecall(outputs, targets, tasks):
     targets = [target[0] for target in targets]
+    label2id = tasks[0].label2id
+    outputs = [label2id[output] for output in outputs]
+    targets = [label2id[target] for target in targets]
     recall_metric = load_metric('recall')
     return recall_metric.compute(references=targets, predictions=outputs)['recall']
 
 
-def computeSequenceClassificationF1(outputs, targets):
+def computeSequenceClassificationF1(outputs, targets, tasks):
     targets = [target[0] for target in targets]
+    label2id = tasks[0].label2id
+    outputs = [label2id[output] for output in outputs]
+    targets = [label2id[target] for target in targets]
     f1_metric = load_metric('f1')
     return f1_metric.compute(references=targets, predictions=outputs)['f1']
 
@@ -408,15 +417,15 @@ def compute_metrics(
         metric_keys.append('nmt_bleu')
         metric_values.append(nmt_bleu)
     if 'sc_precision' in requested_metrics:
-        precision = computeSequenceClassificationPrecision(predictions, answers)
+        precision = computeSequenceClassificationPrecision(predictions, answers, tasks)
         metric_keys.append('sc_precision')
         metric_values.append(precision)
     if 'sc_recall' in requested_metrics:
-        recall = computeSequenceClassificationRecall(predictions, answers)
+        recall = computeSequenceClassificationRecall(predictions, answers, tasks)
         metric_keys.append('sc_recall')
         metric_values.append(recall)
     if 'sc_f1' in requested_metrics:
-        f1 = computeSequenceClassificationF1(predictions, answers)
+        f1 = computeSequenceClassificationF1(predictions, answers, tasks)
         metric_keys.append('sc_f1')
         metric_values.append(f1)
     if 'f1' in requested_metrics:

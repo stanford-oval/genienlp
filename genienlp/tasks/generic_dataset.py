@@ -223,17 +223,14 @@ class OODDataset(CQA):
     name = 'ood'
     is_sequence_classification = True
 
-    def __init__(self, path, lower=False, **kwargs):
+    def __init__(self, path, *, make_example, **kwargs):
         examples = []
-        question = 'Is this sentence in-domain or out-domain?'
 
         dataset = load_dataset('csv', data_files=path, delimiter='\t', column_names=['tmp1', 'tmp2', 'sentence', 'label'])
         dataset = dataset['train']
 
-        for data in dataset:
-            context = data['sentence']
-            answer = '1' if data['label'].strip() == '$ood ;' else '0'
-            examples.append(Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower))
+        for ex_id, data in enumerate(dataset):
+            examples.append(make_example([ex_id, data['sentence'], data['label']]))
 
         super().__init__(examples, **kwargs)
 
