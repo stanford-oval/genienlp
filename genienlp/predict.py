@@ -99,6 +99,10 @@ def parse_argv(parser):
     parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
 
+    parser.add_argument(
+        '--topk_print', default=3, type=int, help='print length of the top K longest examples as well as min, max, and mean'
+    )
+
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets')
 

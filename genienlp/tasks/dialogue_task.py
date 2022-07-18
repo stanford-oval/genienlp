@@ -59,6 +59,7 @@ class RiSAWOZ(E2EDialogueTask):
             '#unknown',
         }
         self._metrics = ['e2e_dialogue_score']
+        self.dataset_name = 'Risawoz'
 
 
 @register_task('bitod')
@@ -105,6 +106,7 @@ class BiTOD(E2EDialogueTask):
             | special_tokens_v2_10
         )
         self._metrics = ['e2e_dialogue_score']
+        self.dataset_name = 'Bitod'
 
 
 @register_task('bitod_nlg')

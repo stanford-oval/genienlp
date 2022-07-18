@@ -56,8 +56,8 @@ def parse_argv(parser):
     parser.add_argument('--eval_dir', type=str, help='use this directory to store eval results')
 
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
-    parser.add_argument('--src_locale', default='en', help='locale tag of the input language to parse')
-    parser.add_argument('--tgt_locale', default='en', help='locale tag of the target language to generate')
+    parser.add_argument('--src_locale', help='locale tag of the input language to parse')
+    parser.add_argument('--tgt_locale', help='locale tag of the target language to generate')
     parser.add_argument('--inference_name', default='nlp', help='name used by kfserving inference service, alphanumeric only')
 
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
@@ -107,6 +107,11 @@ def init(args):
 
     load_config_json(args)
     check_and_update_generation_args(args)
+
+    if not args.src_locale:
+        args.src_locale = args.eval_src_languages
+    if not args.tgt_locale:
+        args.tgt_locale = args.eval_tgt_languages
 
     if args.eval_dir:
         os.makedirs(args.eval_dir, exist_ok=True)

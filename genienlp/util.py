@@ -312,11 +312,14 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
 
+    topk = numericalizer.args.topk_print
     logger.info(
-        f'context lengths (min, mean, max): {np.min(context_lengths)}, {int(np.mean(context_lengths))}, {np.max(context_lengths)}'
+        f'context lengths (min, mean, max, top{topk}): {np.min(context_lengths)}, {int(np.mean(context_lengths))},'
+        f' {np.max(context_lengths)}, {np.sort(context_lengths)[-topk:][::-1]}'
     )
     logger.info(
-        f'answer lengths (min, mean, max): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))}, {np.max(answer_lengths)}'
+        f'answer lengths (min, mean, max, top{topk}): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))},'
+        f' {np.max(answer_lengths)}, {np.sort(answer_lengths)[-topk:][::-1]}'
     )
 
     if train:
@@ -609,6 +612,7 @@ def load_config_json(args):
             'override_valid_metrics',
             'eval_src_languages',
             'eval_tgt_languages',
+            'topk_print',
         ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict.
@@ -680,6 +684,8 @@ def load_config_json(args):
                 setattr(args, r, [])
             elif r == 'align_span_symbol':
                 setattr(args, r, '"')
+            elif r == 'topk_print':
+                setattr(args, r, 3)
             elif r == 'database_type':
                 setattr(args, r, 'json')
             elif r == 'att_pooling':

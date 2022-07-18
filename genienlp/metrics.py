@@ -223,10 +223,10 @@ def compute_e2e_dialogue_score(greedy, answer, tgt_lang, args, example_ids, cont
     return results
 
 
-def computeSER(greedy, inputs, task_names):
+def computeSER(greedy, inputs, tasks):
     # TODO: how to address multitask evaluation?
-    assert len(task_names) == 1
-    dataset_class = getattr(dialogues, task_names[0].split('_', 1)[0].capitalize())
+    assert len(tasks) == 1
+    dataset_class = getattr(dialogues, tasks[0].dataset_name)
     dataset = dataset_class()
 
     act_values = []
@@ -236,23 +236,23 @@ def computeSER(greedy, inputs, task_names):
     return dataset.compute_ser(greedy, act_values)
 
 
-def computeDA_EM(greedy, answer, task_names):
+def computeDA_EM(greedy, answer, tasks):
     # Uses dialogues da metric which takes care of entity normalizations
 
     # TODO: how to address multitask evaluation?
-    assert len(task_names) == 1
-    dataset_class = getattr(dialogues, task_names[0].split('_', 1)[0].capitalize())
+    assert len(tasks) == 1
+    dataset_class = getattr(dialogues, tasks[0].dataset_name)
     dataset = dataset_class()
 
     answer = [a[0] for a in answer]
     return dataset.compute_da(greedy, answer)
 
 
-def computeJGA(greedy, answer, example_ids, task_names):
+def computeJGA(greedy, answer, example_ids, tasks):
     # Inputs contain diff states, so we need to compute the full state first
     # TODO: how to address multitask evaluation?
-    assert len(task_names) == 1
-    dataset_class = getattr(dialogues, task_names[0].split('_', 1)[0].capitalize())
+    assert len(tasks) == 1
+    dataset_class = getattr(dialogues, tasks[0].dataset_name)
     dataset = dataset_class()
 
     cur_dial_id = None
@@ -279,11 +279,11 @@ def computeJGA(greedy, answer, example_ids, task_names):
     return dataset.compute_dst_em(full_greedy, full_answer)
 
 
-def computeDST_EM(greedy, answer, task_names):
+def computeDST_EM(greedy, answer, tasks):
     # Calculate exact match between diff states
     # Uses dialogues dst metric which takes care of entity normalizations
-    assert len(task_names) == 1
-    dataset_class = getattr(dialogues, task_names[0].split('_', 1)[0].capitalize())
+    assert len(tasks) == 1
+    dataset_class = getattr(dialogues, tasks[0].dataset_name)
     dataset = dataset_class()
 
     answer = [dataset.span2state(a[0]) for a in answer]
@@ -339,11 +339,10 @@ def compute_metrics(
         example_ids: used to calculate some of e2e dialogue metrics that need to know span of each dialogue such as JGA
         contexts: used to calculate SER metric that need to know entities in the input
     """
-    task_names = None
-    if hasattr(args, 'val_task_names'):
-        task_names = args.val_task_names
+    if hasattr(args, 'val_tasks'):
+        tasks = args.val_tasks
     else:
-        task_names = args.task_names
+        tasks = args.tasks
 
     metric_keys = []
     metric_values = []
@@ -357,11 +356,11 @@ def compute_metrics(
         metric_keys += results.keys()
         metric_values += results.values()
     if 'jga' in requested_metrics:
-        jga = computeJGA(predictions, answers, example_ids, task_names)
+        jga = computeJGA(predictions, answers, example_ids, tasks)
         metric_keys += ['jga']
         metric_values += [jga]
     if 'ser' in requested_metrics:
-        ser = computeSER(predictions, contexts, task_names)
+        ser = computeSER(predictions, contexts, tasks)
         metric_keys += ['ser']
         metric_values += [ser]
     if 'em' in requested_metrics:
@@ -369,11 +368,11 @@ def compute_metrics(
         metric_keys += ['em']
         metric_values += [em]
     if 'da_em' in requested_metrics:
-        da_em = computeDA_EM(predictions, answers, task_names)
+        da_em = computeDA_EM(predictions, answers, tasks)
         metric_keys += ['da_em']
         metric_values += [da_em]
     if 'dst_em' in requested_metrics:
-        dst_em = computeDST_EM(predictions, answers, task_names)
+        dst_em = computeDST_EM(predictions, answers, tasks)
         metric_keys += ['dst_em']
         metric_values += [dst_em]
     if 'pem' in requested_metrics:

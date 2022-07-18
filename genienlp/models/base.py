@@ -423,7 +423,7 @@ class GenieModelForGeneration(GenieModel):
             answers
             contexts
         """
-        dataset_class = getattr(dialogues, task.name.split('_', 1)[0].capitalize())
+        dataset_class = getattr(dialogues, task.dataset_name)
         dataset = dataset_class()
 
         # TODO: handle multiple responses
@@ -648,7 +648,7 @@ class GenieModelForGeneration(GenieModel):
         # lazily import termcolor
         from termcolor import colored
 
-        dataset_class = getattr(dialogues, task.name.split('_', 1)[0].capitalize())
+        dataset_class = getattr(dialogues, task.dataset_name)
         dataset = dataset_class()
 
         e2e_dialogue_preds = dict()
@@ -700,8 +700,7 @@ class GenieModelForGeneration(GenieModel):
                     if system_history:
                         print(colored('SYSTEM: ' + f'{predictions[-1][0]}', 'red', attrs=['bold']))
                     else:
-                        src_lang = src_lang[:2]
-                        print(colored('SYSTEM: ' + f'{INIT_SYS_MESSAGE[src_lang]}', 'red', attrs=['bold']))
+                        print(colored('SYSTEM: ' + f'{INIT_SYS_MESSAGE[src_lang[:2]]}', 'red', attrs=['bold']))
 
                     # construct new input
                     raw_user_input = input(colored('USER: ', 'green', attrs=['bold'])).strip()
@@ -780,7 +779,7 @@ class GenieModelForGeneration(GenieModel):
 
                 if train_target == 'da':
                     partial_batch_prediction = dataset.postprocess_prediction(
-                        partial_batch_prediction, knowledge, lang=src_lang[:2]
+                        partial_batch_prediction, knowledge=knowledge, lang=src_lang[:2]
                     )
 
                 partial_batch_prediction = task.postprocess_prediction(turn_id, partial_batch_prediction)
