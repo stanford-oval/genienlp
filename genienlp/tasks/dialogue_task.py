@@ -1,6 +1,6 @@
 from ..data_utils.example import Example
 from .base_task import BaseTask
-from .dialogue_dataset import E2EDialogueDataset, AnnotationClassifierDataset
+from .dialogue_dataset import E2EDialogueDataset, ErrorClassificationDataset
 from .registry import register_task
 
 
@@ -33,38 +33,6 @@ class E2EDialogueTask(BaseTask):
     def get_splits(self, root, **kwargs):
         kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
         return E2EDialogueDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
-
-@register_task('annotation_classifier')
-class AnnotationClassiferTask(BaseTask):
-    def __init__(self, name, args):
-        self.id2label = ['positive', 'negative']
-        self.num_labels = 2
-        super().__init__(name, args)
-        self._metrics = ['sc_f1', 'sc_precision', 'sc_recall']
-
-    def utterance_field(self):
-        return 'context'
-
-    def _make_example(self, turn, **kwargs):
-        if 'type' not in turn: return None
-        dial_id, turn_id, input_text, output_text, train_target, type = (
-            turn['dial_id'],
-            turn['turn_id'],
-            turn['input_text'],
-            turn['output_text'],
-            turn['train_target'],
-            turn['type']
-        )
-
-        example_id = '/'.join([dial_id, str(turn_id), train_target])
-
-        return Example.from_raw(
-            self.name + '/' + str(example_id), input_text + '_' + output_text, '', ['0', '1'][type == 'positive'], preprocess=self.preprocess_field, lower=False
-        )
-
-    def get_splits(self, root, **kwargs):
-        kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
-        return AnnotationClassifierDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
 
 
 @register_task('risawoz')
@@ -163,3 +131,48 @@ class BiTODDST(BiTOD):
         kwargs['train_target'] = 'dst'
         kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
         return E2EDialogueDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
+
+
+@register_task('error_cls')
+class ErrorClassificationTask(BiTOD):
+    def __init__(self, name, args):
+        super().__init__(name, args)
+
+        self.label2id = {'negative': 0, 'positive': 1}
+        self.id2label = {v: k for k, v in self.label2id.items()}
+        self.num_labels = len(self.id2label)
+
+        self.special_tokens.update(['##'])
+
+    @property
+    def metrics(self):
+        return ['sc_f1', 'sc_precision', 'sc_recall']
+
+    def _make_example(self, turn, **kwargs):
+        if 'type' not in turn:
+            return None
+        dial_id, turn_id, input_text, output_text, train_target, type = (
+            turn['dial_id'],
+            turn['turn_id'],
+            turn['input_text'],
+            turn['output_text'],
+            turn['train_target'],
+            turn['type'],
+        )
+
+        answer = str(self.label2id[type])
+
+        example_id = '/'.join([dial_id, str(turn_id), train_target])
+
+        return Example.from_raw(
+            self.name + '/' + str(example_id),
+            input_text + ' ## ' + output_text,
+            '',
+            answer,
+            preprocess=self.preprocess_field,
+            lower=False,
+        )
+
+    def get_splits(self, root, **kwargs):
+        kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
+        return ErrorClassificationDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
