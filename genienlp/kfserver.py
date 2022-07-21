@@ -30,7 +30,7 @@
 
 import logging
 
-import kfserving
+import kserve
 
 from .server import Server, init
 from .util import log_model_size
@@ -38,7 +38,7 @@ from .util import log_model_size
 logger = logging.getLogger(__name__)
 
 
-class KFModelServer(kfserving.KFModel):
+class KFModelServer(kserve.KFModel):
     def __init__(
         self, name, args, numericalizer, model, device, confidence_estimators, estimator_filenames, bootleg_annotator
     ):
@@ -69,4 +69,4 @@ def main(args):
         bootleg_annotator,
     )
     model_server.load()
-    kfserving.KFServer(workers=1).start([model_server])
+    kserve.KFServer(workers=1).start([model_server])
