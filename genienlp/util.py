@@ -307,12 +307,13 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
+    args = numericalizer.args
     all_features = NumericalizedExamples.from_examples(dataset, numericalizer)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
 
-    topk = numericalizer.args.topk_print
+    topk = args.topk_print
     logger.info(
         f'context lengths (min, mean, max, top{topk}): {np.min(context_lengths)}, {int(np.mean(context_lengths))},'
         f' {np.max(context_lengths)}, {np.sort(context_lengths)[-topk:][::-1]}'
@@ -354,6 +355,25 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
             f'The maximum output length in your dataset is {np.max(answer_lengths)} but you have set --max_output_length to {max_output_length}.'
             f' Consider increasing that'
         )
+
+    model_input_max_length = numericalizer._tokenizer.model_max_length
+
+    all_features_filtered = []
+    # remove examples longer than model input length
+    for ex in all_features:
+        if batch_size_fn([ex]) < model_input_max_length:
+            all_features_filtered.append(ex)
+
+    length_diff = len(all_features) - len(all_features_filtered)
+    if length_diff != 0 and not args.filter_long_inputs:
+        raise ValueError(
+            'Encountered an example that is longer than required model input_max_length. Consider using --filter_long_inputs to filter these examples.'
+        )
+    logger.info(
+        f'Removed {length_diff} examples that were longer than required model input_max_length of {model_input_max_length}'
+    )
+
+    all_features = all_features_filtered
 
     sampler = LengthSortedIterator(
         all_features,
