@@ -313,14 +313,14 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
 
-    topk = args.topk_print
+    topN = args.log_n_longest
     logger.info(
-        f'context lengths (min, mean, max, top{topk}): {np.min(context_lengths)}, {int(np.mean(context_lengths))},'
-        f' {np.max(context_lengths)}, {np.sort(context_lengths)[-topk:][::-1]}'
+        f'context lengths (min, mean, max, top{topN}): {np.min(context_lengths)}, {int(np.mean(context_lengths))},'
+        f' {np.max(context_lengths)}, {np.sort(context_lengths)[-topN:][::-1]}'
     )
     logger.info(
-        f'answer lengths (min, mean, max, top{topk}): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))},'
-        f' {np.max(answer_lengths)}, {np.sort(answer_lengths)[-topk:][::-1]}'
+        f'answer lengths (min, mean, max, top{topN}): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))},'
+        f' {np.max(answer_lengths)}, {np.sort(answer_lengths)[-topN:][::-1]}'
     )
 
     if train:
@@ -632,7 +632,7 @@ def load_config_json(args):
             'override_valid_metrics',
             'eval_src_languages',
             'eval_tgt_languages',
-            'topk_print',
+            'log_n_longest',
         ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict.
@@ -704,7 +704,7 @@ def load_config_json(args):
                 setattr(args, r, [])
             elif r == 'align_span_symbol':
                 setattr(args, r, '"')
-            elif r == 'topk_print':
+            elif r == 'log_n_longest':
                 setattr(args, r, 3)
             elif r == 'database_type':
                 setattr(args, r, 'json')
