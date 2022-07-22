@@ -205,6 +205,11 @@ def parse_argv(parser):
     parser.add_argument(
         '--allow_OOM', action='store_true', help='Issue a warning for OOM errors during training instead of crashing'
     )
+    parser.add_argument(
+        '--filter_long_inputs',
+        action='store_true',
+        help='Filter out examples that are longer than required model input_max_length',
+    )
     parser.add_argument('--preserve_case', action='store_false', dest='lower', help='whether to preserve casing for all text')
     parser.add_argument(
         "--reduce_metrics",
