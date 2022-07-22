@@ -95,7 +95,7 @@ def computeSequenceClassificationPrecision(outputs, targets, tasks):
     outputs = [label2id[output] for output in outputs]
     targets = [label2id[target] for target in targets]
     precision_metric = load_metric('precision')
-    return precision_metric.compute(references=targets, predictions=outputs)['precision']
+    return precision_metric.compute(references=targets, predictions=outputs)['precision'] * 100
 
 
 def computeSequenceClassificationRecall(outputs, targets, tasks):
@@ -104,7 +104,7 @@ def computeSequenceClassificationRecall(outputs, targets, tasks):
     outputs = [label2id[output] for output in outputs]
     targets = [label2id[target] for target in targets]
     recall_metric = load_metric('recall')
-    return recall_metric.compute(references=targets, predictions=outputs)['recall']
+    return recall_metric.compute(references=targets, predictions=outputs)['recall'] * 100
 
 
 def computeSequenceClassificationF1(outputs, targets, tasks):
@@ -113,7 +113,7 @@ def computeSequenceClassificationF1(outputs, targets, tasks):
     outputs = [label2id[output] for output in outputs]
     targets = [label2id[target] for target in targets]
     f1_metric = load_metric('f1')
-    return f1_metric.compute(references=targets, predictions=outputs)['f1']
+    return f1_metric.compute(references=targets, predictions=outputs)['f1'] * 100
 
 
 def computeF1(outputs, targets):
