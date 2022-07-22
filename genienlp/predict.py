@@ -239,6 +239,12 @@ def parse_argv(parser):
         help='return raw translation as well as ones post-processed with alignment. this is useful for STS filtering.',
     )
 
+    parser.add_argument(
+        '--filter_long_inputs',
+        action='store_true',
+        help='Filter out examples that are longer than required model input_max_length',
+    )
+
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
     parser.add_argument(
         '--do_alignment',

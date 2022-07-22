@@ -667,6 +667,7 @@ def load_config_json(args):
             'align_preserve_input_quotation',
             'align_remove_output_quotation',
             'e2e_dialogue_evaluation',
+            'filter_long_inputs',
         ]
         for o in overwrite_actions:
             # if argument is True in predict overwrite train; if False retrieve from train
