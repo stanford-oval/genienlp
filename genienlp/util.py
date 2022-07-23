@@ -365,13 +365,15 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
             all_features_filtered.append(ex)
 
     length_diff = len(all_features) - len(all_features_filtered)
-    if length_diff != 0 and not args.filter_long_inputs:
-        raise ValueError(
-            'Encountered an example that is longer than required model input_max_length. Consider using --filter_long_inputs to filter these examples.'
-        )
-    logger.info(
-        f'Removed {length_diff} examples that were longer than required model input_max_length of {model_input_max_length}'
-    )
+    if length_diff != 0:
+        if args.filter_long_inputs:
+            logger.info(
+                f'Removed {length_diff} examples that were longer than required model input_max_length of {model_input_max_length}'
+            )
+        else:
+            raise ValueError(
+                'Encountered an example that is longer than required model input_max_length. Consider using --filter_long_inputs to filter these examples.'
+            )
 
     all_features = all_features_filtered
 
