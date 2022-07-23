@@ -149,18 +149,22 @@ class ErrorClassificationTask(BiTOD):
         return ['sc_f1', 'sc_precision', 'sc_recall']
 
     def _make_example(self, turn, **kwargs):
-        if 'type' not in turn:
+        if 'category' not in turn:
             return None
-        dial_id, turn_id, input_text, output_text, train_target, type = (
+
+        dial_id, turn_id, input_text, output_text, train_target, category = (
             turn['dial_id'],
             turn['turn_id'],
             turn['input_text'],
             turn['output_text'],
             turn['train_target'],
-            turn['type'],
+            turn['category'],
         )
 
-        answer = str(self.label2id[type])
+        if category == 'positive':
+            answer = str(self.label2id['positive'])
+        else:
+            answer = str(self.label2id['negative'])
 
         example_id = '/'.join([dial_id, str(turn_id), train_target])
 
