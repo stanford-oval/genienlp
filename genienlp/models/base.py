@@ -68,15 +68,6 @@ class GenieModel(PreTrainedModel):
         model = cls(args=args, tasks=tasks, vocab_sets=vocab_sets, save_directory=save_directory, *model_args, **kwargs)
         save_dict = torch.load(full_checkpoint_path, map_location=device)
 
-        # HACK
-        # `transformers` version 4.1 changed the name of language modeling head of BartForConditionalGeneration
-        # (and therefore its subclass MBartForConditionalGeneration) to lm_head to make it similar to other models
-        # like T5. The following will make this change so that genienlp models trained with `transformers`==4.0 can be properly loaded
-        if (
-            'model.lm_head.weight' not in save_dict['model_state_dict']
-            and 'model.model.shared.weight' in save_dict['model_state_dict']
-        ):
-            save_dict['model_state_dict']['model.lm_head.weight'] = save_dict['model_state_dict']['model.model.shared.weight']
         model.load_state_dict(save_dict['model_state_dict'], strict=True)
 
         return model, save_dict.get('best_decascore')
