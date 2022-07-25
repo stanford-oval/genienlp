@@ -138,7 +138,8 @@ class ErrorClassificationTask(BiTOD):
     def __init__(self, name, args):
         super().__init__(name, args)
 
-        self.label2id = {'negative': 0, 'positive': 1}
+        # we set negative to 1, so recall indicates detection accuracy
+        self.label2id = {'positive': 0, 'negative': 1}
         self.id2label = {v: k for k, v in self.label2id.items()}
         self.num_labels = len(self.id2label)
 
