@@ -4,6 +4,7 @@ set -e
 set -x
 echo "Running in $(pwd)"
 
+git fetch --tags
 version=$(git describe)
 
 case $IMAGE_NAME in
