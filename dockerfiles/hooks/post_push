@@ -4,6 +4,7 @@ set -e
 set -x
 echo "Running in $(pwd)"
 
+git fetch --unshallow &> /dev/null
 git fetch --tags
 version=$(git describe)
 
