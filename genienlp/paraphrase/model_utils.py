@@ -10,7 +10,7 @@ import torch
 
 from ..metrics import computeBLEU
 from ..model_utils.transformers_utils import MARIAN_GROUP_MEMBERS
-from ..util import FAIRSEQ_LANGUAGE_CODES, get_mbart_lang
+from ..util import MBART50_FAIRSEQ_LANGUAGE_CODES, get_model_lang
 
 logger = logging.getLogger(__name__)
 
@@ -114,10 +114,10 @@ def check_args(args):
 
     # adjust language ids for mbart models
     if args.model_type in ['mbart', 'mbart50']:
-        if args.src_lang not in FAIRSEQ_LANGUAGE_CODES:
-            args.src_lang = get_mbart_lang(args.src_lang)
-        if args.tgt_lang not in FAIRSEQ_LANGUAGE_CODES:
-            args.tgt_lang = get_mbart_lang(args.tgt_lang)
+        if args.src_lang not in MBART50_FAIRSEQ_LANGUAGE_CODES:
+            args.src_lang = get_model_lang(args.src_lang, MBART50_FAIRSEQ_LANGUAGE_CODES)
+        if args.tgt_lang not in MBART50_FAIRSEQ_LANGUAGE_CODES:
+            args.tgt_lang = get_model_lang(args.tgt_lang, MBART50_FAIRSEQ_LANGUAGE_CODES)
 
 
 def sort_checkpoints(output_dir):

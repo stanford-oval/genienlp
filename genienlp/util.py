@@ -42,7 +42,8 @@ import numpy as np
 import torch
 import ujson
 from transformers import MarianConfig, MBartConfig
-from transformers.models.mbart50.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
+from transformers.models.mbart50.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES as MBART50_FAIRSEQ_LANGUAGE_CODES
+from transformers.models.nllb.tokenization_nllb import FAIRSEQ_LANGUAGE_CODES as NLLB_FAIRSEQ_LANGUAGE_CODES
 
 from .data_utils.almond_utils import token_type_regex
 from .data_utils.example import NumericalizedExamples
@@ -525,8 +526,8 @@ def merge_translated_sentences(
     return new_example_ids, new_predictions, new_raw_predictions, new_answers, new_contexts, new_confidence_features
 
 
-def get_mbart_lang(orig_lang):
-    for lang in FAIRSEQ_LANGUAGE_CODES:
+def get_model_lang(orig_lang, mapping):
+    for lang in mapping:
         if lang.startswith(orig_lang):
             return lang
 
@@ -568,10 +569,14 @@ def adjust_language_code(config, pretrained_model, src_lang, tgt_lang):
         # otherwise the translation outputs will be incorrect; hence we ignore the target language
         tgt_lang = None
 
-    # adjust src and tgt languages for Mbart models
+    # adjust src and tgt languages for different models
     if isinstance(config, MBartConfig):
-        src_lang = get_mbart_lang(src_lang)
-        tgt_lang = get_mbart_lang(tgt_lang)
+        src_lang = get_model_lang(src_lang, MBART50_FAIRSEQ_LANGUAGE_CODES)
+        tgt_lang = get_model_lang(tgt_lang, MBART50_FAIRSEQ_LANGUAGE_CODES)
+    # Nllb subclasses M2M100 config so we should check tokenizer_class directly
+    elif getattr(config, 'tokenizer_class', '') == 'NllbTokenizer':
+        src_lang = get_model_lang(src_lang, NLLB_FAIRSEQ_LANGUAGE_CODES)
+        tgt_lang = get_model_lang(tgt_lang, NLLB_FAIRSEQ_LANGUAGE_CODES)
 
     return src_lang, tgt_lang
 
