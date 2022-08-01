@@ -49,7 +49,7 @@ setuptools.setup(
         'numpy>=1.14.5',
         'torch>=1.9.0,<1.13.0',
         'transformers==4.21.0',
-        'datasets==2.3.2',
+        'datasets==2.4.0',
         'pathos==0.2.8',
         'protobuf==3.20.1',
         # for sts:
