@@ -49,5 +49,5 @@ class E2EDialogueDataset(CQA):
         )
 
 
-class ErrorClassificationDataset(E2EDialogueDataset):
+class E2EDialogueErrorClassificationDataset(E2EDialogueDataset):
     is_sequence_classification = True

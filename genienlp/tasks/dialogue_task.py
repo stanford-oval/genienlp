@@ -1,69 +1,10 @@
 from ..data_utils.example import Example
 from .base_task import BaseTask
-from .dialogue_dataset import E2EDialogueDataset, ErrorClassificationDataset
+from .dialogue_dataset import E2EDialogueDataset, E2EDialogueErrorClassificationDataset
 from .registry import register_task
 
 
 class E2EDialogueTask(BaseTask):
-    def __init__(self, name, args):
-        super().__init__(name, args)
-        self._metrics = ['e2e_dialogue_score']
-
-    def utterance_field(self):
-        return 'context'
-
-    def _make_example(self, turn, **kwargs):
-        dial_id, turn_id, input_text, output_text, train_target = (
-            turn['dial_id'],
-            turn['turn_id'],
-            turn['input_text'],
-            turn['output_text'],
-            turn['train_target'],
-        )
-
-        if kwargs.get('train_target', False) and train_target != kwargs['train_target']:
-            return None
-
-        example_id = '/'.join([dial_id, str(turn_id), train_target])
-
-        return Example.from_raw(
-            self.name + '/' + str(example_id), input_text, '', output_text, preprocess=self.preprocess_field, lower=False
-        )
-
-    def get_splits(self, root, **kwargs):
-        kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
-        return E2EDialogueDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
-
-
-@register_task('risawoz')
-class RiSAWOZ(E2EDialogueTask):
-    def __init__(self, name, args):
-        super().__init__(name, args)
-        self.special_tokens = {
-            'USER:',
-            'SYSTEM:',
-            'AGENT_ACTS:' 'AGENT_ACTS_PREV:',
-            'USER_ACTS:',
-            'DST:',
-            'API:',
-            'DA:',
-            'RG:',
-            '<knowledge>',
-            '<endofknowledge>',
-            '<history>',
-            '<endofhistory>',
-            '<state>',
-            '<endofstate>',
-            '<actions>',
-            '<endofactions>',
-            '#unknown',
-        }
-        self._metrics = ['e2e_dialogue_score']
-        self.dataset_name = 'Risawoz'
-
-
-@register_task('bitod')
-class BiTOD(E2EDialogueTask):
     def __init__(self, name, args):
         super().__init__(name, args)
         special_tokens_v1 = {
@@ -106,6 +47,44 @@ class BiTOD(E2EDialogueTask):
             | special_tokens_v2_10
         )
         self._metrics = ['e2e_dialogue_score']
+
+    def utterance_field(self):
+        return 'context'
+
+    def _make_example(self, turn, **kwargs):
+        dial_id, turn_id, input_text, output_text, train_target = (
+            turn['dial_id'],
+            turn['turn_id'],
+            turn['input_text'],
+            turn['output_text'],
+            turn['train_target'],
+        )
+
+        if kwargs.get('train_target', False) and train_target != kwargs['train_target']:
+            return None
+
+        example_id = '/'.join([dial_id, str(turn_id), train_target])
+
+        return Example.from_raw(
+            self.name + '/' + str(example_id), input_text, '', output_text, preprocess=self.preprocess_field, lower=False
+        )
+
+    def get_splits(self, root, **kwargs):
+        kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
+        return E2EDialogueDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
+
+
+@register_task('risawoz')
+class RiSAWOZ(E2EDialogueTask):
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self.dataset_name = 'Risawoz'
+
+
+@register_task('bitod')
+class BiTOD(E2EDialogueTask):
+    def __init__(self, name, args):
+        super().__init__(name, args)
         self.dataset_name = 'Bitod'
 
 
@@ -133,8 +112,7 @@ class BiTODDST(BiTOD):
         return E2EDialogueDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
 
 
-@register_task('error_cls')
-class ErrorClassificationTask(BiTOD):
+class E2EDialogueErrorClassificationTask(E2EDialogueTask):
     def __init__(self, name, args):
         super().__init__(name, args)
 
@@ -180,4 +158,18 @@ class ErrorClassificationTask(BiTOD):
 
     def get_splits(self, root, **kwargs):
         kwargs['e2e_evaluation'] = self.args.e2e_dialogue_evaluation
-        return ErrorClassificationDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
+        return E2EDialogueErrorClassificationDataset.return_splits(path=root, make_example=self._make_example, **kwargs)
+
+
+@register_task('bitod_error_cls')
+class BiTODErrorClassificationTask(E2EDialogueErrorClassificationTask):
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self.dataset_name = 'Bitod'
+
+
+@register_task('risawoz_error_cls')
+class RiSAWOZErrorClassificationTask(E2EDialogueErrorClassificationTask):
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self.dataset_name = 'Risawoz'
