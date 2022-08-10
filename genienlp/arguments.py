@@ -127,7 +127,7 @@ def parse_argv(parser):
         '--num_print', default=10, type=int, help='how many validation examples with greedy output to print to std out'
     )
     parser.add_argument(
-        '--topk_print', default=3, type=int, help='print length of the top K longest examples as well as min, max, and mean'
+        '--log_n_longest', default=3, type=int, help='Log the length of N longest examples (as well as min, max, and mean)'
     )
 
     parser.add_argument(
@@ -204,6 +204,11 @@ def parse_argv(parser):
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
     parser.add_argument(
         '--allow_OOM', action='store_true', help='Issue a warning for OOM errors during training instead of crashing'
+    )
+    parser.add_argument(
+        '--filter_long_inputs',
+        action='store_true',
+        help='Filter out examples that are longer than required model input_max_length',
     )
     parser.add_argument('--preserve_case', action='store_false', dest='lower', help='whether to preserve casing for all text')
     parser.add_argument(

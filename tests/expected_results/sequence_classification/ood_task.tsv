@@ -1,10 +1,10 @@
-ood/0	1	1	get curiosity pictures is this sentence in - domain or out - domain?
-ood/1	1	0	play skinny love by bon iver is this sentence in - domain or out - domain?
-ood/2	1	0	search for all songs with the word dance in the title. is this sentence in - domain or out - domain?
-ood/3	1	0	play some psychedelic rock. is this sentence in - domain or out - domain?
-ood/4	0	0	play the track grow old with me by artist chloe rose lattanzi is this sentence in - domain or out - domain?
-ood/5	1	0	acdc is this sentence in - domain or out - domain?
-ood/6	1	1	easy walk, accountable lady gaga. is this sentence in - domain or out - domain?
-ood/7	1	0	play that would be something by eden ahbez is this sentence in - domain or out - domain?
-ood/8	1	0	show me the weather in berceni, romania is this sentence in - domain or out - domain?
-ood/9	1	1	what is number _ 0 + 2 is this sentence in - domain or out - domain?
+ood_task/0	ood	ood	get curiosity pictures this sentence in - domain or out - of - domain?
+ood_task/1	ind	ind	play skinny love by bon iver this sentence in - domain or out - of - domain?
+ood_task/2	ind	ind	search for all songs with the word dance in the title. this sentence in - domain or out - of - domain?
+ood_task/3	ind	ind	play some psychedelic rock. this sentence in - domain or out - of - domain?
+ood_task/4	ind	ind	play the track grow old with me by artist chloe rose lattanzi this sentence in - domain or out - of - domain?
+ood_task/5	ood	ind	acdc this sentence in - domain or out - of - domain?
+ood_task/6	ind	ood	easy walk, accountable lady gaga. this sentence in - domain or out - of - domain?
+ood_task/7	ind	ind	play that would be something by eden ahbez this sentence in - domain or out - of - domain?
+ood_task/8	ind	ind	show me the weather in berceni, romania this sentence in - domain or out - of - domain?
+ood_task/9	ind	ood	what is _ 0 + 2 this sentence in - domain or out - of - domain?

@@ -181,7 +181,6 @@ class NumericalizedExamples(NamedTuple):
                 all_context_plus_questions, [ex.answer for ex in examples]
             )
         elif getattr(examples, 'is_sequence_classification', False):
-            # align labels
             answers = [
                 [
                     int(ex.answer),

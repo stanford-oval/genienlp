@@ -42,7 +42,8 @@ import numpy as np
 import torch
 import ujson
 from transformers import MarianConfig, MBartConfig
-from transformers.models.mbart50.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES
+from transformers.models.mbart50.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES as MBART50_FAIRSEQ_LANGUAGE_CODES
+from transformers.models.nllb.tokenization_nllb import FAIRSEQ_LANGUAGE_CODES as NLLB_FAIRSEQ_LANGUAGE_CODES
 
 from .data_utils.almond_utils import token_type_regex
 from .data_utils.example import NumericalizedExamples
@@ -307,19 +308,20 @@ def elapsed_time(log):
 
 
 def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
+    args = numericalizer.args
     all_features = NumericalizedExamples.from_examples(dataset, numericalizer)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
 
-    topk = numericalizer.args.topk_print
+    topN = args.log_n_longest
     logger.info(
-        f'context lengths (min, mean, max, top{topk}): {np.min(context_lengths)}, {int(np.mean(context_lengths))},'
-        f' {np.max(context_lengths)}, {np.sort(context_lengths)[-topk:][::-1]}'
+        f'context lengths (min, mean, max, top{topN}): {np.min(context_lengths)}, {int(np.mean(context_lengths))},'
+        f' {np.max(context_lengths)}, {np.sort(context_lengths)[-topN:][::-1]}'
     )
     logger.info(
-        f'answer lengths (min, mean, max, top{topk}): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))},'
-        f' {np.max(answer_lengths)}, {np.sort(answer_lengths)[-topk:][::-1]}'
+        f'answer lengths (min, mean, max, top{topN}): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))},'
+        f' {np.max(answer_lengths)}, {np.sort(answer_lengths)[-topN:][::-1]}'
     )
 
     if train:
@@ -354,6 +356,27 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
             f'The maximum output length in your dataset is {np.max(answer_lengths)} but you have set --max_output_length to {max_output_length}.'
             f' Consider increasing that'
         )
+
+    model_input_max_length = numericalizer._tokenizer.model_max_length
+
+    all_features_filtered = []
+    # remove examples longer than model input length
+    for ex in all_features:
+        if batch_size_fn([ex]) < model_input_max_length:
+            all_features_filtered.append(ex)
+
+    length_diff = len(all_features) - len(all_features_filtered)
+    if length_diff != 0:
+        if args.filter_long_inputs:
+            logger.info(
+                f'Removed {length_diff} examples that were longer than required model input_max_length of {model_input_max_length}'
+            )
+        else:
+            raise ValueError(
+                'Encountered an example that is longer than required model input_max_length. Consider using --filter_long_inputs to filter these examples.'
+            )
+
+    all_features = all_features_filtered
 
     sampler = LengthSortedIterator(
         all_features,
@@ -503,8 +526,8 @@ def merge_translated_sentences(
     return new_example_ids, new_predictions, new_raw_predictions, new_answers, new_contexts, new_confidence_features
 
 
-def get_mbart_lang(orig_lang):
-    for lang in FAIRSEQ_LANGUAGE_CODES:
+def get_model_lang(orig_lang, mapping):
+    for lang in mapping:
         if lang.startswith(orig_lang):
             return lang
 
@@ -546,10 +569,14 @@ def adjust_language_code(config, pretrained_model, src_lang, tgt_lang):
         # otherwise the translation outputs will be incorrect; hence we ignore the target language
         tgt_lang = None
 
-    # adjust src and tgt languages for Mbart models
+    # adjust src and tgt languages for different models
     if isinstance(config, MBartConfig):
-        src_lang = get_mbart_lang(src_lang)
-        tgt_lang = get_mbart_lang(tgt_lang)
+        src_lang = get_model_lang(src_lang, MBART50_FAIRSEQ_LANGUAGE_CODES)
+        tgt_lang = get_model_lang(tgt_lang, MBART50_FAIRSEQ_LANGUAGE_CODES)
+    # Nllb subclasses M2M100 config so we should check tokenizer_class directly
+    elif getattr(config, 'tokenizer_class', '') == 'NllbTokenizer':
+        src_lang = get_model_lang(src_lang, NLLB_FAIRSEQ_LANGUAGE_CODES)
+        tgt_lang = get_model_lang(tgt_lang, NLLB_FAIRSEQ_LANGUAGE_CODES)
 
     return src_lang, tgt_lang
 
@@ -612,7 +639,7 @@ def load_config_json(args):
             'override_valid_metrics',
             'eval_src_languages',
             'eval_tgt_languages',
-            'topk_print',
+            'log_n_longest',
         ]
 
         # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict.
@@ -647,6 +674,7 @@ def load_config_json(args):
             'align_preserve_input_quotation',
             'align_remove_output_quotation',
             'e2e_dialogue_evaluation',
+            'filter_long_inputs',
         ]
         for o in overwrite_actions:
             # if argument is True in predict overwrite train; if False retrieve from train
@@ -684,7 +712,7 @@ def load_config_json(args):
                 setattr(args, r, [])
             elif r == 'align_span_symbol':
                 setattr(args, r, '"')
-            elif r == 'topk_print':
+            elif r == 'log_n_longest':
                 setattr(args, r, 3)
             elif r == 'database_type':
                 setattr(args, r, 'json')

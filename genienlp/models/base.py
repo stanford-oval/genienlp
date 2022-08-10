@@ -37,7 +37,7 @@ import dialogues
 import torch
 import ujson
 from dateparser.languages import default_loader
-from transformers import AutoConfig, MarianTokenizer, PreTrainedModel
+from transformers import AutoConfig, BartForConditionalGeneration, MarianTokenizer, PreTrainedModel
 
 from ..data_utils.example import NumericalizedExamples, SequentialField
 from ..data_utils.numericalizer import TransformerNumericalizer
@@ -72,11 +72,15 @@ class GenieModel(PreTrainedModel):
         # `transformers` version 4.1 changed the name of language modeling head of BartForConditionalGeneration
         # (and therefore its subclass MBartForConditionalGeneration) to lm_head to make it similar to other models
         # like T5. The following will make this change so that genienlp models trained with `transformers`==4.0 can be properly loaded
+
+        # TODO: remove this once we make sure the new paraphraser runs fine
         if (
             'model.lm_head.weight' not in save_dict['model_state_dict']
             and 'model.model.shared.weight' in save_dict['model_state_dict']
+            and isinstance(model.model, BartForConditionalGeneration)
         ):
             save_dict['model_state_dict']['model.lm_head.weight'] = save_dict['model_state_dict']['model.model.shared.weight']
+
         model.load_state_dict(save_dict['model_state_dict'], strict=True)
 
         return model, save_dict.get('best_decascore')

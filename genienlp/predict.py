@@ -100,7 +100,7 @@ def parse_argv(parser):
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
 
     parser.add_argument(
-        '--topk_print', default=3, type=int, help='print length of the top K longest examples as well as min, max, and mean'
+        '--log_n_longest', default=3, type=int, help='print length of the top K longest examples as well as min, max, and mean'
     )
 
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
@@ -237,6 +237,12 @@ def parse_argv(parser):
         '--translate_return_raw_outputs',
         action='store_true',
         help='return raw translation as well as ones post-processed with alignment. this is useful for STS filtering.',
+    )
+
+    parser.add_argument(
+        '--filter_long_inputs',
+        action='store_true',
+        help='Filter out examples that are longer than required model input_max_length',
     )
 
     parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')

@@ -47,3 +47,7 @@ class E2EDialogueDataset(CQA):
         return Split(train=train_data, eval=validation_data, test=test_data), Split(
             train=train_path, eval=validation_path, test=test_path
         )
+
+
+class E2EDialogueErrorClassificationDataset(E2EDialogueDataset):
+    is_sequence_classification = True
