@@ -213,7 +213,7 @@ class EntityAndTypeOracleEntityDisambiguator(BaseEntityDisambiguator):
 
         return tokens_type_ids
 
-    def _get_entity_type(self, current_domain, current_function, answer_tokens, string_begin, string_end):
+    def _get_entity_type(self, current_domain, current_function, answer_tokens, string_begin):
         # identify the type of this string based on the surrounding tokens
         type = None
         if string_begin >= 3 and answer_tokens[string_begin - 2] == '(' and answer_tokens[string_begin - 3] == 'Location':
@@ -290,7 +290,7 @@ class EntityAndTypeOracleEntityDisambiguator(BaseEntityDisambiguator):
                         string_begin = None
                         continue
 
-                    type = self._get_entity_type(current_domain, current_function, answer_tokens, string_begin, string_end)
+                    type = self._get_entity_type(current_domain, current_function, answer_tokens, string_begin)
                     if type and type.split(' ')[-1] in (
                         'title',
                         'message',
@@ -306,7 +306,10 @@ class EntityAndTypeOracleEntityDisambiguator(BaseEntityDisambiguator):
                         continue
 
                     if type:
-                        norm_type = self.normalize_types(type)
+                        if self.args.ned_normalize_types != 'off':
+                            norm_type = self.normalize_types(type)
+                        else:
+                            norm_type = type
                         if norm_type:
                             assert norm_type in self.type_vocab_to_typeqid, f'{norm_type}, {answer}'
                             entity2type[' '.join(entity)] = norm_type
@@ -333,6 +336,54 @@ class EntityAndTypeOracleEntityDisambiguator(BaseEntityDisambiguator):
                     current_function = answer_tokens[j + 2]
 
         return entity2type
+
+
+class WikiOracleEntityDisambiguator(BaseEntityDisambiguator):
+    def __init__(self, args):
+        super().__init__(args)
+        self._unrecognized_types = set()
+        with open(f'{self.args.database_dir}/wiki_entity_data/type_mappings/wiki/qid2typenames.json') as fin:
+            self.entityqid2typenames = ujson.load(fin)
+
+    def find_qid2type(self, answer_tokens):
+        pass
+
+    def process_examples(self, examples, split_path, utterance_field):
+        for n, ex in enumerate(examples):
+            if utterance_field == 'question':
+                sentence = ex.question
+            else:
+                sentence = ex.context
+            answer = ex.answer
+
+            append_span = []
+            answer_qids = quoted_pattern_with_space.findall(answer)
+            for qid in answer_qids:
+                append_span.append(qid)
+                if qid in self.entityqid2typenames and self.entityqid2typenames[qid]:
+                    # map entity qid to its types on wikidata
+                    append_span.append(' | '.join(self.entityqid2typenames[qid]))
+                append_span.append(',')
+
+            if utterance_field == 'question':
+                # assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.question.split(' '))
+                # examples[n].question_feature = features
+
+                # use pad features for non-utterance field
+                # examples[n].context_feature = [Entity.get_pad_entity(self.max_features_size)] * len(ex.context.split(' '))
+
+                # override original question with entities added to it
+                examples[n].question = sentence + '<e> ' + ' '.join(append_span).strip(' ,') + ' </e>'
+
+            else:
+                # assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.context.split(' '))
+                # examples[n].context_feature = features
+
+                # use pad features for non-utterance field
+                # examples[n].question_feature = [Entity.get_pad_entity(self.max_features_size)] * len(ex.question.split(' '))
+
+                # override original context with entities added to it
+                examples[n].context = sentence + ' <e> ' + ' '.join(append_span).strip(' ,') + ' </e>'
 
 
 class TypeOracleEntityDisambiguator(EntityAndTypeOracleEntityDisambiguator):

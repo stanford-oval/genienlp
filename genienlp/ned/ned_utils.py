@@ -103,6 +103,8 @@ def init_ned_model(args, ned_retrieve_method=None):
             ned_retrieve_method = 'TypeOracleEntityDisambiguator'
         elif ned_retrieve_method == 'entity-type-oracle':
             ned_retrieve_method = 'EntityAndTypeOracleEntityDisambiguator'
+        elif ned_retrieve_method == 'wiki-oracle':
+            ned_retrieve_method = 'WikiOracleEntityDisambiguator'
         else:
             raise ValueError(
                 'Invalid ned_retrieve_method. Please choose between bootleg, naive, entity-oracle, type-oracle, and entity-type-oracle'

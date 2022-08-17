@@ -5,4 +5,5 @@ from .main import (  # noqa
     EntityOracleEntityDisambiguator,
     NaiveEntityDisambiguator,
     TypeOracleEntityDisambiguator,
+    WikiOracleEntityDisambiguator,
 )
