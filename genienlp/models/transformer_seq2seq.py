@@ -130,6 +130,8 @@ class TransformerSeq2Seq(GenieModelForGeneration):
                 # remove BOS from the answer to BART-Large because BART-Large was not trained to predict BOS
                 # (unlike BART-Base or mBART)
                 #
+                # NOTE: this change for some reason does not change the outputs of fine-tuned bart-large models
+                # like `stanford-oval/paraphaser-bart-large`
                 # NOTE: various people at Huggingface and elsewhere have tried to conclusively ascertain
                 # whether BOS should be there or not, and the answer seems to be that BOS should not be there
                 # at all, either in input or in the output

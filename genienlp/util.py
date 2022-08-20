@@ -585,201 +585,207 @@ def have_multilingual(task_names):
     return any(['multilingual' in name for name in task_names])
 
 
-def load_config_json(args):
-    args.almond_type_embeddings = False
-    with open(os.path.join(args.path, 'config.json')) as config_file:
-        config = json.load(config_file)
+def load_config_file_to_args(args) -> bool:
+    if args.is_hf_model:
+        # no config file found, treat `args.path` as a model name on HuggingFace model hub
+        args.pretrained_model = args.path
+        args.override_question = "" # because HF models are trained without a separate question
+        config = vars(args).copy()
+    else:
+        with open(os.path.join(args.path, 'config.json')) as config_file:
+            config = json.load(config_file)
 
-        retrieve = [
-            'model',
-            'pretrained_model',
-            'rnn_dimension',
-            'rnn_layers',
-            'rnn_zero_state',
-            'max_generative_vocab',
-            'lower',
-            'trainable_decoder_embeddings',
-            'override_context',
-            'override_question',
-            'almond_lang_as_question',
-            'almond_has_multiple_programs',
-            'almond_detokenize_sentence',
-            'preprocess_special_tokens',
-            'dropper_ratio',
-            'dropper_min_count',
-            'label_smoothing',
-            'use_encoder_loss',
-            'num_workers',
-            'no_fast_tokenizer',
-            'force_fast_tokenizer',
-            'add_entities_to_text',
-            'entity_attributes',
-            'max_qids_per_entity',
-            'max_types_per_qid',
+    retrieve = [
+        'model',
+        'pretrained_model',
+        'rnn_dimension',
+        'rnn_layers',
+        'rnn_zero_state',
+        'max_generative_vocab',
+        'lower',
+        'trainable_decoder_embeddings',
+        'override_context',
+        'override_question',
+        'almond_lang_as_question',
+        'almond_has_multiple_programs',
+        'almond_detokenize_sentence',
+        'preprocess_special_tokens',
+        'dropper_ratio',
+        'dropper_min_count',
+        'label_smoothing',
+        'use_encoder_loss',
+        'num_workers',
+        'no_fast_tokenizer',
+        'force_fast_tokenizer',
+        'add_entities_to_text',
+        'entity_attributes',
+        'max_qids_per_entity',
+        'max_types_per_qid',
+        'do_ned',
+        'database_type',
+        'min_entity_len',
+        'max_entity_len',
+        'entity_type_agg_method',
+        'entity_word_embeds_dropout',
+        'num_db_types',
+        'db_unk_id',
+        'ned_retrieve_method',
+        'ned_domains',
+        'almond_type_mapping_path',
+        'max_features_size',
+        'bootleg_output_dir',
+        'bootleg_model',
+        'bootleg_prob_threshold',
+        'ned_normalize_types',
+        'att_pooling',
+        'no_separator',
+        'num_labels',
+        'crossner_domains',
+        'override_valid_metrics',
+        'eval_src_languages',
+        'eval_tgt_languages',
+        'log_n_longest',
+    ]
+
+    # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict.
+    # NOTE: do not set default values for these arguments in predict cause the defaults will always override training arguments
+    overwrite = [
+        'model',
+        'val_batch_size',
+        'num_beams',
+        'num_beam_groups',
+        'diversity_penalty',
+        'num_outputs',
+        'no_repeat_ngram_size',
+        'top_p',
+        'top_k',
+        'repetition_penalty',
+        'temperature',
+        'align_span_symbol',
+        'max_output_length',
+        'min_output_length',
+        'reduce_metrics',
+        'database_dir',
+        'e2e_dialogue_valid_subtasks',
+        'e2e_dialogue_valid_submetrics',
+        'e2e_dialogue_valid_subweights',
+    ]
+    for o in overwrite:
+        if o not in args or getattr(args, o) is None:
+            retrieve.append(o)
+
+    # these are true/ false arguments
+    overwrite_actions = [
+        'do_alignment',
+        'align_preserve_input_quotation',
+        'align_remove_output_quotation',
+        'e2e_dialogue_evaluation',
+        'filter_long_inputs',
+    ]
+    for o in overwrite_actions:
+        # if argument is True in predict overwrite train; if False retrieve from train
+        if not getattr(args, o, False):
+            retrieve.append(o)
+
+    for r in retrieve:
+        if r in config:
+            setattr(args, r, config[r])
+        # These are for backward compatibility with models that were trained before we added these arguments
+        elif r in (
             'do_ned',
-            'database_type',
-            'min_entity_len',
-            'max_entity_len',
-            'entity_type_agg_method',
-            'entity_word_embeds_dropout',
-            'num_db_types',
-            'db_unk_id',
-            'ned_retrieve_method',
-            'ned_domains',
-            'almond_type_mapping_path',
-            'max_features_size',
-            'bootleg_output_dir',
-            'bootleg_model',
-            'bootleg_prob_threshold',
-            'ned_normalize_types',
-            'att_pooling',
-            'no_separator',
-            'num_labels',
-            'crossner_domains',
-            'override_valid_metrics',
-            'eval_src_languages',
-            'eval_tgt_languages',
-            'log_n_longest',
-        ]
-
-        # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict.
-        # NOTE: do not set default values for these arguments in predict cause the defaults will always override training arguments
-        overwrite = [
-            'val_batch_size',
-            'num_beams',
-            'num_beam_groups',
-            'diversity_penalty',
-            'num_outputs',
-            'no_repeat_ngram_size',
-            'top_p',
-            'top_k',
-            'repetition_penalty',
-            'temperature',
-            'align_span_symbol',
-            'max_output_length',
-            'min_output_length',
-            'reduce_metrics',
-            'database_dir',
-            'e2e_dialogue_valid_subtasks',
-            'e2e_dialogue_valid_submetrics',
-            'e2e_dialogue_valid_subweights',
-        ]
-        for o in overwrite:
-            if o not in args or getattr(args, o) is None:
-                retrieve.append(o)
-
-        # these are true/ false arguments
-        overwrite_actions = [
             'do_alignment',
             'align_preserve_input_quotation',
             'align_remove_output_quotation',
-            'e2e_dialogue_evaluation',
-            'filter_long_inputs',
-        ]
-        for o in overwrite_actions:
-            # if argument is True in predict overwrite train; if False retrieve from train
-            if not getattr(args, o, False):
-                retrieve.append(o)
-
-        for r in retrieve:
-            if r in config:
-                setattr(args, r, config[r])
-            # These are for backward compatibility with models that were trained before we added these arguments
-            elif r in (
-                'do_ned',
-                'do_alignment',
-                'align_preserve_input_quotation',
-                'align_remove_output_quotation',
-                'use_encoder_loss',
-                'almond_has_multiple_programs',
-                'almond_lang_as_question',
-                'preprocess_special_tokens',
-                'no_fast_tokenizer',
-                'force_fast_tokenizer',
-            ):
-                setattr(args, r, False)
-            elif r in ('ned_normalize_types'):
-                setattr(args, r, 'off')
-            elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
-                setattr(args, r, 0)
-            elif r in ('entity_word_embeds_dropout'):
-                setattr(args, r, 0.0)
-            elif r in ('num_beams', 'num_outputs', 'top_p', 'repetition_penalty'):
-                setattr(args, r, [1])
-            elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
-                setattr(args, r, [0])
-            elif r in ['override_valid_metrics']:
-                setattr(args, r, [])
-            elif r == 'align_span_symbol':
-                setattr(args, r, '"')
-            elif r == 'log_n_longest':
-                setattr(args, r, 3)
-            elif r == 'database_type':
-                setattr(args, r, 'json')
-            elif r == 'att_pooling':
-                setattr(args, r, 'max')
-            elif r == 'min_entity_len':
-                setattr(args, r, 2)
-            elif r == 'max_entity_len':
-                setattr(args, r, 4)
-            elif r == 'ned_retrieve_method':
-                setattr(args, r, 'naive')
-            elif r == 'locale':
-                setattr(args, r, 'en')
-            elif r == 'num_beam_groups':
-                setattr(args, r, [1])
-            elif r == 'diversity_penalty':
-                setattr(args, r, [0.0])
-            elif r == 'dropper_ratio':
-                setattr(args, r, 0.0)
-            elif r == 'dropper_min_count':
-                setattr(args, r, 10000)
-            elif r == 'label_smoothing':
-                setattr(args, r, 0.0)
-            elif r == 'min_output_length':
-                setattr(args, r, 3)
-            elif r == 'no_separator':
-                setattr(args, r, True)  # old models don't use a separator
-            else:
-                # use default value
-                setattr(args, r, None)
-
-        if args.e2e_dialogue_valid_subtasks is None:
-            setattr(args, 'e2e_dialogue_valid_subtasks', ['dst', 'api', 'da', 'rg'])
-        if args.e2e_dialogue_valid_submetrics is None:
-            setattr(args, 'e2e_dialogue_valid_submetrics', ['dst_em', 'em', 'da_em', 'casedbleu'])
-        if args.e2e_dialogue_valid_subweights is None:
-            setattr(args, 'e2e_dialogue_valid_subweights', [1.0, 1.0, 1.0, 1.0])
-
-        # backward compatibility for models trained with genienlp before NED Refactoring (2)
-        if args.max_features_size is None:
-            if hasattr(args, 'ned_features_size'):
-                setattr(args, 'max_features_size', args.ned_features_size)
-            else:
-                setattr(args, 'max_features_size', 0)
-        if args.ned_domains is None:
-            if hasattr(args, 'almond_domains'):
-                setattr(args, 'ned_domains', args.almond_domains)
-            else:
-                setattr(args, 'ned_domains', [])
-        if args.add_entities_to_text is None:
-            if hasattr(args, 'add_types_to_text'):
-                setattr(args, 'add_entities_to_text', args.add_types_to_text)
-            else:
-                setattr(args, 'add_entities_to_text', 'off')
-        if args.entity_attributes is None:
-            if hasattr(args, 'ned_features'):
-                setattr(args, 'entity_attributes', args.ned_features)
-            else:
-                setattr(args, 'entity_attributes', [])
-        if args.ned_normalize_types is None:
-            if hasattr(args, 'bootleg_post_process_types') and args.bootleg_post_process_types:
-                setattr(args, 'ned_normalize_types', 'soft')
+            'use_encoder_loss',
+            'almond_has_multiple_programs',
+            'almond_lang_as_question',
+            'preprocess_special_tokens',
+            'no_fast_tokenizer',
+            'force_fast_tokenizer',
+        ):
+            setattr(args, r, False)
+        elif r in ('ned_normalize_types'):
+            setattr(args, r, 'off')
+        elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
+            setattr(args, r, 0)
+        elif r in ('entity_word_embeds_dropout'):
+            setattr(args, r, 0.0)
+        elif r in ('num_beams', 'num_outputs', 'top_p', 'repetition_penalty'):
+            setattr(args, r, [1])
+        elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
+            setattr(args, r, [0])
+        elif r in ['override_valid_metrics']:
+            setattr(args, r, [])
+        elif r == 'align_span_symbol':
+            setattr(args, r, '"')
+        elif r == 'log_n_longest':
+            setattr(args, r, 3)
+        elif r == 'database_type':
+            setattr(args, r, 'json')
+        elif r == 'att_pooling':
+            setattr(args, r, 'max')
+        elif r == 'min_entity_len':
+            setattr(args, r, 2)
+        elif r == 'max_entity_len':
+            setattr(args, r, 4)
+        elif r == 'ned_retrieve_method':
+            setattr(args, r, 'naive')
+        elif r == 'locale':
+            setattr(args, r, 'en')
+        elif r == 'num_beam_groups':
+            setattr(args, r, [1])
+        elif r == 'diversity_penalty':
+            setattr(args, r, [0.0])
+        elif r == 'dropper_ratio':
+            setattr(args, r, 0.0)
+        elif r == 'dropper_min_count':
+            setattr(args, r, 10000)
+        elif r == 'label_smoothing':
+            setattr(args, r, 0.0)
+        elif r == 'min_output_length':
+            setattr(args, r, 3)
+        elif r == 'no_separator':
+            setattr(args, r, True)  # old models don't use a separator
         else:
-            setattr(args, 'ned_normalize_types', 'off')
+            # use default value
+            setattr(args, r, None)
 
-        args.dropout_ratio = 0.0
-        args.verbose = False
+    if args.e2e_dialogue_valid_subtasks is None:
+        setattr(args, 'e2e_dialogue_valid_subtasks', ['dst', 'api', 'da', 'rg'])
+    if args.e2e_dialogue_valid_submetrics is None:
+        setattr(args, 'e2e_dialogue_valid_submetrics', ['dst_em', 'em', 'da_em', 'casedbleu'])
+    if args.e2e_dialogue_valid_subweights is None:
+        setattr(args, 'e2e_dialogue_valid_subweights', [1.0, 1.0, 1.0, 1.0])
+
+    # backward compatibility for models trained with genienlp before NED Refactoring (2)
+    if args.max_features_size is None:
+        if hasattr(args, 'ned_features_size'):
+            setattr(args, 'max_features_size', args.ned_features_size)
+        else:
+            setattr(args, 'max_features_size', 0)
+    if args.ned_domains is None:
+        if hasattr(args, 'almond_domains'):
+            setattr(args, 'ned_domains', args.almond_domains)
+        else:
+            setattr(args, 'ned_domains', [])
+    if args.add_entities_to_text is None:
+        if hasattr(args, 'add_types_to_text'):
+            setattr(args, 'add_entities_to_text', args.add_types_to_text)
+        else:
+            setattr(args, 'add_entities_to_text', 'off')
+    if args.entity_attributes is None:
+        if hasattr(args, 'ned_features'):
+            setattr(args, 'entity_attributes', args.ned_features)
+        else:
+            setattr(args, 'entity_attributes', [])
+    if args.ned_normalize_types is None:
+        if hasattr(args, 'bootleg_post_process_types') and args.bootleg_post_process_types:
+            setattr(args, 'ned_normalize_types', 'soft')
+    else:
+        setattr(args, 'ned_normalize_types', 'off')
+
+    args.dropout_ratio = 0.0
+    args.verbose = False
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
 

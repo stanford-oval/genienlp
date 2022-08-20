@@ -36,7 +36,7 @@ import torch
 from . import models
 from .arguments import check_and_update_generation_args
 from .tasks.registry import get_tasks
-from .util import get_devices, load_config_json, set_seed
+from .util import get_devices, load_config_file_to_args, set_seed
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ def init(args):
     devices = get_devices()
     device = devices[0]  # server only runs on a single device
 
-    load_config_json(args)
+    load_config_file_to_args(args)
     check_and_update_generation_args(args)
 
     if not args.src_locale:

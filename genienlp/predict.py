@@ -56,7 +56,7 @@ from .util import (
     combine_folders_on_disk,
     get_devices,
     get_part_path,
-    load_config_json,
+    load_config_file_to_args,
     log_model_size,
     make_data_loader,
     set_seed,
@@ -67,7 +67,21 @@ logger = logging.getLogger(__name__)
 
 
 def parse_argv(parser):
-    parser.add_argument('--path', type=str, required=True, help='Folder to load the model from')
+    parser.add_argument('--is_hf_model', action='store_true',
+                        help='Whether the model should be directly loaded from HuggingFace model hub. If True, `--path` is the full model name.')
+    parser.add_argument(
+        '--model',
+        type=str,
+        choices=[
+            'TransformerLSTM',
+            'TransformerSeq2Seq',
+            'TransformerForTokenClassification',
+            'TransformerForSequenceClassification',
+        ],
+        default=None,
+        help='which model to import',
+    )
+    parser.add_argument('--path', '--model_name_or_path', type=str, required=True, help='Folder to load the model from')
     parser.add_argument(
         '--evaluate',
         type=str,
@@ -127,7 +141,7 @@ def parse_argv(parser):
     parser.add_argument(
         '--val_batch_size',
         nargs='+',
-        default=None,
+        default=[4000],
         type=int,
         help='Batch size for validation corresponding to tasks in val tasks',
     )
@@ -163,9 +177,10 @@ def parse_argv(parser):
         default=[0],
         help='ngrams of this size cannot be repeated in the output. 0 disables it.',
     )
-    parser.add_argument('--max_output_length', type=int, help='maximum output length for generation')
+    parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
     parser.add_argument(
         '--min_output_length',
+        default=3,
         type=int,
         help='maximum output length for generation; '
         'default is 3 for most multilingual models: BOS, language code, and one token. otherwise it is 2',
@@ -315,6 +330,10 @@ def check_args(args):
         setattr(args, 'pred_src_languages', [args.eval_src_languages])
     if not args.pred_tgt_languages:
         setattr(args, 'pred_tgt_languages', [args.eval_tgt_languages])
+    
+    if args.is_hf_model and (not args.pred_src_languages or not args.model):
+        # because in for HF models we are not getting these values from genienlp's training script
+        raise ValueError('You need to specify --pred_languages and --model when directly loading a HuggingFace model.')
 
     if len(args.task_names) != len(args.pred_src_languages):
         raise ValueError('You have to define prediction languages for each task in the same order you provided the tasks.')
@@ -335,6 +354,7 @@ def check_args(args):
 
     if args.main_metric_only and args.extra_metrics:
         raise ValueError('Please remove --main_metric_only from your arguments so the requested extra metrics can be shown.')
+
 
 
 def prepare_data(args):
@@ -456,18 +476,27 @@ def get_metrics_to_compute(args, task):
 
 
 def run(args, device):
-
-    # TODO handle multiple languages
-    Model = getattr(models, args.model)
-    model, _ = Model.load(
-        args.path,
-        model_checkpoint_file=args.checkpoint_name,
-        args=args,
-        device=device,
-        tasks=args.tasks,
-        src_lang=args.pred_src_languages[0],
-        tgt_lang=args.pred_tgt_languages[0],
-    )
+    print(args.model)
+    model_class = getattr(models, args.model)
+    if args.is_hf_model:
+        logger.info(f'Loading model {args.path} from HuggingFace model hub')
+        model = model_class(args=args,
+                            vocab_sets=None,
+                            tasks=args.tasks,
+                            src_lang=args.pred_src_languages[0],
+                            tgt_lang=args.pred_tgt_languages[0]
+                            )
+    else:
+        # TODO handle multiple languages
+        model, _ = model_class.load(
+            args.path,
+            model_checkpoint_file=args.checkpoint_name,
+            args=args,
+            device=device,
+            tasks=args.tasks,
+            src_lang=args.pred_src_languages[0],
+            tgt_lang=args.pred_tgt_languages[0],
+        )
 
     val_sets = prepare_data(args)
     model.add_new_vocab_from_data(args.tasks)
@@ -589,7 +618,7 @@ def update_metrics(args):
 
 
 def main(args):
-    load_config_json(args)
+    load_config_file_to_args(args)
     check_and_update_generation_args(args)
     check_args(args)
     set_default_values(args)
