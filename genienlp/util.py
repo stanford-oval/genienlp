@@ -638,7 +638,6 @@ def load_config_file_to_args(args) -> bool:
         'bootleg_prob_threshold',
         'ned_normalize_types',
         'att_pooling',
-        'no_separator',
         'num_labels',
         'crossner_domains',
         'override_valid_metrics',
@@ -744,8 +743,6 @@ def load_config_file_to_args(args) -> bool:
             setattr(args, r, 0.0)
         elif r == 'min_output_length':
             setattr(args, r, 3)
-        elif r == 'no_separator':
-            setattr(args, r, True)  # old models don't use a separator
         else:
             # use default value
             setattr(args, r, None)

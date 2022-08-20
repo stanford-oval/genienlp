@@ -284,12 +284,6 @@ def parse_argv(parser):
 
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
-    # TODO for backward compatibility only. Remove after no old model (including paraphraser) is in use.
-    parser.add_argument(
-        '--no_separator',
-        action='store_true',
-        help='By default, we add a model-specific separator token between question and context when concatenating them. This argument disables that.',
-    )
     parser.add_argument(
         "--almond_has_single_program",
         action='store_false',
