@@ -1,27 +1,36 @@
-# Genie NLP library
+<p align="center">
+<img style="vertical-align:middle" width="150" src="https://avatars.githubusercontent.com/u/13667124?s=400&u=aca1de69f751c02bbcda6a38f78d4b6653975df6&v=4" />
+</p>
+<h1 align="center">
+<span>GenieNLP</span>
+</h1>
 
-[![Build Status](https://travis-ci.com/stanford-oval/genienlp.svg?branch=master)](https://travis-ci.com/stanford-oval/genienlp) [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/stanford-oval/genienlp.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/stanford-oval/genienlp/context:python)
+<p align="center">
+<a href="https://travis-ci.com/stanford-oval/genienlp"><img src="https://travis-ci.com/stanford-oval/genienlp.svg?branch=master" alt="Build Status"></a>
+<a href="https://pypi.org/project/genienlp/"><img src="https://img.shields.io/pypi/dm/genienlp" alt="PyPI Downloads"></a>
+<a href="https://github.com/stanford-oval/genienlp/stargazers"><img src="https://img.shields.io/github/stars/stanford-oval/genienlp?style=social" alt="Github Stars"></a>
+</p>
 
-This library contains the NLP models for the [Genie](https://github.com/stanford-oval/genie-toolkit) toolkit for
-virtual assistants. It is derived from the [decaNLP](https://github.com/salesforce/decaNLP) library by Salesforce,
-but has diverged significantly.
 
-The library is suitable for all NLP tasks that can be framed as Contextual Question Answering, that is, with 3 inputs:
+GenieNLP is suitable for all NLP tasks, including text generation (e.g. translation, paraphasing), token classification (e.g. named entity recognition) and sequence classification (e.g. NLI, sentiment analysis).
 
-- text or structured input as _context_
-- text input as _question_
-- text or structured output as _answer_
-
-As the work by [McCann et al.](https://arxiv.org/abs/1806.08730) shows, many NLP tasks can be framed in this way.
-Genie primarily uses the library for semantic parsing, paraphrasing, translation, and dialogue state tracking, and this is
-what the models work best for.
+This library contains the code to run NLP models for the [Genie Toolkit](https://github.com/stanford-oval/genie-toolkit) and the [Genie Virtual Assistant](https://genie.stanford.edu/).
+Genie primarily uses this library for semantic parsing, paraphrasing, translation, and dialogue state tracking. Therefore, GenieNLP has a lot of extra features for these tasks.
 
 ## Installation
 
-genienlp is available on PyPi. You can install it with:
+GenieNLP is tested on Python 3.8.
+You can install the latest release with pip from PyPI:
 
 ```bash
-pip3 install genienlp
+pip install genienlp
+```
+
+Or from source:
+```bash
+git clone https://github.com/stanford-oval/genienlp.git
+cd genienlp
+pip install -e .
 ```
 
 After installation, `genienlp` command becomes available.
