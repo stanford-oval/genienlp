@@ -1,12 +1,12 @@
 <p align="center">
-<img style="vertical-align:middle" width="150" src="https://avatars.githubusercontent.com/u/13667124?s=400&u=aca1de69f751c02bbcda6a38f78d4b6653975df6&v=4" />
+<img style="vertical-align:middle;margin:-10px" width="150" src="https://avatars.githubusercontent.com/u/13667124" />
 </p>
 <h1 align="center">
 <span>GenieNLP</span>
 </h1>
 
 <p align="center">
-<a href="https://travis-ci.com/stanford-oval/genienlp"><img src="https://travis-ci.com/stanford-oval/genienlp.svg?branch=master" alt="Build Status"></a>
+<a href="https://app.travis-ci.com/github/stanford-oval/genienlp"><img src="https://travis-ci.com/stanford-oval/genienlp.svg?branch=master" alt="Build Status"></a>
 <a href="https://pypi.org/project/genienlp/"><img src="https://img.shields.io/pypi/dm/genienlp" alt="PyPI Downloads"></a>
 <a href="https://github.com/stanford-oval/genienlp/stargazers"><img src="https://img.shields.io/github/stars/stanford-oval/genienlp?style=social" alt="Github Stars"></a>
 </p>
@@ -14,11 +14,14 @@
 
 GenieNLP is suitable for all NLP tasks, including text generation (e.g. translation, paraphasing), token classification (e.g. named entity recognition) and sequence classification (e.g. NLI, sentiment analysis).
 
+
 This library contains the code to run NLP models for the [Genie Toolkit](https://github.com/stanford-oval/genie-toolkit) and the [Genie Virtual Assistant](https://genie.stanford.edu/).
 Genie primarily uses this library for semantic parsing, paraphrasing, translation, and dialogue state tracking. Therefore, GenieNLP has a lot of extra features for these tasks.
 
-## Table of Contents
-- [Table of Contents](#table-of-contents)
+Works with [🤗 models](https://huggingface.co/models) and [🤗 Datasets](https://huggingface.co/datasets).
+
+## Table of Contents <!-- omit in TOC -->
+
 - [Installation](#installation)
 - [Usage](#usage)
   - [Training a semantic parser](#training-a-semantic-parser)
@@ -43,7 +46,7 @@ Or from source:
 ```bash
 git clone https://github.com/stanford-oval/genienlp.git
 cd genienlp
-pip install -e .
+pip install -e .  # -e means your changes to the code will automatically take effect without the need to reinstall
 ```
 
 After installation, `genienlp` command becomes available.
