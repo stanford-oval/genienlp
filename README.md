@@ -17,9 +17,22 @@ GenieNLP is suitable for all NLP tasks, including text generation (e.g. translat
 This library contains the code to run NLP models for the [Genie Toolkit](https://github.com/stanford-oval/genie-toolkit) and the [Genie Virtual Assistant](https://genie.stanford.edu/).
 Genie primarily uses this library for semantic parsing, paraphrasing, translation, and dialogue state tracking. Therefore, GenieNLP has a lot of extra features for these tasks.
 
+## Table of Contents
+- [Table of Contents](#table-of-contents)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Training a semantic parser](#training-a-semantic-parser)
+  - [Inference on a semantic parser](#inference-on-a-semantic-parser)
+  - [Calibrating a trained model](#calibrating-a-trained-model)
+  - [Paraphrasing](#paraphrasing)
+  - [Translation](#translation)
+  - [Named Entity Disambiguation](#named-entity-disambiguation)
+- [Citation](#citation)
+
+
 ## Installation
 
-GenieNLP is tested on Python 3.8.
+GenieNLP is tested with Python 3.8.
 You can install the latest release with pip from PyPI:
 
 ```bash
@@ -169,7 +182,7 @@ See `genienlp --help` and `genienlp <command> --help` for more details about eac
 
 ## Citation
 
-If you use the MultiTask Question Answering model in your work, please cite [*The Natural Language Decathlon: Multitask Learning as Question Answering*](https://arxiv.org/abs/1806.08730).
+If you use multiTask training in your work, please cite [*The Natural Language Decathlon: Multitask Learning as Question Answering*](https://arxiv.org/abs/1806.08730).
 
 ```bibtex
 @article{McCann2018decaNLP,
@@ -230,5 +243,22 @@ If you use multilingual models such as MarianMT, MBART, MT5, or XLMR-LSTM for Se
   author={Moradshahi, Mehrad and Tsai, Victoria and Campagna, Giovanni and Lam, Monica S},
   journal={arXiv preprint arXiv:2111.02574},
   year={2021}
+}
+```
+
+If you use English models such as BART for Seq2Seq tasks, please cite [A Few-Shot Semantic Parser for Wizard-of-Oz Dialogues with the Precise ThingTalk Representation](https://aclanthology.org/2022.findings-acl.317/), and the original paper that introduced the model.
+
+```bibtex
+@inproceedings{campagna-etal-2022-shot,
+    title = "A Few-Shot Semantic Parser for {W}izard-of-{O}z Dialogues with the Precise {T}hing{T}alk Representation",
+    author = "Campagna, Giovanni  and Semnani, Sina  and Kearns, Ryan  and Koba Sato, Lucas Jun  and Xu, Silei  and Lam, Monica",
+    booktitle = "Findings of the Association for Computational Linguistics: ACL 2022",
+    month = may,
+    year = "2022",
+    address = "Dublin, Ireland",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2022.findings-acl.317",
+    doi = "10.18653/v1/2022.findings-acl.317",
+    pages = "4021--4034",
 }
 ```
