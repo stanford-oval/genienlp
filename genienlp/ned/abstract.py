@@ -193,6 +193,10 @@ class AbstractEntityDisambiguator(object):
                 examples[n].question = self.add_entities_to_text(ex.question, features)
 
             else:
+                print(tokens_type_ids)
+                print(tokens_type_probs)
+                print(tokens_qids)
+                print(ex.context.split(' '))
                 assert len(tokens_type_ids) == len(tokens_type_probs) == len(tokens_qids) == len(ex.context.split(' '))
                 examples[n].context_feature = features
 
