@@ -46,7 +46,7 @@ from . import (
 )
 from .ned.scripts import analyze_bootleg_results, oracle_vs_bootleg
 from .paraphrase import run_generation, run_lm_finetuning
-from .paraphrase.scripts import clean_paraphrasing_dataset, dialog_to_tsv, split_dataset, transform_dataset
+from .paraphrase.scripts import split_dataset
 from .sts import sts_calculate_scores, sts_filter
 
 subcommands = {
@@ -70,21 +70,6 @@ subcommands = {
     # calibration commands
     'calibrate': ('Train a confidence calibration model', calibrate.parse_argv, calibrate.main),
     # commands that work with datasets
-    'transform-dataset': (
-        'Apply transformations to a tab-separated dataset',
-        transform_dataset.parse_argv,
-        transform_dataset.main,
-    ),
-    'clean-paraphrasing-dataset': (
-        'Select a clean subset from the ParaBank2 dataset',
-        clean_paraphrasing_dataset.parse_argv,
-        clean_paraphrasing_dataset.main,
-    ),
-    'dialog-to-tsv': (
-        'Convert a dialog dataset to a turn-by-turn tab-separated format',
-        dialog_to_tsv.parse_argv,
-        dialog_to_tsv.main,
-    ),
     'split-dataset': ('Split a dataset file into two files', split_dataset.parse_argv, split_dataset.main),
     # sts commands
     'sts-calculate-scores': (
