@@ -38,12 +38,6 @@ from pprint import pformat
 
 from torch.multiprocessing import Process, set_start_method
 
-try:
-    set_start_method('spawn')
-except RuntimeError:
-    pass
-
-
 import torch
 
 from . import models
@@ -618,6 +612,11 @@ def update_metrics(args):
 
 
 def main(args):
+    try:
+        set_start_method('spawn')
+    except RuntimeError:
+        pass
+    
     load_config_file_to_args(args)
     check_and_update_generation_args(args)
     check_args(args)

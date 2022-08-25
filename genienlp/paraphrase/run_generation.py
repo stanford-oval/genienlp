@@ -38,11 +38,6 @@ from ..model_utils.translation import compute_attention
 from .data_utils import create_features_from_tsv_file, output_heuristics
 from .model_utils import compute_metrics, force_replace_quoted_params, replace_quoted_params
 
-try:
-    set_start_method('spawn')
-except RuntimeError:
-    pass
-
 import torch
 from transformers import (
     BartForConditionalGeneration,
@@ -302,6 +297,11 @@ def parse_argv(parser):
 
 
 def main(args):
+    try:
+        set_start_method('spawn')
+    except RuntimeError:
+        pass
+    
     hyperparameters = [
         'num_samples',
         'temperature',
