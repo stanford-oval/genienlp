@@ -16,21 +16,15 @@ do
 
   # train
   genienlp train \
+    $SHARED_TRAIN_HPARAMS \
     --train_tasks almond_dialogue_nlu \
     --train_batch_tokens 100 \
     --val_batch_size 100 \
     --train_iterations 6 \
-    --preserve_case \
-    --save_every 2 \
-    --log_every 2 \
-    --val_every 2 \
     --save $workdir/model_$i \
     --database_dir $SRCDIR/database/ \
     --data $SRCDIR/dataset/thingpedia_99/ \
     --bootleg_output_dir $SRCDIR/dataset/thingpedia_99/bootleg/ \
-    --exist_ok \
-    --embeddings $EMBEDDING_DIR \
-    --no_commit \
     --do_ned \
     --min_entity_len 2 \
     --max_entity_len 4 \

@@ -10,19 +10,13 @@ do
 
   # train
   genienlp train \
+    $SHARED_TRAIN_HPARAMS \
     --train_tasks almond \
     --train_batch_tokens 100 \
     --val_batch_size 100 \
     --train_iterations 6 \
-    --preserve_case \
-    --save_every 2 \
-    --log_every 2 \
-    --val_every 2 \
     --save $workdir/model_$i \
     --data $SRCDIR/dataset/ \
-    --exist_ok \
-    --embeddings $EMBEDDING_DIR \
-    --no_commit \
     $hparams
 
   # greedy prediction

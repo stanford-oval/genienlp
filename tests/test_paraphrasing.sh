@@ -10,21 +10,15 @@ for model in \
 
   # train
   genienlp train \
+    $SHARED_TRAIN_HPARAMS \
     --train_tasks almond_natural_seq2seq \
     --train_batch_tokens 100 \
     --val_batch_size 100 \
     --train_iterations 6 \
-    --preserve_case \
-    --save_every 2 \
-    --log_every 2 \
-    --val_every 2 \
     --save $workdir/model_$i \
     --data $SRCDIR/dataset/ \
     --model TransformerSeq2Seq \
-    --pretrained_model $model \
-    --exist_ok  \
-    --embeddings $EMBEDDING_DIR \
-    --no_commit
+    --pretrained_model $model
 
   # greedy prediction
   genienlp predict \

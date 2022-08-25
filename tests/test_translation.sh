@@ -21,6 +21,7 @@ for model in "Helsinki-NLP/opus-mt-en-de" ; do
 
     # save model
     genienlp train  \
+      $SHARED_TRAIN_HPARAMS \
       --train_tasks almond_translate \
       --train_languages en \
       --train_tgt_languages de \
@@ -31,11 +32,7 @@ for model in "Helsinki-NLP/opus-mt-en-de" ; do
       --train_batch_tokens 100 \
       --val_batch_size 100 \
       --train_iterations 0 \
-      --preserve_case \
-      --save $workdir/model_$i \
-      --exist_ok  \
-      --embeddings $EMBEDDING_DIR \
-      --no_commit
+      --save $workdir/model_$i
 
     # translate entities
     genienlp predict \
@@ -89,7 +86,9 @@ for model in "Helsinki-NLP/opus-mt-en-de" "sshleifer/tiny-mbart" ; do
     cp $workdir/translation/almond/train.tsv $workdir/translation/almond/eval.tsv
 
     # train
-    genienlp train --train_tasks almond_translate \
+    genienlp train \
+      $SHARED_TRAIN_HPARAMS \
+      --train_tasks almond_translate \
       --do_alignment \
       --train_languages en \
       --train_tgt_languages de \
@@ -100,15 +99,8 @@ for model in "Helsinki-NLP/opus-mt-en-de" "sshleifer/tiny-mbart" ; do
       --train_batch_tokens 100 \
       --val_batch_size 100 \
       --train_iterations 6 \
-      --preserve_case \
-      --save_every 2 \
-      --log_every 2 \
-      --val_every 2 \
       --save $workdir/model_$i \
-      --data $workdir/translation/ \
-      --exist_ok \
-      --embeddings $EMBEDDING_DIR \
-      --no_commit
+      --data $workdir/translation/
 
     # greedy prediction
     genienlp predict \

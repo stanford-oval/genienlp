@@ -11,20 +11,16 @@ do
 
   # train
   genienlp train \
+    $SHARED_TRAIN_HPARAMS \
     --train_tasks cross_ner \
     --model TransformerForTokenClassification \
     --pretrained_model bert-base-cased \
-    --force_fast_tokenizer --train_batch_tokens 200 \
+    --force_fast_tokenizer \
+    --train_batch_tokens 200 \
     --val_batch_size 200 \
-    --train_iterations 4 --preserve_case \
-    --save_every 2 \
-    --log_every 2 \
-    --val_every 2 \
+    --train_iterations 4 \
     --save $workdir/model_$i \
-    --data $SRCDIR/dataset/cross_ner/ \
-    --embeddings $EMBEDDING_DIR $hparams \
-    --exist_ok  \
-    --no_commit
+    --data $SRCDIR/dataset/cross_ner/
 
   # greedy prediction
   genienlp predict \
@@ -59,6 +55,7 @@ do
 
   # train
   genienlp train \
+    $SHARED_TRAIN_HPARAMS \
     --train_tasks conll2003 \
     --crossner_domains music \
     --model TransformerForTokenClassification \
@@ -68,15 +65,8 @@ do
     --train_batch_tokens 100 \
     --val_batch_size 100 \
     --train_iterations 4 \
-    --preserve_case \
-    --save_every 2 \
-    --log_every 2 \
-    --val_every 2 \
     --save $workdir/model_$i \
-    --data $SRCDIR/dataset/cross_ner/ \
-    --embeddings $EMBEDDING_DIR $hparams \
-    --exist_ok \
-    --no_commit
+    --data $SRCDIR/dataset/cross_ner/
 
   # greedy prediction
   genienlp predict \

@@ -19,20 +19,14 @@ for i in ${!hparams[*]};
 do
   # train
   genienlp train \
+    $SHARED_TRAIN_HPARAMS \
     --train_tasks ${tasks[i]} \
     --train_batch_tokens 100 \
     --val_batch_size 300 \
     --train_iterations 4 \
     --min_output_length 2 \
-    --preserve_case \
-    --save_every 2 \
-    --log_every 2 \
-    --val_every 2 \
     --save $workdir/model_$i \
-    --data $SRCDIR/dataset/bitod \
-    --exist_ok \
-    --embeddings $EMBEDDING_DIR \
-    --no_commit ${hparams[i]}
+    --data $SRCDIR/dataset/bitod
 
   # greedy prediction
   genienlp predict \
