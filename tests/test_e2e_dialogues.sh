@@ -26,7 +26,8 @@ do
     --train_iterations 4 \
     --min_output_length 2 \
     --save $workdir/model_$i \
-    --data $SRCDIR/dataset/bitod
+    --data $SRCDIR/dataset/bitod \
+    ${hparams[i]}
 
   # greedy prediction
   genienlp predict \

@@ -585,7 +585,11 @@ def have_multilingual(task_names):
     return any(['multilingual' in name for name in task_names])
 
 
-def load_config_file_to_args(args) -> bool:
+def load_config_file_to_args(args):
+    if not hasattr(args, 'is_hf_model'):
+        # --is_hf_model might not exist if this function is called by anything other than predict.py
+        setattr(args, 'is_hf_model', False)
+        
     if args.is_hf_model:
         # no config file found, treat `args.path` as a model name on HuggingFace model hub
         args.pretrained_model = args.path

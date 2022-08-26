@@ -20,7 +20,16 @@ genienlp train \
   --num_print 0
 
 # greedy prediction
-genienlp predict --tasks ood_task --evaluate valid --pred_set_name eval --path $workdir/model --overwrite --eval_dir $workdir/model/eval_results/ --data $SRCDIR/dataset/ood/ --embeddings $EMBEDDING_DIR  --val_batch_size 200
+genienlp predict \
+  --tasks ood_task \
+  --evaluate valid \
+  --pred_set_name eval \
+  --path $workdir/model \
+  --overwrite \
+  --eval_dir $workdir/model/eval_results/ \
+  --data $SRCDIR/dataset/ood/ \
+  --embeddings $EMBEDDING_DIR \
+  --val_batch_size 200
 
 # check if result file exists
 if test ! -f $workdir/model/eval_results/valid/ood_task.tsv ; then

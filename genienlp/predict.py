@@ -135,7 +135,7 @@ def parse_argv(parser):
     parser.add_argument(
         '--val_batch_size',
         nargs='+',
-        default=[4000],
+        default=None,
         type=int,
         help='Batch size for validation corresponding to tasks in val tasks',
     )
@@ -171,10 +171,9 @@ def parse_argv(parser):
         default=[0],
         help='ngrams of this size cannot be repeated in the output. 0 disables it.',
     )
-    parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
+    parser.add_argument('--max_output_length', type=int, help='maximum output length for generation')
     parser.add_argument(
         '--min_output_length',
-        default=3,
         type=int,
         help='maximum output length for generation; '
         'default is 3 for most multilingual models: BOS, language code, and one token. otherwise it is 2',
@@ -325,9 +324,9 @@ def check_args(args):
     if not args.pred_tgt_languages:
         setattr(args, 'pred_tgt_languages', [args.eval_tgt_languages])
     
-    if args.is_hf_model and (not args.pred_src_languages or not args.model):
+    if args.is_hf_model and (not args.pred_src_languages or not args.model or not args.min_output_length or not args.max_output_length or not args.val_batch_size):
         # because in for HF models we are not getting these values from genienlp's training script
-        raise ValueError('You need to specify --pred_languages and --model when directly loading a HuggingFace model.')
+        raise ValueError('You need to specify --pred_languages, --model, --min_output_length, --max_output_length and --val_batch_size when directly loading a HuggingFace model.')
 
     if len(args.task_names) != len(args.pred_src_languages):
         raise ValueError('You have to define prediction languages for each task in the same order you provided the tasks.')

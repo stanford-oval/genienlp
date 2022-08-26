@@ -20,7 +20,8 @@ do
     --val_batch_size 200 \
     --train_iterations 4 \
     --save $workdir/model_$i \
-    --data $SRCDIR/dataset/cross_ner/
+    --data $SRCDIR/dataset/cross_ner/ \
+    $hparams
 
   # greedy prediction
   genienlp predict \
@@ -66,7 +67,8 @@ do
     --val_batch_size 100 \
     --train_iterations 4 \
     --save $workdir/model_$i \
-    --data $SRCDIR/dataset/cross_ner/
+    --data $SRCDIR/dataset/cross_ner/ \
+    $hparams
 
   # greedy prediction
   genienlp predict \

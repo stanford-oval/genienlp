@@ -42,6 +42,9 @@ for model in \
     --embeddings $EMBEDDING_DIR \
     --pred_languages en \
     --model TransformerSeq2Seq \
+    --min_output_length 1 \
+    --max_output_length 150 \
+    --val_batch_size 100 \
     --is_hf_model
 
   # check if result file exists
