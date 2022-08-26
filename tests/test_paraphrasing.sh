@@ -77,9 +77,9 @@ for model in \
 done
 
 
-# paraphrasing tests
+# tests for the old paraphrasing code
 cp -r $SRCDIR/dataset/paraphrasing/ $workdir/paraphrasing/
-for model in  "gpt2" "sshleifer/bart-tiny-random" ; do
+for model in "sshleifer/bart-tiny-random" ; do
 
   if [[ $model == *gpt2* ]] ; then
     model_type="gpt2"
@@ -87,60 +87,9 @@ for model in  "gpt2" "sshleifer/bart-tiny-random" ; do
     model_type="bart"
   fi
 
-  # train a paraphrasing model for a few iterations
-  genienlp train-paraphrase \
-    --sort_by_length \
-    --input_column 0 \
-    --gold_column 1 \
-    --train_data_file $workdir/paraphrasing/train.tsv \
-    --eval_data_file $workdir/paraphrasing/dev.tsv \
-    --output_dir $workdir/"$model_type" \
-    --tensorboard_dir $workdir/tensorboard/ \
-    --model_type $model_type \
-    --do_train \
-    --do_eval \
-    --evaluate_during_training \
-    --overwrite_output_dir \
-    --logging_steps 1000 \
-    --save_steps 1000 \
-    --max_steps 4 \
-    --save_total_limit 1 \
-    --gradient_accumulation_steps 2 \
-    --per_gpu_eval_batch_size 1 \
-    --per_gpu_train_batch_size 1 \
-    --num_train_epochs 1 \
-    --model_name_or_path $model \
-    --overwrite_cache
-
-  # train a second paraphrasing model (testing num_input_chunks)
-  genienlp train-paraphrase \
-    --sort_by_length \
-    --num_input_chunks 2 \
-    --input_column 0 \
-    --gold_column 1 \
-    --train_data_file $workdir/paraphrasing/train.tsv \
-    --eval_data_file $workdir/paraphrasing/dev.tsv \
-    --output_dir $workdir/"$model_type"_2/ \
-    --tensorboard_dir $workdir/tensorboard/ \
-    --model_type $model_type \
-    --do_train \
-    --do_eval \
-    --evaluate_during_training \
-    --overwrite_output_dir \
-    --logging_steps 1000 \
-    --save_steps 1000 \
-    --max_steps 4 \
-    --save_total_limit 1 \
-    --gradient_accumulation_steps 2 \
-    --per_gpu_eval_batch_size 1 \
-    --per_gpu_train_batch_size 1 \
-    --num_train_epochs 1 \
-    --model_name_or_path $model \
-    --overwrite_cache
-
-  # use it to paraphrase almond's train set
+  # use a pre-trained model to paraphrase almond's train set
   genienlp run-paraphrase \
-    --model_name_or_path $workdir/"$model_type" \
+    --model_name_or_path $model \
     --length 15 \
     --temperature 0.4 \
     --repetition_penalty 1.0 \

@@ -45,7 +45,7 @@ from . import (
     write_kf_metrics,
 )
 from .ned.scripts import analyze_bootleg_results, oracle_vs_bootleg
-from .paraphrase import run_generation, run_lm_finetuning
+from .paraphrase import run_generation
 from .paraphrase.scripts import split_dataset
 from .sts import sts_calculate_scores, sts_filter
 
@@ -65,7 +65,6 @@ subcommands = {
     ),
     'server': ('Export RPC interface to predict', server.parse_argv, server.main),
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
-    'train-paraphrase': ('Train a paraphraser model', run_lm_finetuning.parse_argv, run_lm_finetuning.main),
     'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main),
     # calibration commands
     'calibrate': ('Train a confidence calibration model', calibrate.parse_argv, calibrate.main),
