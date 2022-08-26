@@ -20,6 +20,19 @@ for model in \
     --model TransformerSeq2Seq \
     --pretrained_model $model
 
+  # train for 0 iterations
+  genienlp train \
+  $SHARED_TRAIN_HPARAMS \
+  --train_tasks almond_natural_seq2seq \
+  --train_batch_tokens 100 \
+  --val_batch_size 100 \
+  --train_iterations 0 \
+  --save $workdir/model_$i \
+  --data $SRCDIR/dataset/ \
+  --model TransformerSeq2Seq \
+  --override_question "" \
+  --pretrained_model $model
+
   # greedy prediction
   genienlp predict \
     --tasks almond_paraphrase \
@@ -31,7 +44,7 @@ for model in \
     --embeddings $EMBEDDING_DIR \
     --extra_metrics rouge1 rougeL
 
-  # use a HuggingFace model directly in genienlp predict
+  # use as a HuggingFace model directly in genienlp predict
   genienlp predict \
     --tasks almond_paraphrase \
     --evaluate test \
@@ -48,10 +61,16 @@ for model in \
     --is_hf_model
 
   # check if result file exists
-  if test ! -f $workdir/model_$i/eval_results/test/almond_paraphrase.tsv || test ! -f $workdir/model_$i/eval_results/test/almond_paraphrase.results.json || test ! -f $workdir/model_$i/hf_results/test/almond_paraphrase.tsv ; then
+  if test ! -f $workdir/model_$i/eval_results/test/almond_paraphrase.tsv || \
+     test ! -f $workdir/model_$i/eval_results/test/almond_paraphrase.results.json || \
+     test ! -f $workdir/model_$i/hf_results/test/almond_paraphrase.tsv || \
+     test ! -f $workdir/model_$i/hf_results/test/almond_paraphrase.results.json; then
     echo "File not found!"
     exit 1
   fi
+
+  # check if eval_results matche hf_results
+  diff -u $workdir/model_$i/hf_results/test/almond_paraphrase.tsv $workdir/model_$i/eval_results/test/almond_paraphrase.tsv
 
   rm -rf $workdir/model_$i
   i=$((i+1))

@@ -53,7 +53,8 @@ do
     --e2e_dialogue_evaluation
 
   # check if result file exists
-  if ! [[ -f $workdir/model_$i/eval_results/test/${tasks[i]}.tsv || -f $workdir/model_$i/e2e_eval_results/test/e2e_dialogue_preds.json ]] ; then
+  if ! [[ -f $workdir/model_$i/eval_results/test/${tasks[i]}.tsv || \
+          -f $workdir/model_$i/e2e_eval_results/test/e2e_dialogue_preds.json ]] ; then
       echo "File not found!"
       exit 1
   fi
