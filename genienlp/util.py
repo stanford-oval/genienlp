@@ -589,11 +589,11 @@ def load_config_file_to_args(args):
     if not hasattr(args, 'is_hf_model'):
         # --is_hf_model might not exist if this function is called by anything other than predict.py
         setattr(args, 'is_hf_model', False)
-        
+
     if args.is_hf_model:
         # no config file found, treat `args.path` as a model name on HuggingFace model hub
         args.pretrained_model = args.path
-        args.override_question = "" # because HF models are trained without a separate question
+        args.override_question = ""  # because HF models are trained without a separate question
         config = vars(args).copy()
     else:
         with open(os.path.join(args.path, 'config.json')) as config_file:

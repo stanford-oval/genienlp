@@ -122,9 +122,11 @@ def is_entity(token):
 
 def is_device(token):
     if len(token) == 0:
-        raise IndexError("Detected an empty token ('') after tokenizing one of the is_program fields of the dataset, \
+        raise IndexError(
+            "Detected an empty token ('') after tokenizing one of the is_program fields of the dataset, \
                          most likely because one of your program data points contained a double whitespace. \
-                         A double whitespace in a ThingTalk program often signifies a bug in the synthesis or preprocessing code.")
+                         A double whitespace in a ThingTalk program often signifies a bug in the synthesis or preprocessing code."
+        )
     return token[0] == '@'
 
 
@@ -256,7 +258,7 @@ def return_sentences(text, regex_pattern, src_char_spans, is_cjk=False):
     cur = 0
     for m in re.finditer(regex_pattern, text, flags=re.U):
         if not inside_spans(m.start(0), src_char_spans):
-            sentences.append(text[cur: m.start(0) + (1 if is_cjk else 0)])
+            sentences.append(text[cur : m.start(0) + (1 if is_cjk else 0)])
             cur = m.end(0)
     if cur != len(text):
         sentences.append(text[cur:])

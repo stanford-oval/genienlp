@@ -36,9 +36,8 @@ import shutil
 from collections import defaultdict
 from pprint import pformat
 
-from torch.multiprocessing import Process, set_start_method
-
 import torch
+from torch.multiprocessing import Process, set_start_method
 
 from . import models
 from .arguments import check_and_update_generation_args
@@ -61,8 +60,11 @@ logger = logging.getLogger(__name__)
 
 
 def parse_argv(parser):
-    parser.add_argument('--is_hf_model', action='store_true',
-                        help='Whether the model should be directly loaded from HuggingFace model hub. If True, `--path` is the full model name.')
+    parser.add_argument(
+        '--is_hf_model',
+        action='store_true',
+        help='Whether the model should be directly loaded from HuggingFace model hub. If True, `--path` is the full model name.',
+    )
     parser.add_argument(
         '--model',
         type=str,
@@ -323,10 +325,18 @@ def check_args(args):
         setattr(args, 'pred_src_languages', [args.eval_src_languages])
     if not args.pred_tgt_languages:
         setattr(args, 'pred_tgt_languages', [args.eval_tgt_languages])
-    
-    if args.is_hf_model and (not args.pred_src_languages or not args.model or not args.min_output_length or not args.max_output_length or not args.val_batch_size):
+
+    if args.is_hf_model and (
+        not args.pred_src_languages
+        or not args.model
+        or not args.min_output_length
+        or not args.max_output_length
+        or not args.val_batch_size
+    ):
         # because in for HF models we are not getting these values from genienlp's training script
-        raise ValueError('You need to specify --pred_languages, --model, --min_output_length, --max_output_length and --val_batch_size when directly loading a HuggingFace model.')
+        raise ValueError(
+            'You need to specify --pred_languages, --model, --min_output_length, --max_output_length and --val_batch_size when directly loading a HuggingFace model.'
+        )
 
     if len(args.task_names) != len(args.pred_src_languages):
         raise ValueError('You have to define prediction languages for each task in the same order you provided the tasks.')
@@ -347,7 +357,6 @@ def check_args(args):
 
     if args.main_metric_only and args.extra_metrics:
         raise ValueError('Please remove --main_metric_only from your arguments so the requested extra metrics can be shown.')
-
 
 
 def prepare_data(args):
@@ -473,12 +482,13 @@ def run(args, device):
     model_class = getattr(models, args.model)
     if args.is_hf_model:
         logger.info(f'Loading model {args.path} from HuggingFace model hub')
-        model = model_class(args=args,
-                            vocab_sets=None,
-                            tasks=args.tasks,
-                            src_lang=args.pred_src_languages[0],
-                            tgt_lang=args.pred_tgt_languages[0]
-                            )
+        model = model_class(
+            args=args,
+            vocab_sets=None,
+            tasks=args.tasks,
+            src_lang=args.pred_src_languages[0],
+            tgt_lang=args.pred_tgt_languages[0],
+        )
     else:
         # TODO handle multiple languages
         model, _ = model_class.load(
@@ -615,7 +625,7 @@ def main(args):
         set_start_method('spawn')
     except RuntimeError:
         pass
-    
+
     load_config_file_to_args(args)
     check_and_update_generation_args(args)
     check_args(args)
