@@ -476,7 +476,7 @@ def input_heuristics(s: str, thingtalk=None, is_cased=False, keep_special_tokens
     s = tokenize(s)
 
     # Put question mark at the end whenever necessary.
-    sentences = [sentence.strip() for sentence in re.split('\s+([.?!:])\s*', s) if len(sentence) > 0]
+    sentences = [sentence.strip() for sentence in re.split('\s+([.?!])\s*', s) if len(sentence) > 0]
     # logger.info('sentences = %s', sentences)
     for idx in range(len(sentences)):
         if sentences[idx] in ['.', '?', '!', ':']:

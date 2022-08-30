@@ -121,6 +121,12 @@ def is_entity(token):
 
 
 def is_device(token):
+    if len(token) == 0:
+        raise IndexError(
+            "Detected an empty token ('') after tokenizing one of the is_program fields of the dataset, \
+                         most likely because one of your program data points contained a double whitespace. \
+                         A double whitespace in a ThingTalk program often signifies a bug in the synthesis or preprocessing code."
+        )
     return token[0] == '@'
 
 

@@ -1,27 +1,52 @@
-# Genie NLP library
+<p align="center">
+<img style="vertical-align:middle;margin:-10px" width="150" src="https://avatars.githubusercontent.com/u/13667124" />
+</p>
+<h1 align="center">
+<span>GenieNLP</span>
+</h1>
 
-[![Build Status](https://travis-ci.com/stanford-oval/genienlp.svg?branch=master)](https://travis-ci.com/stanford-oval/genienlp) [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/stanford-oval/genienlp.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/stanford-oval/genienlp/context:python)
+<p align="center">
+<a href="https://app.travis-ci.com/github/stanford-oval/genienlp"><img src="https://travis-ci.com/stanford-oval/genienlp.svg?branch=master" alt="Build Status"></a>
+<a href="https://pypi.org/project/genienlp/"><img src="https://img.shields.io/pypi/dm/genienlp" alt="PyPI Downloads"></a>
+<a href="https://github.com/stanford-oval/genienlp/stargazers"><img src="https://img.shields.io/github/stars/stanford-oval/genienlp?style=social" alt="Github Stars"></a>
+</p>
 
-This library contains the NLP models for the [Genie](https://github.com/stanford-oval/genie-toolkit) toolkit for
-virtual assistants. It is derived from the [decaNLP](https://github.com/salesforce/decaNLP) library by Salesforce,
-but has diverged significantly.
 
-The library is suitable for all NLP tasks that can be framed as Contextual Question Answering, that is, with 3 inputs:
+GenieNLP is suitable for all NLP tasks, including text generation (e.g. translation, paraphasing), token classification (e.g. named entity recognition) and sequence classification (e.g. NLI, sentiment analysis).
 
-- text or structured input as _context_
-- text input as _question_
-- text or structured output as _answer_
 
-As the work by [McCann et al.](https://arxiv.org/abs/1806.08730) shows, many NLP tasks can be framed in this way.
-Genie primarily uses the library for semantic parsing, paraphrasing, translation, and dialogue state tracking, and this is
-what the models work best for.
+This library contains the code to run NLP models for the [Genie Toolkit](https://github.com/stanford-oval/genie-toolkit) and the [Genie Virtual Assistant](https://genie.stanford.edu/).
+Genie primarily uses this library for semantic parsing, paraphrasing, translation, and dialogue state tracking. Therefore, GenieNLP has a lot of extra features for these tasks.
+
+Works with [🤗 models](https://huggingface.co/models) and [🤗 Datasets](https://huggingface.co/datasets).
+
+## Table of Contents <!-- omit in TOC -->
+
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Training a semantic parser](#training-a-semantic-parser)
+  - [Inference on a semantic parser](#inference-on-a-semantic-parser)
+  - [Calibrating a trained model](#calibrating-a-trained-model)
+  - [Paraphrasing](#paraphrasing)
+  - [Translation](#translation)
+  - [Named Entity Disambiguation](#named-entity-disambiguation)
+- [Citation](#citation)
+
 
 ## Installation
 
-genienlp is available on PyPi. You can install it with:
+GenieNLP is tested with Python 3.8.
+You can install the latest release with pip from PyPI:
 
 ```bash
-pip3 install genienlp
+pip install genienlp
+```
+
+Or from source:
+```bash
+git clone https://github.com/stanford-oval/genienlp.git
+cd genienlp
+pip install -e .  # -e means your changes to the code will automatically take effect without the need to reinstall
 ```
 
 After installation, `genienlp` command becomes available.
@@ -108,12 +133,6 @@ Calibrate the confidence scores of a trained model. This is usually done on the 
 
 ### Paraphrasing
 
-Train a paraphrasing model:
-
-```bash
-genienlp train-paraphrase --train_data_file <train_data_file> --eval_data_file <dev_data_file> --output_dir <model_dir> --model_type gpt2 --do_train --do_eval --evaluate_during_training --logging_steps 1000 --save_steps 1000 --max_steps 40000 --save_total_limit 2 --gradient_accumulation_steps 16 --per_gpu_eval_batch_size 4 --per_gpu_train_batch_size 4 --num_train_epochs 1 --model_name_or_path <gpt2/gpt2-medium/gpt2-large/gpt2-xlarge>
-```
-
 Generate paraphrases:
 
 ```bash
@@ -160,7 +179,7 @@ See `genienlp --help` and `genienlp <command> --help` for more details about eac
 
 ## Citation
 
-If you use the MultiTask Question Answering model in your work, please cite [*The Natural Language Decathlon: Multitask Learning as Question Answering*](https://arxiv.org/abs/1806.08730).
+If you use multiTask training in your work, please cite [*The Natural Language Decathlon: Multitask Learning as Question Answering*](https://arxiv.org/abs/1806.08730).
 
 ```bibtex
 @article{McCann2018decaNLP,
@@ -221,5 +240,22 @@ If you use multilingual models such as MarianMT, MBART, MT5, or XLMR-LSTM for Se
   author={Moradshahi, Mehrad and Tsai, Victoria and Campagna, Giovanni and Lam, Monica S},
   journal={arXiv preprint arXiv:2111.02574},
   year={2021}
+}
+```
+
+If you use English models such as BART for Seq2Seq tasks, please cite [A Few-Shot Semantic Parser for Wizard-of-Oz Dialogues with the Precise ThingTalk Representation](https://aclanthology.org/2022.findings-acl.317/), and the original paper that introduced the model.
+
+```bibtex
+@inproceedings{campagna-etal-2022-shot,
+    title = "A Few-Shot Semantic Parser for {W}izard-of-{O}z Dialogues with the Precise {T}hing{T}alk Representation",
+    author = "Campagna, Giovanni  and Semnani, Sina  and Kearns, Ryan  and Koba Sato, Lucas Jun  and Xu, Silei  and Lam, Monica",
+    booktitle = "Findings of the Association for Computational Linguistics: ACL 2022",
+    month = may,
+    year = "2022",
+    address = "Dublin, Ireland",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2022.findings-acl.317",
+    doi = "10.18653/v1/2022.findings-acl.317",
+    pages = "4021--4034",
 }
 ```

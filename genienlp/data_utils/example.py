@@ -138,12 +138,8 @@ class NumericalizedExamples(NamedTuple):
         numericalized_examples = []
         args = numericalizer.args
 
-        if args.no_separator:
-            sep_token = ' '
-            pad_feature = []
-        else:
-            sep_token = ' ' + numericalizer.sep_token + ' '
-            pad_feature = [Entity.get_pad_entity(args.max_features_size)]
+        sep_token = ' ' + numericalizer.sep_token + ' '
+        pad_feature = [Entity.get_pad_entity(args.max_features_size)]
 
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []

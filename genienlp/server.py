@@ -45,7 +45,7 @@ from .calibrate import ConfidenceEstimator
 from .data_utils.example import Example, NumericalizedExamples
 from .ned.ned_utils import init_ned_model
 from .tasks.registry import get_tasks
-from .util import adjust_language_code, get_devices, load_config_json, log_model_size, set_seed
+from .util import adjust_language_code, get_devices, load_config_file_to_args, log_model_size, set_seed
 
 logger = logging.getLogger(__name__)
 
@@ -327,7 +327,7 @@ class Server(object):
 
 
 def init(args):
-    load_config_json(args)
+    load_config_file_to_args(args)
     check_and_update_generation_args(args)
     if not args.src_locale:
         args.src_locale = args.eval_src_languages

@@ -30,20 +30,8 @@ import os
 import re
 
 import numpy as np
-from torch.multiprocessing import Process, set_start_method
-
-from ..data_utils.almond_utils import tokenize_cjk_chars
-from ..data_utils.progbar import prange
-from ..model_utils.translation import compute_attention
-from .data_utils import create_features_from_tsv_file, output_heuristics
-from .model_utils import compute_metrics, force_replace_quoted_params, replace_quoted_params
-
-try:
-    set_start_method('spawn')
-except RuntimeError:
-    pass
-
 import torch
+from torch.multiprocessing import Process, set_start_method
 from transformers import (
     BartForConditionalGeneration,
     BartTokenizer,
@@ -58,11 +46,14 @@ from transformers import (
     T5Tokenizer,
 )
 
+from ..data_utils.almond_utils import tokenize_cjk_chars
+from ..data_utils.progbar import prange
 from ..model_utils.transformers_utils import GenieMBartTokenizer
+from ..model_utils.translation import compute_attention
 from ..util import combine_files_on_disk, get_part_path, set_seed, split_file_on_disk
-from .data_utils import group_together
+from .data_utils import create_features_from_tsv_file, group_together, output_heuristics
 from .GPT2Seq2Seq import GPT2Seq2Seq
-from .model_utils import check_args
+from .model_utils import check_args, compute_metrics, force_replace_quoted_params, replace_quoted_params
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s', datefmt='%m/%d/%Y %H:%M:%S', level=logging.INFO
@@ -302,6 +293,11 @@ def parse_argv(parser):
 
 
 def main(args):
+    try:
+        set_start_method('spawn')
+    except RuntimeError:
+        pass
+
     hyperparameters = [
         'num_samples',
         'temperature',

@@ -35,7 +35,7 @@ import torch
 
 from . import models
 from .calibrate import ConfidenceEstimator
-from .util import load_config_json
+from .util import load_config_file_to_args
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ def parse_argv(parser):
 
 def main(args):
     os.makedirs(args.output, exist_ok=True)
-    load_config_json(args)
+    load_config_file_to_args(args)
 
     # load everything - this will ensure that we initialize the numericalizer correctly
     Model = getattr(models, args.model)

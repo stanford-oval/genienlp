@@ -20,13 +20,48 @@ for model in "Helsinki-NLP/opus-mt-en-de" ; do
     cp $workdir/translation/almond/train.tsv $workdir/translation/almond/eval.tsv
 
     # save model
-    genienlp train  --train_tasks almond_translate --train_languages en --train_tgt_languages de --eval_languages en --eval_tgt_languages de --model TransformerSeq2Seq --pretrained_model $model --train_batch_tokens 100 --val_batch_size 100 --train_iterations 0 --preserve_case --save $workdir/model_$i --exist_ok  --embeddings $EMBEDDING_DIR --no_commit
+    genienlp train  \
+      $SHARED_TRAIN_HPARAMS \
+      --train_tasks almond_translate \
+      --train_languages en \
+      --train_tgt_languages de \
+      --eval_languages en \
+      --eval_tgt_languages de \
+      --model TransformerSeq2Seq \
+      --pretrained_model $model \
+      --train_batch_tokens 100 \
+      --val_batch_size 100 \
+      --train_iterations 0 \
+      --save $workdir/model_$i
 
     # translate entities
-    genienlp predict --tasks almond_translate --translate_only_entities --top_p 0.9 --temperature 0.3 0.5 0.7 --evaluate valid --pred_languages en --pred_tgt_languages de --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/entities/ --data $workdir/translation/ --embeddings $EMBEDDING_DIR
+    genienlp predict \
+      --tasks almond_translate \
+      --translate_only_entities \
+      --top_p 0.9 \
+      --temperature 0.3 0.5 0.7 \
+      --evaluate valid \
+      --pred_languages en \
+      --pred_tgt_languages de \
+      --path $workdir/model_$i \
+      --overwrite \
+      --eval_dir $workdir/model_$i/entities/ \
+      --data $workdir/translation/ \
+      --embeddings $EMBEDDING_DIR
 
     # translate sentence (using entity dictionary)
-    genienlp predict --tasks almond_translate --do_alignment --align_helper_file $workdir/model_$i/entities/almond_translate.tsv --evaluate valid --pred_languages en --pred_tgt_languages de --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $workdir/translation/ --embeddings $EMBEDDING_DIR
+    genienlp predict \
+      --tasks almond_translate \
+      --do_alignment \
+      --align_helper_file $workdir/model_$i/entities/almond_translate.tsv \
+      --evaluate valid \
+      --pred_languages en \
+      --pred_tgt_languages de \
+      --path $workdir/model_$i \
+      --overwrite \
+      --eval_dir $workdir/model_$i/eval_results/ \
+      --data $workdir/translation/ \
+      --embeddings $EMBEDDING_DIR
 
     # check if result file exists and matches expected_result
     echo $expected_result | diff -u - $workdir/model_$i/eval_results/valid/almond_translate.results.json
@@ -51,13 +86,42 @@ for model in "Helsinki-NLP/opus-mt-en-de" "sshleifer/tiny-mbart" ; do
     cp $workdir/translation/almond/train.tsv $workdir/translation/almond/eval.tsv
 
     # train
-    genienlp train --train_tasks almond_translate --do_alignment --train_languages en --train_tgt_languages de --eval_languages en --eval_tgt_languages de --model TransformerSeq2Seq --pretrained_model $model --train_batch_tokens 100 --val_batch_size 100 --train_iterations 6 --preserve_case --save_every 2 --log_every 2 --val_every 2 --save $workdir/model_$i --data $workdir/translation/ --exist_ok  --embeddings $EMBEDDING_DIR --no_commit
+    genienlp train \
+      $SHARED_TRAIN_HPARAMS \
+      --train_tasks almond_translate \
+      --do_alignment \
+      --train_languages en \
+      --train_tgt_languages de \
+      --eval_languages en \
+      --eval_tgt_languages de \
+      --model TransformerSeq2Seq \
+      --pretrained_model $model \
+      --train_batch_tokens 100 \
+      --val_batch_size 100 \
+      --train_iterations 6 \
+      --save $workdir/model_$i \
+      --data $workdir/translation/
 
     # greedy prediction
-    genienlp predict --tasks almond_translate --evaluate valid --pred_languages en --pred_tgt_languages de --path $workdir/model_$i --overwrite --eval_dir $workdir/model_$i/eval_results/ --data $workdir/translation/ --embeddings $EMBEDDING_DIR
+    genienlp predict \
+      --tasks almond_translate \
+      --evaluate valid \
+      --pred_languages en \
+      --pred_tgt_languages de \
+      --path $workdir/model_$i \
+      --overwrite \
+      --eval_dir $workdir/model_$i/eval_results/ \
+      --data $workdir/translation/ \
+      --embeddings $EMBEDDING_DIR
 
     # compute same metrics using evaluate-file command
-    genienlp evaluate-file --tasks almond_translate --pred_languages en --pred_tgt_languages de --overwrite --pred_file $workdir/model_$i/eval_results/valid/almond_translate.tsv --eval_dir $workdir/model_$i/eval_results_again/valid/
+    genienlp evaluate-file \
+    --tasks almond_translate \
+    --pred_languages en \
+    --pred_tgt_languages de \
+    --overwrite \
+    --pred_file $workdir/model_$i/eval_results/valid/almond_translate.tsv \
+    --eval_dir $workdir/model_$i/eval_results_again/valid/
 
     # check if result file exists and matches expected_result
     echo $expected_result | diff -u - $workdir/model_$i/eval_results/valid/almond_translate.results.json
@@ -82,7 +146,24 @@ for model in "t5-small" "Helsinki-NLP/opus-mt-en-de" ; do
   fi
 
   # use a pre-trained model
-  genienlp run-paraphrase --model_name_or_path $model --length 15 --temperature 0 --repetition_penalty 1.0 --num_samples 1 --batch_size 3 --input_file $workdir/translation/en-de/dev_"$base_model"_aligned.tsv --input_column 1 --gold_column 2 --output_file $workdir/generated_"$base_model"_aligned.tsv  --skip_heuristics --att_pooling mean --task translate --src_lang en --tgt_lang de --replace_qp --output_attentions
+  genienlp run-paraphrase \
+    --model_name_or_path $model \
+    --length 15 \
+    --temperature 0 \
+    --repetition_penalty 1.0 \
+    --num_samples 1 \
+    --batch_size 3 \
+    --input_file $workdir/translation/en-de/dev_"$base_model"_aligned.tsv \
+    --input_column 1 \
+    --gold_column 2 \
+    --output_file $workdir/generated_"$base_model"_aligned.tsv  \
+    --skip_heuristics \
+    --att_pooling mean \
+    --task translate \
+    --src_lang en \
+    --tgt_lang de \
+    --replace_qp \
+    --output_attentions
 
   if [ $i == 3 ] ; then
     # check if predictions matches expected_results
