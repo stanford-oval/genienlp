@@ -591,7 +591,7 @@ class GenieModelForGeneration(GenieModel):
 
                 elif do_api_call == 'no':
                     # do nothing
-                    new_knowledge_text = 'null'
+                    pass
                 else:
                     logger.error(
                         f'API call should be either yes or no but got {do_api_call}. Seems model has not learnt the task yet. For now we assume it\'s a no'
