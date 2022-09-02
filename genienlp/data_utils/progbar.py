@@ -78,7 +78,7 @@ def progress_bar(iterable, desc=None, total=None, disable=False):
     if sys.stderr.isatty():
         return tqdm(iterable, desc=desc, total=total)
     else:
-        return LogFriendlyProgressBar(iterable, desc=desc, total=total, step=5)
+        return LogFriendlyProgressBar(iterable, desc=desc, total=total, step=10)
 
 
 def prange(*args, desc=None, disable=False):

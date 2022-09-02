@@ -229,7 +229,9 @@ def validate_while_training(task, val_iter, model, args, num_print=10):
             # get rid of the DataParallel wrapper
             model = model.module
 
-        validation_output = model.validate(val_iter, task)
+        validation_output = model.validate(
+            val_iter, task, disable_progbar=len(val_iter) < 500
+        )  # show progress bar if there are more than 500 batches in the validation set
 
         # loss is already calculated
         metrics_to_compute = [metric for metric in task.metrics if metric != 'loss']
@@ -445,7 +447,7 @@ def train(
         for task, dataset, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)
     ]
     t1 = time.time()
-    logger.info('Preparing iterators took {:.2f} seconds'.format(t1 - t0))
+    logger.info('Preparing train iterators took %d minutes and %.2f seconds', int((t1 - t0) // 60), (t1 - t0) % 60)
 
     train_iters = [(task, iter(train_iter)) for task, train_iter in train_iters]
     # save memory
