@@ -31,6 +31,7 @@
 import logging
 import random
 
+import numpy as np
 import torch
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             self.data_source, self.original_order = tuple(zip(*sorted_data_with_original_order))
         else:
             self.data_source, self.original_order = data_source, list(range(len(data_source)))
+        self.data_source_marked = np.zeros(shape=(len(self.data_source)))  # mark each example that has been used in a batch
         self.batch_size = batch_size  # number of examples or number of tokens
         self.shuffle_and_repeat = shuffle_and_repeat
         self.last_batch_start_index = 0
@@ -94,6 +96,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
 
     def __iter__(self):
         self.last_batch_start_index = 0
+        self.data_source_marked = np.zeros(shape=(len(self.data_source)))
         self.last_batch_start_index = self._get_next_batch_start_index()
         return self
 
@@ -108,6 +111,7 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         while current_batch_size < self.batch_size:
             candidate_example = self.data_source[candidate_index]
             if self.batch_size_fn([candidate_example]) > self.batch_size:
+                # the example is too big even on its own
                 global _warned_for_batch_size
                 if self.no_skip:
                     raise ValueError(
@@ -118,8 +122,8 @@ class LengthSortedIterator(torch.utils.data.Sampler):
                         'Skipping an example larger than batch size. Consider increasing the batch size to avoid this warning'
                     )
                     _warned_for_batch_size = True
-                self.last_batch_start_index += 1
-                candidate_index += 1
+                self.last_batch_start_index = self._next_unmarked_index(self.last_batch_start_index)
+                candidate_index = self._next_unmarked_index(candidate_index)
                 if candidate_index >= len(self.data_source):
                     # This is the end of the iterator
                     assert not self.shuffle_and_repeat
@@ -134,8 +138,9 @@ class LengthSortedIterator(torch.utils.data.Sampler):
                 break
 
             batch_of_indices.append(candidate_index)
+            self.data_source_marked[candidate_index] = 1  # mark this index
             current_batch_size = candidate_batch_size
-            candidate_index += 1
+            candidate_index = self._next_unmarked_index(candidate_index)
 
             if candidate_index == len(self.data_source):
                 break  # don't start from i=0; there is a large difference between the length of the first and last element
@@ -143,9 +148,28 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         self.last_batch_start_index += len(batch_of_indices)
         return batch_of_indices
 
+    def _unmarked_index_to_datasource_index(self, index: int) -> int:
+        return np.searchsorted(np.arange(0, len(self.data_source)) - np.cumsum(self.data_source_marked), index, side='left')
+
+    def _next_unmarked_index(self, index: int) -> int:
+        """
+        or stop at len(self.data_source)
+        """
+        index += 1
+        while index < len(self.data_source) and self.data_source_marked[index] == 1:
+            index += 1
+        return index
+
     def _get_next_batch_start_index(self):
         if self.shuffle_and_repeat:
+            examples_left_in_epoch = len(self.data_source) - np.sum(self.data_source_marked)
+            if examples_left_in_epoch == 0:
+                # start a new epoch
+                self.data_source_marked = np.zeros(shape=(len(self.data_source)))
+                examples_left_in_epoch = len(self.data_source)
             # if self.groups > 1, this ensures that the start of each batch is a multiply of self.groups, i.e. where a group starts
-            return random.randrange(0, len(self.data_source) / self.groups) * self.groups
+            start_idx = random.randrange(0, examples_left_in_epoch / self.groups) * self.groups
+            start_idx = self._unmarked_index_to_datasource_index(start_idx)
+            return start_idx
         else:
             return self.last_batch_start_index
