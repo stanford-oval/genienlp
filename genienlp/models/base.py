@@ -570,9 +570,7 @@ class GenieModelForGeneration(GenieModel):
                 dataset.update_state(state_update, dialogue_state)
 
                 #### save latest state
-                state_to_record = copy.deepcopy(dialogue_state)
-                state_to_record = {dataset.domain2api_name(k): v for k, v in state_to_record.items()}
-                e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["state"] = state_to_record
+                e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["state"] = dataset.state2span(dialogue_state)
                 ####
 
             elif train_target == 'api':
@@ -804,9 +802,7 @@ class GenieModelForGeneration(GenieModel):
                     new_state_text = dataset.state2span(dialogue_state)
 
                     #### save latest state
-                    state_to_record = copy.deepcopy(dialogue_state)
-                    state_to_record = {dataset.domain2api_name(k): v for k, v in state_to_record.items()}
-                    e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["state"] = state_to_record
+                    e2e_dialogue_preds[dial_id]["turns"][str(turn_id)]["state"] = new_state_text
                     ####
 
                 elif train_target == 'api':
