@@ -307,7 +307,9 @@ def elapsed_time(log):
     return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
-def make_data_loader(dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False):
+def make_data_loader(
+    dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False, batching_algorithm='sample'
+):
     args = numericalizer.args
     all_features = NumericalizedExamples.from_examples(dataset, numericalizer)
 
@@ -386,6 +388,7 @@ def make_data_loader(dataset, numericalizer, batch_size, device=None, train=Fals
         sort_key_fn=sort_key_fn,
         batch_size_fn=batch_size_fn,
         groups=dataset.groups,
+        batching_algorithm=batching_algorithm,
     )
     # get the sorted data_source
     all_f = sampler.data_source

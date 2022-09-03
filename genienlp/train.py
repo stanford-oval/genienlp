@@ -443,7 +443,12 @@ def train(
 
     t0 = time.time()
     train_iters = [
-        (task, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
+        (
+            task,
+            make_data_loader(
+                dataset, numericalizer, tok, main_device, train=True, batching_algorithm=args.train_batching_algorithm
+            ),
+        )
         for task, dataset, tok in zip(args.train_tasks, train_sets, args.train_batch_tokens)
     ]
     t1 = time.time()
@@ -454,7 +459,10 @@ def train(
     del train_sets
 
     val_iters = [
-        (task, make_data_loader(dataset, numericalizer, bs, main_device, train=False))
+        (
+            task,
+            make_data_loader(dataset, numericalizer, bs, main_device, train=False),
+        )  # no need to specify batching_algorithm for validation sets
         for task, dataset, bs in zip(args.val_tasks, val_sets, args.val_batch_size)
     ]
     # save memory
@@ -463,7 +471,12 @@ def train(
     aux_iters = []
     if use_curriculum:
         aux_iters = [
-            (name, make_data_loader(dataset, numericalizer, tok, main_device, train=True))
+            (
+                name,
+                make_data_loader(
+                    dataset, numericalizer, tok, main_device, train=True, batching_algorithm=args.train_batching_algorithm
+                ),
+            )
             for name, dataset, tok in zip(args.train_tasks, aux_sets, args.train_batch_tokens)
         ]
         aux_iters = [(task, iter(aux_iter)) for task, aux_iter in aux_iters]

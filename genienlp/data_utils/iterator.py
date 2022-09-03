@@ -42,7 +42,17 @@ _warned_for_batch_size = False
 class LengthSortedIterator(torch.utils.data.Sampler):
     """ """
 
-    def __init__(self, data_source, batch_size, sort, shuffle_and_repeat, sort_key_fn, batch_size_fn, groups=1):
+    def __init__(
+        self,
+        data_source,
+        batch_size,
+        sort,
+        shuffle_and_repeat,
+        sort_key_fn,
+        batch_size_fn,
+        groups=1,
+        batching_algorithm='sample',
+    ):
         """
         batch_size: can be number of tokens or number of examples, the type is inferred from batch_size_fn
         sort: if False, disables sorting and uses the original order. Useful for evaluation.
@@ -57,6 +67,9 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         self.sort_key = sort_key_fn
         self.batch_size_fn = batch_size_fn
         self.groups = groups
+        if batching_algorithm not in ['sample', 'epoch']:
+            raise ValueError('--batching_algorithm must be one of `sample` or `epoch`')
+        self.batching_algorithm = batching_algorithm
 
         if sort:
             # sort while keeping track of the original order
@@ -138,7 +151,8 @@ class LengthSortedIterator(torch.utils.data.Sampler):
                 break
 
             batch_of_indices.append(candidate_index)
-            self.data_source_marked[candidate_index] = 1  # mark this index
+            if self.batching_algorithm == 'epoch':
+                self.data_source_marked[candidate_index] = 1  # mark this index until the end of this epoch
             current_batch_size = candidate_batch_size
             candidate_index = self._next_unmarked_index(candidate_index)
 
@@ -155,21 +169,26 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         """
         or stop at len(self.data_source)
         """
+        a = index
         index += 1
         while index < len(self.data_source) and self.data_source_marked[index] == 1:
             index += 1
+        assert index == a + 1
         return index
 
     def _get_next_batch_start_index(self):
         if self.shuffle_and_repeat:
             examples_left_in_epoch = len(self.data_source) - np.sum(self.data_source_marked)
+            assert np.sum(self.data_source_marked) == 0
             if examples_left_in_epoch == 0:
                 # start a new epoch
                 self.data_source_marked = np.zeros(shape=(len(self.data_source)))
                 examples_left_in_epoch = len(self.data_source)
             # if self.groups > 1, this ensures that the start of each batch is a multiply of self.groups, i.e. where a group starts
             start_idx = random.randrange(0, examples_left_in_epoch / self.groups) * self.groups
+            a = start_idx
             start_idx = self._unmarked_index_to_datasource_index(start_idx)
+            assert a == start_idx
             return start_idx
         else:
             return self.last_batch_start_index
