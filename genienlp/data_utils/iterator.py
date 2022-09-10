@@ -169,26 +169,21 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         """
         or stop at len(self.data_source)
         """
-        a = index
         index += 1
         while index < len(self.data_source) and self.data_source_marked[index] == 1:
             index += 1
-        assert index == a + 1
         return index
 
     def _get_next_batch_start_index(self):
         if self.shuffle_and_repeat:
             examples_left_in_epoch = len(self.data_source) - np.sum(self.data_source_marked)
-            assert np.sum(self.data_source_marked) == 0
             if examples_left_in_epoch == 0:
                 # start a new epoch
                 self.data_source_marked = np.zeros(shape=(len(self.data_source)))
                 examples_left_in_epoch = len(self.data_source)
             # if self.groups > 1, this ensures that the start of each batch is a multiply of self.groups, i.e. where a group starts
             start_idx = random.randrange(0, examples_left_in_epoch / self.groups) * self.groups
-            a = start_idx
             start_idx = self._unmarked_index_to_datasource_index(start_idx)
-            assert a == start_idx
             return start_idx
         else:
             return self.last_batch_start_index
