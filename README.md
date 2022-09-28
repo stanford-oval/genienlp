@@ -51,6 +51,13 @@ pip install -e .  # -e means your changes to the code will automatically take ef
 
 After installation, `genienlp` command becomes available.
 
+Some GenieNLP commands have additional dependencies for plotting and entity detection. If you are using those commands, you can obtain their dependencies by running the following:
+
+```
+pip install matplotlib~=3.0 seaborn~=0.9
+python -m spacy download en_core_web_sm
+```
+
 ## Usage
 
 ### Training a semantic parser

@@ -172,6 +172,13 @@ def parse_argv(parser):
         '--sentence_batching', action='store_true', help='Batch same sentences together (used for multilingual tasks)'
     )
     parser.add_argument(
+        '--train_batching_algorithm',
+        type=str,
+        default='sample',
+        choices=['sample', 'epoch'],
+        help='`sample` will sample batches from the training set but shorter examples will have a higher probability of being selected, `epoch` will sample but ensure that each training example is seen exactly N times before any example is seen N+1 times.',
+    )
+    parser.add_argument(
         '--use_encoder_loss',
         action='store_true',
         help='Force encoded values for sentences in different languages to be the same',
