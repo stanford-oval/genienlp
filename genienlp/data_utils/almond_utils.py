@@ -106,7 +106,7 @@ CJK_RANGES = [
     (ord(u"\U0002b820"), ord(u"\U0002ceaf")),
 ]
 
-CJK_ADDONS = [ord(u"\u3001")]
+CJK_ADDONS = [ord(u"\u3001"), ord('，'), ord('。'), ord('！'), ord('？')]
 
 
 def is_cjk_char(cp):

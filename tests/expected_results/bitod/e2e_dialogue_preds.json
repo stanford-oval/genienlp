@@ -2,7 +2,7 @@
   "ec909032-d5fd-4dee-8dd2-53a895a98824": {
     "turns": {
       "1": {
-        "state": {},
+        "state": "null",
         "api": "null",
         "actions": "Two herry null herry ( Hotels suchen ) herry herry herry Hey, kannst du mir bei der Hotelbuchung helfen? <endofknowledge> herry <endofknowledge> herry <endofknowledge> herry <endofknowledge> herry <endofknowledge> herry DA: herry <endofknowledge> herry <endofknowledge> herry <endofknowledge> herry <endofknowledge> herry DA: sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet sweet s",
         "response": [
@@ -10,9 +10,7 @@
         ]
       },
       "2": {
-        "state": {
-          "Hotels suchen": {}
-        },
+        "state": "( Hotels suchen )",
         "api": "null",
         "actions": "Sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat sweat ",
         "response": [
@@ -20,9 +18,7 @@
         ]
       },
       "3": {
-        "state": {
-          "Hotels suchen": {}
-        },
+        "state": "( Hotels suchen )",
         "api": "null",
         "actions": "Sweat overnight null overnight ( hotels search ) location level_to \" keine Sorge \" , rating at_least \" 4 \" , stars level_to \" 5 \" sweat sweat sweat overnight ( hotels search ) location anfordern , quest rating AGENT_ Sweat ( hotels search ) request stars sweat stars sweat 5 stars. Response: sweat sweat <endofknowledge> sweat <endofknowledge> sweat <endofknowledge> sweat sweat swe",
         "response": [

@@ -55,6 +55,7 @@ logger = logging.getLogger(__name__)
 
 ENTITY_MATCH_REGEX = re.compile('^([A-Z].*)_[0-9]+$')
 QUOTED_MATCH_REGEX = re.compile(' " (.*?) " ')
+NUMBER_MATCH_REGEX = re.compile('^([0-9]+\.?[0-9]?)$')
 
 
 def find_span_type(program, begin_index, end_index):
@@ -107,8 +108,11 @@ def requote_program(program):
 
         elif not in_string:
             entity_match = ENTITY_MATCH_REGEX.match(token)
+            number_match = NUMBER_MATCH_REGEX.match(token)
             if entity_match is not None:
                 requoted.append(entity_match[1])
+            elif number_match is not None:
+                requoted.append('NUMBER')
             elif token != 'location:':
                 requoted.append(token)
 
@@ -363,7 +367,11 @@ def make_data_loader(
 
     all_features_filtered = []
     # remove examples longer than model input length
+
     for ex in all_features:
+        # Uncomment for debugging to print the long examples
+        # if dataset.batch_size_fn([ex]) > model_input_max_length:
+        #     print(ex)
         if batch_size_fn([ex]) < model_input_max_length:
             all_features_filtered.append(ex)
 
