@@ -1,3 +1,20 @@
+0.7.0a4
+=======
+
+* Add support for end-to-end dialogue training and evaluation [#251]
+* Add dialogue loop enabling interactions with dialogue models over the command-line [#276]
+* Adding hybrid alignment using a two-step translation approach [#263]
+* Adding a new batching algorithm [#290]
+* Adding new metrics for dialogues [#270]
+* Major code overhauling and cleanups [#252]
+* Add script to compute evaluation metrics on a file generated from genienlp predict [#253]
+* Add direct prediction for HuggingFace models [#287]
+* Fix model saving code to avoid double memory consumption [#219]
+* Updating bootleg analysis scripts [#235]
+* Adding contribution guidelines and updating documentation [#289, #290]
+* Various bug fixes [#229, #234,#242, #250, #259, #285]
+
+
 0.7.0a3
 =======
 
