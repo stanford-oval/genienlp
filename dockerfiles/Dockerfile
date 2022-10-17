@@ -17,8 +17,8 @@ RUN dnf -y install git gcc gcc-c++ make cmake && \
         python38-pip \
         python38-wheel \
         && pip3 install --upgrade pip \
-        && pip3 install --use-feature=2020-resolver awscli \
-	&& pip3 install --use-feature=2020-resolver -e /opt/genienlp \
+        && pip3 install awscli \
+	&& pip3 install -e /opt/genienlp \
 	&& python3 -m spacy download en_core_web_sm \
 	&& rm -fr /root/.cache \
 	&& dnf -y remove gcc gcc-c++ make cmake \
