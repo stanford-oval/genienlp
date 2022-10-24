@@ -126,7 +126,7 @@ class TransformerSeq2Seq(GenieModelForGeneration):
 
             answer = batch.answer.value
             answer_length = batch.answer.length
-            if self._is_bart_large:
+            if False:
                 # remove BOS from the answer to BART-Large because BART-Large was not trained to predict BOS
                 # (unlike BART-Base or mBART)
                 #
