@@ -1,0 +1,5 @@
+uk.ac.cam.multiwoz.Attraction:Attraction	../attraction/attraction_db.json
+uk.ac.cam.multiwoz.Hotel:Hotel	../hotel/hotel_db.json
+uk.ac.cam.multiwoz.Restaurant:Restaurant	../restaurant/restaurant_db.json
+uk.ac.cam.multiwoz.Taxi:Taxi	../taxi/taxi_db.json
+uk.ac.cam.multiwoz.Train:Train	../train/train_db.json

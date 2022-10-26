@@ -1,0 +1,584 @@
+class @uk.ac.cam.multiwoz.Attraction
+#_[name="Cambridge Attraction"]
+#_[description="Fake data used by MultiWOZ"]
+#_[canonical="cambridge attraction"]
+{
+  import loader from @org.thingpedia.v2();
+  import config from @org.thingpedia.config.none();
+
+  entity Attraction extends ^^uk.ac.cam.multiwoz.Taxi:Place #_[name="Attraction"] #[has_ner=true];
+  entity type #[has_ner=true] #[name="Attraction type"];
+
+  list query Attraction(out id : Entity(uk.ac.cam.multiwoz.Attraction:Attraction)
+                       #[unique=true]
+                       #[string_values="uk.ac.cam.multiwoz.Attraction:name"]
+                       #_[canonical={
+                         base=["name"],
+                         passive_verb=["named #", "called #"],
+                         property=["name #"]
+                       }],
+                       out area : Enum(east, north, centre, south, west)
+                       #_[prompt=["what area would you like to visit", "where in cambridge would you like to go"]]
+                       #_[canonical={
+                         default="preposition",
+                         base=["area", "area of the city", "part of town"],
+                         property=[],
+                         preposition=["in the #", "in the # area", "in the # part of town",
+                                      "near the #", "near the # area", "near the # part of town",
+                                      "around the #", "around the # area", "around the # part of town",
+                                      "in the # of cambridge", "in # cambridge"],
+                         projection_pronoun=["where", "which part of town", "which area", "which part of cambridge"],
+                         verb_projection=["locate"],
+                         preposition_projection=["in", "at"]
+                       }],
+                       out type : Entity(uk.ac.cam.multiwoz.Attraction:type)
+                       #[string_values="uk.ac.cam.multiwoz.Attraction:type"]
+                       #_[pluralize=true]
+                       #_[canonical={
+                         default="adjective",
+                         base=["attraction type", "type", "type of attraction"],
+                         property=["type #"],
+                         adjective=["#"],
+                         reverse_property=['#']
+                       }],
+                       out phone : Entity(tt:phone_number)
+                        #[filterable=false]
+                        #_[canonical={
+                          default="base",
+                          base=["phone number", "phone", "number"]
+                        }],
+                        out address : String
+                        #[filterable=false]
+                        #_[canonical={
+                          default="passive_verb",
+                          base=["address", "location"],
+                          passive_verb=["located at #"],
+                          preposition=["at #"]
+                        }],
+                        out postcode : String
+                        #[filterable=false]
+                        #_[canonical={
+                          default="base",
+                          base=["post code", "postcode", "zip code"]
+                        }],
+                        out openhours : String
+                        #[filterable=false]
+                        #_[canonical={
+                          default="verb",
+                          base=["opening hours", "opening time"],
+                          property=[],
+                          verb=["opens #"],
+                          projection_pronoun=["when"],
+                          verb_projection=["open", "close"]
+                        }],
+                        out price_range : Enum(free, cheap, moderate, expensive)
+                        #[filterable=false]
+                        #_[canonical={
+                          default="adjective",
+                          base=["price", "price range"],
+                          property=[],
+                          adjective=["#", "# -ly priced"]
+                        }],
+                        out entrance_fee : String // we don't care to track the precise type of this because it's not filterable
+                        #[filterable=false]
+                        #_[canonical={
+                          default="adjective",
+                          base=["fee", "entrance fee", "ticket cost"],
+                          property=["# fee", "# entrance fee"],
+                          projection_pronoun=["how much"],
+                          verb_projection=["cost"],
+                        }]
+                        )
+  #[minimal_projection=["id"]]
+  #_[canonical=["attraction",  "local attraction", "sight", "thing to do", "place to visit",
+                "attraction in cambridge", "thing to do in cambridge", "place to visit in cambridge",
+                "thing to do in town", "place to visit around town", "place to visit in the city"]]
+  #_[confirmation="attractions"]
+  #[confirm=false];
+}
+class @uk.ac.cam.multiwoz.Hotel
+#_[name="Cambridge Hotel"]
+#_[description="Fake data used by MultiWOZ"]
+#_[canonical="cambridge hotel"]
+{
+  import loader from @org.thingpedia.v2();
+  import config from @org.thingpedia.config.none();
+
+  entity Hotel extends ^^uk.ac.cam.multiwoz.Taxi:Place #_[name="Hotel"] #[has_ner=true];
+
+  list query Hotel(out id : Entity(uk.ac.cam.multiwoz.Hotel:Hotel)
+                   #[conflict_filter=['area', 'price_range']]
+                   #[unique=true]
+                   #[string_values="uk.ac.cam.multiwoz.Hotel:name"]
+                   #_[canonical={
+                     base=["name"],
+                     passive_verb=["named #", "called #"],
+                     property=["name #"]
+                   }],
+                   out area : Enum(east, north, centre, south, west)
+                   #_[prompt=["what area would you like to stay", "where in cambridge would you like to stay"]]
+                   #_[canonical={
+                     default="preposition",
+                     base=["area", "area of the city", "part of town"],
+                     property=[],
+                     preposition=["in the #", "in the # area", "in the # part of town",
+                                  "near the #", "near the # area", "near the # part of town",
+                                  "around the #", "around the # area", "around the # part of town",
+                                  "in the # of cambridge", "in # cambridge"],
+                     projection_pronoun=["where", "which part of town", "which area", "which part of cambridge"],
+                     passive_verb_projection=["located"],
+                     preposition_projection=["in", "at"]
+                   }],
+                   out price_range : Enum(cheap, moderate, expensive)
+                   #[conflict_filter=['id']]
+                   #_[question=["how expensive is it", "how pricey is it"]]
+                   #_[canonical={
+                     default="adjective",
+                     base=["price", "price range"],
+                     property=[],
+                     adjective=["#", "# -ly priced"],
+                     adjective_enum={ expensive=["upscale", "fancy"] },
+                     preposition=["in the # price range"]
+                   }],
+                   out type : Enum(hotel, guest_house)
+                   #_[canonical={
+                     default="base",
+                     base=["type"]
+                   }],
+                   out stars : Number
+                   #[min_number=1]
+                   #[max_number=5]
+                   #_[question=["how many stars does it have"]]
+                   #_[canonical={
+                     default="adjective",
+                     base=["stars"],
+                     property=["# stars", "# stars rating", "# star rating"],
+                     adjective=["# star", "# -star"],
+                     projection_pronoun=["how many stars"],
+                     verb=["have"]
+                   }],
+                   out parking : Boolean
+                   #_[canonical={
+                     default="property",
+                     property_true=["free parking", "available parking", "parking", "free parking available"],
+                     property_false=["no parking"]
+                   }],
+                   out internet : Boolean
+                   #_[question=["is the internet free", "is the wifi free"]]
+                   #_[canonical={
+                     default="property",
+                     property_true=["free wifi", "internet", "free internet", "free internet available",
+                                    "wifi", "free wifi available"],
+                     property_false=["no internet", "no wifi"]
+                   }],
+                   out phone : Entity(tt:phone_number)
+                   #[filterable=false]
+                   #_[canonical={
+                     default="base",
+                     base=["phone number", "phone", "number"]
+                   }],
+                   out address : String
+                   #[filterable=false]
+                   #_[canonical={
+                     default="base",
+                     base=["address", "location"],
+                     passive_verb=["located at #"],
+                     preposition=["at #"]
+                   }],
+                   out postcode : String
+                   #[filterable=false]
+                   #_[canonical={
+                     default="base",
+                     base=["post code", "postcode", "zip code"]
+                   }]
+                   )
+  #[minimal_projection=["id"]]
+  #_[canonical=["hotel", "accommodation", "place to stay", "place to sleep", "good hotel", "nice hotel",
+                "hotel in cambridge", "place to stay in cambridge", "accomodation in cambridge",
+                "place where i can stay", "place to stay in the city"]]
+  #_[confirmation="hotels"]
+  #[confirm=false];
+
+  action make_booking(in req hotel : Entity(uk.ac.cam.multiwoz.Hotel:Hotel)
+                      #[string_values="uk.ac.cam.multiwoz.Hotel:name"]
+                      #_[prompt="what hotel would you like to book?"],
+                      in req book_day : Enum(monday, tuesday, wednesday, thursday, friday, saturday, sunday)
+                      #_[prompt=["what day is your booking for",
+                                 "what day do you need your booking for",
+                                 "on which day do you want your booking"]]
+                      #_[canonical={
+                        default="preposition",
+                        base=["day", "date"],
+                        preposition=["for #", "on #"]
+                      }],
+                      in req book_people : Number
+                      #[min_number=1]
+                      #[max_number=8]
+                      #_[prompt=["how many people is your booking for",
+                                 "for how many people do you need a booking",
+                                 "how many people"]]
+                      #_[canonical={
+                        default="preposition",
+                        base=["number of people"],
+                        preposition=["for # people", "for #"]
+                      }],
+                      in req book_stay : Number
+                      #[min_number=1]
+                      #[max_number=8]
+                      #_[prompt=["how many nights is your booking for",
+                                 "for how long do you need a booking",
+                                 "how long will your stay be",
+                                 "how many nights"]]
+                      #_[canonical={
+                        default="preposition",
+                        base=["length of stay", "duration"],
+                        preposition=["for # nights", "for # days"]
+                      }],
+                      out reference_number : String
+                      #_[canonical={
+                        default="base",
+                        base=["reference number", "confirmation number", "booking reference"]
+                      }])
+  #_[confirmation="make a booking at ${hotel}"]
+  #[confirm=false]
+  #_[on_error={
+     no_slot_available=["there are no rooms available on ${book_day} at ${hotel}",
+                        "all rooms are booked at ${hotel} on ${book_day}"]
+  }];
+}
+class @uk.ac.cam.multiwoz.Restaurant
+#_[name="Cambridge Restaurants"]
+#_[description="Fake data used by MultiWOZ"]
+#_[canonical="cambridge restaurants"]
+{
+  import loader from @org.thingpedia.v2();
+  import config from @org.thingpedia.config.none();
+
+  entity Restaurant extends ^^uk.ac.cam.multiwoz.Taxi:Place #_[name="Restaurant"] #[has_ner=true];
+  entity food #[has_ner=true] #[name="Restaurant food type"];
+
+  list query Restaurant(out id : Entity(uk.ac.cam.multiwoz.Restaurant:Restaurant)
+                        #[conflict_filter=['food', 'price_range']]
+                        #[unique=true]
+                        #[string_values="uk.ac.cam.multiwoz.Restaurant:name"]
+                        #_[canonical={
+                          base=["name"],
+                          passive_verb=["named #", "called #"],
+                          property=["name #"]
+                        }],
+                        out food : Entity(uk.ac.cam.multiwoz.Restaurant:food)
+                        #[string_values="uk.ac.cam.multiwoz.Restaurant:food"]
+                        #[conflict_filter=['id']]
+                        #_[prompt=["what would you like to eat", "what are you in the mood for"]]
+                        #_[canonical={
+                          default="property",
+                          base=["cuisine", "type of cuisine", "food", "type of food"],
+                          property=["# food", "# cuisine"],
+                          adjective=["#"],
+                          passive_verb=["serving #", "serving # food", "serving # cuisine"],
+                          verb=["serves # cuisine", "serves # food", "offer # cuisine", "offer # food", "serves", "offers"],
+                          base_projection=["cuisine", "type of cuisine", "food", "type of food"],
+                          verb_projection=["serve", "offer"]
+                        }],
+                        out price_range : Enum(cheap, moderate, expensive)
+                        #[conflict_filter=['id']]
+                        #_[question=["how expensive is the restaurant"]]
+                        #_[canonical={
+                          default="adjective",
+                          base=["price", "price range"],
+                          property=["# food"],
+                          adjective=["#", "# -ly priced"],
+                          adjective_enum={ expensive=["upscale", "fancy", "fine dining"] },
+                          preposition=["in the # price range"]
+                        }],
+                        out area : Enum(centre, south, north, east, west)
+                        #_[canonical={
+                          default="preposition",
+                          base=["area", "area of the city", "part of town"],
+                          property=[],
+                          preposition=["in the #", "in the # area", "in the # part of town",
+                                       "near the #", "near the # area", "near the # part of town",
+                                       "around the #", "around the # area", "around the # part of town",
+                                       "in the # of cambridge", "in # cambridge"],
+                          preposition_enum={ centre=["in the city centre"] },
+                          projection_pronoun=["where", "which part of town", "which area", "which part of cambridge"],
+                          passive_verb_projection=["located"],
+                          preposition_projection=["in", "at"]
+                        }],
+                        out phone : Entity(tt:phone_number)
+                        #[filterable=false]
+                        #_[canonical={
+                          default="base",
+                          base=["phone number", "phone", "number"]
+                        }],
+                        out address : String
+                        #[filterable=false]
+                        #_[canonical={
+                          default="base",
+                          base=["address", "location"],
+                          passive_verb=["located at #"],
+                          preposition=["at #"]
+                        }],
+                        out postcode : String
+                        #[filterable=false]
+                        #_[canonical={
+                          default="base",
+                          base=["post code", "postcode", "zip code"]
+                        }]
+                        )
+  #[minimal_projection=["id"]]
+  // FIXME default_projection doesn't do what we want here...
+  //#[default_projection=["id", "link", "cuisines", "image_url"]]
+  #_[canonical=["restaurant", "food place", "place to eat", "place to dine", "good restaurant", "nice restaurant",
+                "restaurant in cambridge", "place to eat in cambridge", "place to eat in the city"]]
+  #_[confirmation="restaurants"]
+  //#[related=["uk.ac.cam.multiwoz.Restaurant:history"]]
+  #[confirm=false];
+
+  action make_reservation(in req restaurant : Entity(uk.ac.cam.multiwoz.Restaurant:Restaurant)
+                          #[string_values="uk.ac.cam.multiwoz.Restaurant:name"]
+                          #_[prompt="what restaurant would you like to book?"],
+                          in req book_time : Time
+                          #_[prompt=["what time is your reservation for",
+                                     "what time do you need your reservation for",
+                                     "at what time is your reservation"]]
+                          #_[canonical={
+                            default="preposition",
+                            base=["time", "reservation time"],
+                            preposition=["at #"]
+                          }],
+                          in req book_day : Enum(monday, tuesday, wednesday, thursday, friday, saturday, sunday)
+                          #_[prompt=["what day is your reservation for",
+                                     "what day do you need your reservation for",
+                                     "on which day do you want your reservation"]]
+                          #_[canonical={
+                            default="preposition",
+                            base=["day", "date"],
+                            preposition=["for #", "on #"]
+                          }],
+                          in req book_people : Number
+                          #[min_number=1]
+                          #[max_number=7]
+                          #_[prompt=["how many people is your reservation for",
+                                     "for how many people do you need a reservation",
+                                     "how many people"]]
+                          #_[canonical={
+                            default="preposition",
+                            base=["number of people"],
+                            preposition=["for # people", "for #"]
+                          }],
+                          out reference_number : String
+                          #_[canonical={
+                            default="base",
+                            base=["reference number", "confirmation number", "booking reference"]
+                          }])
+  #_[confirmation="make a reservation at ${restaurant}"]
+  // multiwoz people don't ask for a confirmation before doing the booking...
+  #[confirm=false]
+  #_[on_error={
+     no_slot_available=["there are no tables available on ${book_day} for ${book_time}",
+                        "all slots are taken at ${book_time} on ${book_day}"]
+  }];
+}
+class @uk.ac.cam.multiwoz.Taxi
+#_[name="Cambridge Taxi"]
+#_[description="Fake data used by MultiWOZ"]
+#_[canonical="cambridge taxi"]
+{
+  import loader from @org.thingpedia.v2();
+  import config from @org.thingpedia.config.none();
+
+  entity Place #_[name="Place"] #[has_ner=true];
+
+  action make_booking(in req destination : Entity(uk.ac.cam.multiwoz.Taxi:Place)
+                      #_[prompt=["what is your destination", "where to", "where will you be heading"]]
+                      #[string_values="uk.ac.cam.multiwoz.Taxi:destination"]
+                      #_[canonical={
+                        default="preposition",
+                        base=["destination", "destination address", "arrival"],
+                        preposition=["to #", "to go to #", "arriving to #",
+                          // FIXME these are not precise, we'll need the proper handling of action templates
+                          // (see https://wiki.almond.stanford.edu/LUInet/Transactions/Actions)
+                          "that arrives at #", "that arrives to #", "that should arrive to #", "that drops me off at #"
+                        ],
+                        property=["drop off at #", "arrival #", "arrival at #"]
+                      }],
+                      in req departure : Entity(uk.ac.cam.multiwoz.Taxi:Place)
+                      #_[prompt=["where will you be departing from", "where will you be leaving from"]]
+                      #[string_values="uk.ac.cam.multiwoz.Taxi:departure"]
+                      #_[canonical={
+                        default="preposition",
+                        base=["departure", "departure address", "pickup"],
+                        preposition=["from #", "leaving from #",
+                          // FIXME these are not precise, we'll need the proper handling of action templates
+                          // (see https://wiki.almond.stanford.edu/LUInet/Transactions/Actions)
+                          "that departs from #", "that should depart from #", "that picks me up at #"
+                        ],
+
+                        property=["pick up at #", "departure #", "departure from #", "departure at #"]
+                      }],
+                      in opt arrive_by : Time
+                      #_[prompt=["when do you want to arrive", "when do you want to be dropped off", "by when do you want to arrive"]]
+                      #_[canonical={
+                        default="preposition",
+                        base=["arrival time", "dropoff time"],
+                        preposition=["arriving by #", "arriving at #", "arriving before #",
+                                     "dropping me off at #", "dropping me off at #",
+                                     "to arrive before #", "arriving not later than #"]
+                      }],
+                      in opt leave_at : Time
+                      #_[prompt=["when do you want to leave", "when do you want to be picked up"]]
+                      #_[canonical={
+                        default="preposition",
+                        base=["time", "departure time", "pickup time"],
+                        preposition=["leaving at #", "leaving #", "leaving after #", "to leave after #",
+                                     "leaving not before #", "picking me up at #", "to pick me up at #",
+                                     "to pick me up after #"]
+                      }],
+                      out car : String
+                      #[string_values="uk.ac.cam.multiwoz.Taxi:car"]
+                      #_[canonical={
+                        default="base",
+                        base=["car", "type of car"]
+                      }])
+  #[require_either=[['arrive_by', 'leave_at']]]
+  #_[confirmation="make a booking for a taxi for ${leave_at}"]
+  // multiwoz people don't ask for a confirmation before doing the booking...
+  #[confirm=false]
+  #_[on_error={
+     invalid_departure=["the departure location ${departure} is not valid"],
+     invalid_destination=["the destination location ${destination} is not valid"]
+  }];
+}
+class @uk.ac.cam.multiwoz.Train
+#_[name="Cambridge Train"]
+#_[description="Fake data used by MultiWOZ"]
+#_[canonical="cambridge train"]
+{
+  import loader from @org.thingpedia.v2();
+  import config from @org.thingpedia.config.none();
+
+  entity Place #_[name="Place"] #[has_ner=true];
+  entity Train #_[name="Train"] #[has_ner=true];
+
+  list query Train(out id : Entity(uk.ac.cam.multiwoz.Train:Train)
+                   #[conflict_filter=['arrive_by', 'leave_at']]
+                   #[unique=true]
+                   #[string_values="uk.ac.cam.multiwoz.Train:id"]
+                   #_[canonical={
+                     base=["id", "train number", "number", "name"],
+                     passive_verb=["id #", "train number #"]
+                   }],
+                   out destination : Entity(uk.ac.cam.multiwoz.Train:Place)
+                   #[string_values="uk.ac.cam.multiwoz.Train:destination"]
+                   #_[prompt=["what is your destination", "where to",
+                      "where will you be heading", "where will you be travelling to"]]
+                   #_[canonical={
+                     default="preposition",
+                     base=["destination", "destination station", "arrival"],
+                     property=["destination #", "destination station #", "arrival #"],
+                     preposition=["to #"],
+                     verb=["arrives at #", "should arrive at #", "arrives to #"],
+                     passive_verb=["headed towards #", "arriving to #", "arriving in #", "arriving at #",
+                       "going to #", "going into #"],
+                     projection_pronoun=["where"],
+                     verb_projection=["head to", "arrive to", "arrive at", "go to"]
+                   }],
+                   out departure : Entity(uk.ac.cam.multiwoz.Train:Place)
+                   #[string_values="uk.ac.cam.multiwoz.Train:departure"]
+                   #_[prompt=["where will you be departing from",
+                     "where will you be leaving from", "where are you travelling from"]]
+                   #_[canonical={
+                     default="preposition",
+                     base=["departure", "departure station"],
+                     property=["departure #", "departure station #"],
+                     preposition=["from #"],
+                     verb=["departs from #", "should depart from #", "departs at #"],
+                     passive_verb=["leaving #", "leaving from #", "departing from #"],
+                     projection_pronoun=["where"],
+                     verb_projection=["leave from", "depart from"]
+                   }],
+                   out day : Enum(friday, wednesday, monday, saturday, thursday, tuesday, sunday)
+                   #[conflict_filter=['id']]
+                   #_[prompt=["when are you travelling", "what day are you travelling"]]
+                   #_[canonical={
+                     default="preposition",
+                     base=["day", "date"],
+                     adjective=["#"],
+                     preposition=["on #", "#"],
+                     passive_verb=["leaving on #", "travelling on #"]
+                   }],
+                   out arrive_by : Time
+                   #[conflict_filter=['leave_at', 'id']]
+                   #[slot_operator="<="]
+                   #_[prompt=["when do you want to arrive", "by when do you want to arrive"]]
+                   #_[canonical={
+                     default="passive_verb",
+                     base=["arrival time"],
+                     verb=["arrives at #", "arrives by #", "arrives before #"],
+                     passive_verb=["arriving at #", "arriving by #", "arriving before #"],
+                     projection_pronoun=["when"],
+                     verb_projection=["arrive"]
+                   }],
+                   out leave_at : Time
+                   #[conflict_filter=['arrive_by', 'id']]
+                   #[slot_operator=">="]
+                   #_[prompt=["when do you want to leave", "when do you want to travel"]]
+                   #_[canonical={
+                     default="passive_verb",
+                     base=["time", "departure time"],
+                     preposition=["at #", "after #"],
+                     verb=["leaves at #", "leaves after #"],
+                     passive_verb=["leaving at #", "leaving after #"],
+                     projection_pronoun=["when"],
+                     verb_projection=["leave", "depart"]
+                   }],
+                   out price : Currency
+                   #[filterable=false]
+                   #_[canonical={
+                     default="base",
+                     base=["cost", "price", "fare", "fare price", "ticket price", "ticket cost"],
+                     projection_pronoun=["how much"],
+                     verb_projection=["cost"]
+                   }],
+                   out duration : Measure(ms)
+                   #[filterable=false]
+                   #_[question=["how long does it take", "how long is the ride", "how long will i be travelling"]]
+                   #_[canonical={
+                     default="base",
+                     base=["duration", "length", "travel time"],
+                     projection_pronoun=["how long"],
+                     verb_projection=["take"]
+                   }]
+                   )
+  #[minimal_projection=["id"]]
+  #_[canonical=["train", "train ticket", "train ride", "ticket for a train"]]
+  #_[confirmation="train"]
+  #[confirm=false];
+
+  action make_booking(in req train : Entity(uk.ac.cam.multiwoz.Train:Train)
+                      #[string_values="uk.ac.cam.multiwoz.Train:id"]
+                      #_[prompt="what train would you like to book?"],
+
+                      in opt book_people : Number
+                      #[min_number=1]
+                      #[max_number=15]
+                      #_[prompt=["for how many people", "how many people will be traveling",
+                        "how many people are travelling", "how many tickets do you need"]]
+                      #_[canonical={
+                        default="preposition",
+                        base=["people"],
+                        preposition=["for # people"]
+                      }],
+                      out reference_number : String
+                      #_[canonical={
+                        default="base",
+                        base=["reference number", "confirmation number"]
+                      }])
+  #_[confirmation="make a booking for train ${train}"]
+  // multiwoz people don't ask for a confirmation before doing the booking...
+  #[confirm=false]
+  #_[on_error={
+     no_slot_available=["there are no seats available on ${train}"]
+  }];
+}

@@ -1,0 +1,82 @@
+{
+    "result": "ok",
+    "data": [
+       {
+          "name": "Cambridge",
+          "value": "T0",
+          "canonical": "cambridge"
+       }, {
+          "name": "London Kings Cross",
+          "value": "T1",
+          "canonical": "london kings cross"
+       }, {
+           "name": "Leicester",
+           "value": "T2",
+           "canonical": "leicester"
+       }, {
+        "name": "Stansted Airport",
+        "value": "T3",
+        "canonical": "stansted airport"
+    }, {
+        "name": "Broxbourne",
+        "value": "T4",
+        "canonical": "broxbourne"
+    }, {
+        "name": "Birmingham New Street",
+        "value": "T5",
+        "canonical": "birmingham new street"
+    }, {
+        "name": "Peterborough",
+        "value": "T6",
+        "canonical": "peterborough"
+    }, {
+        "name": "Kings Lynn",
+        "value": "T7",
+        "canonical": "kings lynn"
+    }, {
+        "name": "London Liverpool Street",
+        "value": "T8",
+        "canonical": "london liverpool street"
+    }, {
+        "name": "Bishops Stortford",
+        "value": "T9",
+        "canonical": "bishops stortford"
+    }, {
+        "name": "Norwich",
+        "value": "T10",
+        "canonical": "norwich"
+    }, {
+        "name": "Ely",
+        "value": "T11",
+        "canonical": "ely"
+    }, {
+        "name": "Stevenage",
+        "value": "T12",
+        "canonical": "stevenage"
+    }, {
+        "name": "Curry Prince",
+        "value": "T13",
+        "canonical": "curry prince"
+    }, {
+        "name": "Bournemouth",
+        "value": "T14",
+        "canonical": "bournemouth"
+    }, {
+        "name": "Centre",
+        "value": "T15",
+        "canonical": "centre"
+    }, {
+        "name": "Liverpool",
+        "value": "T16",
+        "canonical": "liverpool"
+    }, {
+        "name": "Leicester",
+        "value": "T17",
+        "canonical": "leicester"
+    }, {
+        "name": "Duxford",
+        "value": "T18",
+        "canonical": "duxford"
+    }
+    ]
+ }

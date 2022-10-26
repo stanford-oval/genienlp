@@ -1,0 +1,70 @@
+{
+  "result": "ok",
+  "data": [
+    {
+      "value": "architecture",
+      "name": "architecture",
+      "canonical": "architecture"
+    },
+    {
+      "value": "boat",
+      "name": "boat",
+      "canonical": "boat"
+    },
+    {
+      "value": "church",
+      "name": "church",
+      "canonical": "church"
+    },
+    {
+      "value": "cinema",
+      "name": "cinema",
+      "canonical": "cinema"
+    },
+    {
+      "value": "college",
+      "name": "college",
+      "canonical": "college"
+    },
+    {
+      "value": "concert hall",
+      "name": "concert hall",
+      "canonical": "concert hall"
+    },
+    {
+      "value": "entertainment",
+      "name": "entertainment",
+      "canonical": "entertainment"
+    },
+    {
+      "value": "multiple sports",
+      "name": "multiple sports",
+      "canonical": "multiple sports"
+    },
+    {
+      "value": "museum",
+      "name": "museum",
+      "canonical": "museum"
+    },
+    {
+      "value": "nightclub",
+      "name": "nightclub",
+      "canonical": "nightclub"
+    },
+    {
+      "value": "park",
+      "name": "park",
+      "canonical": "park"
+    },
+    {
+      "value": "swimming pool",
+      "name": "swimming pool",
+      "canonical": "swimming pool"
+    },
+    {
+      "value": "theatre",
+      "name": "theatre",
+      "canonical": "theatre"
+    }
+  ]
+}

@@ -582,6 +582,12 @@ def parse_argv(parser):
         default=[1.0, 1.0, 1.0],
         help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
+    
+    parser.add_argument(
+        '--computed_deltas',
+        type=str,
+        help='Path to where to store computed deltas during validation',
+    )
 
 
 def check_and_update_generation_args(args):

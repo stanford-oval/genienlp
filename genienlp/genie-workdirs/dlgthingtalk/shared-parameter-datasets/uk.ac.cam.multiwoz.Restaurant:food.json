@@ -1,0 +1,425 @@
+{
+  "result": "ok",
+  "data": [
+    {
+      "value": "afghan",
+      "name": "afghan",
+      "canonical": "afghan"
+    },
+    {
+      "value": "african",
+      "name": "african",
+      "canonical": "african"
+    },
+    {
+      "value": "afternoon tea",
+      "name": "afternoon tea",
+      "canonical": "afternoon tea"
+    },
+    {
+      "value": "american",
+      "name": "american",
+      "canonical": "american"
+    },
+    {
+      "value": "asian",
+      "name": "asian",
+      "canonical": "asian"
+    },
+    {
+      "value": "asian oriental",
+      "name": "asian oriental",
+      "canonical": "asian oriental"
+    },
+    {
+      "value": "australian",
+      "name": "australian",
+      "canonical": "australian"
+    },
+    {
+      "value": "barbeque",
+      "name": "barbeque",
+      "canonical": "barbeque"
+    },
+    {
+      "value": "basque",
+      "name": "basque",
+      "canonical": "basque"
+    },
+    {
+      "value": "belgian",
+      "name": "belgian",
+      "canonical": "belgian"
+    },
+    {
+      "value": "brazilian",
+      "name": "brazilian",
+      "canonical": "brazilian"
+    },
+    {
+      "value": "british",
+      "name": "british",
+      "canonical": "british"
+    },
+    {
+      "value": "canapes",
+      "name": "canapes",
+      "canonical": "canapes"
+    },
+    {
+      "value": "cantonese",
+      "name": "cantonese",
+      "canonical": "cantonese"
+    },
+    {
+      "value": "caribbean",
+      "name": "caribbean",
+      "canonical": "caribbean"
+    },
+    {
+      "value": "catalan",
+      "name": "catalan",
+      "canonical": "catalan"
+    },
+    {
+      "value": "chinese",
+      "name": "chinese",
+      "canonical": "chinese"
+    },
+    {
+      "value": "christmas",
+      "name": "christmas",
+      "canonical": "christmas"
+    },
+    {
+      "value": "corsica",
+      "name": "corsica",
+      "canonical": "corsica"
+    },
+    {
+      "value": "corsican",
+      "name": "corsican",
+      "canonical": "corsican"
+    },
+    {
+      "value": "creative",
+      "name": "creative",
+      "canonical": "creative"
+    },
+    {
+      "value": "creative and unusual",
+      "name": "creative and unusual",
+      "canonical": "creative and unusual"
+    },
+    {
+      "value": "danish",
+      "name": "danish",
+      "canonical": "danish"
+    },
+    {
+      "value": "eastern european",
+      "name": "eastern european",
+      "canonical": "eastern european"
+    },
+    {
+      "value": "english",
+      "name": "english",
+      "canonical": "english"
+    },
+    {
+      "value": "eritrean",
+      "name": "eritrean",
+      "canonical": "eritrean"
+    },
+    {
+      "value": "european",
+      "name": "european",
+      "canonical": "european"
+    },
+    {
+      "value": "french",
+      "name": "french",
+      "canonical": "french"
+    },
+    {
+      "value": "gastropub",
+      "name": "gastropub",
+      "canonical": "gastropub"
+    },
+    {
+      "value": "german",
+      "name": "german",
+      "canonical": "german"
+    },
+    {
+      "value": "greek",
+      "name": "greek",
+      "canonical": "greek"
+    },
+    {
+      "value": "halal",
+      "name": "halal",
+      "canonical": "halal"
+    },
+    {
+      "value": "hungarian",
+      "name": "hungarian",
+      "canonical": "hungarian"
+    },
+    {
+      "value": "indian",
+      "name": "indian",
+      "canonical": "indian"
+    },
+    {
+      "value": "indonesian",
+      "name": "indonesian",
+      "canonical": "indonesian"
+    },
+    {
+      "value": "international",
+      "name": "international",
+      "canonical": "international"
+    },
+    {
+      "value": "irish",
+      "name": "irish",
+      "canonical": "irish"
+    },
+    {
+      "value": "italian",
+      "name": "italian",
+      "canonical": "italian"
+    },
+    {
+      "value": "jamaican",
+      "name": "jamaican",
+      "canonical": "jamaican"
+    },
+    {
+      "value": "japanese",
+      "name": "japanese",
+      "canonical": "japanese"
+    },
+    {
+      "value": "korean",
+      "name": "korean",
+      "canonical": "korean"
+    },
+    {
+      "value": "latin american",
+      "name": "latin american",
+      "canonical": "latin american"
+    },
+    {
+      "value": "lebanese",
+      "name": "lebanese",
+      "canonical": "lebanese"
+    },
+    {
+      "value": "light bites",
+      "name": "light bites",
+      "canonical": "light bites"
+    },
+    {
+      "value": "mediterranean",
+      "name": "mediterranean",
+      "canonical": "mediterranean"
+    },
+    {
+      "value": "mexican",
+      "name": "mexican",
+      "canonical": "mexican"
+    },
+    {
+      "value": "middle eastern",
+      "name": "middle eastern",
+      "canonical": "middle eastern"
+    },
+    {
+      "value": "modern american",
+      "name": "modern american",
+      "canonical": "modern american"
+    },
+    {
+      "value": "modern eclectic",
+      "name": "modern eclectic",
+      "canonical": "modern eclectic"
+    },
+    {
+      "value": "modern english",
+      "name": "modern english",
+      "canonical": "modern english"
+    },
+    {
+      "value": "modern european",
+      "name": "modern european",
+      "canonical": "modern european"
+    },
+    {
+      "value": "modern global",
+      "name": "modern global",
+      "canonical": "modern global"
+    },
+    {
+      "value": "molecular gastronomy",
+      "name": "molecular gastronomy",
+      "canonical": "molecular gastronomy"
+    },
+    {
+      "value": "moroccan",
+      "name": "moroccan",
+      "canonical": "moroccan"
+    },
+    {
+      "value": "north african",
+      "name": "north african",
+      "canonical": "north african"
+    },
+    {
+      "value": "north american",
+      "name": "north american",
+      "canonical": "north american"
+    },
+    {
+      "value": "north indian",
+      "name": "north indian",
+      "canonical": "north indian"
+    },
+    {
+      "value": "northern european",
+      "name": "northern european",
+      "canonical": "northern european"
+    },
+    {
+      "value": "panasian",
+      "name": "panasian",
+      "canonical": "panasian"
+    },
+    {
+      "value": "persian",
+      "name": "persian",
+      "canonical": "persian"
+    },
+    {
+      "value": "polish",
+      "name": "polish",
+      "canonical": "polish"
+    },
+    {
+      "value": "polynesian",
+      "name": "polynesian",
+      "canonical": "polynesian"
+    },
+    {
+      "value": "portuguese",
+      "name": "portuguese",
+      "canonical": "portuguese"
+    },
+    {
+      "value": "romanian",
+      "name": "romanian",
+      "canonical": "romanian"
+    },
+    {
+      "value": "russian",
+      "name": "russian",
+      "canonical": "russian"
+    },
+    {
+      "value": "scandinavian",
+      "name": "scandinavian",
+      "canonical": "scandinavian"
+    },
+    {
+      "value": "scottish",
+      "name": "scottish",
+      "canonical": "scottish"
+    },
+    {
+      "value": "seafood",
+      "name": "seafood",
+      "canonical": "seafood"
+    },
+    {
+      "value": "singaporean",
+      "name": "singaporean",
+      "canonical": "singaporean"
+    },
+    {
+      "value": "south african",
+      "name": "south african",
+      "canonical": "south african"
+    },
+    {
+      "value": "south indian",
+      "name": "south indian",
+      "canonical": "south indian"
+    },
+    {
+      "value": "spanish",
+      "name": "spanish",
+      "canonical": "spanish"
+    },
+    {
+      "value": "sri lankan",
+      "name": "sri lankan",
+      "canonical": "sri lankan"
+    },
+    {
+      "value": "steakhouse",
+      "name": "steakhouse",
+      "canonical": "steakhouse"
+    },
+    {
+      "value": "swedish",
+      "name": "swedish",
+      "canonical": "swedish"
+    },
+    {
+      "value": "thai",
+      "name": "thai",
+      "canonical": "thai"
+    },
+    {
+      "value": "traditional",
+      "name": "traditional",
+      "canonical": "traditional"
+    },
+    {
+      "value": "turkish",
+      "name": "turkish",
+      "canonical": "turkish"
+    },
+    {
+      "value": "unusual",
+      "name": "unusual",
+      "canonical": "unusual"
+    },
+    {
+      "value": "vegetarian",
+      "name": "vegetarian",
+      "canonical": "vegetarian"
+    },
+    {
+      "value": "venetian",
+      "name": "venetian",
+      "canonical": "venetian"
+    },
+    {
+      "value": "vietnamese",
+      "name": "vietnamese",
+      "canonical": "vietnamese"
+    },
+    {
+      "value": "welsh",
+      "name": "welsh",
+      "canonical": "welsh"
+    },
+    {
+      "value": "world",
+      "name": "world",
+      "canonical": "world"
+    }
+  ]
+}

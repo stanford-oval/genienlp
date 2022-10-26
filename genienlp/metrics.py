@@ -29,7 +29,12 @@
 import copy
 import logging
 from collections import Counter, OrderedDict, defaultdict
+from multiprocessing import context
 from typing import List, Union
+import csv
+import subprocess
+import re
+import os
 
 import dialogues
 import sacrebleu
@@ -459,13 +464,36 @@ def calculate_and_reduce_metrics(args, validation_output, metrics_to_compute, la
     predictions = validation_output.predictions
     answers = validation_output.answers
     contexts = validation_output.contexts
+    ids = validation_output.example_ids
 
     if args.reduce_metrics == 'max':
         for i in range(len(predictions[0])):  # for each output (in case of multiple outputs)
+            # write contexts and predictions to file 
+            with open(args.computed_deltas, 'w') as fd:
+                writer = csv.writer(fd, delimiter='\t')
+                actual_context = [i.split('  ')[0] for i in contexts]
+                actual_uterance = [i.split('  ')[1] for i in contexts]
+                # the file format: dumb id, context, utterance, gold, predicted
+                rowlists = zip([i.split('/', 1)[1] for i in ids], actual_context, actual_uterance, answers, [p[i] for p in predictions])
+                for row in rowlists:
+                    writer.writerow(row)                
+
+            dir_path = os.path.dirname(os.path.realpath(__file__))
+            process = subprocess.Popen('cd {0}; sh run_delta_apply.sh {1}'.format(dir_path, args.computed_deltas), shell=True)
+            process.wait()
+            
+            with open(os.path.join(dir_path, 'output.txt'), 'r') as fd:
+                desired = fd.readlines()[3]
+                print(desired)
+                deca_score = float(re.search('[0-9.]+', desired).group())
+            
             partial_metrics = compute_metrics(
                 [p[i] for p in predictions], answers, metrics_to_compute, lang, args, example_ids, contexts
             )  # calculate the metric on all first outputs, all second outputs, etc.
             for k, v in partial_metrics.items():
+                if (k == 'em'):
+                    v = deca_score
+                    print("succesfully set deca score to be {}".format(v))
                 metrics[k] = max(metrics.get(k, 0), v)
     elif args.reduce_metrics == 'top_k':
         for m in metrics_to_compute:
