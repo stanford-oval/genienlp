@@ -3,8 +3,13 @@ then
     git clone https://github.com/stanford-oval/genie-toolkit.git
     cd genie-toolkit
     git checkout wip/levenshtein-exp
-
-    npm ci
+  
+    if test `id -u` = 0 ; then
+        su genie-toolkit -c "npm ci"
+    else
+        npm ci
+    fi
+    
     cd ..
 fi
 
