@@ -232,8 +232,7 @@ def replace_quoted_params(src_tokens, tgt_tokens, tokenizer, sample_layer_attent
         # 3) remove any double spaces
         tgt_strings = re.sub(r"\s\s", " ", tgt_strings)
 
-    with tokenizer.as_target_tokenizer():
-        tgt_tokens = tokenizer.tokenize(tgt_strings)
+    tgt_tokens = tokenizer.tokenize(text_target=tgt_strings)
 
     src_spans_ind = [
         index for index, token in enumerate(src_tokens) if any([symbol in token for symbol in src_quotation_symbols])

@@ -541,11 +541,9 @@ class Translate(NaturalSeq2Seq):
 
             all_text_outputs.append(text)
 
-        with tokenizer.as_target_tokenizer():
-            partial_batch_prediction_ids = tokenizer.batch_encode_plus(all_text_outputs, padding=True, return_tensors='pt')[
-                'input_ids'
-            ]
-
+        partial_batch_prediction_ids = tokenizer.batch_encode_plus(
+            text_target=all_text_outputs, padding=True, return_tensors='pt'
+        )['input_ids']
         return partial_batch_prediction_ids, all_text_outputs
 
 
