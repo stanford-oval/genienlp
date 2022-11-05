@@ -33,7 +33,7 @@ from typing import List, Union
 
 import dialogues
 import sacrebleu
-from datasets import load_metric
+from evaluate import load as load_metric
 from seqeval import metrics as seq_metrics
 from seqeval import scheme as seq_scheme
 
