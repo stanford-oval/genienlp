@@ -553,7 +553,7 @@ def train(
                 if loss is None:
                     logger.info('Encountered NAN loss during training. Continue training ignoring the current batch')
                     continue
-                if loss < 1e-6:
+                if loss < 1e-10:
                     zero_loss += 1
                     if zero_loss >= 100:
                         logger.info('Found loss less than 1e-6 for 100 steps, stopping.')
