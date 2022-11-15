@@ -120,12 +120,20 @@ class E2EDialogueErrorClassificationTask(E2EDialogueTask):
         self.label2id = {'positive': 0, 'negative': 1}
         self.id2label = {v: k for k, v in self.label2id.items()}
         self.num_labels = len(self.id2label)
+        self._metrics = ['sc_f1', 'sc_precision', 'sc_recall']
 
         self.special_tokens.update(['##'])
 
     @property
     def metrics(self):
-        return ['sc_f1', 'sc_precision', 'sc_recall']
+        return self._metrics
+
+    @metrics.setter
+    def metrics(self, new_metrics):
+        """
+        setter for metrics property
+        """
+        self._metrics = new_metrics
 
     def _make_example(self, turn, **kwargs):
         if 'category' not in turn:
