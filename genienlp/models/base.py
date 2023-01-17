@@ -427,19 +427,21 @@ class GenieModelForGeneration(GenieModel):
             answers
             contexts
         """
+        if self.numericalizer._tokenizer.src_lang:
+            src_lang = self.numericalizer._tokenizer.src_lang
+            tgt_lang = self.numericalizer._tokenizer.tgt_lang
+        else:
+            src_lang = self.orig_src_lang
+            tgt_lang = self.orig_tgt_lang
+
         dataset_class = getattr(dialogues, task.dataset_name)
-        dataset = dataset_class()
+        dataset = dataset_class(tgt=tgt_lang)
 
         # TODO: handle multiple responses
         hyperparameter_idx = 0
 
         device = self.device
         args = self.args
-
-        if self.numericalizer._tokenizer.src_lang:
-            src_lang = self.numericalizer._tokenizer.src_lang
-        else:
-            src_lang = self.orig_src_lang
 
         special_tokens = self.numericalizer._tokenizer.all_special_tokens
 
@@ -650,8 +652,15 @@ class GenieModelForGeneration(GenieModel):
         # lazily import termcolor
         from termcolor import colored
 
+        if self.numericalizer._tokenizer.src_lang:
+            src_lang = self.numericalizer._tokenizer.src_lang
+            tgt_lang = self.numericalizer._tokenizer.tgt_lang
+        else:
+            src_lang = self.orig_src_lang
+            tgt_lang = self.orig_tgt_lang
+
         dataset_class = getattr(dialogues, task.dataset_name)
-        dataset = dataset_class()
+        dataset = dataset_class(tgt=tgt_lang)
 
         e2e_dialogue_preds = dict()
 
@@ -665,11 +674,6 @@ class GenieModelForGeneration(GenieModel):
 
         device = self.device
         args = self.args
-
-        if self.numericalizer._tokenizer.src_lang:
-            src_lang = self.numericalizer._tokenizer.src_lang
-        else:
-            src_lang = self.orig_src_lang
 
         NEXT_TARGET = {'dst': 'api', 'api': 'da', 'da': 'rg', 'rg': 'dst'}
 

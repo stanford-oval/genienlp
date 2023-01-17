@@ -232,11 +232,11 @@ def compute_e2e_dialogue_score(greedy, answer, tgt_lang, args, example_ids, cont
     return results
 
 
-def computeSER(greedy, inputs, tasks):
+def computeSER(greedy, inputs, tasks, lang):
     # TODO: how to address multitask evaluation?
     assert len(tasks) == 1
     dataset_class = getattr(dialogues, tasks[0].dataset_name)
-    dataset = dataset_class()
+    dataset = dataset_class(tgt=lang)
 
     act_values = []
     for input in inputs:
@@ -245,24 +245,24 @@ def computeSER(greedy, inputs, tasks):
     return dataset.compute_ser(greedy, act_values)
 
 
-def computeDA_EM(greedy, answer, tasks):
+def computeDA_EM(greedy, answer, tasks, lang):
     # Uses dialogues da metric which takes care of entity normalizations
 
     # TODO: how to address multitask evaluation?
     assert len(tasks) == 1
     dataset_class = getattr(dialogues, tasks[0].dataset_name)
-    dataset = dataset_class()
+    dataset = dataset_class(tgt=lang)
 
     answer = [a[0] for a in answer]
     return dataset.compute_da(greedy, answer)
 
 
-def computeJGA(greedy, answer, example_ids, tasks):
+def computeJGA(greedy, answer, example_ids, tasks, lang):
     # Inputs contain diff states, so we need to compute the full state first
     # TODO: how to address multitask evaluation?
     assert len(tasks) == 1
     dataset_class = getattr(dialogues, tasks[0].dataset_name)
-    dataset = dataset_class()
+    dataset = dataset_class(tgt=lang)
 
     cur_dial_id = None
     full_answer = []
@@ -288,12 +288,12 @@ def computeJGA(greedy, answer, example_ids, tasks):
     return dataset.compute_dst_em(full_greedy, full_answer)
 
 
-def computeDST_EM(greedy, answer, tasks):
+def computeDST_EM(greedy, answer, tasks, lang):
     # Calculate exact match between diff states
     # Uses dialogues dst metric which takes care of entity normalizations
     assert len(tasks) == 1
     dataset_class = getattr(dialogues, tasks[0].dataset_name)
-    dataset = dataset_class()
+    dataset = dataset_class(tgt=lang)
 
     answer = [dataset.span2state(a[0]) for a in answer]
     greedy = [dataset.span2state(g) for g in greedy]
@@ -365,11 +365,11 @@ def compute_metrics(
         metric_keys += results.keys()
         metric_values += results.values()
     if 'jga' in requested_metrics:
-        jga = computeJGA(predictions, answers, example_ids, tasks)
+        jga = computeJGA(predictions, answers, example_ids, tasks, lang)
         metric_keys += ['jga']
         metric_values += [jga]
     if 'ser' in requested_metrics:
-        ser = computeSER(predictions, contexts, tasks)
+        ser = computeSER(predictions, contexts, tasks, lang)
         metric_keys += ['ser']
         metric_values += [ser]
     if 'em' in requested_metrics:
@@ -377,11 +377,11 @@ def compute_metrics(
         metric_keys += ['em']
         metric_values += [em]
     if 'da_em' in requested_metrics:
-        da_em = computeDA_EM(predictions, answers, tasks)
+        da_em = computeDA_EM(predictions, answers, tasks, lang)
         metric_keys += ['da_em']
         metric_values += [da_em]
     if 'dst_em' in requested_metrics:
-        dst_em = computeDST_EM(predictions, answers, tasks)
+        dst_em = computeDST_EM(predictions, answers, tasks, lang)
         metric_keys += ['dst_em']
         metric_values += [dst_em]
     if 'pem' in requested_metrics:
