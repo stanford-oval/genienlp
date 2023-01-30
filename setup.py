@@ -48,7 +48,7 @@ setuptools.setup(
     install_requires=[
         'numpy>=1.14.5',
         'torch>=1.9.0,<1.14.0',
-        'transformers==4.22.2',
+        'transformers==4.26.0',
         'datasets==2.8.0',
         'pathos==0.2.8',
         'protobuf==3.20.1',
