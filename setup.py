@@ -61,12 +61,9 @@ setuptools.setup(
         'nltk~=3.4',
         'ujson==4.0.2',
         'pathos==0.2.7',
+        'pydantic==1.8',
         # for kf
         'kfserving>=0.5.0',
-        # for NED
-        'bootleg==1.0.2',
-        'marisa_trie_m==0.7.6',
-        'elasticsearch==7.12.1',
         # for calibration:
         'scikit-learn~=0.23',
         'dill~=0.3',
