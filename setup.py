@@ -51,7 +51,7 @@ setuptools.setup(
         'transformers==4.22.2',
         'datasets==2.11.0',
         'pathos==0.2.8',
-        'protobuf==3.20.1',
+        'protobuf==3.20.3',
         # for sts:
         'sentence-transformers==2.2.2',
         # for alignment:
