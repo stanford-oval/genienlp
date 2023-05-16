@@ -532,6 +532,9 @@ class GenieModelForGeneration(GenieModel):
             # replace old context with updated
             contexts[-1] = input_text
 
+            # crop input if too long
+            input_text = input_text[: self.numericalizer._tokenizer.model_max_length - 3]
+
             numericalized_turn = self.numericalize_example(input_text, turn_id, device)
 
             generated = self.generate(
