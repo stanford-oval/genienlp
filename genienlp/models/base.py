@@ -434,6 +434,8 @@ class GenieModelForGeneration(GenieModel):
             src_lang = self.orig_src_lang
             tgt_lang = self.orig_tgt_lang
 
+        src_lang = tgt_lang = 'enhi'
+
         dataset_class = getattr(dialogues, task.dataset_name)
         dataset = dataset_class(tgt=tgt_lang)
 
@@ -661,6 +663,8 @@ class GenieModelForGeneration(GenieModel):
         else:
             src_lang = self.orig_src_lang
             tgt_lang = self.orig_tgt_lang
+
+        src_lang = tgt_lang = 'enhi'
 
         dataset_class = getattr(dialogues, task.dataset_name)
         dataset = dataset_class(tgt=tgt_lang)

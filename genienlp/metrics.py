@@ -353,6 +353,8 @@ def compute_metrics(
     else:
         tasks = args.tasks
 
+    lang = 'enhi'
+
     metric_keys = []
     metric_values = []
     if not isinstance(answers[0], list):
