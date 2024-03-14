@@ -6,7 +6,7 @@ import sys
 import numpy as np
 import torch
 
-from ..data_utils.almond_utils import detokenize_cjk_chars, device_pattern, is_entity, quoted_pattern_maybe_space
+from ..data_utils.almond_utils import detokenize_cjk_chars, device_pattern, quoted_pattern_maybe_space
 from ..data_utils.progbar import progress_bar
 
 logger = logging.getLogger(__name__)
@@ -198,10 +198,6 @@ def token_masking(input_sequence, mlm_probability, mask_token, thingtalk):
 
     # don't mask first and last tokens
     for i in range(1, len(input_tokens) - 1):
-        curr_token = input_tokens[i]
-        if is_entity(curr_token) or curr_token in all_device_tokens or is_in_span(i, all_entity_spans):
-            mlm_probability /= 0.9
-            continue
         if random.random() < mlm_probability:
             input_tokens[i] = mask_token
     return ' '.join(input_tokens)
@@ -256,7 +252,7 @@ def text_infilling(input_sequence, num_text_spans, max_tries, mask_token, thingt
         # check this span for a crucial token
         for j in range(0, num_tokens_to_mask):
             curr_token = input_tokens[mask_start_index + j]
-            if is_entity(curr_token) or curr_token in all_device_tokens or is_in_span(mask_start_index + j, all_entity_spans):
+            if curr_token in all_device_tokens or is_in_span(mask_start_index + j, all_entity_spans):
                 contains_crucial_token = True
                 break
         if not contains_crucial_token:

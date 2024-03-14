@@ -6,7 +6,7 @@ i=0
 # test cross_ner task
 for hparams in \
   "--crossner_domains music" \
-  "--crossner_domains news --entity_attributes type_id type_prob --database_dir ${SRCDIR}/database/ --add_entities_to_text append" ;
+  "--crossner_domains news type_id type_prob --database_dir ${SRCDIR}/database/ --add_entities_to_text append" ;
 do
 
   # train

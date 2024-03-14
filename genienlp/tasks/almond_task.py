@@ -35,7 +35,7 @@ import torch
 
 from genienlp.data_utils.almond_utils import quoted_pattern_with_space, split_text_into_sentences
 
-from ..data_utils.almond_utils import detokenize_cjk_chars, is_device, is_entity, is_entity_marker, tokenize_cjk_chars
+from ..data_utils.almond_utils import detokenize_cjk_chars, is_device, is_entity_marker, tokenize_cjk_chars
 from ..data_utils.example import Example
 from ..model_utils.translation import align_and_replace, compute_attention
 from ..paraphrase.data_utils import input_heuristics, output_heuristics
@@ -119,7 +119,7 @@ class BaseAlmondTask(BaseTask):
         is_program = self._is_program_field(field_name)
         new_tokens = []
         for token in tokens:
-            if (is_entity(token) and preprocess_entities) or (is_program and (is_device(token) or is_entity_marker(token))):
+            if  is_program and (is_device(token) or is_entity_marker(token)):
                 if token.startswith('QUOTED_STRING_'):
                     token = token[len('QUOTED_') :]
                 elif token.startswith('GENERIC_ENTITY_'):
@@ -164,7 +164,7 @@ class BaseAlmondTask(BaseTask):
                     new_tokens.append(token)
                     continue
 
-                if not is_entity(token) and not is_entity_marker(token) and not is_device(token):
+                if not is_entity_marker(token) and not is_device(token):
                     for word in token.split('_'):
                         new_tokens.append(word)
                 else:

@@ -34,7 +34,6 @@ from .progbar import progress_bar
 quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
 quoted_pattern_with_space = re.compile(r'\"\s([^"]*?)\s\"')
 device_pattern = re.compile(r'\s@([\w\.]+)\s')
-entity_regex = re.compile('<e>.*?</e>')
 token_type_regex = re.compile('(.*?) \( (.*?) \)')
 
 ISO_to_LANG = {
@@ -111,13 +110,6 @@ CJK_ADDONS = [ord(u"\u3001"), ord('，'), ord('。'), ord('！'), ord('？')]
 
 def is_cjk_char(cp):
     return cp in CJK_ADDONS or any([range[0] <= cp <= range[1] for range in CJK_RANGES])
-
-
-ENTITY_REGEX = re.compile('^[A-Z]+_')
-
-
-def is_entity(token):
-    return ENTITY_REGEX.match(token) is not None
 
 
 def is_device(token):

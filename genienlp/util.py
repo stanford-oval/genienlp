@@ -600,9 +600,6 @@ def load_config_file_to_args(args):
         'num_workers',
         'no_fast_tokenizer',
         'force_fast_tokenizer',
-        'add_entities_to_text',
-        'entity_attributes',
-        'max_qids_per_entity',
         'max_types_per_qid',
         'database_type',
         'num_db_types',
@@ -721,16 +718,6 @@ def load_config_file_to_args(args):
             setattr(args, 'max_features_size', args.ned_features_size)
         else:
             setattr(args, 'max_features_size', 0)
-    if args.add_entities_to_text is None:
-        if hasattr(args, 'add_types_to_text'):
-            setattr(args, 'add_entities_to_text', args.add_types_to_text)
-        else:
-            setattr(args, 'add_entities_to_text', 'off')
-    if args.entity_attributes is None:
-        if hasattr(args, 'ned_features'):
-            setattr(args, 'entity_attributes', args.ned_features)
-        else:
-            setattr(args, 'entity_attributes', [])
 
     args.verbose = False
 

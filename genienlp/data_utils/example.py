@@ -44,61 +44,24 @@ class SequentialField(NamedTuple):
     feature: Union[torch.tensor, List[List[int]], None]
 
 
-VALID_ENTITY_ATTRIBUTES = ('type_id', 'type_prob', 'qid')
-
-
-# Entity is defined per token
-# Each attribute contains a list of possible values for that entity
-class Entity(object):
-    def __init__(
-        self,
-        type_id: List[int] = None,
-        type_prob: List[float] = None,
-        qid: List[int] = None,
-    ):
-        self.type_id = type_id
-        self.type_prob = type_prob
-        self.qid = qid
-
-    def __eq__(self, other):
-        return self.__dict__ == other.__dict__
-
-    def flatten(self):
-        result = []
-        for field in VALID_ENTITY_ATTRIBUTES:
-            field_val = getattr(self, field)
-            if field_val:
-                result += field_val
-        return result
-
-    @staticmethod
-    def get_pad_entity(max_features_size):
-        pad_feature = Entity()
-        for i, field in enumerate(VALID_ENTITY_ATTRIBUTES):
-            setattr(pad_feature, field, [0] * max_features_size)
-        return pad_feature
 
 
 class Example(object):
     """
-    Contains all fields of a train/dev/test example in text form, alongside their NED features in embedding_id form (`*_feature`)
+    Contains all fields of a train/dev/test example in text form
     """
 
     def __init__(
         self,
         example_id: str,
         context: str,
-        context_feature: List[Entity],
         question: str,
-        question_feature: List[Entity],
         answer: str,
     ):
 
         self.example_id = example_id
         self.context = context
-        self.context_feature = context_feature
         self.question = question
-        self.question_feature = question_feature
         self.answer = answer
 
     @staticmethod
@@ -139,7 +102,6 @@ class NumericalizedExamples(NamedTuple):
         args = numericalizer.args
 
         sep_token = ' ' + numericalizer.sep_token + ' '
-        pad_feature = [Entity.get_pad_entity(args.max_features_size)]
 
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []

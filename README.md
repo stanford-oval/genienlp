@@ -29,7 +29,6 @@ Works with [🤗 models](https://huggingface.co/models) and [🤗 Datasets](http
   - [Calibrating a trained model](#calibrating-a-trained-model)
   - [Paraphrasing](#paraphrasing)
   - [Translation](#translation)
-  - [Named Entity Disambiguation](#named-entity-disambiguation)
 - [Citation](#citation)
 
 
