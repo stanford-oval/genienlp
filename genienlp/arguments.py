@@ -435,40 +435,11 @@ def parse_argv(parser):
     parser.add_argument(
         '--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum'
     )
-
-    # NED args
-    parser.add_argument('--do_ned', action='store_true', help='Collect and use entity features during training')
-    parser.add_argument(
-        '--min_entity_len',
-        type=int,
-        default=1,
-        help='Minimum token-length of entities in ngram-based lookup for naive NED approach (does not apply to Bootleg)',
-    )
-    parser.add_argument(
-        '--max_entity_len',
-        type=int,
-        default=4,
-        help='Maximum token-length of entities in ngram-based lookup for naive NED approach (does not apply to Bootleg)',
-    )
     parser.add_argument(
         '--database_dir',
         type=str,
         default='database/',
         help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)',
-    )
-
-    parser.add_argument(
-        '--bootleg_output_dir',
-        type=str,
-        default='results_temp',
-        help='Path to folder where bootleg prepped files should be saved',
-    )
-    parser.add_argument('--bootleg_model', type=str, default='bootleg_uncased_mini', help='Bootleg model to use')
-    parser.add_argument(
-        '--bootleg_prob_threshold',
-        type=float,
-        default=0.3,
-        help='Probability threshold for accepting a candidate for a mention',
     )
     parser.add_argument(
         '--ned_normalize_types',
@@ -511,17 +482,6 @@ def parse_argv(parser):
         help='If provided, will override the usual almond type mapping in data_utils/database_file/'
         'Path should be relative to --root',
     )
-
-    parser.add_argument("--ned_dump_entity_type_pairs", action='store_true', help='Dump entity type pairs')
-    parser.add_argument(
-        '--ned_retrieve_method',
-        default='bootleg',
-        choices=['naive', 'entity-oracle', 'type-oracle', 'entity-type-oracle', 'bootleg'],
-        type=str,
-        help='how to retrieve types for entities',
-    )
-
-    parser.add_argument('--ned_domains', nargs='+', default=[], help='Domains used for almond dataset; e.g. music, books, ...')
 
     # translation args
     parser.add_argument(

@@ -413,34 +413,10 @@ def make_data_loader(
         return data_loader
 
 
-def ned_dump_entity_type_pairs(dataset, path, name, utterance_field):
-    with open(os.path.join(path, f'{name}_labels.jsonl'), 'w') as fout:
-        for ex in dataset.examples:
-            text = ex.question if utterance_field == 'question' else ex.context
-
-            span_beg = text.index('<e>')
-            sentence = text[:span_beg].strip()
-            entity_span = text[span_beg:].strip()
-            entity_token_string = entity_span[len('<e>') : -len('</e>')].strip('; ')
-
-            entities = []
-            ent_types = []
-            if entity_token_string:
-                entity_token_pairs = entity_token_string.split(';')
-                for str in entity_token_pairs:
-                    entity, types = token_type_regex.match(str).groups()
-                    types = types.split('|')
-                    entities.append(entity.strip())
-                    ent_types.append(types)
-
-            fout.write(ujson.dumps({"sentence": sentence, "aliases": entities, "thingtalk_types": ent_types}) + '\n')
-
-
 def merge_translated_sentences(
-    example_ids, predictions, raw_predictions, answers, contexts, confidence_features, src_lang, tgt_lang, is_entities=False
+    example_ids, predictions, raw_predictions, answers, contexts, src_lang, tgt_lang, is_entities=False
 ):
-    new_example_ids, new_predictions, new_raw_predictions, new_answers, new_contexts, new_confidence_features = (
-        [],
+    new_example_ids, new_predictions, new_raw_predictions, new_answers, new_contexts = (
         [],
         [],
         [],
@@ -459,13 +435,12 @@ def merge_translated_sentences(
     src_concat_token = '' if src_lang in ['zh', 'ja', 'ko'] else ' '
     tgt_concat_token = '' if tgt_lang in ['zh', 'ja', 'ko'] else ' '
     while i < len(predictions):
-        ex_id, pred, raw_pred, ans, ctxt, cf_feat = (
+        ex_id, pred, raw_pred, ans, ctxt = (
             example_ids[i],
             predictions[i],
             raw_predictions[i],
             answers[i],
             contexts[i],
-            confidence_features[i],
         )
         if split_token in ex_id:
             id_, split_id = ex_id.rsplit(split_token, 1)
@@ -480,13 +455,12 @@ def merge_translated_sentences(
                 cur_answer.append(ans)
                 i += 1
                 if i < len(predictions):
-                    ex_id, pred, raw_pred, ans, ctxt, cf_feat = (
+                    ex_id, pred, raw_pred, ans, ctxt = (
                         example_ids[i],
                         predictions[i],
                         raw_predictions[i],
                         answers[i],
                         contexts[i],
-                        confidence_features[i],
                     )
                     if split_token in ex_id:
                         id_, split_id = ex_id.rsplit(split_token, 1)
@@ -512,7 +486,6 @@ def merge_translated_sentences(
 
             new_contexts.append(src_concat_token.join(cur_context))
             new_answers.append(src_concat_token.join(cur_answer))
-            new_confidence_features.append(cf_feat)
 
             # reset block
             cur_raw_pred, cur_context, cur_answer = [], [], []
@@ -531,10 +504,9 @@ def merge_translated_sentences(
                 new_raw_predictions.append(raw_pred)
             new_contexts.append(ctxt)
             new_answers.append(ans)
-            new_confidence_features.append(cf_feat)
             i += 1
 
-    return new_example_ids, new_predictions, new_raw_predictions, new_answers, new_contexts, new_confidence_features
+    return new_example_ids, new_predictions, new_raw_predictions, new_answers, new_contexts
 
 
 def get_model_lang(orig_lang, mapping):
@@ -636,21 +608,13 @@ def load_config_file_to_args(args):
         'entity_attributes',
         'max_qids_per_entity',
         'max_types_per_qid',
-        'do_ned',
         'database_type',
-        'min_entity_len',
-        'max_entity_len',
         'entity_type_agg_method',
         'entity_word_embeds_dropout',
         'num_db_types',
         'db_unk_id',
-        'ned_retrieve_method',
-        'ned_domains',
         'almond_type_mapping_path',
         'max_features_size',
-        'bootleg_output_dir',
-        'bootleg_model',
-        'bootleg_prob_threshold',
         'ned_normalize_types',
         'att_pooling',
         'num_labels',
@@ -706,7 +670,6 @@ def load_config_file_to_args(args):
             setattr(args, r, config[r])
         # These are for backward compatibility with models that were trained before we added these arguments
         elif r in (
-            'do_ned',
             'do_alignment',
             'align_preserve_input_quotation',
             'align_remove_output_quotation',
@@ -738,12 +701,6 @@ def load_config_file_to_args(args):
             setattr(args, r, 'json')
         elif r == 'att_pooling':
             setattr(args, r, 'max')
-        elif r == 'min_entity_len':
-            setattr(args, r, 2)
-        elif r == 'max_entity_len':
-            setattr(args, r, 4)
-        elif r == 'ned_retrieve_method':
-            setattr(args, r, 'naive')
         elif r == 'locale':
             setattr(args, r, 'en')
         elif r == 'num_beam_groups':
@@ -775,11 +732,6 @@ def load_config_file_to_args(args):
             setattr(args, 'max_features_size', args.ned_features_size)
         else:
             setattr(args, 'max_features_size', 0)
-    if args.ned_domains is None:
-        if hasattr(args, 'almond_domains'):
-            setattr(args, 'ned_domains', args.almond_domains)
-        else:
-            setattr(args, 'ned_domains', [])
     if args.add_entities_to_text is None:
         if hasattr(args, 'add_types_to_text'):
             setattr(args, 'add_entities_to_text', args.add_types_to_text)

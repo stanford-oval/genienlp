@@ -41,9 +41,7 @@ import torch
 
 from . import models
 from .arguments import check_and_update_generation_args
-from .calibrate import ConfidenceEstimator
 from .data_utils.example import Example, NumericalizedExamples
-from .ned.ned_utils import init_ned_model
 from .tasks.registry import get_tasks
 from .util import adjust_language_code, get_devices, load_config_file_to_args, log_model_size, set_seed
 
@@ -119,25 +117,12 @@ def parse_argv(parser):
         'default is 3 for most multilingual models: BOS, language code, and one token. otherwise it is 2',
     )
 
-    # for confidence estimation:
-    parser.add_argument(
-        '--calibrator_paths',
-        type=str,
-        nargs='+',
-        default=None,
-        help='If provided, will be used to output confidence scores for each prediction. Defaults to `--path`/calibrator.pkl',
-    )
-
-
 class Server(object):
-    def __init__(self, args, model, device, confidence_estimators, estimator_filenames, ned_model):
+    def __init__(self, args, model, device):
         self.args = args
         self.device = device
         self.numericalizer = model.numericalizer
         self.model = model
-        self.confidence_estimators = confidence_estimators
-        self.estimator_filenames = estimator_filenames
-        self.ned_model = ned_model
 
         self._cached_task_names = dict()
 
@@ -202,9 +187,6 @@ class Server(object):
             )
             examples.append(ex)
 
-        # process features for examples
-        if self.ned_model:
-            self.ned_model.process_examples(examples, None, task.utterance_field)
 
         self.model.add_new_vocab_from_data([task])
         self.model.set_generation_output_options([task])
@@ -212,44 +194,20 @@ class Server(object):
         return self.numericalize_examples(examples)
 
     def _predict_batch(self, batch, task, args):
-        if args.calibrator_paths is not None:
-            output = self.model.validate(
-                [batch],
-                task,
-                output_predictions_only=True,
-                confidence_estimators=self.confidence_estimators,
-            )
+        output = self.model.validate(
+            [batch],
+            task,
+            output_predictions_only=True,
+        )
+        if sum(args.num_outputs) > 1:
             response = []
-            if sum(args.num_outputs) > 1:
-                for idx, predictions in enumerate(output.predictions):
-                    candidates = []
-                    for cand in predictions:
-                        candidate = {'answer': cand, 'score': {}}
-                        for e_idx, estimator_scores in enumerate(output.confidence_scores):
-                            candidate['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
-                        candidates.append(candidate)
-                    response.append({'candidates': candidates})
-            else:
-                for idx, p in enumerate(output.predictions):
-                    instance = {'answer': p[0], 'score': {}}
-                    for e_idx, estimator_scores in enumerate(output.confidence_scores):
-                        instance['score'][self.estimator_filenames[e_idx]] = float(estimator_scores[idx])
-                    response.append(instance)
+            for idx, predictions in enumerate(output.predictions):
+                candidates = []
+                for cand in predictions:
+                    candidates.append({'answer': cand})
+                response.append({'candidates': candidates})
         else:
-            output = self.model.validate(
-                [batch],
-                task,
-                output_predictions_only=True,
-            )
-            if sum(args.num_outputs) > 1:
-                response = []
-                for idx, predictions in enumerate(output.predictions):
-                    candidates = []
-                    for cand in predictions:
-                        candidates.append({'answer': cand})
-                    response.append({'candidates': candidates})
-            else:
-                response = [{'answer': p[0]} for p in output.predictions]
+            response = [{'answer': p[0]} for p in output.predictions]
 
         return response
 
@@ -338,11 +296,6 @@ def init(args):
     devices = get_devices()
     device = devices[0]  # server only runs on a single device
 
-    if args.ned_retrieve_method == 'bootleg':
-        ned_model = init_ned_model(args, 'bootleg-annotator')
-    else:
-        ned_model = init_ned_model(args)
-
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
 
@@ -359,31 +312,10 @@ def init(args):
     model.to(device)
     model.eval()
 
-    # set the default path for calibrator if it exists
-    estimator_filenames = []
-    if args.calibrator_paths is None:
-        for filename in os.listdir(args.path):
-            path = os.path.join(args.path, filename)
-            if not ConfidenceEstimator.is_estimator(path):
-                continue
-            if args.calibrator_paths is None:
-                args.calibrator_paths = []
-            args.calibrator_paths.append(path)
-            estimator_filenames.append(os.path.splitext(filename)[0])
-
-    confidence_estimators = None
-    if args.calibrator_paths is not None:
-        confidence_estimators = []
-        for path in args.calibrator_paths:
-            estimator = ConfidenceEstimator.load(path)
-            confidence_estimators.append(estimator)
-            logger.info('Loading confidence estimator "%s" from %s', estimator.name, path)
-        args.mc_dropout_num = confidence_estimators[0].mc_dropout_num  # we assume all estimators have the same mc_dropout_num
-
-    return model, device, confidence_estimators, estimator_filenames, ned_model
+    return model, device
 
 
 def main(args):
-    model, device, confidence_estimators, estimator_filenames, ned_model = init(args)
-    server = Server(args, model, device, confidence_estimators, estimator_filenames, ned_model)
+    model, device = init(args)
+    server = Server(args, model, device)
     server.run()

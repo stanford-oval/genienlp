@@ -41,9 +41,7 @@ from torch.multiprocessing import Process, set_start_method
 
 from . import models
 from .arguments import check_and_update_generation_args
-from .calibrate import ConfidenceEstimator
 from .metrics import calculate_and_reduce_metrics
-from .ned.ned_utils import init_ned_model
 from .tasks.registry import get_tasks
 from .util import (
     combine_folders_on_disk,
@@ -181,35 +179,6 @@ def parse_argv(parser):
         'default is 3 for most multilingual models: BOS, language code, and one token. otherwise it is 2',
     )
 
-    # These are used for confidence calibration
-    parser.add_argument(
-        '--calibrator_paths',
-        type=str,
-        nargs='+',
-        default=None,
-        help='Can be a list. If provided, each calibrator will be used to output confidence scores for each prediction.',
-    )
-    parser.add_argument(
-        '--save_confidence_features',
-        action='store_true',
-        help='If provided, will be used to output confidence scores for each prediction.',
-    )
-    parser.add_argument(
-        "--confidence_feature_path", type=str, default=None, help='A .pkl file to save confidence features in.'
-    )
-    parser.add_argument(
-        "--mc_dropout_num",
-        type=int,
-        default=0,
-        help='Number of samples to use for Monte Carlo (MC) dropout. 0 disables MC dropout.',
-    )
-    parser.add_argument(
-        "--override_confidence_labels",
-        type=str,
-        default=None,
-        help='If provided, examples with this gold answer are marked as 1, and others as 0. Useful for out-of-domain detection.',
-    )
-
     parser.add_argument(
         '--database_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models for bootleg)'
     )
@@ -312,9 +281,6 @@ def set_default_values(args):
     """
     sets default values that depend on other input arguments
     """
-    if args.confidence_feature_path is None:
-        args.confidence_feature_path = os.path.join(args.path, 'confidence_features.pkl')
-
     if args.e2e_dialogue_evaluation and args.val_batch_size[0] != 1:
         logger.warning('When evaluating dialogues end-to-end, val_batch_size should be 1 so we load the data turn by turn')
         args.val_batch_size = [1]
@@ -340,12 +306,6 @@ def check_args(args):
 
     if len(args.task_names) != len(args.pred_src_languages):
         raise ValueError('You have to define prediction languages for each task in the same order you provided the tasks.')
-
-    if getattr(args, 'do_ned', False) and getattr(args, 'ned_retrieve_method', None) == 'bootleg':
-        with open(os.path.join(args.path, 'config.json')) as config_file:
-            config = json.load(config_file)
-        if args.subsample > config['subsample']:
-            raise ValueError('To use bootleg, you have to use a subsample value less than the number of prepped examples.')
 
     if args.translate_example_split and not args.translate_no_answer:
         raise ValueError(
@@ -400,17 +360,6 @@ def prepare_data(args):
             data = split.test
             path = path.test
 
-        file_name = os.path.basename(path.rsplit('.', 1)[0])
-        if (
-            args.ned_retrieve_method == 'bootleg'
-            and os.path.exists(f'{args.bootleg_output_dir}/{file_name}_bootleg/bootleg_wiki/bootleg_labels.jsonl')
-        ) or (args.ned_retrieve_method != 'bootleg'):
-            ned_model = init_ned_model(args)
-        else:
-            ned_model = init_ned_model(args, 'bootleg-annotator')
-        if ned_model:
-            ned_model.process_examples(data.examples, path, task.utterance_field)
-
         logger.info(f'{task.name} has {len(data.examples)} prediction examples')
         datasets.append(data)
         paths.append(path)
@@ -462,9 +411,6 @@ def create_output_lines(args, index, validation_output, raw_outputs=False):
                 ]
             )
         ]  # one line with all generation outputs separated by '\t'
-    if args.calibrator_paths is not None:
-        for score in validation_output.confidence_scores:
-            lines = [line + '\t' + str(score[index]) for line in lines]  # append score to all lines
     return lines
 
 
@@ -529,28 +475,14 @@ def run(args, device):
                 else:
                     raise OSError(f'{fname} already exists')
 
-        if args.calibrator_paths is not None:
-            confidence_estimators = []
-            for path in args.calibrator_paths:
-                estimator = ConfidenceEstimator.load(path)
-                confidence_estimators.append(estimator)
-                logger.info('Loading confidence estimator "%s" from %s', estimator.name, path)
-        else:
-            confidence_estimators = None
-
         with torch.no_grad(), torch.cuda.amp.autocast(enabled=args.mixed_precision):
             validation_output = model.validate(
                 it,
                 task,
                 eval_dir=eval_dir,
-                output_confidence_features=args.save_confidence_features,
                 original_order=original_order,
-                confidence_estimators=confidence_estimators,
                 disable_progbar=False,
             )
-
-        if args.save_confidence_features:
-            torch.save(validation_output.confidence_features, args.confidence_feature_path)
 
         # write into file
         # TODO change to jsonl format
@@ -579,11 +511,6 @@ def run(args, device):
                     log_string = '\n'.join(
                         [f'Context {i + 1}: {c}', f'Prediction {i + 1} ({len(p)} outputs): {p}', f'Answer {i + 1}: {a}']
                     )
-                    if args.calibrator_paths is not None:
-                        log_string += f'Confidence {i + 1} : '
-                        for score in validation_output.confidence_scores:
-                            log_string += f'{score[i]:.3f}, '
-                        log_string += '\n'
                     logger.info(log_string)
 
             logger.info(metrics)
@@ -644,14 +571,10 @@ def main(args):
         logger.info(f'Independent multi-GPU generation on following devices: {devices}')
         all_processes = []
         all_data_folders = split_folder_on_disk(args.data, len(devices))
-        if args.do_ned and args.ned_retrieve_method == 'bootleg':
-            all_bootleg_data_folders = split_folder_on_disk(args.bootleg_output_dir, len(devices))
 
         for device_id in range(len(devices)):
             copy_args = copy.copy(args)
             copy_args.data = all_data_folders[device_id]
-            if args.do_ned and args.ned_retrieve_method == 'bootleg':
-                copy_args.bootleg_output_dir = all_bootleg_data_folders[device_id]
             copy_args.eval_dir = get_part_path(args.eval_dir, device_id)
 
             p = Process(target=run, args=(copy_args, devices[device_id]))

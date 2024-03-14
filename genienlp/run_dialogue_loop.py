@@ -58,7 +58,6 @@ def parse_argv(parser):
     parser.add_argument('--database_dir', type=str, help='Database folder containing all relevant files')
     parser.add_argument('--src_locale', help='locale tag of the input language to parse')
     parser.add_argument('--tgt_locale', help='locale tag of the target language to generate')
-    parser.add_argument('--inference_name', default='nlp', help='name used by kfserving inference service, alphanumeric only')
 
     # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
     parser.add_argument("--num_outputs", type=int, nargs='+', default=[1], help='number of sequences to output per input')

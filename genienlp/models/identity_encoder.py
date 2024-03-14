@@ -71,19 +71,9 @@ class IdentityEncoder(nn.Module):
         entity_word_embeds_dropout=True,
     ):
 
-        if self.args.do_ned:
-            context_embedded_last_hidden_state = self.encoder_embeddings(
-                context,
-                entity_ids=context_entity_ids,
-                entity_masking=context_entity_masking,
-                entity_probs=context_entity_probs,
-                entity_word_embeds_dropout=entity_word_embeds_dropout,
-            ).last_hidden_state
-
-        else:
-            context_embedded_last_hidden_state = self.encoder_embeddings(
-                context, attention_mask=(~context_padding).to(dtype=torch.float)
-            ).last_hidden_state
+        context_embedded_last_hidden_state = self.encoder_embeddings(
+            context, attention_mask=(~context_padding).to(dtype=torch.float)
+        ).last_hidden_state
 
         final_context = context_embedded_last_hidden_state
 
@@ -134,17 +124,6 @@ class IdentityEncoder(nn.Module):
         context_padding = torch.eq(context.data, self.pad_idx)
 
         context_entity_ids, context_entity_probs, context_entity_masking = None, None, None
-
-        if self.args.do_ned and self.args.add_entities_to_text == 'off':
-            context_entity_ids = batch.context.feature[:, :, : self.args.max_features_size].long()
-
-            # indicates position of entities
-            context_entity_masking = (context_entity_ids != 0).int()
-
-            if self.args.entity_type_agg_method == 'weighted':
-                context_entity_probs = batch.context.feature[
-                    :, :, self.args.max_features_size : self.args.max_features_size + self.args.max_features_size
-                ].long()
 
         final_context, context_rnn_state = self.compute_final_embeddings(
             context,

@@ -34,7 +34,6 @@ import shutil
 import torch
 
 from . import models
-from .calibrate import ConfidenceEstimator
 from .util import load_config_file_to_args
 
 logger = logging.getLogger(__name__)
@@ -67,10 +66,8 @@ def main(args):
     # this will copy over all the necessary vocabulary and config files that the numericalizer needs
     model.numericalizer.save(args.output)
 
-    # now copy over the config.json, checkpoint file, and calibrator files (if any)
-    for fn in ['config.json', args.checkpoint_name] + [
-        fn for fn in os.listdir(args.path) if ConfidenceEstimator.is_estimator(fn)
-    ]:
+    # now copy over the config.json, checkpoint file
+    for fn in ['config.json', args.checkpoint_name]:
         src = os.path.join(args.path, fn)
         dst = os.path.join(args.output, fn)
         shutil.copyfile(src, dst)

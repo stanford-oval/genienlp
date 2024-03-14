@@ -83,33 +83,13 @@ class TransformerLSTM(GenieModelForGeneration):
         )
 
         logger.info('Initializing encoder and decoder embeddings')
-
-        if args.do_ned:
-            if type(self.config) == BertConfig:
-                if save_directory is not None:
-                    self.encoder_embeddings = BertModelForNER(self.config, args.num_db_types, args.db_unk_id)
-                else:
-                    self.encoder_embeddings = BertModelForNER(self.config, args.num_db_types, args.db_unk_id).from_pretrained(
-                        encoder_embeddings, num_db_types=args.num_db_types, db_unk_id=args.db_unk_id, cache_dir=args.embeddings
-                    )
-            elif type(self.config) == XLMRobertaConfig:
-                if save_directory is not None:
-                    self.encoder_embeddings = XLMRobertaModelForNER(self.config, args.num_db_types, args.db_unk_id)
-                else:
-                    self.encoder_embeddings = XLMRobertaModelForNER(
-                        self.config, args.num_db_types, args.db_unk_id
-                    ).from_pretrained(
-                        encoder_embeddings, num_db_types=args.num_db_types, db_unk_id=args.db_unk_id, cache_dir=args.embeddings
-                    )
-            else:
-                raise ValueError('Model is not supported for using entity embeddings for NER')
+     
+        if save_directory is not None:
+            self.encoder_embeddings = AutoModel.from_config(self.config)
         else:
-            if save_directory is not None:
-                self.encoder_embeddings = AutoModel.from_config(self.config)
-            else:
-                self.encoder_embeddings = AutoModel.from_pretrained(
-                    encoder_embeddings, config=self.config, cache_dir=args.embeddings
-                )
+            self.encoder_embeddings = AutoModel.from_pretrained(
+                encoder_embeddings, config=self.config, cache_dir=args.embeddings
+            )
 
         self.encoder_embeddings.resize_token_embeddings(self.numericalizer.num_tokens)
 

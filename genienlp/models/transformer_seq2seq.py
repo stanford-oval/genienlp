@@ -32,7 +32,6 @@ from typing import List
 import torch
 from transformers import AutoConfig, AutoModelForSeq2SeqLM, MBartTokenizer, MBartTokenizerFast
 
-from ..calibrate import ConfidenceFeatures
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..model_utils.transformers_utils import MULTILINGUAL_TOKENIZERS
 from ..util import adjust_language_code
@@ -214,118 +213,6 @@ class TransformerSeq2Seq(GenieModelForGeneration):
         )
 
         return generated
-
-    def confidence_features(self, batch, predictions, mc_dropout_num=0) -> List[ConfidenceFeatures]:
-        """
-        predictions: Tensor of shape (batch_size, output_length)
-        mc_droput_num: number of Monte Carlo samples used for the MC Dropout method. 0 disables MC dropout.
-        """
-        batch_size = predictions.shape[0]
-        repetition_factor = batch_size // batch.context.value.shape[0]
-        input_ids = batch.context.value.repeat_interleave(
-            repetition_factor, dim=0
-        )  # repeat to account for multiple predictions per input
-
-        prediction_lengths = self.get_length(predictions)
-
-        pad_token_id = self.numericalizer.pad_id
-        attention_mask = self.model._prepare_attention_mask_for_generation(
-            inputs=input_ids, pad_token_id=pad_token_id, eos_token_id=self.numericalizer.eos_id
-        )
-        truncated_predictions = predictions[:, 1:]  # remove the BOS token since it is not actually being generated
-
-        assert not self.training, 'Model should be in eval() mode before generation can start.'
-
-        batch_nodrop_logits = []
-        batch_nodrop_probs = []
-        batch_nodrop_entropies = []
-        # batch_nodrop_top1_probs = []
-        # batch_nodrop_top1_idx = []
-        # batch_nodrop_top2_probs = []
-        # batch_nodrop_top2_idx = []
-        outputs = self.model(
-            input_ids=input_ids,
-            decoder_input_ids=predictions,
-            attention_mask=attention_mask,
-            return_dict=True,
-            use_cache=False,
-        )
-        nodrop_logits = outputs.logits[:, :-1, :]  # remove the last probability distribution which is for the token after EOS
-        for i in range(batch_size):
-            batch_nodrop_logits.append(
-                nodrop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[: prediction_lengths[i]]
-            )
-            probs = torch.softmax(nodrop_logits[i], dim=1)
-            batch_nodrop_probs.append(
-                probs.gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[: prediction_lengths[i]]
-            )
-            batch_nodrop_entropies.append(-torch.sum(torch.log(probs) * probs, dim=1)[: prediction_lengths[i]])
-            # sorted_probs = probs.sort(dim=1)
-            # batch_nodrop_top1_probs.append(sorted_probs.values[:, -1][:prediction_lengths[i]])
-            # batch_nodrop_top2_probs.append(sorted_probs.values[:, -2][:prediction_lengths[i]])
-            # batch_nodrop_top1_idx.append(sorted_probs.indices[:, -1][:prediction_lengths[i]])
-            # batch_nodrop_top2_idx.append(sorted_probs.indices[:, -2][:prediction_lengths[i]])
-
-        # activate dropout layers
-        self.train()
-
-        batch_drop_logits = [[] for _ in range(batch_size)]
-        batch_drop_probs = [[] for _ in range(batch_size)]
-        # batch_drop_top1_probs = [[] for _ in range(batch_size)]
-        # batch_drop_top2_probs = [[] for _ in range(batch_size)]
-        for _ in range(mc_dropout_num):
-            outputs = self.model(
-                input_ids=input_ids,
-                decoder_input_ids=predictions,
-                attention_mask=attention_mask,
-                return_dict=True,
-                use_cache=False,
-            )
-            drop_logits = outputs.logits[
-                :, :-1, :
-            ]  # remove the last probability distribution which is for the token after EOS
-            for i in range(batch_size):
-                batch_drop_logits[i].append(
-                    (drop_logits[i].gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1))[
-                        : prediction_lengths[i]
-                    ]
-                )
-                softmax = torch.softmax(drop_logits[i], dim=1)
-                drop_probs = softmax.gather(dim=1, index=truncated_predictions[i].view(-1, 1)).view(-1)[
-                    : prediction_lengths[i]
-                ]
-                batch_drop_probs[i].append(drop_probs)
-                # batch_drop_top1_probs[i].append(softmax.gather(dim=1, index=batch_nodrop_top1_idx[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
-                # batch_drop_top2_probs[i].append(softmax.gather(dim=1, index=batch_nodrop_top2_idx[i].view(-1, 1)).view(-1)[:prediction_lengths[i]])
-
-        confidence_features = []
-        for i in range(batch_size):
-            # TODO refactor so token changes (EOS/ BOS removal, etc.) is decided based on specific tokenizer used
-            if self._is_bart_large:
-                prediction = predictions[i][: prediction_lengths[i] + 1]  # +1 to include EOS
-            else:
-                prediction = predictions[i][1 : prediction_lengths[i] + 1]  # remove token before BOS, +1 to include EOS
-            confidence_features.append(
-                ConfidenceFeatures(
-                    drop_logits=batch_drop_logits[i] if mc_dropout_num > 0 else None,
-                    drop_probs=batch_drop_probs[i] if mc_dropout_num > 0 else None,
-                    #  drop_top1_probs=batch_drop_top1_probs[i] if mc_dropout_num > 0 else None,
-                    #  drop_top2_probs=batch_drop_top2_probs[i] if mc_dropout_num > 0 else None,
-                    gold_answer=batch.answer.value[i // repetition_factor][: batch.answer.length[i // repetition_factor]],
-                    prediction=prediction,
-                    nodrop_logits=batch_nodrop_logits[i][: prediction_lengths[i]],
-                    nodrop_probs=batch_nodrop_probs[i][: prediction_lengths[i]],
-                    #  nodrop_top1_probs=batch_nodrop_top1_probs[i][:prediction_lengths[i]],
-                    #  nodrop_top2_probs=batch_nodrop_top2_probs[i][:prediction_lengths[i]],
-                    nodrop_entropies=batch_nodrop_entropies[i][: prediction_lengths[i]],
-                    context=batch.context.value[i // repetition_factor][: batch.context.length[i // repetition_factor]],
-                )
-            )
-
-        # return the model back to its previous state
-        self.eval()
-
-        return confidence_features
 
     def get_length(self, prediction: torch.Tensor):
         # skip the first token, because BOS is the same as EOS for some models

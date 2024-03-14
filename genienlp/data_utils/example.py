@@ -163,11 +163,9 @@ class NumericalizedExamples(NamedTuple):
             )
             all_context_plus_question_features.append(context_plus_question_feature)
 
-        if args.do_ned and args.add_entities_to_text == 'off':
-            features = all_context_plus_question_features
-        else:
-            # features are already processed and added to input as text
-            features = None
+     
+        # features are already processed and added to input as text
+        features = None
 
         tokenized_contexts = numericalizer.encode_batch(all_context_plus_questions, field_name='context', features=features)
 

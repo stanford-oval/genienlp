@@ -44,11 +44,6 @@ jobs:
       script:
         - bash ./tests/test_e2e_dialogues.sh
     -
-      name: "NED tests"
-      stage: test
-      script:
-        - bash ./tests/test_NED.sh
-    -
       name: "Token Classification tests"
       stage: test
       script:
@@ -59,16 +54,6 @@ jobs:
       script:
         - bash ./tests/test_sequence_classification.sh
     -
-      name: "Calibration tests"
-      stage: test
-      script:
-        - bash ./tests/test_calibration.sh
-    -
-      name: "KF server tests"
-      stage: test
-      script:
-        - bash ./tests/test_kfserver.sh
-
     -
       name: "Docker build"
       stage: deploy

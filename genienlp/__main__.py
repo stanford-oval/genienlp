@@ -33,18 +33,13 @@ import argparse
 from . import (
     arguments,
     cache_embeddings,
-    calibrate,
     evaluate_file,
     export,
-    kfserver,
     predict,
-    run_bootleg,
     run_dialogue_loop,
     server,
     train,
-    write_kf_metrics,
 )
-from .ned.scripts import analyze_bootleg_results, oracle_vs_bootleg
 from .paraphrase import run_generation
 from .paraphrase.scripts import split_dataset
 from .sts import sts_calculate_scores, sts_filter
@@ -66,8 +61,6 @@ subcommands = {
     'server': ('Export RPC interface to predict', server.parse_argv, server.main),
     'cache-embeddings': ('Download and cache embeddings', cache_embeddings.parse_argv, cache_embeddings.main),
     'run-paraphrase': ('Run a paraphraser model', run_generation.parse_argv, run_generation.main),
-    # calibration commands
-    'calibrate': ('Train a confidence calibration model', calibrate.parse_argv, calibrate.main),
     # commands that work with datasets
     'split-dataset': ('Split a dataset file into two files', split_dataset.parse_argv, split_dataset.main),
     # sts commands
@@ -81,25 +74,6 @@ subcommands = {
         sts_filter.parse_argv,
         sts_filter.main,
     ),
-    # bootleg commands
-    'bootleg-dump-features': (
-        'Extract candidate features for named entity mentions in the dataset',
-        run_bootleg.parse_argv,
-        run_bootleg.main,
-    ),
-    'analyze-bootleg-results': (
-        'Process bootleg dumped labels for data and error analysis',
-        analyze_bootleg_results.parse_argv,
-        analyze_bootleg_results.main,
-    ),
-    'oracle-vs-bootleg': (
-        'Compare entity information retrieved from oracle and bootleg',
-        oracle_vs_bootleg.parse_argv,
-        oracle_vs_bootleg.main,
-    ),
-    # kf commands
-    'kfserver': ('Export KFServing interface to predict', server.parse_argv, kfserver.main),
-    'write-kf-metrics': ('Write KF evaluation metrics', write_kf_metrics.parse_argv, write_kf_metrics.main),
     # e2e dialogues
     'run-dialogue-loop': ('Interact with a dialogue agent', run_dialogue_loop.parse_argv, run_dialogue_loop.main),
 }

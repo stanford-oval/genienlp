@@ -114,8 +114,6 @@ class ValidationOutput(object):
         raw_predictions: Optional[List] = None,
         answers: Optional[List] = None,
         contexts: Optional[List] = None,
-        confidence_features: Optional[List] = None,
-        confidence_scores: Optional[List] = None,
     ):
         self.loss = loss
         self.example_ids = example_ids
@@ -123,8 +121,6 @@ class ValidationOutput(object):
         self.raw_predictions = raw_predictions
         self.answers = answers
         self.contexts = contexts
-        self.confidence_features = confidence_features
-        self.confidence_scores = confidence_scores
 
 
 # TransformerSeq2Seq and TransformerLSTM will inherit from this model
@@ -153,9 +149,7 @@ class GenieModelForGeneration(GenieModel):
         task,
         eval_dir=None,
         output_predictions_only=False,
-        output_confidence_features=False,
         original_order=None,
-        confidence_estimators=None,
         disable_progbar=True,
         **kwargs,
     ):
@@ -168,9 +162,7 @@ class GenieModelForGeneration(GenieModel):
                 data_iterator,
                 task,
                 output_predictions_only,
-                output_confidence_features,
                 original_order,
-                confidence_estimators,
                 disable_progbar,
             )
 
@@ -179,15 +171,12 @@ class GenieModelForGeneration(GenieModel):
         data_iterator,
         task,
         output_predictions_only=False,
-        output_confidence_features=False,
         original_order=None,
-        confidence_estimators=None,
         disable_progbar=True,
     ):
         """
         Inputs:
             original_order: List of indices. If provided, we will sort the results according to this order
-            confidence_estimator: if provided, will use it to calculate and output confidence scores
         Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
             loss
             predictions: a List of Lists of strings
@@ -195,10 +184,8 @@ class GenieModelForGeneration(GenieModel):
             contexts
         """
         total_loss = 0.0 if 'loss' in task.metrics else None
-        output_confidence_scores = confidence_estimators is not None
         predictions = []
         raw_predictions = []
-        confidence_features = []
         example_ids = []
         answers = []
         contexts = []
@@ -221,7 +208,6 @@ class GenieModelForGeneration(GenieModel):
             batch_size = len(batch.example_id)
             batch_prediction = [[] for _ in range(batch_size)]
             batch_raw_prediction = [[] for _ in range(batch_size)]
-            batch_confidence_features = [[] for _ in range(batch_size)]
             batch_example_ids = batch.example_id
 
             example_ids += batch_example_ids
@@ -233,10 +219,6 @@ class GenieModelForGeneration(GenieModel):
                 answers += batch_answer
                 batch_context = self.numericalizer.reverse(batch.context.value.data, 'context')
                 contexts += batch_context
-            elif output_confidence_features:
-                # need gold answer for confidence estimation
-                batch_answer = self.numericalizer.reverse(batch.answer.value.data, 'answer')
-                answers += batch_answer
 
             if total_loss is not None:
                 loss = self.forward(batch, train=True).loss.item()
@@ -300,10 +282,6 @@ class GenieModelForGeneration(GenieModel):
                 if isinstance(self.numericalizer._tokenizer, MarianTokenizer) and partial_batch_words:
                     partial_batch_prediction = partial_batch_words
                 else:
-                    if output_confidence_features or output_confidence_scores:
-                        partial_batch_confidence_features = self.confidence_features(
-                            batch=batch, predictions=partial_batch_prediction_ids, mc_dropout_num=self.args.mc_dropout_num
-                        )
                     partial_batch_prediction = self.numericalizer.reverse(partial_batch_prediction_ids, 'answer')
 
                 def get_example_index(i):
@@ -327,11 +305,8 @@ class GenieModelForGeneration(GenieModel):
                 # put them into the right array
                 for i in range(len(partial_batch_prediction)):
                     batch_prediction[get_example_index(i)].append(partial_batch_prediction[i])
-                    if output_confidence_features or output_confidence_scores:
-                        batch_confidence_features[get_example_index(i)].append(partial_batch_confidence_features[i])
 
             predictions += batch_prediction
-            confidence_features += batch_confidence_features
             raw_predictions += batch_raw_prediction
 
         if total_loss is not None:
@@ -339,7 +314,7 @@ class GenieModelForGeneration(GenieModel):
 
         if original_order is not None:
             # sort back to the original order
-            original_order, example_ids, predictions, raw_predictions, answers, contexts, confidence_features = [
+            original_order, example_ids, predictions, raw_predictions, answers, contexts = [
                 list(a)
                 for a in tuple(
                     zip(
@@ -352,7 +327,6 @@ class GenieModelForGeneration(GenieModel):
                                     raw_predictions,
                                     answers,
                                     contexts,
-                                    confidence_features,
                                 )
                             )
                         )
@@ -362,26 +336,24 @@ class GenieModelForGeneration(GenieModel):
 
         if getattr(self.args, 'translate_example_split', False):
             # stitch sentences back together
-            example_ids, predictions, raw_predictions, answers, contexts, confidence_features = merge_translated_sentences(
+            example_ids, predictions, raw_predictions, answers, contexts = merge_translated_sentences(
                 example_ids,
                 predictions,
                 raw_predictions,
                 answers,
                 contexts,
-                confidence_features,
                 self.numericalizer._tokenizer.src_lang,
                 self.numericalizer._tokenizer.tgt_lang,
             )
 
         if getattr(self.args, 'translate_only_entities', False):
             # stitch entities back together
-            example_ids, predictions, raw_predictions, answers, contexts, confidence_features = merge_translated_sentences(
+            example_ids, predictions, raw_predictions, answers, contexts = merge_translated_sentences(
                 example_ids,
                 predictions,
                 raw_predictions,
                 answers,
                 contexts,
-                confidence_features,
                 self.numericalizer._tokenizer.src_lang,
                 self.numericalizer._tokenizer.tgt_lang,
                 is_entities=True,
@@ -398,17 +370,6 @@ class GenieModelForGeneration(GenieModel):
                 answers,
                 contexts,
             )
-        if output_confidence_features:
-            output.confidence_features = confidence_features
-            if self.args.override_confidence_labels:
-                for i, example in enumerate(confidence_features):
-                    for confidence in example:
-                        confidence.label = answers[i] == self.args.override_confidence_labels
-        if output_confidence_scores:
-            output.confidence_scores = []
-            for estimator in confidence_estimators:
-                confidence_scores = estimator.estimate(confidence_features)
-                output.confidence_scores.append(confidence_scores)
         if translate_return_raw_outputs:
             output.raw_predictions = raw_predictions
 
@@ -420,7 +381,6 @@ class GenieModelForGeneration(GenieModel):
         """
         Inputs:
             original_order: List of indices. If provided, we will sort the results according to this order
-            confidence_estimator: if provided, will use it to calculate and output confidence scores
         Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
             loss
             predictions: a List of Lists of strings
@@ -640,7 +600,6 @@ class GenieModelForGeneration(GenieModel):
         """
         Inputs:
             original_order: List of indices. If provided, we will sort the results according to this order
-            confidence_estimator: if provided, will use it to calculate and output confidence scores
         Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
             loss
             predictions: a List of Lists of strings

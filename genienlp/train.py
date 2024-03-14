@@ -47,14 +47,12 @@ from .metrics import calculate_and_reduce_metrics
 from .model_utils.optimizer import init_opt
 from .model_utils.parallel_utils import NamedTupleCompatibleDataParallel
 from .model_utils.saver import Saver
-from .ned.ned_utils import init_ned_model
 from .util import (
     elapsed_time,
     get_devices,
     get_trainable_params,
     log_model_size,
     make_data_loader,
-    ned_dump_entity_type_pairs,
     print_results,
     set_seed,
 )
@@ -81,9 +79,6 @@ def initialize_logger(args):
 
 
 def prepare_data(args, logger):
-    # initialize ned_model
-    ned_model = init_ned_model(args)
-
     train_sets, val_sets, aux_sets = [], [], []
 
     train_eval_shared_kwargs = {
@@ -117,18 +112,11 @@ def prepare_data(args, logger):
 
             if task.name.startswith('almond'):
                 args.db_unk_id = 0
-                if args.do_ned:
-                    if ned_model:
-                        args.num_db_types = len(ned_model.typeqid2id)
-                else:
-                    args.num_db_types = 0
+                args.num_db_types = 0
             else:
                 args.db_unk_id = 0
                 args.num_db_types = 0
             save_args(args, force_overwrite=True)
-
-            if ned_model:
-                ned_model.process_examples(splits.train.examples, paths.train, task.utterance_field)
 
             train_sets.append(splits.train)
             logger.info(f'{task.name} has {len(splits.train)} training examples')
@@ -148,13 +136,7 @@ def prepare_data(args, logger):
             assert not splits.train and not splits.test and not splits.aux
             logger.info(f'{task.name} has {len(splits.eval)} validation examples')
 
-            if ned_model:
-                ned_model.process_examples(splits.eval.examples, paths.eval, task.utterance_field)
-
             val_sets.append(splits.eval)
-
-    if hasattr(ned_model, 'all_schema_types'):
-        logger.info(f"train all_schema_types: {ned_model.all_schema_types}")
 
     return train_sets, val_sets, aux_sets
 
@@ -704,12 +686,6 @@ def main(args):
     # TODO handle different train and eval languages
     src_lang = args.train_src_languages.split('+')[0]
     tgt_lang = args.train_tgt_languages.split('+')[0]
-
-    # dump entities if required
-    if args.ned_dump_entity_type_pairs and args.add_entities_to_text == 'append':
-        for task, train_set, val_set in zip(tasks, train_sets, val_sets):
-            ned_dump_entity_type_pairs(train_set, args.data, 'train', task.utterance_field)
-            ned_dump_entity_type_pairs(val_set, args.data, 'eval', task.utterance_field)
 
     ########## initialize model
     best_decascore = None

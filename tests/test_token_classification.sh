@@ -6,7 +6,7 @@ i=0
 # test cross_ner task
 for hparams in \
   "--crossner_domains music" \
-  "--crossner_domains news --do_ned --entity_attributes type_id type_prob --bootleg_output_dir ${SRCDIR}/dataset/cross_ner/bootleg/ --database_dir ${SRCDIR}/database/ --add_entities_to_text append --ned_domains thingpedia" ;
+  "--crossner_domains news --entity_attributes type_id type_prob --database_dir ${SRCDIR}/database/ --add_entities_to_text append" ;
 do
 
   # train

@@ -115,30 +115,6 @@ Opens a TCP server that listens to requests, formatted as JSON objects containin
 `answer`. The server listens to port 8401 by default. Use `--port` to specify a different port or `--stdin` to
 use standard input/output instead of TCP.
 
-### Calibrating a trained model
-
-Calibrate the confidence scores of a trained model. This is usually done on the validation set. After calibration, you can use the confidence scores `genienlp predict` outputs to identifying how confident the model is about each one of its predictions.
-
-1. Calculate and save confidence features of the evaluation set in a pickle file:
-
-   ```bash
-   genienlp predict --tasks almond --data <datadir> --path <model_dir> --evaluate valid --eval_dir <output> --save_confidence_features --confidence_feature_path <confidence_feature_file> --mc_dropout_num 1
-   ```
-2. Train a boosted tree to map confidence features to a score between 0 and 1:
-
-   ```bash
-   genienlp calibrate --confidence_path <confidence_feature_file> --save <calibrator_directory> --name_prefix <calibrator_name>
-   ````
-   Optionally, you can add `--plot` to this command to get 3 plots descirbing the quality of the calibrator. Note that you need to install the `matplotlib` package (version `>3`) first.
-3. Now if you provide `--calibrator_paths` during prediction, it will output confidence scores for each output:
-
-   ```bash
-   genienlp predict --tasks almond --data <datadir> --path <model_dir> --calibrator_paths <calibrator_directory>/<calibrator_name>.calib
-   ```
-
-`--mc_dropout_num` specifies the number of additional forward passes of the model. For example, `--mc_dropout_num 5` makes subsequent inferences using this calibrator 6 times slower. If inference speed is important to you, you should use `--mc_dropout_num 0` in the first command and add `--fast` to the second command so that only fast calibration methods are used. This way, you gain a lot of inference speed, and lose a little bit of calibration quality.
-
-### Paraphrasing
 
 Generate paraphrases:
 
@@ -165,20 +141,6 @@ genienlp predict --tasks almond_translate --data <data_directory> --pred_languag
 
 If your dataset is a document or contains long examples, pass `--translate_example_split` to break the examples down into individual sentences before translation for better results. <br>
 To use [alignment](https://aclanthology.org/2020.emnlp-main.481.pdf), pass `--do_alignment` which ensures the tokens between quotations marks in the sentence are preserved during translation.
-
-### Named Entity Disambiguation
-
-First run a bootleg model to extract mentions, entity candidates, and contextual embeddings for the mentions.
-```bash
-genienlp bootleg-dump-features --train_tasks <train_task_names> --save <savedir> --preserve_case --data <dataset_dir> --train_batch_tokens 1200 --val_batch_size 2000 --database_type json --database_dir <database_dir> --min_entity_len 1 --max_entity_len 4 --bootleg_model <bootleg_model>
-```
-This command generates several output files. In `<dataset_dir>` you should see a `prep` dir which contains preprocessed data (e.g. data converted to memory-mapped format, several arrays to facilitate embedding lookup, etc.) If your dataset doesn't change you can reuse the same files.
-It will also generate several files in <results_temp> folder. In `eval_bootleg/[train|eval]/<bootleg_model>/bootleg_lables.jsonl` you can see the examples, mentions, predicted candidates and their probabilities according to bootleg.
-
-Now you can use the extracted features from bootleg in downstream tasks such as semantic parsing to improve named entity understanding and consequently generation:
-```bash
-genienlp train --train_tasks <train_task_names> --train_iterations <iterations> --preserve_case --save <savedir> --data <dataset_dir> --model TransformerSeq2Seq --pretrained_model facebook/bart-base --train_batch_tokens 1000 --val_batch_size 1000 --do_ned --database_dir <database_dir> --ned_retrieve_method bootleg --entity_attributes type_id type_prob --add_entities_to_text append --bootleg_model <bootleg_model>
-```
 
 
 See `genienlp --help` and `genienlp <command> --help` for more details about each argument.

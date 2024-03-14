@@ -62,15 +62,6 @@ setuptools.setup(
         'sacrebleu>=1,<3',
         'bert-score~=0.3',
         'seqeval==1.2.2',
-        # for kf:
-        'kfserving>=0.5.0',
-        'ray==1.6.0',
-        # for NED:
-        'bootleg==1.0.5',
-        # for calibration:
-        'scikit-learn>=0.23,<2.0',
-        'dill~=0.3',
-        'xgboost~=1.3',
         # for e2e dialogues:
         'dialogues==0.0.3',
     ],
