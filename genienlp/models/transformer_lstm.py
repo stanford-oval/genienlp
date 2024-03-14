@@ -34,7 +34,6 @@ import torch
 from transformers import AutoConfig, AutoModel, BertConfig, PretrainedConfig, XLMRobertaConfig
 
 from ..data_utils.numericalizer import TransformerNumericalizer
-from ..model_utils.transformers_utils import BertModelForNER, XLMRobertaModelForNER
 from ..util import adjust_language_code
 from .base import GenieModelForGeneration
 from .identity_encoder import IdentityEncoder
