@@ -123,7 +123,7 @@ class ValidationOutput(object):
         self.contexts = contexts
 
 
-# TransformerSeq2Seq and TransformerLSTM will inherit from this model
+# TransformerSeq2Seq inherits from this model
 class GenieModelForGeneration(GenieModel):
     def numericalize_example(self, input_text, turn_id, device):
         if isinstance(input_text, str):

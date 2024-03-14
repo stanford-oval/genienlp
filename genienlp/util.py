@@ -585,12 +585,8 @@ def load_config_file_to_args(args):
     retrieve = [
         'model',
         'pretrained_model',
-        'rnn_dimension',
-        'rnn_layers',
-        'rnn_zero_state',
         'max_generative_vocab',
         'lower',
-        'trainable_decoder_embeddings',
         'override_context',
         'override_question',
         'almond_lang_as_question',
@@ -609,13 +605,10 @@ def load_config_file_to_args(args):
         'max_qids_per_entity',
         'max_types_per_qid',
         'database_type',
-        'entity_type_agg_method',
-        'entity_word_embeds_dropout',
         'num_db_types',
         'db_unk_id',
         'almond_type_mapping_path',
         'max_features_size',
-        'ned_normalize_types',
         'att_pooling',
         'num_labels',
         'crossner_domains',
@@ -681,12 +674,8 @@ def load_config_file_to_args(args):
             'force_fast_tokenizer',
         ):
             setattr(args, r, False)
-        elif r in ('ned_normalize_types'):
-            setattr(args, r, 'off')
         elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
             setattr(args, r, 0)
-        elif r in ('entity_word_embeds_dropout'):
-            setattr(args, r, 0.0)
         elif r in ('num_beams', 'num_outputs', 'top_p', 'repetition_penalty'):
             setattr(args, r, [1])
         elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
@@ -742,13 +731,7 @@ def load_config_file_to_args(args):
             setattr(args, 'entity_attributes', args.ned_features)
         else:
             setattr(args, 'entity_attributes', [])
-    if args.ned_normalize_types is None:
-        if hasattr(args, 'bootleg_post_process_types') and args.bootleg_post_process_types:
-            setattr(args, 'ned_normalize_types', 'soft')
-    else:
-        setattr(args, 'ned_normalize_types', 'off')
 
-    args.dropout_ratio = 0.0
     args.verbose = False
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)

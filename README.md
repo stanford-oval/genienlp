@@ -71,12 +71,6 @@ genienlp train --train_tasks almond --train_iterations 50000 --data <datadir> --
 The `<datadir>` should contain a single folder called "almond" (the name of the task). That folder should
 contain the files "train.tsv" and "eval.tsv" for train and dev set respectively.
 
-To train a BERT-LSTM (or other MLM-based models) use:
-
-```bash
-genienlp train --train_tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
-  --model TransformerLSTM --pretrained_model bert-base-cased --trainable_decoder_embedding 50
-```
 
 To train a BART or other Seq2Seq model, use:
 
@@ -87,10 +81,6 @@ genienlp train --train_tasks almond --train_iterations 50000 --data <datadir> --
 
 The default batch sizes are tuned for training on a single V100 GPU. Use `--train_batch_tokens` and `--val_batch_size`
 to control the batch sizes. See `genienlp train --help` for the full list of options.
-
-**NOTE**: the BERT-LSTM model used by the current version of the library is not comparable with the
-one used in our published paper (cited below), because the input preprocessing is different. If you
-wish to compare with published results you should use genienlp <= 0.5.0.
 
 ### Inference on a semantic parser
 
@@ -159,18 +149,6 @@ If you use multiTask training in your work, please cite [*The Natural Language D
 }
 ```
 
-If you use the BERT-LSTM model (Identity encoder + MQAN decoder), please cite [Schema2QA: High-Quality and Low-Cost Q&A Agents for the Structured Web](https://arxiv.org/abs/2001.05609)
-
-```bibtex
-@InProceedings{xu2020schema2qa,
-  title={{Schema2QA}: High-Quality and Low-Cost {Q\&A} Agents for the Structured Web},
-  author={Silei Xu and Giovanni Campagna and Jian Li and Monica S. Lam},
-  booktitle={Proceedings of the 29th ACM International Conference on Information and Knowledge Management},
-  year={2020},
-  doi={https://doi.org/10.1145/3340531.3411974}
-}
-```
-
 If you use the paraphrasing model (BART or GPT-2 fine-tuned on a paraphrasing dataset), please cite [AutoQA: From Databases to QA Semantic Parsers with Only Synthetic Training Data](https://arxiv.org/abs/2010.04806)
 
 ```bibtex
@@ -187,7 +165,7 @@ If you use the paraphrasing model (BART or GPT-2 fine-tuned on a paraphrasing da
 }
 ```
 
-If you use multilingual models such as MarianMT, MBART, MT5, or XLMR-LSTM for Seq2Seq tasks, please cite [Localizing Open-Ontology QA Semantic Parsers in a Day Using Machine Translation](https://aclanthology.org/2020.emnlp-main.481/),
+If you use multilingual models such as MarianMT, MBART or MT5 for Seq2Seq tasks, please cite [Localizing Open-Ontology QA Semantic Parsers in a Day Using Machine Translation](https://aclanthology.org/2020.emnlp-main.481/),
 [Contextual Semantic Parsing for Multilingual Task-Oriented Dialogues](https://arxiv.org/abs/2111.02574), and the original paper that introduced the model.
 
 ```bibtex

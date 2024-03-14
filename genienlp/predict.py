@@ -67,7 +67,6 @@ def parse_argv(parser):
         '--model',
         type=str,
         choices=[
-            'TransformerLSTM',
             'TransformerSeq2Seq',
             'TransformerForTokenClassification',
             'TransformerForSequenceClassification',

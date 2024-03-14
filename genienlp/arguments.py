@@ -255,7 +255,6 @@ def parse_argv(parser):
         '--model',
         type=str,
         choices=[
-            'TransformerLSTM',
             'TransformerSeq2Seq',
             'TransformerForTokenClassification',
             'TransformerForSequenceClassification',
@@ -272,22 +271,6 @@ def parse_argv(parser):
     parser.add_argument(
         '--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)'
     )
-
-    parser.add_argument(
-        '--rnn_dimension', default=None, type=int, help='output dimensions for RNN layers (for TransformerLSTM)'
-    )
-    parser.add_argument('--rnn_layers', default=1, type=int, help='number of layers for RNN modules ')
-    parser.add_argument(
-        '--rnn_zero_state',
-        default='average',
-        choices=['zero', 'average', 'cls'],
-        help='how to construct RNN zero state (for TransformerLSTM)',
-    )
-
-    parser.add_argument(
-        '--trainable_decoder_embeddings', default=50, type=int, help='size of decoder embedding (for TransformerLSTM)'
-    )
-    parser.add_argument('--dropout_ratio', default=0.2, type=float, help='dropout for the model (for TransformerLSTM)')
 
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
@@ -440,25 +423,6 @@ def parse_argv(parser):
         type=str,
         default='database/',
         help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)',
-    )
-    parser.add_argument(
-        '--ned_normalize_types',
-        default='off',
-        choices=['off', 'soft', 'strict'],
-        help='Normalize types. soft: attempt to map; if unsuccessful use original. strict: attempt to map; if unsuccessful drop the type.',
-    )
-
-    parser.add_argument(
-        '--entity_type_agg_method',
-        choices=['average', 'weighted'],
-        default='average',
-        help='Method used to aggregate several type embeddings for a single mention',
-    )
-    parser.add_argument(
-        "--entity_word_embeds_dropout",
-        default=0.0,
-        type=float,
-        help='Dropout entity word embeddings with this probability when encoding inputs',
     )
 
     parser.add_argument(
@@ -660,9 +624,7 @@ def post_parse_train_specific(args):
             raise ValueError('For now we only support single language training and evaluation with mbart models')
 
     if args.model_parallel:
-        if args.model == 'TransformerLSTM':
-            raise ValueError('Model parallel is not supported for TransformerLSTM models')
-        elif args.model == 'TransformerSeq2Seq' and args.pretrained_model not in MODEL_PARALLEL_SUPPORTED_MODELS:
+        if args.model == 'TransformerSeq2Seq' and args.pretrained_model not in MODEL_PARALLEL_SUPPORTED_MODELS:
             raise ValueError('Only the following models have model_parallel support: ', MODEL_PARALLEL_SUPPORTED_MODELS)
 
     if args.mp_device_ratio is not None:
@@ -675,14 +637,6 @@ def post_parse_train_specific(args):
     if args.use_encoder_loss and not (args.sentence_batching and len(args.train_src_languages.split('+')) > 1):
         raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
 
-    if args.preprocess_special_tokens and args.model == 'TransformerLSTM':
-        raise ValueError('Preprocessing special tokens should not be used for TransformerLSTM models')
-
-    if args.model == 'TransformerLSTM' and 'uncased' in args.pretrained_model:
-        raise ValueError(
-            'You should use the cased version of provided model when not preprocessing special tokens.'
-            ' Otherwise the program (answer) will not be tokenized properly'
-        )
 
     if args.override_valid_metrics:
         assert len(args.override_valid_metrics) == len(args.train_tasks) == len(args.val_tasks)
