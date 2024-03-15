@@ -121,9 +121,8 @@ def compute_e2e_dialogue_score(greedy, answer, args, example_ids, contexts):
     return results
 
 
-def computeSER(greedy, inputs, tasks):
-    assert len(tasks) == 1
-    dataset_class = getattr(dialogues, tasks[0].dataset_name)
+def computeSER(greedy, inputs, task):
+    dataset_class = getattr(dialogues, task.dataset_name)
     dataset = dataset_class()
 
     act_values = []
@@ -133,22 +132,20 @@ def computeSER(greedy, inputs, tasks):
     return dataset.compute_ser(greedy, act_values)
 
 
-def computeDA_EM(greedy, answer, tasks):
+def computeDA_EM(greedy, answer, task):
     # Uses dialogues da metric which takes care of entity normalizations
 
-    assert len(tasks) == 1
-    dataset_class = getattr(dialogues, tasks[0].dataset_name)
+    dataset_class = getattr(dialogues, task.dataset_name)
     dataset = dataset_class()
 
     answer = [a[0] for a in answer]
     return dataset.compute_da(greedy, answer)
 
 
-def computeJGA(greedy, answer, example_ids, tasks):
+def computeJGA(greedy, answer, example_ids, task):
     # Inputs contain diff states, so we need to compute the full state first
     # TODO: how to address multitask evaluation?
-    assert len(tasks) == 1
-    dataset_class = getattr(dialogues, tasks[0].dataset_name)
+    dataset_class = getattr(dialogues, task.dataset_name)
     dataset = dataset_class()
 
     cur_dial_id = None
@@ -175,11 +172,10 @@ def computeJGA(greedy, answer, example_ids, tasks):
     return dataset.compute_dst_em(full_greedy, full_answer)
 
 
-def computeDST_EM(greedy, answer, tasks):
+def computeDST_EM(greedy, answer, task):
     # Calculate exact match between diff states
     # Uses dialogues dst metric which takes care of entity normalizations
-    assert len(tasks) == 1
-    dataset_class = getattr(dialogues, tasks[0].dataset_name)
+    dataset_class = getattr(dialogues, task.dataset_name)
     dataset = dataset_class()
 
     answer = [dataset.span2state(a[0]) for a in answer]
@@ -207,11 +203,6 @@ def compute_metrics(
         example_ids: used to calculate some of e2e dialogue metrics that need to know span of each dialogue such as JGA
         contexts: used to calculate SER metric that need to know entities in the input
     """
-    if hasattr(args, 'val_tasks'):
-        tasks = args.val_tasks
-    else:
-        tasks = args.tasks
-
     metric_keys = []
     metric_values = []
     if not isinstance(answers[0], list):
@@ -224,11 +215,11 @@ def compute_metrics(
         metric_keys += results.keys()
         metric_values += results.values()
     if 'jga' in requested_metrics:
-        jga = computeJGA(predictions, answers, example_ids, tasks)
+        jga = computeJGA(predictions, answers, example_ids, args.task)
         metric_keys += ['jga']
         metric_values += [jga]
     if 'ser' in requested_metrics:
-        ser = computeSER(predictions, contexts, tasks)
+        ser = computeSER(predictions, contexts, args.task)
         metric_keys += ['ser']
         metric_values += [ser]
     if 'em' in requested_metrics:
@@ -236,11 +227,11 @@ def compute_metrics(
         metric_keys += ['em']
         metric_values += [em]
     if 'da_em' in requested_metrics:
-        da_em = computeDA_EM(predictions, answers, tasks)
+        da_em = computeDA_EM(predictions, answers, args.task)
         metric_keys += ['da_em']
         metric_values += [da_em]
     if 'dst_em' in requested_metrics:
-        dst_em = computeDST_EM(predictions, answers, tasks)
+        dst_em = computeDST_EM(predictions, answers, args.task)
         metric_keys += ['dst_em']
         metric_values += [dst_em]
     if 'casedbleu' in requested_metrics:

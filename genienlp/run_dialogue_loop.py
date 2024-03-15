@@ -35,13 +35,15 @@ import torch
 
 from genienlp.models import TransformerSeq2Seq
 
-from .tasks.registry import get_tasks
+from .tasks.registry import get_task
 
 logger = logging.getLogger(__name__)
 
 
 def parse_argv(parser):
-    parser.add_argument('--tasks', dest='task_names', nargs='+', help='task names for prediction')
+    parser.add_argument('--task', dest='task_name', help='task name for prediction')
+    parser.add_argument('--llm', type=str, choices=["gpt-4", "gpt-35-turbo"], required=True, help='The LLM to use for inference')
+    parser.add_argument('--llm_url', type=str, required=True, help='The LLM inference server URL')
     parser.add_argument('--eval_dir', type=str, help='use this directory to store eval results')
 
     parser.add_argument("--temperature", type=float, nargs='+', default=[0.0], help="temperature of 0 implies greedy sampling")
@@ -63,7 +65,7 @@ class DialogueLoop(object):
         self.args = args
 
     def run(self):
-        task = list(get_tasks(self.args.task_names, self.args).values())[0]
+        task = get_task(self.args.task_name, self.args)
 
         with torch.no_grad():
             self.model.interact_e2e_dialogues(task, eval_dir=self.args.eval_dir)

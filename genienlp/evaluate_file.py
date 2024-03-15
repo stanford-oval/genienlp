@@ -35,7 +35,7 @@ from pprint import pformat
 
 from .metrics import calculate_metrics
 from .models.base import ValidationOutput
-from .tasks.registry import get_tasks
+from .tasks.registry import get_task
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,9 @@ def parse_argv(parser):
         type=str,
         help='Name of dataset to run prediction for; will be ignored if --evaluate is test',
     )
-    parser.add_argument('--tasks', dest='task_names', nargs='+', required=True, help='task names for prediction')
+    parser.add_argument('--task', dest='task_name', required=True, help='task names for prediction')
+    parser.add_argument('--llm', type=str, choices=["gpt-4", "gpt-35-turbo"], required=True, help='The LLM to use for inference')
+    parser.add_argument('--llm_url', type=str, required=True, help='The LLM inference server URL')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the prediction file')
 
     parser.add_argument('--eval_dir', type=str, required=False, help='use this directory to store eval results')
@@ -98,7 +100,7 @@ def compute_metrics_on_file(pred_file, results_file_name, task, args):
 
 
 def main(args):
-    args.tasks = list(get_tasks(args.task_names, args).values())
+    args.task = get_task(args.task_name, args)
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
 
@@ -108,6 +110,5 @@ def main(args):
         eval_dir = args.eval_dir
     os.makedirs(eval_dir, exist_ok=True)
 
-    for task in args.tasks:
-        results_file_name = os.path.join(eval_dir, task.name + '.results.json')
-        compute_metrics_on_file(args.pred_file, results_file_name, task, args)
+    results_file_name = os.path.join(eval_dir, args.task.name + '.results.json')
+    compute_metrics_on_file(args.pred_file, results_file_name, args.task, args)

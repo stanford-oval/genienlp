@@ -77,8 +77,5 @@ def register_task(name):
     return decorator
 
 
-def get_tasks(names, args):
-    tasks = dict()
-    for name in names:
-        tasks[name] = _registry[task_name_to_cls_name(name)](name, args)
-    return tasks
+def get_task(name, args):
+    return _registry[name](name, args)

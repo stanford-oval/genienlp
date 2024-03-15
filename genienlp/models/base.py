@@ -499,6 +499,6 @@ class TransformerSeq2Seq:
 
     def generate(self, input_text: str):
         response = requests.get(
-            "http://127.0.0.1:7878/generate", json={"language": self.args.language, "task_input": input_text, "model": "gpt-4"}
+            f"{self.args.llm_url}/generate", json={"language": self.args.language, "task_input": input_text, "model": self.args.llm}
         )
         return response.json()["task_output"]

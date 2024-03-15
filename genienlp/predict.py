@@ -38,7 +38,7 @@ from pprint import pformat
 from genienlp.models import TransformerSeq2Seq
 
 from .metrics import calculate_metrics
-from .tasks.registry import get_tasks
+from .tasks.registry import get_task
 from .util import (
     make_data_loader,
 )
@@ -54,10 +54,11 @@ def parse_argv(parser):
         choices=['train', 'valid', 'test'],
         help='Which dataset to do predictions for (train, dev or test)',
     )
-    parser.add_argument('--tasks', dest='task_names', nargs='+', help='task names for prediction')
-    parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
-    parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
+    parser.add_argument('--task', dest='task_name', help='task names for prediction')
+    parser.add_argument('--llm', type=str, choices=["gpt-4", "gpt-35-turbo"], required=True, help='The LLM to use for inference')
+    parser.add_argument('--llm_url', type=str, required=True, help='The LLM inference server URL')
     parser.add_argument('--language', type=str, required=True, help='The language of the output, used for postprocessing.')
+    parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
 
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets')
@@ -116,53 +117,40 @@ def prepare_data(args):
 
     datasets = []
     paths = []
-    for i, task in enumerate(args.tasks):
-        logger.info(f'Loading {task}')
-        kwargs = {'train': None, 'validation': None, 'test': None}
-        if args.evaluate == 'train':
-            del kwargs['train']  # deleting keys means use the default file name
-        elif args.evaluate == 'valid':
-            kwargs['validation'] = 'valid'
-        elif args.evaluate == 'test':
-            del kwargs['test']
-        else:
-            raise ValueError('Split used for prediction should be either train, valid or test')
 
-        kwargs.update(
-            {
-                'subsample': args.subsample,
-            }
-        )
+    logger.info(f'Loading {args.task}')
+    kwargs = {'train': None, 'validation': None, 'test': None}
+    if args.evaluate == 'train':
+        del kwargs['train']  # deleting keys means use the default file name
+    elif args.evaluate == 'valid':
+        kwargs['validation'] = 'valid'
+    elif args.evaluate == 'test':
+        del kwargs['test']
+    else:
+        raise ValueError('Split used for prediction should be either train, valid or test')
 
-        split, path = task.get_splits(root=args.data, **kwargs)
-        if split.train:
-            data = split.train
-            path = path.train
-        elif split.eval:
-            data = split.eval
-            path = path.eval
-        else:
-            data = split.test
-            path = path.test
+    kwargs.update(
+        {
+            'subsample': args.subsample,
+        }
+    )
 
-        logger.info(f'{task.name} has {len(data.examples)} prediction examples')
-        datasets.append(data)
-        paths.append(path)
+    split, path = args.task.get_splits(root=args.data, **kwargs)
+    if split.train:
+        data = split.train
+        path = path.train
+    elif split.eval:
+        data = split.eval
+        path = path.eval
+    else:
+        data = split.test
+        path = path.test
+
+    logger.info(f'{args.task.name} has {len(data.examples)} prediction examples')
+    datasets.append(data)
+    paths.append(path)
 
     return datasets
-
-
-def prepare_data_iterators(args, val_sets):
-    logger.info('Preparing data iterators')
-    iters = []
-    for task, bs, val_set in zip(args.tasks, [args.val_batch_size] * len(val_sets), val_sets):
-        task_iter = []
-        loader = make_data_loader(val_set, bs)
-        task_iter.append((task, loader))
-
-        iters.extend(task_iter)
-
-    return iters
 
 
 def create_output_lines(index, validation_output):
@@ -185,58 +173,40 @@ def run(args):
         args=args,
     )
     val_sets = prepare_data(args)
-    iters = prepare_data_iterators(args, val_sets)
-
-    task_scores = defaultdict(list)
+    iter = make_data_loader(val_sets[0], args.val_batch_size)
 
     eval_dir = os.path.join(args.eval_dir, args.evaluate)
     os.makedirs(eval_dir, exist_ok=True)
 
-    for task, it in iters:
-        logger.info(task.name)
-        prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
-        results_file_name = os.path.join(eval_dir, task.name + '.results.json')
+    logger.info(args.task.name)
+    prediction_file_name = os.path.join(eval_dir, args.task.name + '.tsv')
+    results_file_name = os.path.join(eval_dir, args.task.name + '.results.json')
 
-        validation_output = model.validate(
-            it,
-            task,
-            eval_dir=eval_dir,
-        )
+    validation_output = model.validate(
+        iter,
+        args.task,
+        eval_dir=eval_dir,
+    )
 
-        # write into file
-        with open(prediction_file_name, 'w') as prediction_file:
-            for i in range(len(validation_output.example_ids)):
-                lines = create_output_lines(i, validation_output)
-                prediction_file.write('\n'.join(lines) + '\n')
+    # write into file
+    with open(prediction_file_name, 'w') as prediction_file:
+        for i in range(len(validation_output.example_ids)):
+            lines = create_output_lines(i, validation_output)
+            prediction_file.write('\n'.join(lines) + '\n')
 
-        if len(validation_output.answers) > 0:
-            metrics = calculate_metrics(args, validation_output, task)
+    if len(validation_output.answers) > 0:
+        metrics = calculate_metrics(args, validation_output, args.task)
 
-            with open(results_file_name, 'w') as results_file:
-                results_file.write(json.dumps(metrics) + '\n')
+        with open(results_file_name, 'w') as results_file:
+            results_file.write(json.dumps(metrics) + '\n')
 
-            if not args.silent:
-                for i, (c, p, a) in enumerate(
-                    zip(validation_output.contexts, validation_output.predictions, validation_output.answers)
-                ):
-                    log_string = '\n'.join(
-                        [f'Context {i + 1}: {c}', f'Prediction {i + 1} ({len(p)} outputs): {p}', f'Answer {i + 1}: {a}']
-                    )
-                    logger.info(log_string)
+        logger.info(metrics)
 
-            logger.info(metrics)
+        decaScore = len(validation_output.answers), metrics[args.task.metrics[0]]
 
-            task_scores[task].append((len(validation_output.answers), metrics[task.metrics[0]]))
-
-    decaScore = []
-    for task in task_scores.keys():
-        decaScore.append(
-            sum([length * score for length, score in task_scores[task]]) / sum([length for length, score in task_scores[task]])
-        )
 
     logger.info('Evaluated Tasks:\n')
-    for i, task in enumerate(args.tasks):
-        logger.info(f'{task.name}: {decaScore[i]}')
+    logger.info(f'{args.task.name}: {decaScore}')
     logger.info('-------------------')
     logger.info(f'DecaScore:  {sum(decaScore)}\n')
     logger.info(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
@@ -245,7 +215,7 @@ def run(args):
 def main(args):
     set_default_values(args)
 
-    args.tasks = list(get_tasks(args.task_names, args).values())
+    args.task = get_task(args.task_name, args)
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
 
