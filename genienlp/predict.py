@@ -36,7 +36,7 @@ from pprint import pformat
 
 import torch
 
-from genienlp.models.transformer_seq2seq import TransformerSeq2Seq
+from genienlp.models import TransformerSeq2Seq
 
 from .arguments import check_and_update_generation_args
 from .metrics import calculate_and_reduce_metrics
@@ -133,12 +133,6 @@ def parse_argv(parser):
         '--database_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models for bootleg)'
     )
 
-    parser.add_argument(
-        "--mixed_precision",
-        action='store_true',
-        help='If True, will use mixed precision for prediction.'
-        'This reduces memory consumption and is especially faster on GPUs like NVIDIA V100 and T4. May slightly change the generated output.',
-    )
     parser.add_argument(
         '--one_output_per_line',
         action='store_true',
@@ -316,9 +310,7 @@ def get_metrics_to_compute(args, task):
 def run(args):
     model = TransformerSeq2Seq.load(
         args.path,
-        model_checkpoint_file=args.checkpoint_name,
         args=args,
-        tasks=args.tasks,
     )
     val_sets = prepare_data(args)
     iters = prepare_data_iterators(args, val_sets, model.numericalizer)
@@ -333,14 +325,12 @@ def run(args):
         prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
         results_file_name = os.path.join(eval_dir, task.name + '.results.json')
 
-        with torch.no_grad(), torch.cuda.amp.autocast(enabled=args.mixed_precision):
-            validation_output = model.validate(
-                it,
-                task,
-                eval_dir=eval_dir,
-                original_order=original_order,
-                disable_progbar=False,
-            )
+        validation_output = model.validate(
+            it,
+            task,
+            eval_dir=eval_dir,
+            original_order=original_order,
+        )
 
         # write into file
         with open(prediction_file_name, 'w') as prediction_file:

@@ -170,15 +170,6 @@ def parse_argv(parser):
         help='do not track the git commit associated with this training run',
     )
 
-    parser.add_argument(
-        '--no_fast_tokenizer', action='store_true', help='Ignore all conditions and use slow version of huggingface tokenizer'
-    )
-    parser.add_argument(
-        '--force_fast_tokenizer',
-        action='store_true',
-        help='Ignore all conditions and use fast version of huggingface tokenizer',
-    )
-
     parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')
     parser.add_argument(
         '--aux_dataset', default='', type=str, help='path to auxiliary dataset (ignored if curriculum is not used)'
@@ -340,9 +331,6 @@ def post_parse_train_specific(args):
 
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
-
-    if args.no_fast_tokenizer and args.force_fast_tokenizer:
-        raise ValueError('Both no_fast_tokenizer and force_fast_tokenizer flags are on')
 
     if args.override_valid_metrics:
         assert len(args.override_valid_metrics) == len(args.train_tasks) == len(args.val_tasks)

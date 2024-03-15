@@ -195,8 +195,6 @@ def load_config_file_to_args(args):
         'preprocess_special_tokens',
         'label_smoothing',
         'num_workers',
-        'no_fast_tokenizer',
-        'force_fast_tokenizer',
         'max_types_per_qid',
         'database_type',
         'num_db_types',
@@ -260,8 +258,6 @@ def load_config_file_to_args(args):
             'almond_has_multiple_programs',
             'almond_lang_as_question',
             'preprocess_special_tokens',
-            'no_fast_tokenizer',
-            'force_fast_tokenizer',
         ):
             setattr(args, r, False)
         elif r in ('num_db_types', 'db_unk_id', 'num_workers'):

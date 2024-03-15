@@ -32,37 +32,12 @@ import json
 import logging
 import os
 import re
-from collections import Counter, defaultdict
 from typing import List, Tuple
 
-from pathos import multiprocessing
 from torch.nn.utils.rnn import pad_sequence
 from transformers import (
     SPIECE_UNDERLINE,
-    T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
     AutoTokenizer,
-    BartTokenizer,
-    BartTokenizerFast,
-    BertTokenizer,
-    BertTokenizerFast,
-    ByT5Tokenizer,
-    GPT2Tokenizer,
-    GPT2TokenizerFast,
-    M2M100Tokenizer,
-    MarianConfig,
-    MarianTokenizer,
-    MBart50Tokenizer,
-    MBart50TokenizerFast,
-    MBartTokenizer,
-    MBartTokenizerFast,
-    NllbTokenizer,
-    NllbTokenizerFast,
-    T5Tokenizer,
-    T5TokenizerFast,
-    XGLMTokenizer,
-    XGLMTokenizerFast,
-    XLMRobertaTokenizer,
-    XLMRobertaTokenizerFast,
 )
 
 from .decoder_vocab import DecoderVocabulary
@@ -70,33 +45,6 @@ from .example import SequentialField
 
 logger = logging.getLogger(__name__)
 
-# not all tokenizers respect whitespace in the input or honor do_basic_tokenize=False
-# for those, we need to use the slow tokenizers or we'll get messed up thingtalk output
-ALLOWED_FAST_TOKENIZERS = {
-    'facebook/bart-base',
-    'facebook/bart-large',
-    'sshleifer/bart-tiny-random',
-}
-
-# known NOT to work:
-# - all the BERT models
-# - all the XLM-R models
-#
-# mBART, t5, and mt5 models work when preprocessing, because they're SPM/RoBERTa-based so they respect
-# whitespace, but the fast tokenizers treat special tokens differently than the slow ones
-# and drop whitespace before special tokens, which breaks
-ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING = {
-    'facebook/mbart-large-cc25',
-    'sshleifer/tiny-mbart',
-    'google/mt5-small',
-    'google/mt5-base',
-    'google/mt5-large',
-    'google/mt5-xl',
-    'google/mt5-xxl',
-}
-
-# for input batches smaller than this value, multiprocessing will not be used due to its overhead
-MULTIPROCESSING_THRESHOLD = 5000
 
 
 class TransformerNumericalizer(object):
@@ -109,16 +57,14 @@ class TransformerNumericalizer(object):
     _words_to_special_token_regexes: List[Tuple[re.Pattern, str]]
 
     def __init__(
-        self, pretrained_tokenizer, args, max_generative_vocab, config, vocab_sets, tasks, save_dir=None
+        self, pretrained_tokenizer, args, save_dir=None
     ):
         """
         If `save_dir` is None, initializes a new Numericalizer and optionally adds new words to its vocabulary, otherwise,
         loads from `save_dir`
         """
         self._pretrained_name = pretrained_tokenizer
-        self.max_generative_vocab = max_generative_vocab
         self._tokenizer = None
-        self.config = config
 
         self._preprocess_special_tokens = args.preprocess_special_tokens
 
@@ -131,14 +77,11 @@ class TransformerNumericalizer(object):
 
         self.args = args
 
-        self._init_tokenizer(save_dir, config)
+        self._init_tokenizer(save_dir)
 
         if save_dir is not None:
             logger.info(f'Loading the accompanying numericalizer from {save_dir}')
             self.load_extras(save_dir)
-        else:
-            logger.info('Building vocabulary')
-            self.build_vocab(vocab_sets, tasks)
 
         self._init_token_ids()
         self._init_decoder_vocab()
@@ -153,76 +96,30 @@ class TransformerNumericalizer(object):
 
     @property
     def decoder_pad_id(self):
-        if self.max_generative_vocab is not None:
-            return self.decoder_vocab.pad_idx
-        else:
-            return self.pad_id
+        return self.pad_id
 
-    def _use_fast(self):
-        if self.args.no_fast_tokenizer:
-            return False
-        if self.args.force_fast_tokenizer:
-            return True
-        return self._pretrained_name in ALLOWED_FAST_TOKENIZERS or (
-            self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING
-        )
-
-    def _init_tokenizer(self, save_dir, config):
+    def _init_tokenizer(self, save_dir):
         """
         Initializes the `self._tokenizer` object, but not the rest.
         """
         tokenizer_args = {
             'do_lower_case': False,
             'do_basic_tokenize': False,
-            'use_fast': self._use_fast(),
         }
         if save_dir is not None:
-            tokenizer_args.update({'pretrained_model_name_or_path': save_dir, 'config': config})
+            tokenizer_args.update({'pretrained_model_name_or_path': save_dir})
         else:
             tokenizer_args.update({'pretrained_model_name_or_path': self._pretrained_name})
 
         self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
 
-        # We only include the base tokenizers since `isinstance` checks for inheritance
-        if isinstance(self._tokenizer, (BertTokenizer, BertTokenizerFast)):
-            self._tokenizer.is_piece_fn = lambda wp: wp.startswith('##')
-        elif isinstance(
-            self._tokenizer,
-            (
-                XLMRobertaTokenizer,
-                XLMRobertaTokenizerFast,
-                T5Tokenizer,
-                T5TokenizerFast,
-                BartTokenizer,
-                BartTokenizerFast,
-                MBartTokenizer,
-                MBartTokenizerFast,
-                MBart50Tokenizer,
-                MBart50TokenizerFast,
-                MarianTokenizer,
-                M2M100Tokenizer,
-                XGLMTokenizer,
-                XGLMTokenizerFast,
-                NllbTokenizer,
-                NllbTokenizerFast,
-            ),
-        ):
-            self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
-        elif isinstance(self._tokenizer, (GPT2Tokenizer, GPT2TokenizerFast)):
-            self._tokenizer.is_piece_fn = lambda wp: not wp.startswith('Ġ')
-        elif isinstance(self._tokenizer, ByT5Tokenizer):
-            self._tokenizer.is_piece_fn = lambda wp: False
+        self._tokenizer.is_piece_fn = lambda wp: not wp.startswith(SPIECE_UNDERLINE)
 
         # make sure we assigned is_piece_fn
         assert self._tokenizer.is_piece_fn
 
 
     def load_extras(self, save_dir):
-        if self.max_generative_vocab is not None:
-            with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'r') as fp:
-                self._decoder_words = [
-                    (line.rstrip('\n'), self._tokenizer.convert_tokens_to_ids(line.rstrip('\n'))) for line in fp
-                ]
         try:
             with open(os.path.join(save_dir, 'special-token-preprocessing.json')) as fp:
                 self._special_tokens_to_word_map = json.load(fp)
@@ -236,157 +133,6 @@ class TransformerNumericalizer(object):
         """
         # TODO account for left padding models
         return pad_sequence(batch, padding_value=pad_id, batch_first=True)
-
-    def save(self, save_dir):
-        self._tokenizer.save_pretrained(save_dir)
-        if self.max_generative_vocab is not None:
-            with open(os.path.join(save_dir, 'decoder-vocab.txt'), 'w') as fp:
-                for word, _full_idx in self._decoder_words:
-                    fp.write(word + '\n')
-        if len(self._special_tokens_to_word_map) > 0:
-            with open(os.path.join(save_dir, 'special-token-preprocessing.json'), 'w') as fp:
-                json.dump(self._special_tokens_to_word_map, fp)
-
-    def build_vocab(self, vocab_sets, tasks):
-        special_tokens = []
-        for task in tasks:
-            special_tokens += list(task.special_tokens)
-        special_tokens.sort()
-
-        if self._preprocess_special_tokens:
-            self._build_special_tokens_maps(special_tokens)
-            self._build_special_tokens_regexes()
-        else:
-            # add the special tokens directly to the tokenizer
-            self._tokenizer.add_tokens(special_tokens)
-
-        existing_special_tokens = self._tokenizer.special_tokens_map
-        # add separator if it doesn't exist. It will be used to concatenate context and question
-        if 'sep_token' not in existing_special_tokens:
-            self._tokenizer.add_special_tokens({'sep_token': existing_special_tokens.get('sep_token', '</s>')})
-
-        if self.max_generative_vocab is not None:
-            # do a pass over all the data in the dataset
-            # in this pass, we
-            # 1) tokenize everything, to ensure we account for all added tokens
-            # 2) we construct a counter of wordpieces in the answers, for the decoder vocabulary
-            decoder_words = Counter()
-            for dataset in vocab_sets:
-                for example in dataset:
-                    decoder_words.update(self._tokenizer.tokenize(example.context))
-                    decoder_words.update(self._tokenizer.tokenize(example.question))
-                    decoder_words.update(self._tokenizer.tokenize(example.answer))
-
-            # add the required special tokens, if not present already
-            # note: if the tokens are not present, it means they are not used natively
-            # by the model, so we can pick our favorite token
-            if 'bos_token' not in existing_special_tokens:
-                self._tokenizer.add_special_tokens({'bos_token': existing_special_tokens.get('cls_token', '<s>')})
-            if 'eos_token' not in existing_special_tokens:
-                self._tokenizer.add_special_tokens({'eos_token': existing_special_tokens.get('sep_token', '</s>')})
-            if 'pad_token' not in existing_special_tokens:
-                self._tokenizer.add_special_tokens({'pad_token': '<pad>'})
-            if 'unk_token' not in existing_special_tokens:
-                self._tokenizer.add_special_tokens({'unk_token': '<unk>'})
-            self._decoder_words = [
-                (self._tokenizer.bos_token, self._tokenizer.bos_token_id),
-                (self._tokenizer.eos_token, self._tokenizer.eos_token_id),
-                (self._tokenizer.pad_token, self._tokenizer.pad_token_id),
-                (self._tokenizer.unk_token, self._tokenizer.unk_token_id),
-            ] + [
-                (word, self._tokenizer.convert_tokens_to_ids(word))
-                for word, _freq in decoder_words.most_common(self.max_generative_vocab)
-            ]
-
-    def grow_vocab(self, tasks):
-        if self._preprocess_special_tokens:
-            # if we're preprocessing special tokens, we cannot extend the vocabulary
-            # if the vocabulary was incomplete during training, tough luck, those words will be subwords all the way
-            # (what do you expect?)
-            return
-
-        # add the new special tokens from the task
-        for task in tasks:
-            self._tokenizer.add_tokens(list(task.special_tokens))
-
-    def _build_special_tokens_maps(self, special_tokens):
-        # we automatically construct the mapping from special tokens to the shortest unambiguous
-        # sequence of word-like things
-
-        processed_tokens = dict()
-        # first, split each token into words
-        for original_token in special_tokens:
-            token = original_token
-            prefix = None
-            if token.startswith('@'):
-                prefix = '@ '
-                token = token[1:]
-            elif token.startswith('^^'):
-                prefix = '^^ '
-                token = token[2:]
-
-            # split the token into words
-            parts = re.split('[:._-]', token)
-            if not prefix:
-                # if we don't have a prefix, use the first word as prefix
-                assert len(parts) >= 2
-                prefix = parts[0] + ' '
-                parts = parts[1:]
-            processed_tokens[original_token] = (prefix, parts)
-
-        # words -> token(s) (multiple tokens if a sequence of words is ambiguous)
-        assignment = defaultdict(list)
-        # token -> words
-        reverse_mapping = dict()
-
-        # now greedily assign each token to the shortest end that is not ambiguous
-        for original_token, (prefix, parts) in processed_tokens.items():
-            for i in range(len(parts) - 1, -1, -1):
-                attempt = prefix + ' '.join(parts[i:])
-                if attempt in assignment:
-                    # ambiguous, extend everything in the current assignment by one word
-                    for ambiguous_token in assignment[attempt]:
-                        # list of sequences of words mapping to this token
-                        # the first one is the one we have chosen so far, and the others are ambiguous
-                        word_sequences = reverse_mapping[ambiguous_token]
-                        if word_sequences[0] != attempt:
-                            # ambiguous_token is already choosing a word sequence that is not ambiguous with
-                            # original_token, nothing to do, other than to know original_token will need to
-                            # be extended
-                            continue
-                        # extend ambiguous_token by one
-                        ambiguous_prefix, ambiguous_parts = processed_tokens[ambiguous_token]
-                        # assert we still have one word to use to disambiguate
-                        # this works as long as the tokens are not suffix of one another
-                        assert len(word_sequences) < len(ambiguous_parts), (original_token, ambiguous_token, word_sequences)
-                        new_words = ambiguous_prefix + ' '.join(
-                            ambiguous_parts[len(ambiguous_parts) - len(word_sequences) - 1 :]
-                        )
-                        word_sequences.insert(0, new_words)
-                        # before original_token, ambiguous_token was not ambiguous with any token already
-                        # assigned, so it cannot be ambiguous after we made it longer
-                        assert new_words not in assignment
-                        assignment[new_words] = [ambiguous_token]
-
-                    # mark that attempt is an ambiguous suffix of original_token
-                    assignment[attempt].append(original_token)
-
-                    # don't assign original_token at this step, wait until the next loop cycle
-                    # at the next loop, we'll try again with a longer suffix of original_token
-                    # that way, we check if the token is still ambiguous after we extended everything
-                    # else by one word
-                else:
-                    # yay not ambiguous, time to assign it
-
-                    # construct all word sequences, from the one we chose to the end
-                    word_sequences = [prefix + ' '.join(parts[j:]) for j in range(i, len(parts))]
-                    assignment[attempt] = [original_token]
-                    reverse_mapping[original_token] = word_sequences
-                    break
-
-        # okay we have assigned everything, time to clean up
-        for token, word_sequences in reverse_mapping.items():
-            self._special_tokens_to_word_map.append((token, word_sequences[0]))
 
     def _build_special_tokens_regexes(self):
         for token, words in self._special_tokens_to_word_map:
@@ -420,15 +166,8 @@ class TransformerNumericalizer(object):
         self.answer_pad_id = self.pad_id
 
     def _init_decoder_vocab(self):
-        if self.max_generative_vocab is not None:
-            self.generative_vocab_size = len(self._decoder_words)
-
-            self.decoder_vocab = DecoderVocabulary(
-                self._decoder_words, self._tokenizer, pad_token=self.pad_token, eos_token=self.eos_token
-            )
-        else:
-            self.generative_vocab_size = len(self._tokenizer)
-            self.decoder_vocab = None
+        self.generative_vocab_size = len(self._tokenizer)
+        self.decoder_vocab = None
 
     def get_num_special_tokens(self, special_tokens_mask):
         num_prefix_special_tokens, num_suffix_special_tokens = 0, 0
@@ -531,8 +270,7 @@ class TransformerNumericalizer(object):
 
     def encode_batch(self, sentences: List[str], field_name, features=None) -> List[SequentialField]:
         """
-        Batched version of `encode_single()`. Uses multiprocessing on all CPU cores for preprocessing,
-        and multithreading for tokenization if a `FastTokenizer` is used
+        Batched version of `encode_single()`. Uses multiprocessing on all CPU cores for preprocessing
         Inputs:
             sentences: a list of sentences to encode
             field_name: text field name (options: context, question, answer)
@@ -554,27 +292,14 @@ class TransformerNumericalizer(object):
             sentences = [sent for sent in sentences]
 
         if self._preprocess_special_tokens:
-            if len(sentences) > MULTIPROCESSING_THRESHOLD:
-                multiprocessing_factor = 1
-                logger.info('multiprocessing factor for special token preprocessing is %d', multiprocessing_factor)
-                with multiprocessing.Pool(multiprocessing_factor) as p:
-                    sentences, index2expansions = list(
-                        zip(
-                            *p.map(
-                                functools.partial(self._apply_special_token_preprocessing, return_idx2exp=bool(len(features))),
-                                sentences,
-                            )
-                        )
-                    )
-            else:
-                sentences, index2expansions = list(
-                    zip(
-                        *map(
-                            functools.partial(self._apply_special_token_preprocessing, return_idx2exp=bool(len(features))),
-                            sentences,
-                        )
+            sentences, index2expansions = list(
+                zip(
+                    *map(
+                        functools.partial(self._apply_special_token_preprocessing, return_idx2exp=bool(len(features))),
+                        sentences,
                     )
                 )
+            )
 
             all_input_features = []
             if features:
@@ -594,31 +319,6 @@ class TransformerNumericalizer(object):
                     all_input_features.append(new_feat)
 
             features = all_input_features
-
-        # batch_encode_plus for fast tokenizers returns tokenized text
-        # whereas slow version do not. We breakdown slow tokenization into two steps
-        # extract tokenized text first, use that to adjust features
-        # then pass tokenized text to `_batch_prepare_for_model`
-        def do_fast_tokenization(extract_word_pieces):
-            all_wp_tokenized = []
-            batch_encoded = self._tokenizer.batch_encode_plus(
-                list(sentences),
-                add_special_tokens=True,
-                max_length=None,
-                return_length=True,
-                return_attention_mask=False,
-                return_special_tokens_mask=True,
-            )
-            if extract_word_pieces:
-                for encoding in batch_encoded.encodings:
-                    # remove special tokens
-                    num_prefix_special_tokens, num_suffix_special_tokens = self.get_num_special_tokens(
-                        encoding.special_tokens_mask
-                    )
-                    wp_tokens = encoding.tokens[num_prefix_special_tokens:-num_suffix_special_tokens]
-                    all_wp_tokenized.append(wp_tokens)
-
-            return batch_encoded, all_wp_tokenized
 
         def do_slow_tokenization(extract_word_pieces):
             all_input_ids = []
@@ -651,19 +351,11 @@ class TransformerNumericalizer(object):
                 )
             return batch_encoded, all_wp_tokenized
 
-        if self._use_fast():
-            if field_name == 'answer':
-                with self._tokenizer.as_target_tokenizer():
-                    batch_encoded, all_wp_tokenized = do_fast_tokenization(extract_word_pieces)
-            else:
-                batch_encoded, all_wp_tokenized = do_fast_tokenization(extract_word_pieces)
-
-        else:
-            if field_name == 'answer':
-                with self._tokenizer.as_target_tokenizer():
-                    batch_encoded, all_wp_tokenized = do_slow_tokenization(extract_word_pieces)
-            else:
+        if field_name == 'answer':
+            with self._tokenizer.as_target_tokenizer():
                 batch_encoded, all_wp_tokenized = do_slow_tokenization(extract_word_pieces)
+        else:
+            batch_encoded, all_wp_tokenized = do_slow_tokenization(extract_word_pieces)
 
         all_input_features = []
 
@@ -746,16 +438,10 @@ class TransformerNumericalizer(object):
         # go through genienlp and remain intact while predictions will be missing these tokens. We replace such tokens
         # with known ones that do not conflict with other tokens. This continues our series of
         # "Possible bugs in spm-based tokenizers" issued here https://github.com/huggingface/transformers/issues/12867
-        if isinstance(self._tokenizer, (T5Tokenizer, T5TokenizerFast)):
-            sentence = sentence.replace('^^', '%')
-            sentence = sentence.replace('~', '#')
         return sentence, index2expansion
 
     def _undo_special_token_preprocessing(self, sentence):
         # undo T5 specific token preprocessing
-        if isinstance(self._tokenizer, (T5Tokenizer, T5TokenizerFast)):
-            sentence = sentence.replace('%', '^^')
-            sentence = sentence.replace('#', '~')
         for regex, replacement in self._words_to_special_token_regexes:
             sentence = regex.sub(replacement, sentence)
         return sentence

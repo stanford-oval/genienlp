@@ -127,21 +127,6 @@ def computePartialEM(outputs, targets):
     return sum(outs) / len(outputs) * 100
 
 
-def computeBERTScore(outputs, targets, lang):
-    bertscore_metric = load_metric("bertscore")
-    return (
-        sum(bertscore_metric.compute(predictions=outputs, references=targets, lang=lang, use_fast_tokenizer=True)['f1'])
-        / len(outputs)
-        * 100
-    )
-
-
-def computeTER(outputs, targets):
-    targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
-    ter_metric = sacrebleu.metrics.TER()
-    return ter_metric.corpus_score(outputs, targets).score * 100
-
-
 def computeBLEU(outputs, targets):
     targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
     return sacrebleu.corpus_bleu(outputs, targets, lowercase=True).score

@@ -34,38 +34,15 @@ from collections import defaultdict
 from typing import List, Optional
 
 import dialogues
-import torch
 import ujson
-from dateparser.languages import default_loader
+
 import requests
-from transformers import MarianTokenizer, PreTrainedModel
 from tqdm import tqdm
 
-from ..data_utils.example import NumericalizedExamples, SequentialField
 from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import replace_capturing_group
 
 logger = logging.getLogger(__name__)
-
-
-class GenieModel(PreTrainedModel):
-    numericalizer: TransformerNumericalizer
-
-    @classmethod
-    def load(cls, save_directory: str, *model_args, **kwargs):
-        """
-        Loads a GenieModel (in Genie format, not HuggingFace's transformers) and its
-        accompanying Numericalizer (not HuggingFace's tokenizers) from `save_directory`, which is a path
-        """
-        # TODO remove kwargs and take individual inputs instead
-        args = kwargs.pop("args", None)
-        tasks = kwargs.pop("tasks", None)
-        vocab_sets = kwargs.pop("vocab_sets", None)
-
-        model = cls(args=args, tasks=tasks, vocab_sets=vocab_sets, save_directory=save_directory, *model_args, **kwargs)
-        
-
-        return model
 
 
 class ValidationOutput(object):
@@ -91,66 +68,66 @@ class ValidationOutput(object):
 
 
 # TransformerSeq2Seq inherits from this model
-class GenieModelForGeneration(GenieModel):
-    def numericalize_example(self, input_text, turn_id):
-        if isinstance(input_text, str):
-            input_text = [input_text]
-        tokenized_contexts = self.numericalizer.encode_batch(input_text, field_name='context', features=None)[0]
+class TransformerSeq2Seq():
 
-        numericalized_turn = NumericalizedExamples(
-            example_id=[str(turn_id)],
-            context=SequentialField(
-                value=torch.tensor([tokenized_contexts.value]),
-                length=torch.tensor([tokenized_contexts.length]),
-                limited=torch.tensor([tokenized_contexts.limited]),
-                feature=None,
-            ),
-            answer=SequentialField(value=None, length=None, limited=None, feature=None),
+    numericalizer: TransformerNumericalizer
+
+    @classmethod
+    def load(cls, save_directory: str, args):
+        """
+        Loads a GenieModel (in Genie format, not HuggingFace's transformers) and its
+        accompanying Numericalizer (not HuggingFace's tokenizers) from `save_directory`, which is a path
+        """
+        model = cls(args, save_directory)
+        
+
+        return model
+
+    def __init__(self, args, save_directory):
+        """
+        If `save_directory` is None, will initialize a new model and numericalizer, otherwise, will load them from `save_directory`
+        """
+        self.args = args
+
+        self.numericalizer = TransformerNumericalizer(
+            self.args.pretrained_model,
+            args,
+            save_dir=save_directory,
         )
-
-        return numericalized_turn
 
     def validate(
         self,
         data_iterator,
         task,
         eval_dir=None,
-        output_predictions_only=False,
         original_order=None,
-        disable_progbar=True,
-        **kwargs,
     ):
         if self.args.e2e_dialogue_evaluation:
             return self.validate_e2e_dialogues(
-                data_iterator, task, eval_dir, output_predictions_only, original_order
+                data_iterator, task, eval_dir, original_order
             )
         else:
             return self.validate_batch(
                 data_iterator,
                 task,
-                output_predictions_only,
                 original_order,
-                disable_progbar,
             )
 
     def validate_batch(
         self,
         data_iterator,
         task,
-        output_predictions_only=False,
         original_order=None,
-        disable_progbar=True,
     ):
         """
         Inputs:
             original_order: List of indices. If provided, we will sort the results according to this order
-        Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
+        Outputs: (loss, predictions, answers, contexts)
             loss
             predictions: a List of Lists of strings
             answers
             contexts
         """
-        total_loss = 0.0 if 'loss' in task.metrics else None
         predictions = []
         raw_predictions = []
         example_ids = []
@@ -164,73 +141,18 @@ class GenieModelForGeneration(GenieModel):
             batch_example_ids = batch.example_id
 
             example_ids += batch_example_ids
-            if not output_predictions_only:
-                batch_answer = self.numericalizer.reverse(batch.answer.value.data, 'answer')
-                batch_answer = [
-                    task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))
-                ]
-                answers += batch_answer
-                batch_context = self.numericalizer.reverse(batch.context.value.data, 'context')
-                contexts += batch_context
-
-            if total_loss is not None:
-                loss = self.forward(batch, train=True).loss.item()
-                total_loss += loss
+            batch_answer = self.numericalizer.reverse(batch.answer.value.data, 'answer')
+            batch_answer = [
+                task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))
+            ]
+            answers += batch_answer
+            batch_context = self.numericalizer.reverse(batch.context.value.data, 'context')
+            contexts += batch_context
 
             for hyperparameter_idx in range(len(self.args.temperature)):
-                generated = self.generate(
-                    batch,
-                    max_output_length=self.args.max_output_length,
-                    min_output_length=self.args.min_output_length,
-                    num_outputs=self.args.num_outputs[hyperparameter_idx],
-                    temperature=self.args.temperature[hyperparameter_idx]
-                    if self.args.temperature[hyperparameter_idx] > 0
-                    else 1.0,
-                    repetition_penalty=self.args.repetition_penalty[hyperparameter_idx],
-                    top_k=self.args.top_k[hyperparameter_idx],
-                    top_p=self.args.top_p[hyperparameter_idx],
-                    num_beams=self.args.num_beams[hyperparameter_idx],
-                    num_beam_groups=self.args.num_beam_groups[hyperparameter_idx],
-                    diversity_penalty=self.args.diversity_penalty[hyperparameter_idx],
-                    no_repeat_ngram_size=self.args.no_repeat_ngram_size[hyperparameter_idx],
-                    do_sample=self.args.temperature[hyperparameter_idx] != 0,  # if temperature==0, we do not sample
-                )
-                partial_batch_prediction_ids = generated.sequences
-                partial_batch_words = None
-
-                if getattr(task, 'need_attention_scores', False):
-                    cross_attentions = generated.cross_attentions
-
-                    # stack tensors to shape (max_output_length, num_layers, batch_size, num_heads, 1, max_input_length)
-                    cross_attentions = torch.stack(([torch.stack(tuple) for tuple in cross_attentions])).cpu()
-
-                    # reshape to (num_layers, batch_size, num_heads, max_output_length, max_input_length)
-                    cross_attentions = cross_attentions.squeeze(4)
-                    cross_attentions = cross_attentions.permute(1, 2, 3, 0, 4).contiguous()
-
-                    # choose only last layer attentions
-                    # cross_attentions = torch.mean(cross_attentions[-3:, ...], dim=0)
-                    cross_attentions = cross_attentions[-1, ...]
-
-                    # postprocess prediction ids
-                    kwargs = {
-                        'numericalizer': self.numericalizer,
-                        'cross_attentions': cross_attentions,
-                    }
-
-                    partial_batch_prediction_ids, partial_batch_words = task.batch_postprocess_prediction_ids(
-                        batch_example_ids, batch.context.value.data, partial_batch_prediction_ids, **kwargs
-                    )
-
-                # MarianTokenizer uses two different spm models for encoding source and target languages.
-                # in almond_translate we postprocess text with alignment which produces code-switched sentences.
-                # encoding a code-switched sentence with either spm will omit tokens from the other language
-                # so we have to return both the processed and encoded text.
-                # we need to return encoded text too since confidence_features requires ids
-                if isinstance(self.numericalizer._tokenizer, MarianTokenizer) and partial_batch_words:
-                    partial_batch_prediction = partial_batch_words
-                else:
-                    partial_batch_prediction = self.numericalizer.reverse(partial_batch_prediction_ids, 'answer')
+                print(batch)
+                raise NotImplementedError() # TODO
+                partial_batch_prediction = self.generate(batch)
 
                 def get_example_index(i):
                     return (i // self.args.num_outputs[hyperparameter_idx]) % batch_size
@@ -247,9 +169,6 @@ class GenieModelForGeneration(GenieModel):
 
             predictions += batch_prediction
             raw_predictions += batch_raw_prediction
-
-        if total_loss is not None:
-            total_loss /= len(example_ids)
 
         if original_order is not None:
             # sort back to the original order
@@ -275,26 +194,22 @@ class GenieModelForGeneration(GenieModel):
 
 
 
-        output = ValidationOutput(loss=total_loss)
-
-        if output_predictions_only:
-            output.predictions = predictions
-        else:
-            output.example_ids, output.predictions, output.answers, output.contexts = (
-                example_ids,
-                predictions,
-                answers,
-                contexts,
-            )
+        output = ValidationOutput()
+        output.example_ids, output.predictions, output.answers, output.contexts = (
+            example_ids,
+            predictions,
+            answers,
+            contexts,
+        )
         return output
 
     def validate_e2e_dialogues(
-        self, data_iterator, task, eval_dir=None, output_predictions_only=False, original_order=None
+        self, data_iterator, task, eval_dir=None, original_order=None
     ):
         """
         Inputs:
             original_order: List of indices. If provided, we will sort the results according to this order
-        Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
+        Outputs: (loss, predictions, answers, contexts)
             loss
             predictions: a List of Lists of strings
             answers
@@ -352,13 +267,11 @@ class GenieModelForGeneration(GenieModel):
                 batch_context.append(self.numericalizer._tokenizer.convert_tokens_to_string(text).replace(",", "，"))
 
             contexts += batch_context
-
-            if not output_predictions_only:
-                batch_answer = self.numericalizer.reverse(turn.answer.value.data, 'answer')
-                batch_answer = [
-                    task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))
-                ]
-                answers += batch_answer
+            batch_answer = self.numericalizer.reverse(turn.answer.value.data, 'answer')
+            batch_answer = [
+                task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))
+            ]
+            answers += batch_answer
 
             new_state_text = dataset.state2span(dialogue_state)
 
@@ -392,7 +305,7 @@ class GenieModelForGeneration(GenieModel):
             # replace old context with updated
             contexts[-1] = input_text
 
-            response = requests.get("http://127.0.0.1:7878/generate", json={"language":"en", "task_input":input_text, "model":"gpt-4"})
+            response = requests.get("http://127.0.0.1:7878/generate", json={"language":self.args.language, "task_input":input_text, "model":"gpt-4"})
             partial_batch_prediction = response.json()["task_output"]
             print(partial_batch_prediction)
 
@@ -465,27 +378,22 @@ class GenieModelForGeneration(GenieModel):
                 list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))
             ]
 
-        # TODO calculate and return loss
-        loss = None
-        output = ValidationOutput(loss=loss)
+        output = ValidationOutput()
 
-        if output_predictions_only:
-            output.predictions = predictions
-        else:
-            output.example_ids, output.predictions, output.answers, output.contexts = (
-                example_ids,
-                predictions,
-                answers,
-                contexts,
-            )
+        output.example_ids, output.predictions, output.answers, output.contexts = (
+            example_ids,
+            predictions,
+            answers,
+            contexts,
+        )
 
         return output
 
-    def interact_e2e_dialogues(self, task, eval_dir=None, output_predictions_only=False, original_order=None):
+    def interact_e2e_dialogues(self, task, eval_dir=None, original_order=None):
         """
         Inputs:
             original_order: List of indices. If provided, we will sort the results according to this order
-        Outputs: predictions if `output_predictions_only` == True, (loss, predictions, answers, contexts) otherwise
+        Outputs: (loss, predictions, answers, contexts)
             loss
             predictions: a List of Lists of strings
             answers
@@ -503,10 +411,6 @@ class GenieModelForGeneration(GenieModel):
         example_ids = []
         answers = []
         contexts = []
-
-        hyperparameter_idx = 0
-
-        args = self.args
 
         NEXT_TARGET = {'dst': 'api', 'api': 'da', 'da': 'rg', 'rg': 'dst'}
 
@@ -596,25 +500,7 @@ class GenieModelForGeneration(GenieModel):
                 ## record model input
                 e2e_dialogue_preds[dial_id]["turns"][str(turn_id)][f"model_input_{train_target}"] = input_text
 
-                numericalized_turn = self.numericalize_example(input_text, turn_id, device)
-                generated = self.generate(
-                    numericalized_turn,
-                    max_output_length=args.max_output_length,
-                    min_output_length=args.min_output_length,
-                    num_outputs=args.num_outputs[hyperparameter_idx],
-                    temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
-                    repetition_penalty=args.repetition_penalty[hyperparameter_idx],
-                    top_k=args.top_k[hyperparameter_idx],
-                    top_p=args.top_p[hyperparameter_idx],
-                    num_beams=args.num_beams[hyperparameter_idx],
-                    num_beam_groups=args.num_beam_groups[hyperparameter_idx],
-                    diversity_penalty=args.diversity_penalty[hyperparameter_idx],
-                    no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
-                    do_sample=args.temperature[hyperparameter_idx] != 0,
-                )
-
-                partial_batch_prediction_ids = generated.sequences
-                partial_batch_prediction = self.numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
+                partial_batch_prediction = self.generate(input_text)
 
                 if train_target == 'da':
                     partial_batch_prediction = dataset.postprocess_prediction(
@@ -650,7 +536,7 @@ class GenieModelForGeneration(GenieModel):
                         if state_update:
                             api_names = list(state_update.keys())
                         new_knowledge_text, constraints = dataset.make_api_call(
-                            dialogue_state, knowledge, api_names, src_lang, dial_id, turn_id
+                            dialogue_state, knowledge, api_names, self.language, dial_id, turn_id
                         )
                         #### save latest api constraints
                         e2e_dialogue_preds[dial_id]["API"] = copy.deepcopy(constraints)
@@ -695,18 +581,16 @@ class GenieModelForGeneration(GenieModel):
                 list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))
             ]
 
-        # TODO calculate and return loss
-        loss = None
-        output = ValidationOutput(loss=loss)
-
-        if output_predictions_only:
-            output.predictions = predictions
-        else:
-            output.example_ids, output.predictions, output.answers, output.contexts = (
-                example_ids,
-                predictions,
-                answers,
-                contexts,
-            )
+        output = ValidationOutput()
+        output.example_ids, output.predictions, output.answers, output.contexts = (
+            example_ids,
+            predictions,
+            answers,
+            contexts,
+        )
 
         return output
+    
+    def generate(self, input_text:str):
+        response = requests.get("http://127.0.0.1:7878/generate", json={"language":self.args.language, "task_input":input_text, "model":"gpt-4"})
+        return response.json()["task_output"]

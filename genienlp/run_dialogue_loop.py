@@ -33,7 +33,7 @@ from pprint import pformat
 
 import torch
 
-from genienlp.models.transformer_seq2seq import TransformerSeq2Seq
+from genienlp.models import TransformerSeq2Seq
 
 from .arguments import check_and_update_generation_args
 from .tasks.registry import get_tasks
@@ -102,7 +102,6 @@ def init(args):
 
     model = TransformerSeq2Seq.load(
         args.path,
-        model_checkpoint_file=args.checkpoint_name,
         args=args,
     )
     logger.info(f'Arguments:\n{pformat(vars(args))}')
