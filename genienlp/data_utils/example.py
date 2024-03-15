@@ -30,18 +30,9 @@
 import unicodedata
 from typing import Iterable, List, NamedTuple, Union
 
-import torch
-
 
 def identity(x, **kw):
     return x
-
-
-class SequentialField(NamedTuple):
-    value: Union[torch.tensor, List[int]]
-    length: Union[torch.tensor, int]
-    limited: Union[torch.tensor, List[int]]
-
 
 
 
@@ -83,15 +74,13 @@ class NumericalizedExamples(NamedTuple):
     """
 
     example_id: List[str]
-    context: SequentialField
-    answer: SequentialField
+    context_string: Union[str, List[str]]
+    answer_string: Union[str, List[str]]
 
     @staticmethod
-    def from_examples(examples: Iterable[Example], numericalizer):
+    def from_examples(examples: Iterable[Example]):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
-
-        sep_token = ' ' + numericalizer.sep_token + ' '
 
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []
@@ -102,51 +91,17 @@ class NumericalizedExamples(NamedTuple):
             elif not len(ex.context):
                 context_plus_question = ex.question
             else:
-                context_plus_question = ex.context + sep_token + ex.question
+                context_plus_question = ex.context +  " " + ex.question
 
             all_context_plus_questions.append(context_plus_question)
 
-        tokenized_contexts = numericalizer.encode_batch(all_context_plus_questions, field_name='context')
-        tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
 
         for i in range(len(examples)):
             numericalized_examples.append(
-                NumericalizedExamples([examples[i].example_id], tokenized_contexts[i], tokenized_answers[i])
+                NumericalizedExamples([examples[i].example_id], all_context_plus_questions[i], examples[i].answer)
             )
         return numericalized_examples
 
     @staticmethod
-    def collate_batches(batches: Iterable['NumericalizedExamples'], numericalizer):
-        example_id = []
-
-        context_values, context_lengths, context_limiteds = [], [], []
-        answer_values, answer_lengths, answer_limiteds = [], [], []
-
-        for batch in batches:
-            example_id.append(batch.example_id[0])
-            context_values.append(torch.tensor(batch.context.value))
-            context_lengths.append(torch.tensor(batch.context.length))
-            context_limiteds.append(torch.tensor(batch.context.limited))
-
-            answer_values.append(torch.tensor(batch.answer.value))
-            answer_lengths.append(torch.tensor(batch.answer.length))
-            answer_limiteds.append(torch.tensor(batch.answer.limited))
-
-        context_values = numericalizer.pad(context_values, pad_id=numericalizer.pad_id)
-        context_limiteds = numericalizer.pad(context_limiteds, pad_id=numericalizer.decoder_pad_id)
-        context_lengths = torch.stack(context_lengths, dim=0)
-
-
-        answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
-        answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)
-        answer_lengths = torch.stack(answer_lengths, dim=0)
-
-        context = SequentialField(
-            value=context_values,
-            length=context_lengths,
-            limited=context_limiteds,
-        )
-
-        answer = SequentialField(value=answer_values, length=answer_lengths, limited=answer_limiteds)
-
-        return NumericalizedExamples(example_id=example_id, context=context, answer=answer)
+    def collate_batches(batches: Iterable['NumericalizedExamples']):
+        return NumericalizedExamples(example_id=[batch.example_id[0] for batch in batches], answer_string=[batch.answer_string for batch in batches], context_string=[batch.context_string for batch in batches])

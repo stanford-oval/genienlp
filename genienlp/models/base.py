@@ -39,7 +39,6 @@ import json
 import requests
 from tqdm import tqdm
 
-from ..data_utils.numericalizer import TransformerNumericalizer
 from ..util import replace_capturing_group
 
 logger = logging.getLogger(__name__)
@@ -54,78 +53,53 @@ class ValidationOutput(object):
         self,
         example_ids: Optional[List] = None,
         predictions: Optional[List] = None,
-        raw_predictions: Optional[List] = None,
         answers: Optional[List] = None,
         contexts: Optional[List] = None,
     ):
         self.example_ids = example_ids
         self.predictions = predictions
-        self.raw_predictions = raw_predictions
         self.answers = answers
         self.contexts = contexts
 
 
-# TransformerSeq2Seq inherits from this model
-class TransformerSeq2Seq():
-
-    numericalizer: TransformerNumericalizer
+class TransformerSeq2Seq:
 
     @classmethod
-    def load(cls, save_directory: str, args):
-        """
-        Loads a GenieModel (in Genie format, not HuggingFace's transformers) and its
-        accompanying Numericalizer (not HuggingFace's tokenizers) from `save_directory`, which is a path
-        """
-        model = cls(args, save_directory)
-        
+    def load(cls, args):
+        model = cls(args)
 
         return model
 
-    def __init__(self, args, save_directory):
-        """
-        If `save_directory` is None, will initialize a new model and numericalizer, otherwise, will load them from `save_directory`
-        """
+    def __init__(self, args):
         self.args = args
 
-        self.numericalizer = TransformerNumericalizer(
-            args,
-            save_dir=save_directory,
-        )
 
     def validate(
         self,
         data_iterator,
         task,
         eval_dir=None,
-        original_order=None,
     ):
         if self.args.e2e_dialogue_evaluation:
-            return self.validate_e2e_dialogues(
-                data_iterator, task, eval_dir, original_order
-            )
+            return self.validate_e2e_dialogues(data_iterator, task, eval_dir)
         else:
             return self.validate_batch(
                 data_iterator,
                 task,
-                original_order,
             )
 
     def validate_batch(
         self,
         data_iterator,
         task,
-        original_order=None,
     ):
         """
-        Inputs:
-            original_order: List of indices. If provided, we will sort the results according to this order
         Outputs: (predictions, answers, contexts)
             predictions: a List of Lists of strings
             answers
             contexts
         """
         predictions = []
-        raw_predictions = []
         example_ids = []
         answers = []
         contexts = []
@@ -133,62 +107,30 @@ class TransformerSeq2Seq():
         for batch in tqdm(data_iterator, desc='Generating'):
             batch_size = len(batch.example_id)
             batch_prediction = [[] for _ in range(batch_size)]
-            batch_raw_prediction = [[] for _ in range(batch_size)]
             batch_example_ids = batch.example_id
 
             example_ids += batch_example_ids
-            batch_answer = self.numericalizer.reverse(batch.answer.value.data, 'answer')
+            batch_answer = batch.answer_string
             batch_answer = [
                 task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))
             ]
             answers += batch_answer
-            batch_context = self.numericalizer.reverse(batch.context.value.data, 'context')
+            batch_context = batch.context_string
             contexts += batch_context
 
-            for hyperparameter_idx in range(len(self.args.temperature)):
-                print(batch)
-                raise NotImplementedError() # TODO
-                partial_batch_prediction = self.generate(batch)
+            print(batch)
+            raise NotImplementedError()  # TODO batch generate
+            partial_batch_prediction = self.generate(batch)
 
-                def get_example_index(i):
-                    return (i // self.args.num_outputs[hyperparameter_idx]) % batch_size
+            # post-process predictions
+            for i in range(len(partial_batch_prediction)):
+                partial_batch_prediction[i] = task.postprocess_prediction(batch_example_ids[i], partial_batch_prediction[i])
 
-                # post-process predictions
-                for i in range(len(partial_batch_prediction)):
-                    partial_batch_prediction[i] = task.postprocess_prediction(
-                        batch_example_ids[get_example_index(i)], partial_batch_prediction[i]
-                    )
-
-                # put them into the right array
-                for i in range(len(partial_batch_prediction)):
-                    batch_prediction[get_example_index(i)].append(partial_batch_prediction[i])
+            # put them into the right array
+            for i in range(len(partial_batch_prediction)):
+                batch_prediction[i].append(partial_batch_prediction[i])
 
             predictions += batch_prediction
-            raw_predictions += batch_raw_prediction
-
-        if original_order is not None:
-            # sort back to the original order
-            original_order, example_ids, predictions, raw_predictions, answers, contexts = [
-                list(a)
-                for a in tuple(
-                    zip(
-                        *sorted(
-                            list(
-                                zip(
-                                    original_order,
-                                    example_ids,
-                                    predictions,
-                                    raw_predictions,
-                                    answers,
-                                    contexts,
-                                )
-                            )
-                        )
-                    )
-                )
-            ]
-
-
 
         output = ValidationOutput()
         output.example_ids, output.predictions, output.answers, output.contexts = (
@@ -200,11 +142,12 @@ class TransformerSeq2Seq():
         return output
 
     def validate_e2e_dialogues(
-        self, data_iterator, task, eval_dir=None, original_order=None
+        self,
+        data_iterator,
+        task,
+        eval_dir=None,
     ):
         """
-        Inputs:
-            original_order: List of indices. If provided, we will sort the results according to this order
         Outputs: (predictions, answers, contexts)
             predictions: a List of Lists of strings
             answers
@@ -212,8 +155,6 @@ class TransformerSeq2Seq():
         """
         dataset_class = getattr(dialogues, task.dataset_name)
         dataset = dataset_class()
-
-        special_tokens = self.numericalizer._tokenizer.all_special_tokens
 
         e2e_dialogue_preds = dict()
         predictions = []
@@ -245,24 +186,10 @@ class TransformerSeq2Seq():
                 state_update = {}
                 e2e_dialogue_preds[dial_id] = {"turns": defaultdict(dict), "API": defaultdict(dict)}
 
-            batch_context = []
-            batch_tokens = self.numericalizer.convert_ids_to_tokens(turn.context.value.data, skip_special_tokens=False)
-
-            # remove only beginning and trailing special tokens
-            # otherwise the sep_token added between context and question will be lost
-            for text in batch_tokens:
-                i = 0
-                while text[i] in special_tokens:
-                    i += 1
-                j = len(text) - 1
-                while text[j] in special_tokens:
-                    j -= 1
-                text = text[i : j + 1]
-
-                batch_context.append(self.numericalizer._tokenizer.convert_tokens_to_string(text).replace(",", "，"))
-
+            batch_context = turn.context_string
             contexts += batch_context
-            batch_answer = self.numericalizer.reverse(turn.answer.value.data, 'answer')
+            batch_answer = turn.answer_string
+
             batch_answer = [
                 task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))
             ]
@@ -300,8 +227,7 @@ class TransformerSeq2Seq():
             # replace old context with updated
             contexts[-1] = input_text
 
-            response = requests.get("http://127.0.0.1:7878/generate", json={"language":self.args.language, "task_input":input_text, "model":"gpt-4"})
-            partial_batch_prediction = response.json()["task_output"]
+            partial_batch_prediction = self.generate(input_text)
             print(partial_batch_prediction)
 
             if train_target == 'da':
@@ -367,12 +293,6 @@ class TransformerSeq2Seq():
             with open(os.path.join(eval_dir, 'e2e_dialogue_preds.json'), 'w') as fout:
                 json.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
 
-        if original_order is not None:
-            # sort back to the original order
-            original_order, example_ids, predictions, answers, contexts = [
-                list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))
-            ]
-
         output = ValidationOutput()
 
         output.example_ids, output.predictions, output.answers, output.contexts = (
@@ -384,10 +304,8 @@ class TransformerSeq2Seq():
 
         return output
 
-    def interact_e2e_dialogues(self, task, eval_dir=None, original_order=None):
+    def interact_e2e_dialogues(self, task, eval_dir=None):
         """
-        Inputs:
-            original_order: List of indices. If provided, we will sort the results according to this order
         Outputs: (predictions, answers, contexts)
             predictions: a List of Lists of strings
             answers
@@ -569,12 +487,6 @@ class TransformerSeq2Seq():
             with open(os.path.join(eval_dir, 'interact_e2e_dialogue_preds.json'), 'w') as fout:
                 json.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
 
-        if original_order is not None:
-            # sort back to the original order
-            original_order, example_ids, predictions, answers, contexts = [
-                list(a) for a in tuple(zip(*sorted(list(zip(original_order, example_ids, predictions, answers, contexts)))))
-            ]
-
         output = ValidationOutput()
         output.example_ids, output.predictions, output.answers, output.contexts = (
             example_ids,
@@ -584,7 +496,9 @@ class TransformerSeq2Seq():
         )
 
         return output
-    
-    def generate(self, input_text:str):
-        response = requests.get("http://127.0.0.1:7878/generate", json={"language":self.args.language, "task_input":input_text, "model":"gpt-4"})
+
+    def generate(self, input_text: str):
+        response = requests.get(
+            "http://127.0.0.1:7878/generate", json={"language": self.args.language, "task_input": input_text, "model": "gpt-4"}
+        )
         return response.json()["task_output"]

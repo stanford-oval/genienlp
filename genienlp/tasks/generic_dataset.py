@@ -31,12 +31,9 @@
 import json
 import logging
 import os
-from typing import Iterable
 
-from datasets import load_dataset
-
-from ..data_utils.example import Example, NumericalizedExamples
-from .base_dataset import Dataset, Split, interleave_keys
+from ..data_utils.example import Example
+from .base_dataset import Dataset, Split
 
 logger = logging.getLogger(__name__)
 
@@ -45,25 +42,6 @@ def make_example_id(dataset, example_id):
     return dataset.name + '/' + str(example_id)
 
 
-# sort_key funcs
-def context_answer_len(ex: NumericalizedExamples):
-    return interleave_keys(ex.context.length, ex.answer.length)
-
-
-def context_question_len(ex: NumericalizedExamples):
-    return ex.context.length  # question is already appended to context
-
-
-def input_then_output_len(ex: NumericalizedExamples):
-    """
-    sort by input length, break ties by output length
-    """
-    return (context_question_len(ex), answer_len(ex))
-
-
-def answer_len(ex: NumericalizedExamples):
-    return ex.answer.length
-
 
 def id_value(ex):
     id_ = ex.example_id.rsplit('/', 1)
@@ -71,22 +49,9 @@ def id_value(ex):
     return id_
 
 
-# batch_size functions; batch size is calculated after pad tokens are added
-def input_tokens_fn(batch: Iterable[NumericalizedExamples]):
-    return max([context_question_len(e) for e in batch]) * len(batch)
-
-
-def all_tokens_fn(batch: Iterable[NumericalizedExamples]):
-    return (max([context_question_len(e) for e in batch]) + max([answer_len(e) for e in batch])) * len(batch)
-
-
-def default_batch_fn(batch: Iterable[NumericalizedExamples]):
-    return len(batch)
-
 
 class CQA(Dataset):
-    def __init__(self, examples, batch_size_fn=all_tokens_fn, **kwargs):
-        self.batch_size_fn = batch_size_fn
+    def __init__(self, examples, **kwargs):
         super().__init__(examples, **kwargs)
 
 

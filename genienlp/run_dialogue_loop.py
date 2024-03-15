@@ -36,18 +36,12 @@ import torch
 from genienlp.models import TransformerSeq2Seq
 
 from .tasks.registry import get_tasks
-from .util import load_config_file_to_args
 
 logger = logging.getLogger(__name__)
 
 
 def parse_argv(parser):
-    parser.add_argument('--path', type=str, required=True)
     parser.add_argument('--tasks', dest='task_names', nargs='+', help='task names for prediction')
-
-    parser.add_argument(
-        '--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)'
-    )
     parser.add_argument('--eval_dir', type=str, help='use this directory to store eval results')
 
     parser.add_argument("--temperature", type=float, nargs='+', default=[0.0], help="temperature of 0 implies greedy sampling")
@@ -60,7 +54,7 @@ def parse_argv(parser):
     )
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
-    parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
+    parser.add_argument('--output_length', default=150, type=int, help='output length for generation')
 
 
 class DialogueLoop(object):
@@ -76,13 +70,10 @@ class DialogueLoop(object):
 
 
 def init(args):
-    load_config_file_to_args(args)
-
     if args.eval_dir:
         os.makedirs(args.eval_dir, exist_ok=True)
 
     model = TransformerSeq2Seq.load(
-        args.path,
         args=args,
     )
     logger.info(f'Arguments:\n{pformat(vars(args))}')

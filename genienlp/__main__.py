@@ -31,7 +31,6 @@
 import argparse
 
 from . import (
-    arguments,
     evaluate_file,
     predict,
     run_dialogue_loop,
@@ -58,7 +57,7 @@ def main():
     parser = argparse.ArgumentParser(prog='genienlp')
     subparsers = parser.add_subparsers(dest='subcommand')
     for subcommand in subcommands:
-        helpstr, get_parser, command_fn = subcommands[subcommand]
+        helpstr, get_parser, _ = subcommands[subcommand]
         get_parser(subparsers.add_parser(subcommand, help=helpstr))
 
     argv = parser.parse_args()

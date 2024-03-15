@@ -40,7 +40,6 @@ from genienlp.models import TransformerSeq2Seq
 from .metrics import calculate_metrics
 from .tasks.registry import get_tasks
 from .util import (
-    load_config_file_to_args,
     make_data_loader,
 )
 
@@ -48,7 +47,6 @@ logger = logging.getLogger(__name__)
 
 
 def parse_argv(parser):
-    parser.add_argument('--path', '--model_name_or_path', type=str, required=True, help='Folder to load the model from')
     parser.add_argument(
         '--evaluate',
         type=str,
@@ -58,9 +56,6 @@ def parse_argv(parser):
     )
     parser.add_argument('--tasks', dest='task_names', nargs='+', help='task names for prediction')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
-    parser.add_argument(
-        '--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)'
-    )
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
     parser.add_argument('--language', type=str, required=True, help='The language of the output, used for postprocessing.')
 
@@ -85,7 +80,7 @@ def parse_argv(parser):
     )
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
-    parser.add_argument('--max_output_length', type=int, help='maximum output length for generation')
+    parser.add_argument('--output_length', type=int, help='maximum output length for generation')
 
     parser.add_argument(
         '--e2e_dialogue_evaluation',
@@ -96,12 +91,14 @@ def parse_argv(parser):
         '--e2e_dialogue_valid_subtasks',
         nargs='+',
         type=str,
+        default=['dst', 'api', 'da'],
         help='Evaluate only on these subtasks when calculating e2e_dialogue_score; rg is not included by default',
     )
     parser.add_argument(
         '--e2e_dialogue_valid_submetrics',
         nargs='+',
         type=str,
+        default=['dst_em', 'em', 'da_em'],
         help='Specify metrics to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
 
@@ -155,13 +152,13 @@ def prepare_data(args):
     return datasets
 
 
-def prepare_data_iterators(args, val_sets, numericalizer):
+def prepare_data_iterators(args, val_sets):
     logger.info('Preparing data iterators')
     iters = []
     for task, bs, val_set in zip(args.tasks, [args.val_batch_size] * len(val_sets), val_sets):
         task_iter = []
-        loader, original_order = make_data_loader(val_set, numericalizer, bs, return_original_order=True)
-        task_iter.append((task, loader, original_order))
+        loader = make_data_loader(val_set, bs)
+        task_iter.append((task, loader))
 
         iters.extend(task_iter)
 
@@ -185,18 +182,17 @@ def create_output_lines(index, validation_output):
 
 def run(args):
     model = TransformerSeq2Seq.load(
-        args.path,
         args=args,
     )
     val_sets = prepare_data(args)
-    iters = prepare_data_iterators(args, val_sets, model.numericalizer)
+    iters = prepare_data_iterators(args, val_sets)
 
     task_scores = defaultdict(list)
 
     eval_dir = os.path.join(args.eval_dir, args.evaluate)
     os.makedirs(eval_dir, exist_ok=True)
 
-    for task, it, original_order in iters:
+    for task, it in iters:
         logger.info(task.name)
         prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
         results_file_name = os.path.join(eval_dir, task.name + '.results.json')
@@ -205,7 +201,6 @@ def run(args):
             it,
             task,
             eval_dir=eval_dir,
-            original_order=original_order,
         )
 
         # write into file
@@ -248,12 +243,10 @@ def run(args):
 
 
 def main(args):
-    load_config_file_to_args(args)
     set_default_values(args)
 
     args.tasks = list(get_tasks(args.task_names, args).values())
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
-    logger.info(f'Loading from {args.best_checkpoint}')
 
     run(args)

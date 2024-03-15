@@ -110,7 +110,7 @@ class Dataset(torch.utils.data.Dataset):
             return 'Dataset()'
 
     @classmethod
-    def download(cls, root, check=None):
+    def download(cls, root):
         """Download and unzip an online archive (.zip, .gz, or .tgz).
 
         Arguments:
@@ -123,33 +123,6 @@ class Dataset(torch.utils.data.Dataset):
             dataset_path (str): Path to extracted dataset.
         """
         path = os.path.join(root, cls.name)
-        check = path if check is None else check
-        if not os.path.isdir(check):
-            for url in cls.urls:
-                if isinstance(url, tuple):
-                    url, filename = url
-                else:
-                    filename = os.path.basename(url)
-                zpath = os.path.join(path, filename)
-                if not os.path.isfile(zpath):
-                    if not os.path.exists(os.path.dirname(zpath)):
-                        os.makedirs(os.path.dirname(zpath))
-                    print('downloading {}'.format(filename))
-                    download_from_url(url, zpath)
-                ext = os.path.splitext(filename)[-1]
-                if ext == '.zip':
-                    with zipfile.ZipFile(zpath, 'r') as zfile:
-                        print('extracting')
-                        zfile.extractall(path)
-                elif ext in ['.gz', '.tgz']:
-                    with tarfile.open(zpath, 'r:gz') as tar:
-                        dirs = [member for member in tar.getmembers()]
-                        tar.extractall(path=path, members=dirs)
-                elif ext in ['.bz2', '.tar']:
-                    with tarfile.open(zpath) as tar:
-                        dirs = [member for member in tar.getmembers()]
-                        tar.extractall(path=path, members=dirs)
-
         return os.path.join(path, cls.dirname)
 
 
@@ -157,45 +130,3 @@ class Split(NamedTuple):
     train: Union[Dataset, str] = None
     eval: Union[Dataset, str] = None
     test: Union[Dataset, str] = None
-
-
-def interleave_keys(a, b):
-    """Interleave bits from two sort keys to form a joint sort key.
-
-    Examples that are similar in both of the provided keys will have similar
-    values for the key defined by this function. Useful for tasks with two
-    text fields like machine translation or natural language inference.
-    """
-
-    def interleave(args):
-        return ''.join([x for t in zip(*args) for x in t])
-
-    return int(''.join(interleave(format(x, '016b') for x in (a, b))), base=2)
-
-
-def download_from_url(url, path):
-    """Download file, with logic (from tensor2tensor) for Google Drive"""
-    if 'drive.google.com' not in url:
-        try:
-            return urllib.request.urlretrieve(url, path)
-        except Exception:
-            res = requests.get(url)
-            with open(path, 'wb') as out:
-                out.write(res.content)
-    print('downloading from Google Drive; may take a few minutes')
-    confirm_token = None
-    session = requests.Session()
-    response = session.get(url, stream=True)
-    for k, v in response.cookies.items():
-        if k.startswith("download_warning"):
-            confirm_token = v
-
-    if confirm_token:
-        url = url + "&confirm=" + confirm_token
-        response = session.get(url, stream=True)
-
-    chunk_size = 16 * 1024
-    with open(path, "wb") as f:
-        for chunk in response.iter_content(chunk_size):
-            if chunk:
-                f.write(chunk)
