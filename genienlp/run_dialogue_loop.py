@@ -67,15 +67,6 @@ def parse_argv(parser):
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
-    parser.add_argument("--num_beam_groups", type=int, nargs='+', default=[1], help='1 disables diverse beam seach')
-    parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
-    parser.add_argument(
-        "--no_repeat_ngram_size",
-        type=int,
-        nargs='+',
-        default=[0],
-        help='ngrams of this size cannot be repeated in the output. 0 disables it.',
-    )
     parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
 
 

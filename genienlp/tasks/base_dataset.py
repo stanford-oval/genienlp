@@ -157,7 +157,6 @@ class Split(NamedTuple):
     train: Union[Dataset, str] = None
     eval: Union[Dataset, str] = None
     test: Union[Dataset, str] = None
-    aux: Union[Dataset, str] = None
 
 
 def interleave_keys(a, b):

@@ -1,5 +1,0 @@
-R25-0	where is the nearest indian restaurant .	[ geo ] of ( [ * , distance ( geo , $location . current_location ) ] of sort ( distance ( geo , $location . current_location ) asc of @org.schema.Restaurant . Restaurant ( ) filter servesCuisine =~ " indian " ) ) [ 1 ] ;
-R29-0	search for an chinese restaurant in LOCATION_0 with at least NUMBER_0 reviews .	@org.schema.Restaurant . Restaurant ( ) filter aggregateRating . reviewCount >= NUMBER_0 && geo == LOCATION_0 && servesCuisine =~ " chinese " ;
-R30-0	what is the rating for the pizzeria uno in LOCATION_0 ?	[ aggregateRating.ratingValue ] of @org.schema.Restaurant . Restaurant ( ) filter geo == LOCATION_0 && name =~ " pizzeria uno " ;
-R32-0	what is the rating of bermuda bar ?	[ aggregateRating.ratingValue ] of @org.schema.Restaurant . Restaurant ( ) filter id == null ^^org.schema.Restaurant:Restaurant ( " bermuda bar " ) ;
-R33-0	show me the location and name of the nearest mexican restaurant .	[ geo ] of ( [ * , distance ( geo , $location . current_location ) ] of sort ( distance ( geo , $location . current_location ) asc of @org.schema.Restaurant . Restaurant ( ) filter servesCuisine =~ " mexican " ) ) [ 1 ] ;

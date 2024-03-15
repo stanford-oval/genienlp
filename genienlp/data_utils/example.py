@@ -41,7 +41,6 @@ class SequentialField(NamedTuple):
     value: Union[torch.tensor, List[int]]
     length: Union[torch.tensor, int]
     limited: Union[torch.tensor, List[int]]
-    feature: Union[torch.tensor, List[List[int]], None]
 
 
 
@@ -98,7 +97,6 @@ class NumericalizedExamples(NamedTuple):
 
         # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
         all_context_plus_questions = []
-        all_context_plus_question_features = []
 
         for ex in examples:
             if not len(ex.question):
@@ -110,12 +108,7 @@ class NumericalizedExamples(NamedTuple):
 
             all_context_plus_questions.append(context_plus_question)
 
-            # concatenate question and context features with a separator, but no need for a separator if there are no features to begin with
-            context_plus_question_feature = []
-            
-            all_context_plus_question_features.append(context_plus_question_feature)
-
-        tokenized_contexts = numericalizer.encode_batch(all_context_plus_questions, field_name='context', features=None)
+        tokenized_contexts = numericalizer.encode_batch(all_context_plus_questions, field_name='context')
         tokenized_answers = numericalizer.encode_batch([ex.answer for ex in examples], field_name='answer')
 
         for i in range(len(examples)):
@@ -128,7 +121,7 @@ class NumericalizedExamples(NamedTuple):
     def collate_batches(batches: Iterable['NumericalizedExamples'], numericalizer):
         example_id = []
 
-        context_values, context_lengths, context_limiteds, context_features = [], [], [], []
+        context_values, context_lengths, context_limiteds = [], [], []
         answer_values, answer_lengths, answer_limiteds = [], [], []
 
         for batch in batches:
@@ -136,8 +129,6 @@ class NumericalizedExamples(NamedTuple):
             context_values.append(torch.tensor(batch.context.value))
             context_lengths.append(torch.tensor(batch.context.length))
             context_limiteds.append(torch.tensor(batch.context.limited))
-            if batch.context.feature:
-                context_features.append(torch.tensor(batch.context.feature))
 
             answer_values.append(torch.tensor(batch.answer.value))
             answer_lengths.append(torch.tensor(batch.answer.length))
@@ -147,8 +138,6 @@ class NumericalizedExamples(NamedTuple):
         context_limiteds = numericalizer.pad(context_limiteds, pad_id=numericalizer.decoder_pad_id)
         context_lengths = torch.stack(context_lengths, dim=0)
 
-        if context_features:
-            context_features = numericalizer.pad(context_features, pad_id=numericalizer.args.db_unk_id)
 
         answer_values = numericalizer.pad(answer_values, pad_id=numericalizer.pad_id)
         answer_limiteds = numericalizer.pad(answer_limiteds, pad_id=numericalizer.decoder_pad_id)
@@ -158,9 +147,8 @@ class NumericalizedExamples(NamedTuple):
             value=context_values,
             length=context_lengths,
             limited=context_limiteds,
-            feature=context_features,
         )
 
-        answer = SequentialField(value=answer_values, length=answer_lengths, limited=answer_limiteds, feature=None)
+        answer = SequentialField(value=answer_values, length=answer_lengths, limited=answer_limiteds)
 
         return NumericalizedExamples(example_id=example_id, context=context, answer=answer)

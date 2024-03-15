@@ -46,15 +46,9 @@ class BaseAlmondTask(BaseTask):
         super().__init__(name, args)
         self.args = args
         self._metrics = ['em', 'sm', 'f1']
-        self.no_feature_fields = ['answer']
-        if self.utterance_field == 'question':
-            self.no_feature_fields.append('context')
-        else:
-            self.no_feature_fields.append('question')
 
         self.need_attention_scores = False
 
-        self._almond_has_multiple_programs = args.almond_has_multiple_programs
         self._almond_detokenize_sentence = args.almond_detokenize_sentence
 
     @property
@@ -168,31 +162,6 @@ class BaseAlmondTask(BaseTask):
         return new_sentence
 
 
-@register_task('almond')
-class Almond(BaseAlmondTask):
-    """The Almond semantic parsing task
-    i.e. natural language to formal language (ThingTalk) mapping"""
-
-    def _is_program_field(self, field_name):
-        return field_name == 'answer'
-
-    @property
-    def utterance_field(self):
-        return 'context'
-
-    def _make_example(self, parts, dir_name=None, **kwargs):
-        # the question is irrelevant, so the question says English and ThingTalk even if we're doing
-        # a different language (like Chinese)
-        if self._almond_has_multiple_programs:
-            example_id, sentence, target_code = parts[:3]
-        else:
-            example_id, sentence, target_code = parts
-        question = 'translate from english to thingtalk'
-        context = sentence
-        answer = target_code
-        return Example.from_raw(
-            self.name + '/' + example_id, context, question, answer, preprocess=self.preprocess_field, lower=False
-        )
 
 
 @register_task('almond_natural_seq2seq')
@@ -236,28 +205,6 @@ class NaturalSeq2Seq(BaseAlmondTask):
     def get_splits(self, root, **kwargs):
         return AlmondDataset.return_splits(path=os.path.join(root, 'almond'), make_example=self._make_example, **kwargs)
 
-
-@register_task('contextual_almond')
-class ContextualAlmond(BaseAlmondTask):
-    """Contextual Almond semantic parsing task"""
-
-    def _is_program_field(self, field_name):
-        return field_name in ('answer', 'context')
-
-    @property
-    def utterance_field(self):
-        return 'question'
-
-    def _make_example(self, parts, dir_name=None, **kwargs):
-        if self._almond_has_multiple_programs:
-            example_id, context, sentence, target_code = parts[:4]
-        else:
-            example_id, context, sentence, target_code = parts
-        answer = target_code
-        question = sentence
-        return Example.from_raw(
-            self.name + '/' + example_id, context, question, answer, preprocess=self.preprocess_field, lower=False
-        )
 
 
 @register_task('reverse_almond')
@@ -309,64 +256,7 @@ class BaseAlmondDialogueNLUTask(BaseAlmondTask):
         return prediction
 
 
-@register_task('almond_dialogue_nlu')
-class AlmondDialogueNLU(BaseAlmondDialogueNLUTask):
-    """Multi-turn NLU task for Almond dialogues
-    (translate the user utterance to a formal representation, given the current
-    state of the conversation)
-    """
 
-    def _is_program_field(self, field_name):
-        return field_name in ('answer', 'context')
-
-    @property
-    def utterance_field(self):
-        return 'question'
-
-    def _make_example(self, parts, dir_name=None, **kwargs):
-        if self._almond_has_multiple_programs:
-            example_id, context, sentence, target_code = parts[:4]
-        else:
-            example_id, context, sentence, target_code = parts
-
-        answer = target_code
-        question = sentence
-        return Example.from_raw(
-            self.name + '/' + example_id, context, question, answer, preprocess=self.preprocess_field, lower=False
-        )
-
-    def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/user'), make_example=self._make_example, **kwargs)
-
-
-@register_task('almond_dialogue_nlu_agent')
-class AlmondDialogueNLUAgent(BaseAlmondDialogueNLUTask):
-    """Multi-turn NLU task for Almond dialogues, for the agent utterance
-    (translate the agent utterance to a formal representation, given the current
-    state of the conversation).
-    This is used to facilitate annotation of human-human dialogues.
-    """
-
-    def _is_program_field(self, field_name):
-        return field_name in ('answer', 'context')
-
-    @property
-    def utterance_field(self):
-        return 'question'
-
-    def _make_example(self, parts, dir_name=None, **kwargs):
-        if self._almond_has_multiple_programs:
-            example_id, context, sentence, target_code = parts[:4]
-        else:
-            example_id, context, sentence, target_code = parts
-        answer = target_code
-        question = sentence
-        return Example.from_raw(
-            self.name + '/' + example_id, context, question, answer, preprocess=self.preprocess_field, lower=False
-        )
-
-    def get_splits(self, root, **kwargs):
-        return AlmondDataset.return_splits(path=os.path.join(root, 'almond/agent'), make_example=self._make_example, **kwargs)
 
 
 @register_task('almond_dialogue_nlg')

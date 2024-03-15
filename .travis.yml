@@ -14,7 +14,6 @@ cache: pip
 install:
 - pip install flake8
 - pip install -e .
-- python3 -m spacy download en_core_web_sm
 
 stages:
   - test
@@ -29,23 +28,10 @@ jobs:
       script:
         - bash ./tests/test_main_almond.sh
     -
-      name: "Translation tests"
-      stage: test
-      script:
-        - bash ./tests/test_translation.sh
-    -
       name: "E2E Dialogues tests"
       stage: test
       script:
         - bash ./tests/test_e2e_dialogues.sh
-    -
-      name: "Docker build"
-      stage: deploy
-      services:
-        - docker
-      install:
-      - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
-      script: ./travis/docker-build.sh
 
 deploy:
   provider: pypi

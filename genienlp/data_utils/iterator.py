@@ -29,7 +29,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
-import random
 
 import numpy as np
 import torch
@@ -46,63 +45,33 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         self,
         data_source,
         batch_size,
-        sort,
-        shuffle_and_repeat,
-        sort_key_fn,
         batch_size_fn,
-        groups=1,
         batching_algorithm='sample',
     ):
         """
         batch_size: can be number of tokens or number of examples, the type is inferred from batch_size_fn
-        sort: if False, disables sorting and uses the original order. Useful for evaluation.
-        shuffle_and_repeat: if True, the order of returned examples are semi-shuffled, and there is no end to the iterator
-        groups: used for sentence batching
         """
-        if groups is None:
-            groups = 1
-        assert batch_size % groups == 0
-        assert len(data_source) % groups == 0
-
-        self.sort_key = sort_key_fn
         self.batch_size_fn = batch_size_fn
-        self.groups = groups
         if batching_algorithm not in ['sample', 'epoch']:
             raise ValueError('--batching_algorithm must be one of `sample` or `epoch`')
         self.batching_algorithm = batching_algorithm
 
-        if sort:
-            # sort while keeping track of the original order
-            data_with_original_order = list(
-                zip(data_source, range(len(data_source)))
-            )  # list of tuples of the form (data_source[i], i)
-            # sort based on data_source
-            sorted_data_with_original_order = sorted(
-                data_with_original_order, key=lambda x: self.sort_key(x[0]), reverse=True
-            )  # sort from long to short
-            # separate the two parts of each tuple
-            self.data_source, self.original_order = tuple(zip(*sorted_data_with_original_order))
-        else:
-            self.data_source, self.original_order = data_source, list(range(len(data_source)))
+        self.data_source, self.original_order = data_source, list(range(len(data_source)))
         self.data_source_marked = np.zeros(shape=(len(self.data_source)))  # mark each example that has been used in a batch
         self.batch_size = batch_size  # number of examples or number of tokens
-        self.shuffle_and_repeat = shuffle_and_repeat
         self.last_batch_start_index = 0
-        self.last_batch_start_index = self._get_next_batch_start_index()
+        self.last_batch_start_index = self.last_batch_start_index
 
-        if not self.shuffle_and_repeat:
-            # do not allow skipping examples during validation/ prediction
-            self.no_skip = True
-            # quickly iterate over self to calculate length
-            self.length = 0
-            for _ in self:
-                self.length += 1
-            # reset state
-            self.last_batch_start_index = 0
-            self.last_batch_start_index = self._get_next_batch_start_index()
-        else:
-            self.no_skip = False
-            self.length = len(self.data_source)
+        # do not allow skipping examples during validation/ prediction
+        self.no_skip = True
+        # quickly iterate over self to calculate length
+        self.length = 0
+        for _ in self:
+            self.length += 1
+        # reset state
+        self.last_batch_start_index = 0
+        self.last_batch_start_index = self.last_batch_start_index
+       
 
     def __len__(self):
         return self.length
@@ -110,16 +79,15 @@ class LengthSortedIterator(torch.utils.data.Sampler):
     def __iter__(self):
         self.last_batch_start_index = 0
         self.data_source_marked = np.zeros(shape=(len(self.data_source)))
-        self.last_batch_start_index = self._get_next_batch_start_index()
+        self.last_batch_start_index = self.last_batch_start_index
         return self
 
     def __next__(self):
         batch_of_indices = []
         current_batch_size = 0
-        candidate_index = self._get_next_batch_start_index()
+        candidate_index = self.last_batch_start_index
         if candidate_index >= len(self.data_source):
             # This is the end of the iterator
-            assert not self.shuffle_and_repeat
             raise StopIteration
         while current_batch_size < self.batch_size:
             candidate_example = self.data_source[candidate_index]
@@ -138,8 +106,6 @@ class LengthSortedIterator(torch.utils.data.Sampler):
                 self.last_batch_start_index = self._next_unmarked_index(self.last_batch_start_index)
                 candidate_index = self._next_unmarked_index(candidate_index)
                 if candidate_index >= len(self.data_source):
-                    # This is the end of the iterator
-                    assert not self.shuffle_and_repeat
                     raise StopIteration
                 continue
 
@@ -173,17 +139,3 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         while index < len(self.data_source) and self.data_source_marked[index] == 1:
             index += 1
         return index
-
-    def _get_next_batch_start_index(self):
-        if self.shuffle_and_repeat:
-            examples_left_in_epoch = len(self.data_source) - np.sum(self.data_source_marked)
-            if examples_left_in_epoch == 0:
-                # start a new epoch
-                self.data_source_marked = np.zeros(shape=(len(self.data_source)))
-                examples_left_in_epoch = len(self.data_source)
-            # if self.groups > 1, this ensures that the start of each batch is a multiply of self.groups, i.e. where a group starts
-            start_idx = random.randrange(0, examples_left_in_epoch / self.groups) * self.groups
-            start_idx = self._unmarked_index_to_datasource_index(start_idx)
-            return start_idx
-        else:
-            return self.last_batch_start_index

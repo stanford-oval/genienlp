@@ -112,15 +112,6 @@ def parse_argv(parser):
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
-    parser.add_argument("--num_beam_groups", type=int, nargs='+', default=[1], help='1 disables diverse beam seach')
-    parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
-    parser.add_argument(
-        "--no_repeat_ngram_size",
-        type=int,
-        nargs='+',
-        default=[0],
-        help='ngrams of this size cannot be repeated in the output. 0 disables it.',
-    )
     parser.add_argument('--max_output_length', type=int, help='maximum output length for generation')
     parser.add_argument(
         '--min_output_length',
@@ -137,34 +128,6 @@ def parse_argv(parser):
         '--one_output_per_line',
         action='store_true',
         help='If true, each of the `num_outputs` output will be written to a separate line, while other columns are duplicated to fill these extra lines.',
-    )
-
-    parser.add_argument(
-        '--filter_long_inputs',
-        action='store_true',
-        help='Filter out examples that are longer than required model input_max_length',
-    )
-
-    parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
-    parser.add_argument(
-        '--do_alignment',
-        action='store_true',
-        help='whether to replace tokens between quotation marks after translation with source values',
-    )
-    parser.add_argument(
-        '--align_preserve_input_quotation',
-        action='store_true',
-        help='preserve quotation marks in the input. Useful if using alignment for semantic parsing or NLG',
-    )
-    parser.add_argument(
-        '--align_remove_output_quotation',
-        action='store_true',
-        help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
-    )
-    parser.add_argument(
-        '--align_span_symbol',
-        type=str,
-        help='The symbol we use to wrap spans of words in the input that need to be preserved in the output.',
     )
 
     parser.add_argument(
@@ -190,13 +153,6 @@ def parse_argv(parser):
         type=float,
         help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
-
-    parser.add_argument(
-        '--align_helper_file',
-        type=str,
-        help='dictionary path',
-    )
-
 
 def set_default_values(args):
     """
@@ -236,7 +192,6 @@ def prepare_data(args):
         )
 
         split, path = task.get_splits(root=args.data, lower=args.lower, **kwargs)
-        assert (split.eval or split.test or split.train) and not split.aux
         if split.train:
             data = split.train
             path = path.train

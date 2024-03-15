@@ -117,24 +117,16 @@ class AlmondDataset(CQA):
         validation_data = None if validation is None else cls(os.path.join(path, validation + '.tsv'), **kwargs)
         test_data = None if test is None else cls(os.path.join(path, test + '.tsv'), **kwargs)
 
-        aux_data = None
-        do_curriculum = kwargs.get('curriculum', False)
-        if do_curriculum:
-            kwargs.pop('curriculum')
-            aux_data = cls(os.path.join(path, 'aux' + '.tsv'), **kwargs)
-
         data_splits = Split(
             train=None if train is None else train_data,
             eval=None if validation is None else validation_data,
             test=None if test is None else test_data,
-            aux=None if do_curriculum is False else aux_data,
         )
 
         all_paths = Split(
             train=None if train is None else os.path.join(path, train + '.tsv'),
             eval=None if validation is None else os.path.join(path, validation + '.tsv'),
             test=None if test is None else os.path.join(path, test + '.tsv'),
-            aux=None if do_curriculum is False else os.path.join(path, 'aux' + '.tsv'),
         )
 
         return data_splits, all_paths

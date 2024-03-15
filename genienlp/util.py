@@ -95,12 +95,7 @@ def make_data_loader(
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
 
-    if train:
-        sort_key_fn = dataset.sort_key_fn
-        batch_size_fn = dataset.batch_size_fn
-    else:
-        sort_key_fn = getattr(dataset, 'eval_sort_key_fn', dataset.sort_key_fn)
-        batch_size_fn = getattr(dataset, 'eval_batch_size_fn', dataset.batch_size_fn)
+    batch_size_fn = getattr(dataset, 'eval_batch_size_fn', dataset.batch_size_fn)
 
     if batch_size_fn == input_tokens_fn:
         min_batch_length = np.min(context_lengths)
@@ -128,39 +123,10 @@ def make_data_loader(
             f' Consider increasing that'
         )
 
-    model_input_max_length = numericalizer._tokenizer.model_max_length
-
-    all_features_filtered = []
-    # remove examples longer than model input length
-
-    for ex in all_features:
-        # Uncomment for debugging to print the long examples
-        # if dataset.batch_size_fn([ex]) > model_input_max_length:
-        #     print(ex)
-        if batch_size_fn([ex]) < model_input_max_length:
-            all_features_filtered.append(ex)
-
-    length_diff = len(all_features) - len(all_features_filtered)
-    if length_diff != 0:
-        if args.filter_long_inputs:
-            logger.info(
-                f'Removed {length_diff} examples that were longer than required model input_max_length of {model_input_max_length}'
-            )
-        else:
-            raise ValueError(
-                'Encountered an example that is longer than required model input_max_length. Consider using --filter_long_inputs to filter these examples.'
-            )
-
-    all_features = all_features_filtered
-
     sampler = LengthSortedIterator(
         all_features,
         batch_size=batch_size,
-        sort=bool(sort_key_fn),
-        shuffle_and_repeat=train,
-        sort_key_fn=sort_key_fn,
         batch_size_fn=batch_size_fn,
-        groups=dataset.groups,
         batching_algorithm=batching_algorithm,
     )
     # get the sorted data_source
@@ -184,25 +150,17 @@ def load_config_file_to_args(args):
 
     retrieve = [
         'model',
-        'pretrained_model',
-        'max_generative_vocab',
         'lower',
         'override_context',
         'override_question',
         'almond_lang_as_question',
-        'almond_has_multiple_programs',
         'almond_detokenize_sentence',
         'preprocess_special_tokens',
-        'label_smoothing',
         'num_workers',
         'max_types_per_qid',
         'database_type',
         'num_db_types',
         'db_unk_id',
-        'almond_type_mapping_path',
-        'max_features_size',
-        'att_pooling',
-        'num_labels',
         'crossner_domains',
         'override_valid_metrics',
     ]
@@ -213,15 +171,11 @@ def load_config_file_to_args(args):
         'model',
         'val_batch_size',
         'num_beams',
-        'num_beam_groups',
-        'diversity_penalty',
         'num_outputs',
-        'no_repeat_ngram_size',
         'top_p',
         'top_k',
         'repetition_penalty',
         'temperature',
-        'align_span_symbol',
         'max_output_length',
         'min_output_length',
         'reduce_metrics',
@@ -236,11 +190,7 @@ def load_config_file_to_args(args):
 
     # these are true/ false arguments
     overwrite_actions = [
-        'do_alignment',
-        'align_preserve_input_quotation',
-        'align_remove_output_quotation',
         'e2e_dialogue_evaluation',
-        'filter_long_inputs',
     ]
     for o in overwrite_actions:
         # if argument is True in predict overwrite train; if False retrieve from train
@@ -252,10 +202,6 @@ def load_config_file_to_args(args):
             setattr(args, r, config[r])
         # These are for backward compatibility with models that were trained before we added these arguments
         elif r in (
-            'do_alignment',
-            'align_preserve_input_quotation',
-            'align_remove_output_quotation',
-            'almond_has_multiple_programs',
             'almond_lang_as_question',
             'preprocess_special_tokens',
         ):
@@ -264,24 +210,12 @@ def load_config_file_to_args(args):
             setattr(args, r, 0)
         elif r in ('num_beams', 'num_outputs', 'top_p', 'repetition_penalty'):
             setattr(args, r, [1])
-        elif r in ('no_repeat_ngram_size', 'top_k', 'temperature'):
-            setattr(args, r, [0])
         elif r in ['override_valid_metrics']:
             setattr(args, r, [])
-        elif r == 'align_span_symbol':
-            setattr(args, r, 3)
         elif r == 'database_type':
             setattr(args, r, 'json')
-        elif r == 'att_pooling':
-            setattr(args, r, 'max')
         elif r == 'locale':
             setattr(args, r, 'en')
-        elif r == 'num_beam_groups':
-            setattr(args, r, [1])
-        elif r == 'diversity_penalty':
-            setattr(args, r, [0.0])
-        elif r == 'label_smoothing':
-            setattr(args, r, 0.0)
         elif r == 'min_output_length':
             setattr(args, r, 3)
         else:
@@ -294,13 +228,6 @@ def load_config_file_to_args(args):
         setattr(args, 'e2e_dialogue_valid_submetrics', ['dst_em', 'em', 'da_em', 'casedbleu'])
     if args.e2e_dialogue_valid_subweights is None:
         setattr(args, 'e2e_dialogue_valid_subweights', [1.0, 1.0, 1.0, 1.0])
-
-    # backward compatibility for models trained with genienlp before NED Refactoring (2)
-    if args.max_features_size is None:
-        if hasattr(args, 'ned_features_size'):
-            setattr(args, 'max_features_size', args.ned_features_size)
-        else:
-            setattr(args, 'max_features_size', 0)
 
     args.verbose = False
 

@@ -40,7 +40,6 @@ from transformers import (
     AutoTokenizer,
 )
 
-from .decoder_vocab import DecoderVocabulary
 from .example import SequentialField
 
 logger = logging.getLogger(__name__)
@@ -57,13 +56,12 @@ class TransformerNumericalizer(object):
     _words_to_special_token_regexes: List[Tuple[re.Pattern, str]]
 
     def __init__(
-        self, pretrained_tokenizer, args, save_dir=None
+        self, args, save_dir=None
     ):
         """
         If `save_dir` is None, initializes a new Numericalizer and optionally adds new words to its vocabulary, otherwise,
         loads from `save_dir`
         """
-        self._pretrained_name = pretrained_tokenizer
         self._tokenizer = None
 
         self._preprocess_special_tokens = args.preprocess_special_tokens
@@ -84,7 +82,6 @@ class TransformerNumericalizer(object):
             self.load_extras(save_dir)
 
         self._init_token_ids()
-        self._init_decoder_vocab()
 
     @property
     def vocab(self):
@@ -108,8 +105,6 @@ class TransformerNumericalizer(object):
         }
         if save_dir is not None:
             tokenizer_args.update({'pretrained_model_name_or_path': save_dir})
-        else:
-            tokenizer_args.update({'pretrained_model_name_or_path': self._pretrained_name})
 
         self._tokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
 
@@ -165,10 +160,6 @@ class TransformerNumericalizer(object):
         # pad_id for answer tokens (different than context/ question pad_id for token classification tasks)
         self.answer_pad_id = self.pad_id
 
-    def _init_decoder_vocab(self):
-        self.generative_vocab_size = len(self._tokenizer)
-        self.decoder_vocab = None
-
     def get_num_special_tokens(self, special_tokens_mask):
         num_prefix_special_tokens, num_suffix_special_tokens = 0, 0
         i = 0
@@ -188,103 +179,15 @@ class TransformerNumericalizer(object):
 
         return num_prefix_special_tokens, num_suffix_special_tokens
 
-    def process_classification_labels(self, all_context_plus_questions, all_answers):
-        def tokenize_and_align_labels(all_sequences, all_sequences_wo_types, all_labels):
-            tokenized_inputs = self._tokenizer.batch_encode_plus(
-                all_sequences,
-                padding=False,
-                truncation=True,
-                is_split_into_words=True,
-            )
-            tokenized_inputs_wo_types = self._tokenizer.batch_encode_plus(
-                all_sequences_wo_types,
-                padding=False,
-                truncation=True,
-                is_split_into_words=True,
-            )
-
-            all_processed_labels = []
-            for i, label in enumerate(all_labels):
-                word_ids = tokenized_inputs.word_ids(batch_index=i)
-                word_ids_wo_types = tokenized_inputs_wo_types.word_ids(batch_index=i)
-
-                # find feature size
-                size_diff = len(word_ids) - len(word_ids_wo_types)
-
-                previous_word_idx = None
-                label_ids = []
-                for word_id in word_ids_wo_types:
-                    # special tokens's word_id is None
-                    if word_id is None:
-                        label_ids.append(self.answer_pad_id)
-                    # set the label for the first subword of each word
-                    elif word_id != previous_word_idx:
-                        label_ids.append(label[word_id])
-                    # process next subwords
-                    else:
-                        label_ids.append(label[word_id])
-                    previous_word_idx = word_id
-
-                # extend labels for features
-                label_ids.extend([self.answer_pad_id] * size_diff)
-
-                all_processed_labels.append(label_ids)
-
-            return all_processed_labels
-
-        all_context_plus_questions_wo_types = all_context_plus_questions
-
-        assert all(
-            [
-                len(cpq.split(" ")) == len(answer.split(" "))
-                for cpq, answer in zip(all_context_plus_questions_wo_types, all_answers)
-            ]
-        )
-
-        # align labels
-        tokenized_answers = tokenize_and_align_labels(
-            [cpq.split(" ") for cpq in all_context_plus_questions],
-            [cpq.split(" ") for cpq in all_context_plus_questions_wo_types],
-            [list(map(lambda token: int(token), ans.split(" "))) for ans in all_answers],
-        )
-
-        batch_decoder_numerical = []
-        if self.decoder_vocab:
-            for i in range(len(tokenized_answers)):
-                batch_decoder_numerical.append(self.decoder_vocab.encode(tokenized_answers[i]))
-        else:
-            batch_decoder_numerical = [[]] * len(tokenized_answers)
-
-        answer_sequential_fields = []
-        for i in range(len(tokenized_answers)):
-            answer_sequential_fields.append(
-                SequentialField(
-                    value=tokenized_answers[i],
-                    length=len(tokenized_answers[i]),
-                    limited=batch_decoder_numerical[i],
-                    feature=None,
-                )
-            )
-
-        return answer_sequential_fields
-
-    def encode_batch(self, sentences: List[str], field_name, features=None) -> List[SequentialField]:
+    def encode_batch(self, sentences: List[str], field_name) -> List[SequentialField]:
         """
         Batched version of `encode_single()`. Uses multiprocessing on all CPU cores for preprocessing
         Inputs:
             sentences: a list of sentences to encode
             field_name: text field name (options: context, question, answer)
-            features: for each sentence we have a list of features per token (used for NED)
         """
-        # We need to set this so that `tokenizers` package does not complain about detecting forks.
-        os.environ['TOKENIZERS_PARALLELISM'] = "true"
 
-        if features is None:
-            features = []
-            extract_word_pieces = False
-        else:
-            assert all([len(sentence.split()) == len(feature) for sentence, feature in zip(sentences, features)])
-            extract_word_pieces = True
+        extract_word_pieces = False
 
         batch_size = len(sentences)
 
@@ -295,30 +198,11 @@ class TransformerNumericalizer(object):
             sentences, index2expansions = list(
                 zip(
                     *map(
-                        functools.partial(self._apply_special_token_preprocessing, return_idx2exp=bool(len(features))),
+                        functools.partial(self._apply_special_token_preprocessing, return_idx2exp=False)),
                         sentences,
                     )
                 )
-            )
-
-            all_input_features = []
-            if features:
-                for i, (sentence, index2expansion) in enumerate(zip(sentences, index2expansions)):
-                    feat = features[i]
-                    new_feat = []
-                    keys = set(index2expansion.keys())
-                    for j in range(len(feat)):
-                        repeat = 1
-                        if j in keys:
-                            repeat = index2expansion[j]
-
-                        new_feat.extend(feat[j] * repeat)
-
-                    assert len(new_feat) == len(sentence.split(' '))
-
-                    all_input_features.append(new_feat)
-
-            features = all_input_features
+            
 
         def do_slow_tokenization(extract_word_pieces):
             all_input_ids = []
@@ -357,68 +241,20 @@ class TransformerNumericalizer(object):
         else:
             batch_encoded, all_wp_tokenized = do_slow_tokenization(extract_word_pieces)
 
-        all_input_features = []
-
-        if features:
-            for i in range(batch_size):
-                wp_features = []
-                wp_tokenized = all_wp_tokenized[i]
-
-                feat = features[i]
-
-                # first token is always not a piece
-                is_wp = [0] + [int(self._tokenizer.is_piece_fn(wp)) for wp in wp_tokenized[1:]]
-                k = -1
-                for j, wp in enumerate(wp_tokenized):
-                    if not is_wp[j]:
-                        k += 1
-                    wp_features.append(feat[k])
-
-                assert len(wp_tokenized) == len(wp_features)
-
-                all_input_features.append(wp_features)
-
-        features = all_input_features
-
-        batch_special_tokens_mask = batch_encoded.special_tokens_mask
-
-        batch_features = []
-
-        if features:
-            for i in range(batch_size):
-                feat = features[i]
-                special_tokens_mask = batch_special_tokens_mask[i]
-                num_prefix_special_tokens, num_suffix_special_tokens = self.get_num_special_tokens(special_tokens_mask)
-
-                pad_feat = Entity.get_pad_entity(self.args.max_features_size)
-                feat = [pad_feat] * num_prefix_special_tokens + feat + [pad_feat] * num_suffix_special_tokens
-
-                batch_features.append(feat)
 
         batch_numerical = batch_encoded.input_ids
         batch_length = batch_encoded.length
 
         batch_decoder_numerical = []
-        if self.decoder_vocab:
-            for i in range(batch_size):
-                batch_decoder_numerical.append(self.decoder_vocab.encode(batch_numerical[i]))
-        else:
-            batch_decoder_numerical = [[]] * len(batch_numerical)
+        batch_decoder_numerical = [[]] * len(batch_numerical)
 
         sequential_fields = []
         for i in range(batch_size):
-            if features:
-                feature = [feat.flatten() for feat in batch_features[i]]
-                assert len(batch_numerical[i]) == len(feature)
-            else:
-                feature = None
-
             sequential_fields.append(
                 SequentialField(
                     value=batch_numerical[i],
                     length=batch_length[i],
                     limited=batch_decoder_numerical[i],
-                    feature=feature,
                 )
             )
         return sequential_fields

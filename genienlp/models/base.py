@@ -90,7 +90,6 @@ class TransformerSeq2Seq():
         self.args = args
 
         self.numericalizer = TransformerNumericalizer(
-            self.args.pretrained_model,
             args,
             save_dir=save_directory,
         )

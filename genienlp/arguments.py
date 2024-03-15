@@ -85,12 +85,6 @@ def parse_argv(parser):
         help='maximum output length for generation; '
         'default is 3 for most multilingual models: BOS, language code, and one token. otherwise it is 2',
     )
-    parser.add_argument('--max_generative_vocab', default=50000, type=int, help='max vocabulary for the generative softmax')
-    parser.add_argument(
-        '--filter_long_inputs',
-        action='store_true',
-        help='Filter out examples that are longer than required model input_max_length',
-    )
     parser.add_argument('--preserve_case', action='store_false', dest='lower', help='whether to preserve casing for all text')
     parser.add_argument(
         "--reduce_metrics",
@@ -115,21 +109,6 @@ def parse_argv(parser):
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
     parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
-    parser.add_argument("--num_beam_groups", type=int, nargs='+', default=[1], help='1 disables diverse beam seach')
-    parser.add_argument("--diversity_penalty", type=float, nargs='+', default=[0.0], help='0 disables diverse beam seach')
-    parser.add_argument(
-        "--no_repeat_ngram_size",
-        type=int,
-        nargs='+',
-        default=[0],
-        help='ngrams of this size cannot be repeated in the output. 0 disables it.',
-    )
-
-    parser.add_argument(
-        '--pretrained_model',
-        default=None,
-        help='which pretrained model to use on the encoder side; choose a name from Huggingface models',
-    )
 
     parser.add_argument(
         '--num_workers', type=int, default=0, help='Number of processes to use for data loading (0 means no multiprocessing)'
@@ -137,12 +116,6 @@ def parse_argv(parser):
 
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
-    parser.add_argument(
-        "--almond_has_single_program",
-        action='store_false',
-        dest='almond_has_multiple_programs',
-        help='Indicate if almond dataset has multiple programs for each sentence',
-    )
     parser.add_argument(
         '--almond_lang_as_question',
         action='store_true',
@@ -164,71 +137,11 @@ def parse_argv(parser):
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
 
     parser.add_argument(
-        '--no_commit',
-        action='store_false',
-        dest='commit',
-        help='do not track the git commit associated with this training run',
-    )
-
-    parser.add_argument('--use_curriculum', action='store_true', help='Use curriculum learning')
-    parser.add_argument(
-        '--aux_dataset', default='', type=str, help='path to auxiliary dataset (ignored if curriculum is not used)'
-    )
-    parser.add_argument(
-        '--curriculum_max_frac', default=1.0, type=float, help='max fraction of harder dataset to keep for curriculum'
-    )
-    parser.add_argument('--curriculum_rate', default=0.1, type=float, help='growth rate for curriculum')
-    parser.add_argument(
-        '--curriculum_strategy', default='linear', type=str, choices=['linear', 'exp'], help='growth strategy for curriculum'
-    )
-    parser.add_argument(
         '--database_dir',
         type=str,
         default='database/',
         help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)',
     )
-
-    parser.add_argument(
-        "--almond_type_mapping_path",
-        default=None,
-        type=str,
-        help='If provided, will override the usual almond type mapping in data_utils/database_file/'
-        'Path should be relative to --root',
-    )
-
-    # translation args
-    parser.add_argument(
-        '--att_pooling',
-        type=str,
-        default='max',
-        help='pooling strategy to calculate cross-attention values across multiple heads',
-    )
-    parser.add_argument('--plot_heatmaps', action='store_true', help='whether to plot cross-attention heatmaps')
-    parser.add_argument(
-        '--do_alignment',
-        action='store_true',
-        help='whether to preserve token spans between quotation marks using alignment during translation',
-    )
-    parser.add_argument(
-        '--align_preserve_input_quotation',
-        action='store_true',
-        help='preserve quotation marks in the input. Useful if using alignment for semantic parsing or NLG',
-    )
-    parser.add_argument(
-        '--align_remove_output_quotation',
-        action='store_true',
-        help='do not preserve quotation marks in the output. Useful if using alignment for semantic parsing or NLG',
-    )
-    parser.add_argument(
-        '--align_span_symbol',
-        default='"',
-        type=str,
-        help='The symbol we use to wrap spans of words in the input that need to be preserved in the output.',
-    )
-
-    # token classification task args
-    parser.add_argument('--num_labels', type=int, help='num_labels for classification tasks')
-    parser.add_argument('--crossner_domains', nargs='+', type=str, help='domains to use for CrossNER task')
 
     parser.add_argument(
         '--e2e_dialogue_evaluation',
@@ -270,9 +183,6 @@ def check_and_update_generation_args(args):
         'top_p',
         'repetition_penalty',
         'num_beams',
-        'num_beam_groups',
-        'diversity_penalty',
-        'no_repeat_ngram_size',
     ]
     max_hyperparameter_len = max([len(getattr(args, h)) for h in hyperparameters])
     valid_len = [1, max_hyperparameter_len]

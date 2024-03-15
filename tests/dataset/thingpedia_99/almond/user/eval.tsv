@@ -1,5 +1,0 @@
-Eonline/ac87/0	null	pick a random number between NUMBER_0 and NUMBER_1 , and if it 's exactly NUMBER_2 , say critical hit !	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.builtin.thingengine.builtin . get_random_between ( high = NUMBER_1 , low = NUMBER_0 ) filter random == NUMBER_2 ; @org.thingpedia.builtin.thingengine.builtin . say ( message = " critical hit ! " ) ;
-Eonline/120678/0	null	what day is today	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.builtin.thingengine.builtin . get_date ( ) ;
-Eonline/120750/0	null	get random integer	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.builtin.thingengine.builtin . get_random_between ( ) ;
-Eonline/121354/0	null	get random number	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.builtin.thingengine.builtin . get_random_between ( ) ;
-Eonline/121398/0	null	get date	$dialogue @org.thingpedia.dialogue.transaction . execute ; @org.thingpedia.builtin.thingengine.builtin . get_date ( ) ;
