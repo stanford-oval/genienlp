@@ -28,14 +28,12 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import copy
 import logging
-from collections import Counter, OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict
 from typing import List, Union
 
 import dialogues
 import sacrebleu
 from datasets import load_metric
-from seqeval import metrics as seq_metrics
-from seqeval import scheme as seq_scheme
 
 from .util import QUOTED_MATCH_REGEX
 
@@ -43,32 +41,11 @@ logger = logging.getLogger(__name__)
 
 # metrics that are calculated over a corpus (i.e. a list of predictions and gold answers, not single ones).
 # These metrics cannot be calculated on individual examples and then averaged.
-corpus_level_metrics = {'bleu', 'casedbleu', 'ter', 't5_bleu', 'nmt_bleu', 'corpus_f1', 'jga'}
-
-
-def f1_score(prediction, ground_truth):
-    prediction_tokens = prediction.split()
-    ground_truth_tokens = ground_truth.split()
-    common = Counter(prediction_tokens) & Counter(ground_truth_tokens)
-    num_same = sum(common.values())
-    if num_same == 0:
-        return 0
-    precision = 1.0 * num_same / len(prediction_tokens)
-    recall = 1.0 * num_same / len(ground_truth_tokens)
-    f1 = (2 * precision * recall) / (precision + recall)
-    return f1
+corpus_level_metrics = {'bleu', 'casedbleu', 'jga'}
 
 
 def exact_match(prediction, ground_truth):
     return prediction == ground_truth
-
-
-def partial_exact_match(prediction, ground_truth):
-    prediction = prediction.split()
-    ground_truth = ground_truth.split()
-    is_correct_token = [p == g for p, g in zip(prediction, ground_truth)]
-    partial_score = sum(is_correct_token) / len(is_correct_token)
-    return partial_score
 
 
 def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
@@ -85,45 +62,8 @@ def computeROUGE(outputs, targets, rouge_types):
     return rouge_metric.compute(references=targets, predictions=outputs, rouge_types=rouge_types)
 
 
-def computeSequenceClassificationPrecision(outputs, targets, tasks):
-    targets = [target[0] for target in targets]
-    label2id = tasks[0].label2id
-    outputs = [label2id[output] for output in outputs]
-    targets = [label2id[target] for target in targets]
-    precision_metric = load_metric('precision')
-    return precision_metric.compute(references=targets, predictions=outputs)['precision'] * 100
-
-
-def computeSequenceClassificationRecall(outputs, targets, tasks):
-    targets = [target[0] for target in targets]
-    label2id = tasks[0].label2id
-    outputs = [label2id[output] for output in outputs]
-    targets = [label2id[target] for target in targets]
-    recall_metric = load_metric('recall')
-    return recall_metric.compute(references=targets, predictions=outputs)['recall'] * 100
-
-
-def computeSequenceClassificationF1(outputs, targets, tasks):
-    targets = [target[0] for target in targets]
-    label2id = tasks[0].label2id
-    outputs = [label2id[output] for output in outputs]
-    targets = [label2id[target] for target in targets]
-    f1_metric = load_metric('f1')
-    return f1_metric.compute(references=targets, predictions=outputs)['f1'] * 100
-
-
-def computeF1(outputs, targets):
-    outs = [metric_max_over_ground_truths(f1_score, o, t) for o, t in zip(outputs, targets)]
-    return sum(outs) / len(outputs) * 100
-
-
 def computeEM(outputs, targets):
     outs = [metric_max_over_ground_truths(exact_match, o, t) for o, t in zip(outputs, targets)]
-    return sum(outs) / len(outputs) * 100
-
-
-def computePartialEM(outputs, targets):
-    outs = [metric_max_over_ground_truths(partial_exact_match, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
 
 
@@ -136,31 +76,6 @@ def computeCasedBLEU(outputs, targets):
     # lowercase is false
     sacrebleu_metric = load_metric("sacrebleu")
     return sacrebleu_metric.compute(predictions=outputs, references=targets, lowercase=False)['score']
-
-
-def computeT5BLEU(outputs, targets):
-    # tokenize_v14_international is used instead of default tokenize_13a tokenizer
-    targets = [[t[i] for t in targets] for i in range(len(targets[0]))]
-    return sacrebleu.corpus_bleu(
-        outputs,
-        targets,
-        smooth_method="exp",  # default
-        smooth_value=0.0,  # default
-        force=False,  # default
-        lowercase=False,  # default
-        tokenize="intl",
-        use_effective_order=False,  # default
-    ).score
-
-
-def computeNMTBLEU(outputs, targets):
-    # input should be tokenized
-    # TODO figure better tokenization esp. for CJK langs
-
-    outputs = [o.split(" ") for o in outputs]
-    targets = [[t.split(" ") for t in values] for values in targets]
-    bleu_metric = load_metric("bleu")
-    return bleu_metric.compute(predictions=outputs, references=targets)['bleu'] * 100
 
 
 def compute_e2e_dialogue_score(greedy, answer, args, example_ids, contexts):
@@ -328,10 +243,6 @@ def compute_metrics(
         dst_em = computeDST_EM(predictions, answers, tasks)
         metric_keys += ['dst_em']
         metric_values += [dst_em]
-    if 'pem' in requested_metrics:
-        pem = computePartialEM(predictions, answers)
-        metric_keys.append('pem')
-        metric_values.append(pem)
     if 'casedbleu' in requested_metrics:
         casedbleu = computeCasedBLEU(predictions, answers)
         metric_keys.append('casedbleu')
@@ -340,22 +251,6 @@ def compute_metrics(
         bleu = computeBLEU(predictions, answers)
         metric_keys.append('bleu')
         metric_values.append(bleu)
-    if 'sc_precision' in requested_metrics:
-        precision = computeSequenceClassificationPrecision(predictions, answers, tasks)
-        metric_keys.append('sc_precision')
-        metric_values.append(precision)
-    if 'sc_recall' in requested_metrics:
-        recall = computeSequenceClassificationRecall(predictions, answers, tasks)
-        metric_keys.append('sc_recall')
-        metric_values.append(recall)
-    if 'sc_f1' in requested_metrics:
-        f1 = computeSequenceClassificationF1(predictions, answers, tasks)
-        metric_keys.append('sc_f1')
-        metric_values.append(f1)
-    if 'f1' in requested_metrics:
-        f1 = computeF1(predictions, answers)
-        metric_keys.append('f1')
-        metric_values.append(f1)
     for m in ['rouge1', 'rouge2', 'rougeL']:
         if m in requested_metrics:
             rouge = computeROUGE(predictions, answers, rouge_types=[m])[m]
@@ -369,41 +264,17 @@ def compute_metrics(
     return metric_dict
 
 
-def calculate_and_reduce_metrics(args, validation_output, metrics_to_compute):
+def calculate_metrics(args, validation_output, task):
+    metrics_to_compute = task.metrics
+
     metrics = OrderedDict()
     example_ids = validation_output.example_ids
     predictions = validation_output.predictions
     answers = validation_output.answers
     contexts = validation_output.contexts
 
-    if args.reduce_metrics == 'max':
-        for i in range(len(predictions[0])):  # for each output (in case of multiple outputs)
-            partial_metrics = compute_metrics(
-                [p[i] for p in predictions], answers, metrics_to_compute, args, example_ids, contexts
-            )  # calculate the metric on all first outputs, all second outputs, etc.
-            for k, v in partial_metrics.items():
-                metrics[k] = max(metrics.get(k, 0), v)
-    elif args.reduce_metrics == 'top_k':
-        for m in metrics_to_compute:
-            if m in corpus_level_metrics:
-                logging.warning(
-                    f'You are using the corpus-level metric {m} with `--reduce_metrics top_k`, which can lead to incorrect results.',
-                )
-        for i in range(len(predictions)):  # for each input
-            example_metrics = OrderedDict()  # keep track of metrics for one input and all of its outputs
-            for j in range(len(predictions[i])):  # for each output (in case of multiple outputs)
-                partial_metrics = compute_metrics(
-                    [predictions[i][j]], [answers[i]], metrics_to_compute, args, example_ids, contexts
-                )  # calculate the metric on the j-th output of the i-th input
-                for k, v in partial_metrics.items():
-                    example_metrics[k] = max(example_metrics.get(k, 0), v)
-            # sum metrics for all examples
-            for k, v in example_metrics.items():
-                metrics[k] = metrics.get(k, 0) + example_metrics[k]
-        # convert sums to averages
-        for k, v in metrics.items():
-            metrics[k] = metrics[k] / len(predictions)
-    else:
-        raise ValueError('Invalid reduce_metrics argument')
+    metrics = compute_metrics(
+        [p[0] for p in predictions], answers, metrics_to_compute, args, example_ids, contexts
+    )  # calculate the metric on all first outputs, all second outputs, etc.
 
     return metrics

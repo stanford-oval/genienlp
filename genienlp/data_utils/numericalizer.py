@@ -45,7 +45,6 @@ from .example import SequentialField
 logger = logging.getLogger(__name__)
 
 
-
 class TransformerNumericalizer(object):
     """
     Numericalizer that uses Tokenizers from huggingface's transformers library.
@@ -55,9 +54,7 @@ class TransformerNumericalizer(object):
     _special_tokens_to_word_regexes: List[Tuple[re.Pattern, str]]
     _words_to_special_token_regexes: List[Tuple[re.Pattern, str]]
 
-    def __init__(
-        self, args, save_dir=None
-    ):
+    def __init__(self, args, save_dir=None):
         """
         If `save_dir` is None, initializes a new Numericalizer and optionally adds new words to its vocabulary, otherwise,
         loads from `save_dir`
@@ -113,7 +110,6 @@ class TransformerNumericalizer(object):
         # make sure we assigned is_piece_fn
         assert self._tokenizer.is_piece_fn
 
-
     def load_extras(self, save_dir):
         try:
             with open(os.path.join(save_dir, 'special-token-preprocessing.json')) as fp:
@@ -157,9 +153,6 @@ class TransformerNumericalizer(object):
         self.cls_id = self._tokenizer.cls_token_id
         self.sep_id = self._tokenizer.sep_token_id
 
-        # pad_id for answer tokens (different than context/ question pad_id for token classification tasks)
-        self.answer_pad_id = self.pad_id
-
     def get_num_special_tokens(self, special_tokens_mask):
         num_prefix_special_tokens, num_suffix_special_tokens = 0, 0
         i = 0
@@ -195,23 +188,17 @@ class TransformerNumericalizer(object):
             sentences = [sent for sent in sentences]
 
         if self._preprocess_special_tokens:
-            sentences, index2expansions = list(
-                zip(
-                    *map(
-                        functools.partial(self._apply_special_token_preprocessing, return_idx2exp=False)),
-                        sentences,
-                    )
-                )
-            
+            sentences = map(
+                self._apply_special_token_preprocessing,
+                sentences,
+            )
 
         def do_slow_tokenization(extract_word_pieces):
             all_input_ids = []
-            all_wp_tokenized = []
             if extract_word_pieces:
                 for i in range(batch_size):
                     text = sentences[i]
                     wp_tokenized = self._tokenizer.tokenize(text)
-                    all_wp_tokenized.append(wp_tokenized)
 
                     # None indicates encoding single instance not paired inputs
                     all_input_ids.append((self._tokenizer.convert_tokens_to_ids(wp_tokenized), None))
@@ -233,14 +220,13 @@ class TransformerNumericalizer(object):
                     return_attention_mask=False,
                     return_special_tokens_mask=True,
                 )
-            return batch_encoded, all_wp_tokenized
+            return batch_encoded
 
         if field_name == 'answer':
             with self._tokenizer.as_target_tokenizer():
-                batch_encoded, all_wp_tokenized = do_slow_tokenization(extract_word_pieces)
+                batch_encoded = do_slow_tokenization(extract_word_pieces)
         else:
-            batch_encoded, all_wp_tokenized = do_slow_tokenization(extract_word_pieces)
-
+            batch_encoded = do_slow_tokenization(extract_word_pieces)
 
         batch_numerical = batch_encoded.input_ids
         batch_length = batch_encoded.length
@@ -259,22 +245,15 @@ class TransformerNumericalizer(object):
             )
         return sequential_fields
 
-    def _apply_special_token_preprocessing(self, sentence, return_idx2exp=False):
-        index2expansion = {}
-        if return_idx2exp:
-            for i, (regex, replacement) in enumerate(self._special_tokens_to_word_regexes):
-                for match in regex.finditer(sentence):
-                    idx = match.span()[0]
-                    tokens_before_idx = len(sentence[:idx].split(' '))
-                    index2expansion[tokens_before_idx] = len(replacement.split(' '))
-        for i, (regex, replacement) in enumerate(self._special_tokens_to_word_regexes):
+    def _apply_special_token_preprocessing(self, sentence):
+        for regex, replacement in self._special_tokens_to_word_regexes:
             sentence = regex.sub(replacement, sentence)
         # '^' is an unknown token to T5 tokenizer and will break the preprocessing.
         # '~' is also unknown to T5. Evaluating models in server mode will give wrong results since answers will not
         # go through genienlp and remain intact while predictions will be missing these tokens. We replace such tokens
         # with known ones that do not conflict with other tokens. This continues our series of
         # "Possible bugs in spm-based tokenizers" issued here https://github.com/huggingface/transformers/issues/12867
-        return sentence, index2expansion
+        return sentence
 
     def _undo_special_token_preprocessing(self, sentence):
         # undo T5 specific token preprocessing

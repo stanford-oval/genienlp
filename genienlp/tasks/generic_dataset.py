@@ -93,7 +93,7 @@ class CQA(Dataset):
 class JSON(CQA):
     name = 'json'
 
-    def __init__(self, path, subsample=None, lower=False, **kwargs):
+    def __init__(self, path, subsample=None, **kwargs):
 
         examples = []
         with open(os.path.expanduser(path)) as f:
@@ -101,7 +101,7 @@ class JSON(CQA):
             for line in lines:
                 ex = json.loads(line)
                 context, question, answer = ex['context'], ex['question'], ex['answer']
-                examples.append(Example.from_raw(make_example_id(self, len(examples)), context, question, answer, lower=lower))
+                examples.append(Example.from_raw(make_example_id(self, len(examples)), context, question, answer))
                 if subsample is not None and len(examples) >= subsample:
                     break
 

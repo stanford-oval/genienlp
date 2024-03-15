@@ -35,7 +35,6 @@ import torch
 
 from genienlp.models import TransformerSeq2Seq
 
-from .arguments import check_and_update_generation_args
 from .tasks.registry import get_tasks
 from .util import load_config_file_to_args
 
@@ -51,8 +50,6 @@ def parse_argv(parser):
     )
     parser.add_argument('--eval_dir', type=str, help='use this directory to store eval results')
 
-    # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
-    parser.add_argument("--num_outputs", type=int, nargs='+', default=[1], help='number of sequences to output per input')
     parser.add_argument("--temperature", type=float, nargs='+', default=[0.0], help="temperature of 0 implies greedy sampling")
     parser.add_argument(
         "--repetition_penalty",
@@ -63,7 +60,6 @@ def parse_argv(parser):
     )
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
-    parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
     parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
 
 
@@ -81,7 +77,6 @@ class DialogueLoop(object):
 
 def init(args):
     load_config_file_to_args(args)
-    check_and_update_generation_args(args)
 
     if args.eval_dir:
         os.makedirs(args.eval_dir, exist_ok=True)

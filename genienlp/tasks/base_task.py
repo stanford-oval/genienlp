@@ -45,8 +45,6 @@ class BaseTask(object):
         self._metrics = ['em']
         # special task-specific tokens that should not be subword tokenized
         self.special_tokens = set()
-        self.override_context = args.override_context
-        self.override_question = args.override_question
 
         # dataset class name in dialogues (used for E2EDialogue tasks)
         self.dataset_name = None
@@ -80,10 +78,6 @@ class BaseTask(object):
         return prediction
 
     def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None):
-        if self.override_context is not None and field_name == 'context':
-            return self.override_context
-        if self.override_question is not None and field_name == 'question':
-            return self.override_question
         return sentence
 
     @property

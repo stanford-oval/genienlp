@@ -1,9 +1,9 @@
 import os
 
-import ujson
+import json
 
 from .base_dataset import Split
-from .generic_dataset import CQA, default_batch_fn
+from .generic_dataset import CQA
 
 
 class E2EDialogueDataset(CQA):
@@ -12,7 +12,7 @@ class E2EDialogueDataset(CQA):
         examples = []
 
         with open(path) as fin:
-            data = ujson.load(fin)['data']
+            data = json.load(fin)['data']
             for turn in data:
                 processed = make_example(turn, train_target=kwargs.get('train_target', False))
                 if processed:
@@ -22,10 +22,6 @@ class E2EDialogueDataset(CQA):
                     break
 
         super().__init__(examples, **kwargs)
-
-        # in e2e evaluation use 1 batch at a time
-        if kwargs.get('e2e_evaluation', False):
-            self.eval_batch_size_fn = default_batch_fn
 
     @classmethod
     def return_splits(cls, path='.data', train='train', validation='valid', test='test', **kwargs):
@@ -44,7 +40,3 @@ class E2EDialogueDataset(CQA):
         return Split(train=train_data, eval=validation_data, test=test_data), Split(
             train=train_path, eval=validation_path, test=test_path
         )
-
-
-class E2EDialogueErrorClassificationDataset(E2EDialogueDataset):
-    is_sequence_classification = True

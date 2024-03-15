@@ -34,7 +34,7 @@ from collections import defaultdict
 from typing import List, Optional
 
 import dialogues
-import ujson
+import json
 
 import requests
 from tqdm import tqdm
@@ -52,14 +52,12 @@ class ValidationOutput(object):
 
     def __init__(
         self,
-        loss: Optional[float] = None,
         example_ids: Optional[List] = None,
         predictions: Optional[List] = None,
         raw_predictions: Optional[List] = None,
         answers: Optional[List] = None,
         contexts: Optional[List] = None,
     ):
-        self.loss = loss
         self.example_ids = example_ids
         self.predictions = predictions
         self.raw_predictions = raw_predictions
@@ -121,8 +119,7 @@ class TransformerSeq2Seq():
         """
         Inputs:
             original_order: List of indices. If provided, we will sort the results according to this order
-        Outputs: (loss, predictions, answers, contexts)
-            loss
+        Outputs: (predictions, answers, contexts)
             predictions: a List of Lists of strings
             answers
             contexts
@@ -208,8 +205,7 @@ class TransformerSeq2Seq():
         """
         Inputs:
             original_order: List of indices. If provided, we will sort the results according to this order
-        Outputs: (loss, predictions, answers, contexts)
-            loss
+        Outputs: (predictions, answers, contexts)
             predictions: a List of Lists of strings
             answers
             contexts
@@ -369,7 +365,7 @@ class TransformerSeq2Seq():
 
         if eval_dir:
             with open(os.path.join(eval_dir, 'e2e_dialogue_preds.json'), 'w') as fout:
-                ujson.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
+                json.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
 
         if original_order is not None:
             # sort back to the original order
@@ -392,8 +388,7 @@ class TransformerSeq2Seq():
         """
         Inputs:
             original_order: List of indices. If provided, we will sort the results according to this order
-        Outputs: (loss, predictions, answers, contexts)
-            loss
+        Outputs: (predictions, answers, contexts)
             predictions: a List of Lists of strings
             answers
             contexts
@@ -572,7 +567,7 @@ class TransformerSeq2Seq():
 
         if eval_dir:
             with open(os.path.join(eval_dir, 'interact_e2e_dialogue_preds.json'), 'w') as fout:
-                ujson.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
+                json.dump(e2e_dialogue_preds, fout, indent=2, ensure_ascii=False)
 
         if original_order is not None:
             # sort back to the original order

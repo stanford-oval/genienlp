@@ -55,9 +55,8 @@ setuptools.setup(
         # for metrics:
         'rouge_score>=0.0.4',
         'sacrebleu>=1,<3',
-        'bert-score~=0.3',
-        'seqeval==1.2.2',
         # for e2e dialogues:
         'dialogues==0.0.3',
+        'termcolor'
     ],
 )

@@ -34,12 +34,10 @@ import os
 from collections import defaultdict
 from pprint import pformat
 
-import torch
 
 from genienlp.models import TransformerSeq2Seq
 
-from .arguments import check_and_update_generation_args
-from .metrics import calculate_and_reduce_metrics
+from .metrics import calculate_metrics
 from .tasks.registry import get_tasks
 from .util import (
     load_config_file_to_args,
@@ -58,12 +56,6 @@ def parse_argv(parser):
         choices=['train', 'valid', 'test'],
         help='Which dataset to do predictions for (train, dev or test)',
     )
-    parser.add_argument(
-        '--pred_set_name',
-        default='eval',
-        type=str,
-        help='Name of dataset to run prediction for; will be ignored if --evaluate is test',
-    )
     parser.add_argument('--tasks', dest='task_names', nargs='+', help='task names for prediction')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument(
@@ -75,29 +67,14 @@ def parse_argv(parser):
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets')
 
-    parser.add_argument(
-        '--main_metric_only', action='store_true', help='If True, we only calculate the deca score metric for each task.'
-    )
     # If not None, these values will override the values saved in the trained model's config file
     parser.add_argument(
         '--val_batch_size',
-        nargs='+',
-        default=None,
+        default=40,
         type=int,
         help='Batch size for validation corresponding to tasks in val tasks',
     )
-    parser.add_argument(
-        "--reduce_metrics",
-        type=str,
-        default='max',
-        choices=['max', 'top_k'],
-        help='How to calculate the metric when there are multiple outputs per input.'
-        '`max` chooses the best set of generation hyperparameters and reports the metric for that.'
-        '`top_k` chooses the best generation output per input, and uses that to output the metric. For example, combining this with the exact match metric gives what is commonly known as the top-k accuracy. Note that the output is meaningless if used with corpus-level metrics.',
-    )
 
-    # These are generation hyperparameters. Each one can be a list of values in which case, we generate `num_outputs` outputs for each set of hyperparameters.
-    parser.add_argument("--num_outputs", type=int, nargs='+', default=[1], help='number of sequences to output per input')
     parser.add_argument("--temperature", type=float, nargs='+', default=[0.0], help="temperature of 0 implies greedy sampling")
     parser.add_argument(
         "--repetition_penalty",
@@ -108,14 +85,7 @@ def parse_argv(parser):
     )
     parser.add_argument("--top_k", type=int, nargs='+', default=[0], help='0 disables top-k filtering')
     parser.add_argument("--top_p", type=float, nargs='+', default=[1.0], help='1.0 disables top-p filtering')
-    parser.add_argument("--num_beams", type=int, nargs='+', default=[1], help='1 disables beam seach')
     parser.add_argument('--max_output_length', type=int, help='maximum output length for generation')
-    parser.add_argument(
-        '--min_output_length',
-        type=int,
-        help='maximum output length for generation; '
-        'default is 3 for most multilingual models: BOS, language code, and one token. otherwise it is 2',
-    )
 
     parser.add_argument(
         '--e2e_dialogue_evaluation',
@@ -135,14 +105,14 @@ def parse_argv(parser):
         help='Specify metrics to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
 
+
 def set_default_values(args):
     """
     sets default values that depend on other input arguments
     """
-    if args.e2e_dialogue_evaluation and args.val_batch_size[0] != 1:
+    if args.e2e_dialogue_evaluation and args.val_batch_size != 1:
         logger.warning('When evaluating dialogues end-to-end, val_batch_size should be 1 so we load the data turn by turn')
-        args.val_batch_size = [1]
-
+        args.val_batch_size = 1
 
 
 def prepare_data(args):
@@ -155,7 +125,7 @@ def prepare_data(args):
         if args.evaluate == 'train':
             del kwargs['train']  # deleting keys means use the default file name
         elif args.evaluate == 'valid':
-            kwargs['validation'] = args.pred_set_name
+            kwargs['validation'] = 'valid'
         elif args.evaluate == 'test':
             del kwargs['test']
         else:
@@ -164,11 +134,10 @@ def prepare_data(args):
         kwargs.update(
             {
                 'subsample': args.subsample,
-                'num_workers': args.num_workers,
             }
         )
 
-        split, path = task.get_splits(root=args.data, lower=args.lower, **kwargs)
+        split, path = task.get_splits(root=args.data, **kwargs)
         if split.train:
             data = split.train
             path = path.train
@@ -188,12 +157,10 @@ def prepare_data(args):
 
 def prepare_data_iterators(args, val_sets, numericalizer):
     logger.info('Preparing data iterators')
-    if len(args.val_batch_size) == 1 and len(val_sets) > 1:
-        args.val_batch_size *= len(val_sets)
     iters = []
-    for task, bs, val_set in zip(args.tasks, args.val_batch_size, val_sets):
+    for task, bs, val_set in zip(args.tasks, [args.val_batch_size] * len(val_sets), val_sets):
         task_iter = []
-        loader, original_order = make_data_loader(val_set, numericalizer, bs, train=False, return_original_order=True)
+        loader, original_order = make_data_loader(val_set, numericalizer, bs, return_original_order=True)
         task_iter.append((task, loader, original_order))
 
         iters.extend(task_iter)
@@ -216,14 +183,6 @@ def create_output_lines(index, validation_output):
     return lines
 
 
-def get_metrics_to_compute(args, task):
-    metrics_to_compute = task.metrics
-    metrics_to_compute = [metric for metric in task.metrics if metric not in ['loss']]
-    if args.main_metric_only:
-        metrics_to_compute = [metrics_to_compute[0]]
-    return metrics_to_compute
-
-
 def run(args):
     model = TransformerSeq2Seq.load(
         args.path,
@@ -237,7 +196,7 @@ def run(args):
     eval_dir = os.path.join(args.eval_dir, args.evaluate)
     os.makedirs(eval_dir, exist_ok=True)
 
-    for (task, it, original_order) in iters:
+    for task, it, original_order in iters:
         logger.info(task.name)
         prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
         results_file_name = os.path.join(eval_dir, task.name + '.results.json')
@@ -256,8 +215,7 @@ def run(args):
                 prediction_file.write('\n'.join(lines) + '\n')
 
         if len(validation_output.answers) > 0:
-            metrics_to_compute = get_metrics_to_compute(args, task)
-            metrics = calculate_and_reduce_metrics(args, validation_output, metrics_to_compute)
+            metrics = calculate_metrics(args, validation_output, task)
 
             with open(results_file_name, 'w') as results_file:
                 results_file.write(json.dumps(metrics) + '\n')
@@ -289,30 +247,11 @@ def run(args):
     logger.info(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
 
 
-def update_metrics(args):
-    assert len(args.override_valid_metrics) == len(args.tasks)
-    new_metrics = []
-    for task, metrics in zip(args.tasks, args.override_valid_metrics):
-        for m in metrics:
-            # remove loss from validation metrics
-            if m == 'loss':
-                continue
-            # backward compatibility for models validated on sacrebleu (now casedbleu)
-            if m == 'sacrebleu':
-                m = 'casedblue'
-            new_metrics.append(m)
-
-        task.metrics = new_metrics
-
-
 def main(args):
     load_config_file_to_args(args)
-    check_and_update_generation_args(args)
     set_default_values(args)
 
     args.tasks = list(get_tasks(args.task_names, args).values())
-    if args.override_valid_metrics:
-        update_metrics(args)
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')

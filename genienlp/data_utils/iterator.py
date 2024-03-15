@@ -35,8 +35,6 @@ import torch
 
 logger = logging.getLogger(__name__)
 
-_warned_for_batch_size = False
-
 
 class LengthSortedIterator(torch.utils.data.Sampler):
     """ """
@@ -45,17 +43,10 @@ class LengthSortedIterator(torch.utils.data.Sampler):
         self,
         data_source,
         batch_size,
-        batch_size_fn,
-        batching_algorithm='sample',
     ):
         """
-        batch_size: can be number of tokens or number of examples, the type is inferred from batch_size_fn
+        batch_size: number of examples
         """
-        self.batch_size_fn = batch_size_fn
-        if batching_algorithm not in ['sample', 'epoch']:
-            raise ValueError('--batching_algorithm must be one of `sample` or `epoch`')
-        self.batching_algorithm = batching_algorithm
-
         self.data_source, self.original_order = data_source, list(range(len(data_source)))
         self.data_source_marked = np.zeros(shape=(len(self.data_source)))  # mark each example that has been used in a batch
         self.batch_size = batch_size  # number of examples or number of tokens
@@ -90,35 +81,13 @@ class LengthSortedIterator(torch.utils.data.Sampler):
             # This is the end of the iterator
             raise StopIteration
         while current_batch_size < self.batch_size:
-            candidate_example = self.data_source[candidate_index]
-            if self.batch_size_fn([candidate_example]) > self.batch_size:
-                # the example is too big even on its own
-                global _warned_for_batch_size
-                if self.no_skip:
-                    raise ValueError(
-                        'Have to skip examples in validation/ prediction splits. Increase the validation batch size'
-                    )
-                if not _warned_for_batch_size:
-                    logger.warning(
-                        'Skipping an example larger than batch size. Consider increasing the batch size to avoid this warning'
-                    )
-                    _warned_for_batch_size = True
-                self.last_batch_start_index = self._next_unmarked_index(self.last_batch_start_index)
-                candidate_index = self._next_unmarked_index(candidate_index)
-                if candidate_index >= len(self.data_source):
-                    raise StopIteration
-                continue
-
-            candidate_batch_size = self.batch_size_fn(
-                [self.data_source[i] for i in batch_of_indices] + [candidate_example]
-            )  # the new batch size if we added this example to the batch
+            candidate_batch_size = len(batch_of_indices) + 1
             if candidate_batch_size > self.batch_size:
                 # the new example would put us over the batch size limit
                 break
 
             batch_of_indices.append(candidate_index)
-            if self.batching_algorithm == 'epoch':
-                self.data_source_marked[candidate_index] = 1  # mark this index until the end of this epoch
+            self.data_source_marked[candidate_index] = 1  # mark this index until the end of this epoch
             current_batch_size = candidate_batch_size
             candidate_index = self._next_unmarked_index(candidate_index)
 

@@ -40,7 +40,7 @@ import torch
 
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
-from .tasks.generic_dataset import all_tokens_fn, input_tokens_fn
+from .tasks.generic_dataset import all_tokens_fn, default_batch_fn, input_tokens_fn
 
 logger = logging.getLogger(__name__)
 
@@ -80,35 +80,20 @@ def find_span(haystack, needle):
 
 
 def make_data_loader(
-    dataset, numericalizer, batch_size, train=False, return_original_order=False, batching_algorithm='sample'
+    dataset, numericalizer, batch_size, return_original_order=False,
 ):
-    args = numericalizer.args
     all_features = NumericalizedExamples.from_examples(dataset, numericalizer)
 
-    context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
 
-    batch_size_fn = getattr(dataset, 'eval_batch_size_fn', dataset.batch_size_fn)
+    min_batch_length = 1
 
-    if batch_size_fn == input_tokens_fn:
-        min_batch_length = np.min(context_lengths)
-    elif batch_size_fn == all_tokens_fn:
-        min_batch_length = np.min(context_lengths) + np.min(answer_lengths)
-    else:
-        min_batch_length = 1
-
-    min_output_length = numericalizer.args.min_output_length
     max_output_length = numericalizer.args.max_output_length
 
     if min_batch_length > batch_size:
         raise ValueError(
             f'The minimum batch length in your dataset is {min_batch_length} but your batch size is {batch_size}.'
             f' Thus no examples will be processed. Consider increasing batch_size'
-        )
-    if np.min(answer_lengths) < min_output_length:
-        raise ValueError(
-            f'The minimum output length in your dataset is {np.min(answer_lengths)} but you have set --min_output_length to {min_output_length}.'
-            f' Consider reducing that'
         )
     if np.max(answer_lengths) > max_output_length:
         raise ValueError(
@@ -119,8 +104,6 @@ def make_data_loader(
     sampler = LengthSortedIterator(
         all_features,
         batch_size=batch_size,
-        batch_size_fn=batch_size_fn,
-        batching_algorithm=batching_algorithm,
     )
     # get the sorted data_source
     all_f = sampler.data_source
@@ -143,16 +126,7 @@ def load_config_file_to_args(args):
 
     retrieve = [
         'model',
-        'lower',
-        'override_context',
-        'override_question',
         'preprocess_special_tokens',
-        'num_workers',
-        'max_types_per_qid',
-        'database_type',
-        'num_db_types',
-        'db_unk_id',
-        'crossner_domains',
         'override_valid_metrics',
     ]
 
@@ -161,15 +135,11 @@ def load_config_file_to_args(args):
     overwrite = [
         'model',
         'val_batch_size',
-        'num_beams',
-        'num_outputs',
         'top_p',
         'top_k',
         'repetition_penalty',
         'temperature',
         'max_output_length',
-        'min_output_length',
-        'reduce_metrics',
         'e2e_dialogue_valid_subtasks',
         'e2e_dialogue_valid_submetrics',
     ]
@@ -189,18 +159,8 @@ def load_config_file_to_args(args):
     for r in retrieve:
         if r in config:
             setattr(args, r, config[r])
-        elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
-            setattr(args, r, 0)
-        elif r in ('num_beams', 'num_outputs', 'top_p', 'repetition_penalty'):
+        elif r in ('top_p', 'repetition_penalty'):
             setattr(args, r, [1])
-        elif r in ['override_valid_metrics']:
-            setattr(args, r, [])
-        elif r == 'database_type':
-            setattr(args, r, 'json')
-        elif r == 'locale':
-            setattr(args, r, 'en')
-        elif r == 'min_output_length':
-            setattr(args, r, 3)
         else:
             # use default value
             setattr(args, r, None)

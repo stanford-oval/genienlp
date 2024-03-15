@@ -33,7 +33,7 @@ import logging
 import os
 from pprint import pformat
 
-from .metrics import calculate_and_reduce_metrics
+from .metrics import calculate_metrics
 from .models.base import ValidationOutput
 from .tasks.registry import get_tasks
 
@@ -51,19 +51,6 @@ def parse_argv(parser):
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the prediction file')
 
     parser.add_argument('--eval_dir', type=str, required=False, help='use this directory to store eval results')
-
-    parser.add_argument(
-        '--main_metric_only', action='store_true', help='If True, we only calculate the deca score metric for each task.'
-    )
-    parser.add_argument(
-        "--reduce_metrics",
-        type=str,
-        default='max',
-        choices=['max', 'top_k'],
-        help='How to calculate the metric when there are multiple outputs per input.'
-        '`max` chooses the best set of generation hyperparameters and reports the metric for that.'
-        '`top_k` chooses the best generation output per input, and uses that to output the metric. For example, combining this with the exact match metric gives what is commonly known as the top-k accuracy. Note that the output is meaningless if used with corpus-level metrics.',
-    )
 
     parser.add_argument(
         '--e2e_dialogue_valid_subtasks',
@@ -98,10 +85,7 @@ def compute_metrics_on_file(pred_file, results_file_name, task, args):
     validation_output = ValidationOutput(example_ids=ids, contexts=contexts, predictions=preds, answers=targets)
 
     metrics_to_compute = task.metrics
-    metrics_to_compute = [metric for metric in task.metrics if metric not in ['loss']]
-    if args.main_metric_only:
-        metrics_to_compute = [metrics_to_compute[0]]
-    metrics = calculate_and_reduce_metrics(
+    metrics = calculate_metrics(
         args,
         validation_output,
         metrics_to_compute,
@@ -114,10 +98,6 @@ def compute_metrics_on_file(pred_file, results_file_name, task, args):
 
 
 def main(args):
-    # these are needed when initializing the tasks
-    args.override_context = None
-    args.override_question = None
-
     args.tasks = list(get_tasks(args.task_names, args).values())
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')

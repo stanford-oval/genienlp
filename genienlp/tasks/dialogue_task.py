@@ -1,6 +1,6 @@
 from ..data_utils.example import Example
 from .base_task import BaseTask
-from .dialogue_dataset import E2EDialogueDataset, E2EDialogueErrorClassificationDataset
+from .dialogue_dataset import E2EDialogueDataset
 from .registry import register_task
 
 
@@ -66,7 +66,7 @@ class E2EDialogueTask(BaseTask):
         example_id = '/'.join([dial_id, str(turn_id), train_target])
 
         return Example.from_raw(
-            self.name + '/' + str(example_id), input_text, '', output_text, preprocess=self.preprocess_field, lower=False
+            self.name + '/' + str(example_id), input_text, '', output_text, preprocess=self.preprocess_field
         )
 
     def get_splits(self, root, **kwargs):
