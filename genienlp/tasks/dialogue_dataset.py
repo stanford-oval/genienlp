@@ -37,6 +37,4 @@ class E2EDialogueDataset(CQA):
         validation_data = None if validation is None else cls(validation_path, **kwargs)
         test_data = None if test is None else cls(test_path, **kwargs)
 
-        return Split(train=train_data, eval=validation_data, test=test_data), Split(
-            train=train_path, eval=validation_path, test=test_path
-        )
+        return Split(train=train_data, eval=validation_data, test=test_data)

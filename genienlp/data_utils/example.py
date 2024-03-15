@@ -63,40 +63,17 @@ class Example(object):
         return Example(*args)
 
 
-class NumericalizedExamples(NamedTuple):
-    """
-    Contains a batch of numericalized (i.e. tokenized and converted to token ids) examples, potentially of size 1
-    """
-
+class ExampleBatch(NamedTuple):
     example_id: List[str]
     context_string: Union[str, List[str]]
     answer_string: Union[str, List[str]]
 
     @staticmethod
-    def from_examples(examples: Iterable[Example]):
+    def example_list_to_batch(examples: Iterable[Example]):
         assert all(isinstance(ex.example_id, str) for ex in examples)
-        numericalized_examples = []
 
-        # we keep the result of concatenation of question and context fields in these arrays temporarily. The numericalized versions will live on in self.context
-        all_context_plus_questions = []
-
-        for ex in examples:
-            if not len(ex.question):
-                context_plus_question = ex.context
-            elif not len(ex.context):
-                context_plus_question = ex.question
-            else:
-                context_plus_question = ex.context +  " " + ex.question
-
-            all_context_plus_questions.append(context_plus_question)
-
-
-        for i in range(len(examples)):
-            numericalized_examples.append(
-                NumericalizedExamples([examples[i].example_id], all_context_plus_questions[i], examples[i].answer)
-            )
-        return numericalized_examples
-
-    @staticmethod
-    def collate_batches(batches: Iterable['NumericalizedExamples']):
-        return NumericalizedExamples(example_id=[batch.example_id[0] for batch in batches], answer_string=[batch.answer_string for batch in batches], context_string=[batch.context_string for batch in batches])
+        return ExampleBatch(
+            example_id=[e.example_id for e in examples],
+            context_string=[e.context for e in examples],
+            answer_string=[e.answer for e in examples],
+        )

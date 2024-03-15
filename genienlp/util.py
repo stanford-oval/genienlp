@@ -31,21 +31,12 @@
 import logging
 import re
 
-from .data_utils.iterator import LengthSortedIterator
 
 logger = logging.getLogger(__name__)
 
 QUOTED_MATCH_REGEX = re.compile(' " (.*?) " ')
 
 
-def make_data_loader(
-    dataset, batch_size,
-):
-    sampler = LengthSortedIterator(
-        dataset,
-        batch_size=batch_size,
-    )
-    return sampler
 
 def replace_capturing_group(input, re_pattern, replacement):
     # replace first captured group in the input with replacement using regex re_pattern

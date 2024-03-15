@@ -29,13 +29,14 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+import math
 
-from genienlp.data_utils.example import NumericalizedExamples
+from genienlp.data_utils.example import ExampleBatch
 
 logger = logging.getLogger(__name__)
 
 
-class LengthSortedIterator:
+class DataIterator:
 
     def __init__(
         self,
@@ -51,7 +52,7 @@ class LengthSortedIterator:
         self.last_batch_start_index = 0
 
     def __len__(self):
-        return self.length
+        return math.ceil(self.length / self.batch_size)
 
     def __iter__(self):
         return self
@@ -63,4 +64,4 @@ class LengthSortedIterator:
             range(self.last_batch_start_index, min(self.last_batch_start_index + self.batch_size, self.length))
         )
         self.last_batch_start_index += len(batch_of_indices)
-        return NumericalizedExamples.collate_batches(NumericalizedExamples.from_examples([self.dataset[i] for i in batch_of_indices]))
+        return ExampleBatch.example_list_to_batch([self.dataset[i] for i in batch_of_indices])

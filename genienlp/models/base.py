@@ -27,6 +27,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from concurrent.futures import ThreadPoolExecutor
 import copy
 import logging
 import os
@@ -63,10 +64,8 @@ class ValidationOutput(object):
 
 
 class LLM:
-
     def __init__(self, args):
         self.args = args
-
 
     def validate(
         self,
@@ -107,15 +106,14 @@ class LLM:
             batch_context = batch.context_string
             contexts += batch_context
 
-            print(batch)
-            raise NotImplementedError()  # TODO batch generate
-            partial_batch_prediction = self._generate(batch)
+            partial_batch_prediction = self._batch_generate(batch.context_string)
             # put them into the right array
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[i].append(partial_batch_prediction[i])
 
             predictions += batch_prediction
 
+        print("predictions = ", predictions)
         output = ValidationOutput()
         output.example_ids, output.predictions, output.answers, output.contexts = (
             example_ids,
@@ -149,7 +147,6 @@ class LLM:
         cur_dial_id = ''
 
         for turn in tqdm(data_iterator, desc='Generating'):
-            print("batch = ", turn)
             batch_size = len(turn.example_id)
             assert batch_size == 1
             batch_prediction = []
@@ -209,7 +206,6 @@ class LLM:
             contexts[-1] = input_text
 
             partial_batch_prediction = self._generate(input_text)
-            print(partial_batch_prediction)
 
             if train_target == 'da':
                 partial_batch_prediction = dataset.postprocess_prediction(
@@ -476,6 +472,12 @@ class LLM:
 
     def _generate(self, input_text: str):
         response = requests.get(
-            f"{self.args.llm_url}/generate", json={"language": self.args.language, "task_input": input_text, "model": self.args.llm}
+            f"{self.args.llm_url}/generate",
+            json={"language": self.args.language, "task_input": input_text, "model": self.args.llm},
         )
         return response.json()["task_output"]
+
+    def _batch_generate(self, input_texts: List[str]):
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            results = list(executor.map(self._generate, input_texts))
+        return results

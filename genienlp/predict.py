@@ -31,17 +31,12 @@
 import json
 import logging
 import os
-from collections import defaultdict
-from pprint import pformat
-
+from genienlp.data_utils.iterator import DataIterator
 
 from genienlp.models import LLM
 
 from .metrics import calculate_metrics
 from .tasks.registry import get_task
-from .util import (
-    make_data_loader,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +50,9 @@ def parse_argv(parser):
         help='Which dataset to do predictions for (train, dev or test)',
     )
     parser.add_argument('--task', dest='task_name', help='task names for prediction')
-    parser.add_argument('--llm', type=str, choices=["gpt-4", "gpt-35-turbo"], required=True, help='The LLM to use for inference')
+    parser.add_argument(
+        '--llm', type=str, choices=["gpt-4", "gpt-35-turbo"], required=True, help='The LLM to use for inference'
+    )
     parser.add_argument('--llm_url', type=str, required=True, help='The LLM inference server URL')
     parser.add_argument('--language', type=str, required=True, help='The language of the output, used for postprocessing.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
@@ -114,10 +111,6 @@ def set_default_values(args):
 
 
 def prepare_data(args):
-
-    datasets = []
-    paths = []
-
     logger.info(f'Loading {args.task}')
     kwargs = {'train': None, 'validation': None, 'test': None}
     if args.evaluate == 'train':
@@ -135,22 +128,17 @@ def prepare_data(args):
         }
     )
 
-    split, path = args.task.get_splits(root=args.data, **kwargs)
+    split = args.task.get_splits(root=args.data, **kwargs)
     if split.train:
         data = split.train
-        path = path.train
     elif split.eval:
         data = split.eval
-        path = path.eval
     else:
         data = split.test
-        path = path.test
 
     logger.info(f'{args.task.name} has {len(data.examples)} prediction examples')
-    datasets.append(data)
-    paths.append(path)
 
-    return datasets
+    return data
 
 
 def create_output_lines(index, validation_output):
@@ -172,8 +160,6 @@ def run(args):
     model = LLM(
         args=args,
     )
-    val_sets = prepare_data(args)
-    iter = make_data_loader(val_sets[0], args.val_batch_size)
 
     eval_dir = os.path.join(args.eval_dir, args.evaluate)
     os.makedirs(eval_dir, exist_ok=True)
@@ -183,7 +169,10 @@ def run(args):
     results_file_name = os.path.join(eval_dir, args.task.name + '.results.json')
 
     validation_output = model.validate(
-        iter,
+        DataIterator(
+            prepare_data(args),
+            args.val_batch_size,
+        ),
         args.task.dataset_name,
         eval_dir=eval_dir,
     )
@@ -203,7 +192,6 @@ def run(args):
         logger.info(metrics)
 
         decaScore = len(validation_output.answers), metrics[args.task.metrics[0]]
-
 
     logger.info('Evaluated Tasks:\n')
     logger.info(f'{args.task.name}: {decaScore}')
