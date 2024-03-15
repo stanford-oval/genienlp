@@ -191,17 +191,15 @@ def compute_e2e_dialogue_score(greedy, answer, args, example_ids, contexts):
             subtask_metrics_dict[subtask] = (
                 sub_metrics[metrics_to_compute],
                 len(golds),
-                args.e2e_dialogue_valid_subweights[k],
             )
-
-    # TODO  how should we aggregate?
+            
     weighted_num_examples = 0
-    for subtask, (sub_result, num_ex, weight) in subtask_metrics_dict.items():
+    for subtask, (sub_result, num_ex) in subtask_metrics_dict.items():
         result_key = subtask2result_key[subtask]
 
         results[result_key] += sub_result
-        results['e2e_dialogue_score'] += weight * (sub_result * num_ex)
-        weighted_num_examples += abs(weight) * num_ex
+        results['e2e_dialogue_score'] += (sub_result * num_ex)
+        weighted_num_examples += num_ex
 
     results['e2e_dialogue_score'] /= weighted_num_examples
 
@@ -209,7 +207,6 @@ def compute_e2e_dialogue_score(greedy, answer, args, example_ids, contexts):
 
 
 def computeSER(greedy, inputs, tasks):
-    # TODO: how to address multitask evaluation?
     assert len(tasks) == 1
     dataset_class = getattr(dialogues, tasks[0].dataset_name)
     dataset = dataset_class()
@@ -224,7 +221,6 @@ def computeSER(greedy, inputs, tasks):
 def computeDA_EM(greedy, answer, tasks):
     # Uses dialogues da metric which takes care of entity normalizations
 
-    # TODO: how to address multitask evaluation?
     assert len(tasks) == 1
     dataset_class = getattr(dialogues, tasks[0].dataset_name)
     dataset = dataset_class()

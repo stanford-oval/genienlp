@@ -79,13 +79,6 @@ def find_span(haystack, needle):
     return None
 
 
-def set_seed(args):
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-
-
 def make_data_loader(
     dataset, numericalizer, batch_size, train=False, return_original_order=False, batching_algorithm='sample'
 ):
@@ -153,8 +146,6 @@ def load_config_file_to_args(args):
         'lower',
         'override_context',
         'override_question',
-        'almond_lang_as_question',
-        'almond_detokenize_sentence',
         'preprocess_special_tokens',
         'num_workers',
         'max_types_per_qid',
@@ -179,10 +170,8 @@ def load_config_file_to_args(args):
         'max_output_length',
         'min_output_length',
         'reduce_metrics',
-        'database_dir',
         'e2e_dialogue_valid_subtasks',
         'e2e_dialogue_valid_submetrics',
-        'e2e_dialogue_valid_subweights',
     ]
     for o in overwrite:
         if o not in args or getattr(args, o) is None:
@@ -200,12 +189,6 @@ def load_config_file_to_args(args):
     for r in retrieve:
         if r in config:
             setattr(args, r, config[r])
-        # These are for backward compatibility with models that were trained before we added these arguments
-        elif r in (
-            'almond_lang_as_question',
-            'preprocess_special_tokens',
-        ):
-            setattr(args, r, False)
         elif r in ('num_db_types', 'db_unk_id', 'num_workers'):
             setattr(args, r, 0)
         elif r in ('num_beams', 'num_outputs', 'top_p', 'repetition_penalty'):
@@ -226,10 +209,6 @@ def load_config_file_to_args(args):
         setattr(args, 'e2e_dialogue_valid_subtasks', ['dst', 'api', 'da', 'rg'])
     if args.e2e_dialogue_valid_submetrics is None:
         setattr(args, 'e2e_dialogue_valid_submetrics', ['dst_em', 'em', 'da_em', 'casedbleu'])
-    if args.e2e_dialogue_valid_subweights is None:
-        setattr(args, 'e2e_dialogue_valid_subweights', [1.0, 1.0, 1.0, 1.0])
-
-    args.verbose = False
 
     args.best_checkpoint = os.path.join(args.path, args.checkpoint_name)
 

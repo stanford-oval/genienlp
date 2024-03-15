@@ -36,7 +36,6 @@ from pprint import pformat
 from .metrics import calculate_and_reduce_metrics
 from .models.base import ValidationOutput
 from .tasks.registry import get_tasks
-from .util import set_seed
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +48,6 @@ def parse_argv(parser):
         help='Name of dataset to run prediction for; will be ignored if --evaluate is test',
     )
     parser.add_argument('--tasks', dest='task_names', nargs='+', required=True, help='task names for prediction')
-    parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the prediction file')
 
     parser.add_argument('--eval_dir', type=str, required=False, help='use this directory to store eval results')
@@ -66,7 +64,6 @@ def parse_argv(parser):
         '`max` chooses the best set of generation hyperparameters and reports the metric for that.'
         '`top_k` chooses the best generation output per input, and uses that to output the metric. For example, combining this with the exact match metric gives what is commonly known as the top-k accuracy. Note that the output is meaningless if used with corpus-level metrics.',
     )
-    parser.add_argument('--extra_metrics', nargs='+', default=[], help='include these additional metrics in reported results')
 
     parser.add_argument(
         '--e2e_dialogue_valid_subtasks',
@@ -81,13 +78,6 @@ def parse_argv(parser):
         type=str,
         default=['em', 'em', 'em', 'casedbleu'],
         help='Specify metrics to use for each of subtasks in e2e_dialogue_valid_subtasks.',
-    )
-    parser.add_argument(
-        '--e2e_dialogue_valid_subweights',
-        nargs='+',
-        type=float,
-        default=[1.0, 1.0, 1.0, 1.0],
-        help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
 
 
@@ -108,7 +98,6 @@ def compute_metrics_on_file(pred_file, results_file_name, task, args):
     validation_output = ValidationOutput(example_ids=ids, contexts=contexts, predictions=preds, answers=targets)
 
     metrics_to_compute = task.metrics
-    metrics_to_compute += args.extra_metrics
     metrics_to_compute = [metric for metric in task.metrics if metric not in ['loss']]
     if args.main_metric_only:
         metrics_to_compute = [metrics_to_compute[0]]
@@ -128,12 +117,7 @@ def main(args):
     # these are needed when initializing the tasks
     args.override_context = None
     args.override_question = None
-    args.almond_detokenize_sentence = None
 
-    if args.main_metric_only and args.extra_metrics:
-        raise ValueError('Please remove --main_metric_only from your arguments so the requested extra metrics can be shown.')
-
-    set_seed(args)
     args.tasks = list(get_tasks(args.task_names, args).values())
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')

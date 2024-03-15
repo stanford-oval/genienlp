@@ -44,7 +44,6 @@ from .tasks.registry import get_tasks
 from .util import (
     load_config_file_to_args,
     make_data_loader,
-    set_seed,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,8 +65,6 @@ def parse_argv(parser):
         help='Name of dataset to run prediction for; will be ignored if --evaluate is test',
     )
     parser.add_argument('--tasks', dest='task_names', nargs='+', help='task names for prediction')
-    parser.add_argument('--extra_metrics', nargs='+', default=[], help='include these additional metrics in reported results')
-    parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument(
         '--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)'
@@ -121,16 +118,6 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--database_dir', type=str, help='Path to folder containing all files (e.g. alias2qids, pretrained models for bootleg)'
-    )
-
-    parser.add_argument(
-        '--one_output_per_line',
-        action='store_true',
-        help='If true, each of the `num_outputs` output will be written to a separate line, while other columns are duplicated to fill these extra lines.',
-    )
-
-    parser.add_argument(
         '--e2e_dialogue_evaluation',
         action='store_true',
         help='Evaluate model on a dialogue dataset end-to-end; i.e. model predictions are used as input instead of gold',
@@ -147,12 +134,6 @@ def parse_argv(parser):
         type=str,
         help='Specify metrics to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
-    parser.add_argument(
-        '--e2e_dialogue_valid_subweights',
-        nargs='+',
-        type=float,
-        help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
-    )
 
 def set_default_values(args):
     """
@@ -162,10 +143,6 @@ def set_default_values(args):
         logger.warning('When evaluating dialogues end-to-end, val_batch_size should be 1 so we load the data turn by turn')
         args.val_batch_size = [1]
 
-
-def check_args(args):
-    if args.main_metric_only and args.extra_metrics:
-        raise ValueError('Please remove --main_metric_only from your arguments so the requested extra metrics can be shown.')
 
 
 def prepare_data(args):
@@ -224,38 +201,23 @@ def prepare_data_iterators(args, val_sets, numericalizer):
     return iters
 
 
-def create_output_lines(args, index, validation_output):
+def create_output_lines(index, validation_output):
     predictions = validation_output.predictions
-
-    if args.one_output_per_line:
-        lines = [
-            '\t'.join(
-                [
-                    validation_output.example_ids[index],
-                    prediction,
-                    validation_output.answers[index],
-                    validation_output.contexts[index],
-                ]
-            )
-            for prediction in predictions[index]
-        ]  # one line per generation output
-    else:
-        lines = [
-            '\t'.join(
-                [
-                    validation_output.example_ids[index],
-                    *predictions[index],
-                    validation_output.answers[index],
-                    validation_output.contexts[index],
-                ]
-            )
-        ]  # one line with all generation outputs separated by '\t'
+    lines = [
+        '\t'.join(
+            [
+                validation_output.example_ids[index],
+                *predictions[index],
+                validation_output.answers[index],
+                validation_output.contexts[index],
+            ]
+        )
+    ]  # one line with all generation outputs separated by '\t'
     return lines
 
 
 def get_metrics_to_compute(args, task):
     metrics_to_compute = task.metrics
-    metrics_to_compute += args.extra_metrics
     metrics_to_compute = [metric for metric in task.metrics if metric not in ['loss']]
     if args.main_metric_only:
         metrics_to_compute = [metrics_to_compute[0]]
@@ -290,7 +252,7 @@ def run(args):
         # write into file
         with open(prediction_file_name, 'w') as prediction_file:
             for i in range(len(validation_output.example_ids)):
-                lines = create_output_lines(args, i, validation_output)
+                lines = create_output_lines(i, validation_output)
                 prediction_file.write('\n'.join(lines) + '\n')
 
         if len(validation_output.answers) > 0:
@@ -346,10 +308,8 @@ def update_metrics(args):
 def main(args):
     load_config_file_to_args(args)
     check_and_update_generation_args(args)
-    check_args(args)
     set_default_values(args)
 
-    set_seed(args)
     args.tasks = list(get_tasks(args.task_names, args).values())
     if args.override_valid_metrics:
         update_metrics(args)

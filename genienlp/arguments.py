@@ -116,32 +116,6 @@ def parse_argv(parser):
 
     parser.add_argument('--override_context', type=str, default=None, help='Override the context for all tasks')
     parser.add_argument('--override_question', type=str, default=None, help='Override the question for all tasks')
-    parser.add_argument(
-        '--almond_lang_as_question',
-        action='store_true',
-        help='if true will use "Translate from ${language} to ThingTalk" for question',
-    )
-    parser.add_argument(
-        '--almond_detokenize_sentence',
-        action='store_true',
-        help='undo word tokenization of almond sentence fields (useful if the tokenizer is sentencepiece)',
-    )
-    parser.add_argument('--preprocess_special_tokens', action='store_true', help='convert special ThingTalk tokens to words')
-
-    parser.add_argument(
-        '--load',
-        default=None,
-        type=str,
-        help='path to checkpoint to load model from inside --args.save, usually set to best.pth',
-    )
-    parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-
-    parser.add_argument(
-        '--database_dir',
-        type=str,
-        default='database/',
-        help='Database folder containing all relevant files (e.g. alias2qids, pretrained models for bootleg)',
-    )
 
     parser.add_argument(
         '--e2e_dialogue_evaluation',
@@ -161,13 +135,6 @@ def parse_argv(parser):
         type=str,
         default=['dst_em', 'em', 'da_em'],
         help='Specify metrics to use for each of subtasks in e2e_dialogue_valid_subtasks.',
-    )
-    parser.add_argument(
-        '--e2e_dialogue_valid_subweights',
-        nargs='+',
-        type=float,
-        default=[1.0, 1.0, 1.0],
-        help='Specify weights to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
 
 
@@ -234,10 +201,6 @@ def post_parse_train_specific(args):
             'Length of e2e_dialogue_valid_subtasks and e2e_dialogue_valid_submetrics arguments should be equal (i.e. one metric per subtask)'
         )
 
-    if len(args.e2e_dialogue_valid_subtasks) != len(args.e2e_dialogue_valid_subweights):
-        raise ValueError(
-            'Length of e2e_dialogue_valid_subtasks and e2e_dialogue_valid_subweights arguments should be equal (i.e. one weight per subtask)'
-        )
 
     if len(args.val_batch_size) < len(args.val_task_names):
         args.val_batch_size = len(args.val_task_names) * args.val_batch_size
