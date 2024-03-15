@@ -37,7 +37,7 @@ from datasets import load_metric
 from seqeval import metrics as seq_metrics
 from seqeval import scheme as seq_scheme
 
-from .util import QUOTED_MATCH_REGEX, requote_program
+from .util import QUOTED_MATCH_REGEX
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +69,6 @@ def partial_exact_match(prediction, ground_truth):
     is_correct_token = [p == g for p, g in zip(prediction, ground_truth)]
     partial_score = sum(is_correct_token) / len(is_correct_token)
     return partial_score
-
-
-def structure_match(prediction, ground_truth):
-    return requote_program(prediction) == requote_program(ground_truth)
 
 
 def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
@@ -128,11 +124,6 @@ def computeEM(outputs, targets):
 
 def computePartialEM(outputs, targets):
     outs = [metric_max_over_ground_truths(partial_exact_match, o, t) for o, t in zip(outputs, targets)]
-    return sum(outs) / len(outputs) * 100
-
-
-def computeSM(outputs, targets):
-    outs = [metric_max_over_ground_truths(structure_match, o, t) for o, t in zip(outputs, targets)]
     return sum(outs) / len(outputs) * 100
 
 
@@ -341,7 +332,6 @@ def compute_metrics(
         answers: a list of gold answers, each answer can be one item, or a list if multiple gold answers exist
         requested_metrics: contains a subset of the following metrics
             em (exact match)
-            sm (structure match): valid if the output is ThingTalk code. Whether the gold answer and prediction are identical if we ignore parameter values of ThingTalk programs
             # TODO add all
         lang: the language of the predictions and answers. Used for BERTScore.
         args: arguments

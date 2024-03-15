@@ -88,189 +88,6 @@ def find_span(haystack, needle):
     return None
 
 
-def requote_program(program):
-    program = program.split(' ')
-    requoted = []
-
-    in_string = False
-    begin_index = 0
-    i = 0
-    while i < len(program):
-        token = program[i]
-        if token == '"':
-            in_string = not in_string
-            if in_string:
-                begin_index = i + 1
-            else:
-                span_type, end_index = find_span_type(program, begin_index, i)
-                requoted.append(span_type)
-                i = end_index
-
-        elif not in_string:
-            entity_match = ENTITY_MATCH_REGEX.match(token)
-            number_match = NUMBER_MATCH_REGEX.match(token)
-            if entity_match is not None:
-                requoted.append(entity_match[1])
-            elif number_match is not None:
-                requoted.append('NUMBER')
-            elif token != 'location:':
-                requoted.append(token)
-
-        i += 1
-
-    return ' '.join(requoted)
-
-
-def get_part_path(path, part_idx):
-    if path.endswith(os.path.sep):
-        has_separator = True
-        path = path[:-1]
-    else:
-        has_separator = False
-    return path + '_part' + str(part_idx + 1) + (os.path.sep if has_separator else '')
-
-
-def split_folder_on_disk(folder_path, num_splits):
-    new_folder_paths = [get_part_path(folder_path, part_idx) for part_idx in range(num_splits)]
-    for subdir, dirs, files in os.walk(folder_path):
-        for file in files:
-            # ignore system files
-            if file.startswith('.'):
-                continue
-            new_file_paths = [
-                os.path.join(subdir.replace(folder_path, new_folder_paths[part_idx]), file) for part_idx in range(num_splits)
-            ]
-            split_file_on_disk(os.path.join(subdir, file), num_splits, output_paths=new_file_paths)
-    return new_folder_paths
-
-
-def split_file_on_disk(file_path, num_splits, output_paths=None, delete=False):
-    """ """
-
-    all_output_paths = []
-    all_output_files = []
-    for part_idx in range(num_splits):
-        if output_paths is None:
-            output_path = get_part_path(file_path, part_idx)
-        else:
-            output_path = output_paths[part_idx]
-        all_output_paths.append(output_path)
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        all_output_files.append(open(output_path, 'w'))
-
-    with open(file_path, 'r') as input_file:
-        output_file_idx = 0
-        for line in input_file:
-            all_output_files[output_file_idx].write(line)
-            output_file_idx = (output_file_idx + 1) % len(all_output_files)
-
-    for f in all_output_files:
-        f.close()
-
-    if delete:
-        os.remove(file_path)
-
-    return all_output_paths
-
-
-def combine_folders_on_disk(folder_path_prefix, num_files, line_group_size, delete=False):
-    folder_paths = [get_part_path(folder_path_prefix, part_idx) for part_idx in range(num_files)]
-    new_to_olds_map = {}
-    for i in range(num_files):
-        for subdir, dirs, files in os.walk(folder_paths[i]):
-            for file in files:
-                new_file_path = os.path.join(subdir.replace(folder_paths[i], folder_path_prefix), file)
-                if new_file_path not in new_to_olds_map:
-                    new_to_olds_map[new_file_path] = []
-                new_to_olds_map[new_file_path].append(os.path.join(subdir, file))
-
-    for new, olds in new_to_olds_map.items():
-        os.makedirs(os.path.dirname(new), exist_ok=True)
-        with open(new, 'w') as combined_file:
-            if new.endswith('.json'):
-                new_json = None
-                for old in olds:
-                    with open(old, 'r') as f:
-                        if new_json is None:
-                            try:
-                                new_json = json.load(f)
-                            except JSONDecodeError:
-                                f.seek(0)
-                                logger.info('Failed to read json file %s with content:\n %s', old, f.read())
-                        else:
-                            for k, v in json.load(f).items():
-                                new_json[k] += v
-                for k, v in new_json.items():
-                    new_json[k] /= float(num_files)
-                json.dump(new_json, combined_file)
-            else:
-                all_old_file_contents = []
-                for old in olds:
-                    with open(old, 'r') as f:
-                        all_old_file_contents.append([line for line in f])
-                old_file_idx = 0
-                all_indices = [0] * len(all_old_file_contents)
-                finished_reading = [False] * len(all_old_file_contents)
-                while True:
-                    if finished_reading[old_file_idx]:
-                        old_file_idx = (old_file_idx + 1) % len(all_old_file_contents)
-                        continue
-                    for i in range(line_group_size):
-                        line = all_old_file_contents[old_file_idx][all_indices[old_file_idx]]
-                        combined_file.write(line)
-                        all_indices[old_file_idx] += 1
-                    if all_indices[old_file_idx] == len(all_old_file_contents[old_file_idx]):
-                        finished_reading[old_file_idx] = True
-                        if all(finished_reading):
-                            break
-                    old_file_idx = (old_file_idx + 1) % len(all_old_file_contents)
-
-    if delete:
-        for folder in folder_paths:
-            shutil.rmtree(folder)
-
-
-def combine_files_on_disk(file_path_prefix, num_files, line_group_size, delete=False):
-    all_input_file_contents = []
-    all_input_file_paths = []
-    for i in range(num_files):
-        input_file_path = get_part_path(file_path_prefix, i)
-        all_input_file_paths.append(input_file_path)
-        with open(input_file_path, 'r') as f:
-            all_input_file_contents.append([line for line in f])
-
-    all_indices = [0] * len(all_input_file_contents)
-    finished_reading = [False] * len(all_input_file_contents)
-    input_file_idx = 0
-    with open(file_path_prefix, 'w') as combined_file:
-        while True:
-            if finished_reading[input_file_idx]:
-                input_file_idx = (input_file_idx + 1) % len(all_input_file_contents)
-                continue
-            for i in range(line_group_size):
-                line = all_input_file_contents[input_file_idx][all_indices[input_file_idx]]
-                combined_file.write(line)
-                all_indices[input_file_idx] += 1
-            if all_indices[input_file_idx] == len(all_input_file_contents[input_file_idx]):
-                finished_reading[input_file_idx] = True
-                if all(finished_reading):
-                    break
-            input_file_idx = (input_file_idx + 1) % len(all_input_file_contents)
-
-    if delete:
-        for file_path in all_input_file_paths:
-            os.remove(file_path)
-
-
-def map_filter(callable, iterable):
-    output = []
-    for element in iterable:
-        new_element = callable(element)
-        if new_element is not None:
-            output.append(new_element)
-    return output
-
-
 def get_devices(devices=None):
     if not torch.cuda.is_available():
         return [torch.device('cpu')]
@@ -284,31 +101,6 @@ def set_seed(args):
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
-
-
-def get_trainable_params(model, name=False):
-    # TODO is always called with name=False, so remove the if statement
-    if name:
-        return list(filter(lambda p: p[1].requires_grad, model.named_parameters()))
-    else:
-        return list(filter(lambda p: p.requires_grad, model.parameters()))
-
-
-def log_model_size(logger, model, model_name):
-    num_param = sum([p.nelement() for p in model.parameters() if p.requires_grad])
-    logger.info(f'{model_name} has {num_param:,} parameters')
-
-
-def elapsed_time(log):
-    t = time.time() - log.start
-    day = int(t // (24 * 3600))
-    t = t % (24 * 3600)
-    hour = int(t // 3600)
-    t %= 3600
-    minutes = int(t // 60)
-    t %= 60
-    seconds = int(t)
-    return f'{day:02}:{hour:02}:{minutes:02}:{seconds:02}'
 
 
 def make_data_loader(
@@ -593,8 +385,6 @@ def load_config_file_to_args(args):
         'almond_has_multiple_programs',
         'almond_detokenize_sentence',
         'preprocess_special_tokens',
-        'dropper_ratio',
-        'dropper_min_count',
         'label_smoothing',
         'use_encoder_loss',
         'num_workers',
@@ -693,10 +483,6 @@ def load_config_file_to_args(args):
             setattr(args, r, [1])
         elif r == 'diversity_penalty':
             setattr(args, r, [0.0])
-        elif r == 'dropper_ratio':
-            setattr(args, r, 0.0)
-        elif r == 'dropper_min_count':
-            setattr(args, r, 10000)
         elif r == 'label_smoothing':
             setattr(args, r, 0.0)
         elif r == 'min_output_length':

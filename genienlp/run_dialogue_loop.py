@@ -91,8 +91,6 @@ class DialogueLoop(object):
 
     def run(self):
         task = list(get_tasks(self.args.task_names, self.args).values())[0]
-        self.model.add_new_vocab_from_data([task])
-        self.model.set_generation_output_options([task])
 
         with torch.no_grad():
             self.model.interact_e2e_dialogues(task, eval_dir=self.args.eval_dir)

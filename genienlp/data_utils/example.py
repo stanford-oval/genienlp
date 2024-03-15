@@ -75,13 +75,7 @@ class Example(object):
                 arg = arg.lower()
 
             sentence = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer, example_id=example_id)
-
             args.append(sentence)
-
-            if argname != 'answer':
-                # we use a placeholder for features here
-                # the features will be produced and overridden via bootleg or database
-                args.append([])
 
         return Example(*args)
 
@@ -99,7 +93,6 @@ class NumericalizedExamples(NamedTuple):
     def from_examples(examples: Iterable[Example], numericalizer):
         assert all(isinstance(ex.example_id, str) for ex in examples)
         numericalized_examples = []
-        args = numericalizer.args
 
         sep_token = ' ' + numericalizer.sep_token + ' '
 
@@ -118,18 +111,11 @@ class NumericalizedExamples(NamedTuple):
             all_context_plus_questions.append(context_plus_question)
 
             # concatenate question and context features with a separator, but no need for a separator if there are no features to begin with
-            context_plus_question_feature = (
-                ex.context_feature + pad_feature + ex.question_feature
-                if len(ex.question_feature) + len(ex.context_feature) > 0
-                else []
-            )
+            context_plus_question_feature = []
+            
             all_context_plus_question_features.append(context_plus_question_feature)
 
-     
-        # features are already processed and added to input as text
-        features = None
-
-        tokenized_contexts = numericalizer.encode_batch(all_context_plus_questions, field_name='context', features=features)
+        tokenized_contexts = numericalizer.encode_batch(all_context_plus_questions, field_name='context', features=None)
 
         # TODO remove double attempts at context tokenization
         if getattr(examples, 'is_classification', False):

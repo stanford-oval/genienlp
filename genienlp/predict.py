@@ -28,30 +28,23 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import copy
 import json
 import logging
 import os
-import shutil
 from collections import defaultdict
 from pprint import pformat
 
 import torch
-from torch.multiprocessing import Process, set_start_method
 
 from . import models
 from .arguments import check_and_update_generation_args
 from .metrics import calculate_and_reduce_metrics
 from .tasks.registry import get_tasks
 from .util import (
-    combine_folders_on_disk,
     get_devices,
-    get_part_path,
     load_config_file_to_args,
-    log_model_size,
     make_data_loader,
     set_seed,
-    split_folder_on_disk,
 )
 
 logger = logging.getLogger(__name__)
@@ -447,14 +440,10 @@ def run(args, device):
         )
 
     val_sets = prepare_data(args)
-    model.add_new_vocab_from_data(args.tasks)
 
     iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
 
-    log_model_size(logger, model, args.model)
-    model.to(device)
 
-    model.eval()
     task_scores = defaultdict(list)
 
     eval_dir = os.path.join(args.eval_dir, args.evaluate)
@@ -484,7 +473,6 @@ def run(args, device):
             )
 
         # write into file
-        # TODO change to jsonl format
         with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
             for i in range(len(validation_output.example_ids)):
                 lines = create_output_lines(args, i, validation_output)
@@ -547,11 +535,6 @@ def update_metrics(args):
 
 
 def main(args):
-    try:
-        set_start_method('spawn')
-    except RuntimeError:
-        pass
-
     load_config_file_to_args(args)
     check_and_update_generation_args(args)
     check_args(args)
@@ -566,27 +549,5 @@ def main(args):
     logger.info(f'Loading from {args.best_checkpoint}')
     devices = get_devices(args.devices)
 
-    if len(devices) > 1:
-        logger.info(f'Independent multi-GPU generation on following devices: {devices}')
-        all_processes = []
-        all_data_folders = split_folder_on_disk(args.data, len(devices))
-
-        for device_id in range(len(devices)):
-            copy_args = copy.copy(args)
-            copy_args.data = all_data_folders[device_id]
-            copy_args.eval_dir = get_part_path(args.eval_dir, device_id)
-
-            p = Process(target=run, args=(copy_args, devices[device_id]))
-            all_processes.append(p)
-            p.start()
-
-        for p in all_processes:
-            p.join()
-
-        for folder in all_data_folders:
-            shutil.rmtree(folder)
-        combine_folders_on_disk(args.eval_dir, len(devices), line_group_size=1, delete=True)
-
-    else:
-        logger.info(f'Single device generation on: {devices[0]}')
-        run(args, devices[0])
+    logger.info(f'Single device generation on: {devices[0]}')
+    run(args, devices[0])

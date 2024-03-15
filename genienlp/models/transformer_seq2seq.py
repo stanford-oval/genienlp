@@ -54,8 +54,6 @@ class TransformerSeq2Seq(GenieModelForGeneration):
 
         # tasks is not passed during initialization only in server mode
         # call this function after task is recognized
-        if tasks:
-            self.set_generation_output_options(tasks)
 
         # only used for Marian models. adjusted language codes passed to numericalizer will be None for models trained on single langauge pairs
         self.orig_src_lang, self.orig_tgt_lang = kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
@@ -83,19 +81,7 @@ class TransformerSeq2Seq(GenieModelForGeneration):
         self.update_language_dependent_configs(self.tgt_lang)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
-        if args.dropper_ratio > 0:
-            # lazy import since dropper is an optional dependency
-            from loss_dropper import LossDropper
-
-            self.dropper = LossDropper(dropc=args.dropper_ratio, min_count=args.dropper_min_count)
-        else:
-            self.dropper = None
-
         self.criterion = LabelSmoothingCrossEntropy(args.label_smoothing)
-
-    def add_new_vocab_from_data(self, tasks, resize_decoder=False):
-        super().add_new_vocab_from_data(tasks, resize_decoder)
-        self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
     def update_language_dependent_configs(self, tgt_lang):
         # set decoder_start_token_id for mbart
@@ -143,8 +129,7 @@ class TransformerSeq2Seq(GenieModelForGeneration):
             # (1) pad tokens are ignored in all loss calculations
             # (2) loss is averaged over sequence lengths first, then over the batch size. This way,
             # longer sequences in the batch do not drown shorter sequences.
-            # (3) if `args.dropper_ratio > 0.0`, will perform Loss Truncation
-            # (4) if `args.label_smoothing > 0.0`, will add label smoothing term to loss
+            # (3) if `args.label_smoothing > 0.0`, will add label smoothing term to loss
             outputs = self.model(
                 batch.context.value,
                 labels=answer,
@@ -159,9 +144,6 @@ class TransformerSeq2Seq(GenieModelForGeneration):
             )
             loss = loss.view(batch_size, -1)  # (batch_size, sequence_length)
             loss = loss.sum(dim=1) / answer_length  # accounts for the case where BOS is removed
-            if self.dropper is not None:
-                dropper_mask = self.dropper(loss)
-                loss = loss * dropper_mask
             loss = loss.mean()  # average over the batch size
             outputs.loss = loss  # replace the loss calculated by `transformers` with the new loss
             return outputs

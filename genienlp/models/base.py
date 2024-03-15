@@ -37,6 +37,7 @@ import dialogues
 import torch
 import ujson
 from dateparser.languages import default_loader
+import requests
 from transformers import AutoConfig, BartForConditionalGeneration, MarianTokenizer, PreTrainedModel
 
 from ..data_utils.example import NumericalizedExamples, SequentialField
@@ -57,48 +58,18 @@ class GenieModel(PreTrainedModel):
         accompanying Numericalizer (not HuggingFace's tokenizers) from `save_directory`, which is a path
         """
         # TODO remove kwargs and take individual inputs instead
-        model_checkpoint_file = kwargs.pop("model_checkpoint_file", None)
         args = kwargs.pop("args", None)
-        device = kwargs.pop("device", None)
         tasks = kwargs.pop("tasks", None)
         vocab_sets = kwargs.pop("vocab_sets", None)
 
-        full_checkpoint_path = os.path.join(save_directory, model_checkpoint_file)
-        logger.info(f'Loading the model from {full_checkpoint_path}')
         model = cls(args=args, tasks=tasks, vocab_sets=vocab_sets, save_directory=save_directory, *model_args, **kwargs)
-        save_dict = torch.load(full_checkpoint_path, map_location=device)
+        
 
-        # HACK
-        # `transformers` version 4.1 changed the name of language modeling head of BartForConditionalGeneration
-        # (and therefore its subclass MBartForConditionalGeneration) to lm_head to make it similar to other models
-        # like T5. The following will make this change so that genienlp models trained with `transformers`==4.0 can be properly loaded
-
-        # TODO: remove this once we make sure the new paraphraser runs fine
-        if (
-            'model.lm_head.weight' not in save_dict['model_state_dict']
-            and 'model.model.shared.weight' in save_dict['model_state_dict']
-            and isinstance(model.model, BartForConditionalGeneration)
-        ):
-            save_dict['model_state_dict']['model.lm_head.weight'] = save_dict['model_state_dict']['model.model.shared.weight']
-
-        model.load_state_dict(save_dict['model_state_dict'], strict=True)
-
-        return model, save_dict.get('best_decascore')
-
-    def add_new_vocab_from_data(self, tasks, resize_decoder=False):
-        old_num_tokens = self.numericalizer.num_tokens
-        self.numericalizer.grow_vocab(tasks)
-        if self.numericalizer.num_tokens > old_num_tokens:
-            logger.info(f'Vocabulary has expanded to {self.numericalizer.num_tokens} tokens')
+        return model, 100
 
     def update_language_dependent_configs(self, tgt_lang):
         # we override this method for TransformerSeq2Seq models; otherwise it's a no-op
         pass
-
-    def set_generation_output_options(self, tasks):
-        self._output_attentions = any(getattr(task, 'need_attention_scores', False) for task in tasks)
-        self._output_scores = False
-        self._output_hidden_states = False
 
 
 class ValidationOutput(object):
@@ -490,26 +461,9 @@ class GenieModelForGeneration(GenieModel):
             # replace old context with updated
             contexts[-1] = input_text
 
-            numericalized_turn = self.numericalize_example(input_text, turn_id, device)
-
-            generated = self.generate(
-                numericalized_turn,
-                max_output_length=args.max_output_length,
-                min_output_length=args.min_output_length,
-                num_outputs=args.num_outputs[hyperparameter_idx],
-                temperature=args.temperature[hyperparameter_idx] if args.temperature[hyperparameter_idx] > 0 else 1.0,
-                repetition_penalty=args.repetition_penalty[hyperparameter_idx],
-                top_k=args.top_k[hyperparameter_idx],
-                top_p=args.top_p[hyperparameter_idx],
-                num_beams=args.num_beams[hyperparameter_idx],
-                num_beam_groups=args.num_beam_groups[hyperparameter_idx],
-                diversity_penalty=args.diversity_penalty[hyperparameter_idx],
-                no_repeat_ngram_size=args.no_repeat_ngram_size[hyperparameter_idx],
-                do_sample=args.temperature[hyperparameter_idx] != 0,
-            )
-
-            partial_batch_prediction_ids = generated.sequences
-            partial_batch_prediction = self.numericalizer.reverse(partial_batch_prediction_ids, 'answer')[0]
+            response = requests.get("http://127.0.0.1:7878/generate", json={"language":"en", "task_input":input_text, "model":"gpt-4"})
+            partial_batch_prediction = response.json()["task_output"]
+            print(partial_batch_prediction)
 
             if train_target == 'da':
                 partial_batch_prediction = dataset.postprocess_prediction(
@@ -860,10 +814,6 @@ class GenieModelForClassification(GenieModel):
         self.src_lang, self.tgt_lang = adjust_language_code(
             config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
         )
-
-    def add_new_vocab_from_data(self, tasks, resize_decoder=False):
-        super().add_new_vocab_from_data(tasks, resize_decoder)
-        self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
     def forward(self, *input, **kwargs):
         if self.training:

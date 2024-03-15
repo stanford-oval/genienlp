@@ -38,7 +38,6 @@ from genienlp.data_utils.almond_utils import quoted_pattern_with_space, split_te
 from ..data_utils.almond_utils import detokenize_cjk_chars, is_device, is_entity_marker, tokenize_cjk_chars
 from ..data_utils.example import Example
 from ..model_utils.translation import align_and_replace, compute_attention
-from ..paraphrase.data_utils import input_heuristics, output_heuristics
 from .almond_dataset import AlmondDataset
 from .base_task import BaseTask
 from .registry import register_task
