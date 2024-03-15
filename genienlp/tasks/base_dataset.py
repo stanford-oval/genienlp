@@ -29,16 +29,10 @@
 
 
 import os
-import tarfile
-import urllib
-import zipfile
 from typing import NamedTuple, Union
 
-import requests
-import torch.utils.data
 
-
-class Dataset(torch.utils.data.Dataset):
+class Dataset():
     """Defines a dataset composed of Examples along with its Fields.
 
     Attributes:
@@ -102,12 +96,6 @@ class Dataset(torch.utils.data.Dataset):
     def __iter__(self):
         for x in self.examples:
             yield x
-
-    def __repr__(self):
-        if self.examples is not None:
-            return 'Dataset(' + self.examples.__repr__() + ')'
-        else:
-            return 'Dataset()'
 
     @classmethod
     def download(cls, root):

@@ -31,11 +31,6 @@ import unicodedata
 from typing import Iterable, List, NamedTuple, Union
 
 
-def identity(x, **kw):
-    return x
-
-
-
 class Example(object):
     """
     Contains all fields of a train/dev/test example in text form
@@ -55,14 +50,14 @@ class Example(object):
         self.answer = answer
 
     @staticmethod
-    def from_raw(example_id: str, context: str, question: str, answer: str, preprocess=identity):
+    def from_raw(example_id: str, context: str, question: str, answer: str):
         args = [example_id]
         answer = unicodedata.normalize('NFD', answer)
 
-        for argname, arg in (('context', context), ('question', question), ('answer', answer)):
+        for arg in (context, question, answer):
             arg = unicodedata.normalize('NFD', arg)
 
-            sentence = preprocess(arg.rstrip('\n'), field_name=argname, answer=answer, example_id=example_id)
+            sentence = arg.rstrip('\n')
             args.append(sentence)
 
         return Example(*args)

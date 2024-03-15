@@ -29,11 +29,8 @@
 
 import logging
 import os
-from pprint import pformat
 
-import torch
-
-from genienlp.models import TransformerSeq2Seq
+from genienlp.models import LLM
 
 from .tasks.registry import get_task
 
@@ -42,7 +39,9 @@ logger = logging.getLogger(__name__)
 
 def parse_argv(parser):
     parser.add_argument('--task', dest='task_name', help='task name for prediction')
-    parser.add_argument('--llm', type=str, choices=["gpt-4", "gpt-35-turbo"], required=True, help='The LLM to use for inference')
+    parser.add_argument(
+        '--llm', type=str, choices=["gpt-4", "gpt-35-turbo"], required=True, help='The LLM to use for inference'
+    )
     parser.add_argument('--llm_url', type=str, required=True, help='The LLM inference server URL')
     parser.add_argument('--eval_dir', type=str, help='use this directory to store eval results')
 
@@ -67,18 +66,16 @@ class DialogueLoop(object):
     def run(self):
         task = get_task(self.args.task_name, self.args)
 
-        with torch.no_grad():
-            self.model.interact_e2e_dialogues(task, eval_dir=self.args.eval_dir)
+        self.model.interact_e2e_dialogues(task.dataset_name, eval_dir=self.args.eval_dir)
 
 
 def init(args):
     if args.eval_dir:
         os.makedirs(args.eval_dir, exist_ok=True)
 
-    model = TransformerSeq2Seq.load(
+    model = LLM(
         args=args,
     )
-    logger.info(f'Arguments:\n{pformat(vars(args))}')
 
     return model
 

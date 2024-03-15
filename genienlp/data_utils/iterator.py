@@ -30,81 +30,37 @@
 
 import logging
 
-import numpy as np
-import torch
+from genienlp.data_utils.example import NumericalizedExamples
 
 logger = logging.getLogger(__name__)
 
 
-class LengthSortedIterator(torch.utils.data.Sampler):
-    """ """
+class LengthSortedIterator:
 
     def __init__(
         self,
-        data_source,
+        dataset,
         batch_size,
     ):
         """
         batch_size: number of examples
         """
-        self.data_source, self.original_order = data_source, list(range(len(data_source)))
-        self.data_source_marked = np.zeros(shape=(len(self.data_source)))  # mark each example that has been used in a batch
-        self.batch_size = batch_size  # number of examples or number of tokens
+        self.dataset = dataset
+        self.batch_size = batch_size  # number of examples
+        self.length = len(dataset)
         self.last_batch_start_index = 0
-        self.last_batch_start_index = self.last_batch_start_index
-
-        # do not allow skipping examples during validation/ prediction
-        self.no_skip = True
-        # quickly iterate over self to calculate length
-        self.length = 0
-        for _ in self:
-            self.length += 1
-        # reset state
-        self.last_batch_start_index = 0
-        self.last_batch_start_index = self.last_batch_start_index
-       
 
     def __len__(self):
         return self.length
 
     def __iter__(self):
-        self.last_batch_start_index = 0
-        self.data_source_marked = np.zeros(shape=(len(self.data_source)))
-        self.last_batch_start_index = self.last_batch_start_index
         return self
 
     def __next__(self):
-        batch_of_indices = []
-        current_batch_size = 0
-        candidate_index = self.last_batch_start_index
-        if candidate_index >= len(self.data_source):
-            # This is the end of the iterator
+        if self.last_batch_start_index == self.length:
             raise StopIteration
-        while current_batch_size < self.batch_size:
-            candidate_batch_size = len(batch_of_indices) + 1
-            if candidate_batch_size > self.batch_size:
-                # the new example would put us over the batch size limit
-                break
-
-            batch_of_indices.append(candidate_index)
-            self.data_source_marked[candidate_index] = 1  # mark this index until the end of this epoch
-            current_batch_size = candidate_batch_size
-            candidate_index = self._next_unmarked_index(candidate_index)
-
-            if candidate_index == len(self.data_source):
-                break  # don't start from i=0; there is a large difference between the length of the first and last element
-
+        batch_of_indices = list(
+            range(self.last_batch_start_index, min(self.last_batch_start_index + self.batch_size, self.length))
+        )
         self.last_batch_start_index += len(batch_of_indices)
-        return batch_of_indices
-
-    def _unmarked_index_to_datasource_index(self, index: int) -> int:
-        return np.searchsorted(np.arange(0, len(self.data_source)) - np.cumsum(self.data_source_marked), index, side='left')
-
-    def _next_unmarked_index(self, index: int) -> int:
-        """
-        or stop at len(self.data_source)
-        """
-        index += 1
-        while index < len(self.data_source) and self.data_source_marked[index] == 1:
-            index += 1
-        return index
+        return NumericalizedExamples.collate_batches(NumericalizedExamples.from_examples([self.dataset[i] for i in batch_of_indices]))

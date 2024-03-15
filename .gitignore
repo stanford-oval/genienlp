@@ -26,17 +26,9 @@ src/
 workdir/
 *save*/
 eval_dir*/*
-genieNLP-tests*
 
-lightning_logs/
 pytorch_model.bin
 *.pth
-tests/embeddings/*
-tests/dataset-*
-tests/dataset/*
-tests/database/*
-tests/music/*
-tests/test_py.sh
 
 
 # C extensions

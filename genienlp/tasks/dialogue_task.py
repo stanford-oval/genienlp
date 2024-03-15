@@ -66,7 +66,7 @@ class E2EDialogueTask(BaseTask):
         example_id = '/'.join([dial_id, str(turn_id), train_target])
 
         return Example.from_raw(
-            self.name + '/' + str(example_id), input_text, '', output_text, preprocess=self.preprocess_field
+            self.name + '/' + str(example_id), input_text, '', output_text
         )
 
     def get_splits(self, root, **kwargs):

@@ -33,7 +33,7 @@ from typing import List, Union
 
 import dialogues
 import sacrebleu
-from datasets import load_metric
+import evaluate
 
 from .util import QUOTED_MATCH_REGEX
 
@@ -58,7 +58,7 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
 
 def computeROUGE(outputs, targets, rouge_types):
     targets = [target[0] for target in targets]
-    rouge_metric = load_metric('rouge')
+    rouge_metric = evaluate.load('rouge')
     return rouge_metric.compute(references=targets, predictions=outputs, rouge_types=rouge_types)
 
 
@@ -74,7 +74,7 @@ def computeBLEU(outputs, targets):
 
 def computeCasedBLEU(outputs, targets):
     # lowercase is false
-    sacrebleu_metric = load_metric("sacrebleu")
+    sacrebleu_metric = evaluate.load("sacrebleu")
     return sacrebleu_metric.compute(predictions=outputs, references=targets, lowercase=False)['score']
 
 

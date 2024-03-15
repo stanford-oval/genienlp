@@ -35,7 +35,7 @@ with open("README.md", "r") as fh:
 setuptools.setup(
     name='genienlp',
     version='0.7.0a4',
-    packages=setuptools.find_packages(exclude=['tests']),
+    packages=setuptools.find_packages(),
     package_data={},
     entry_points={
         'console_scripts': ['genienlp=genienlp.__main__:main'],
@@ -46,13 +46,8 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/stanford-oval/genienlp",
     install_requires=[
-        'numpy>=1.14.5',
-        'torch>=1.9.0,<1.14.0',
-        'transformers==4.22.2',
-        'datasets==2.11.0',
-        'pathos==0.2.8',
-        'protobuf==3.20.1',
         # for metrics:
+        'evaluate',
         'rouge_score>=0.0.4',
         'sacrebleu>=1,<3',
         # for e2e dialogues:

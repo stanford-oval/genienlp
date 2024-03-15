@@ -35,7 +35,7 @@ from collections import defaultdict
 from pprint import pformat
 
 
-from genienlp.models import TransformerSeq2Seq
+from genienlp.models import LLM
 
 from .metrics import calculate_metrics
 from .tasks.registry import get_task
@@ -169,7 +169,7 @@ def create_output_lines(index, validation_output):
 
 
 def run(args):
-    model = TransformerSeq2Seq.load(
+    model = LLM(
         args=args,
     )
     val_sets = prepare_data(args)
@@ -184,7 +184,7 @@ def run(args):
 
     validation_output = model.validate(
         iter,
-        args.task,
+        args.task.dataset_name,
         eval_dir=eval_dir,
     )
 
@@ -207,16 +207,10 @@ def run(args):
 
     logger.info('Evaluated Tasks:\n')
     logger.info(f'{args.task.name}: {decaScore}')
-    logger.info('-------------------')
-    logger.info(f'DecaScore:  {sum(decaScore)}\n')
-    logger.info(f'\nSummary: | {sum(decaScore)} | {" | ".join([str(x) for x in decaScore])} |\n')
 
 
 def main(args):
     set_default_values(args)
-
     args.task = get_task(args.task_name, args)
-
-    logger.info(f'Arguments:\n{pformat(vars(args))}')
 
     run(args)

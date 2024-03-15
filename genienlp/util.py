@@ -31,9 +31,6 @@
 import logging
 import re
 
-import torch
-
-from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
 
 logger = logging.getLogger(__name__)
@@ -44,22 +41,11 @@ QUOTED_MATCH_REGEX = re.compile(' " (.*?) " ')
 def make_data_loader(
     dataset, batch_size,
 ):
-    all_features = NumericalizedExamples.from_examples(dataset)
-
     sampler = LengthSortedIterator(
-        all_features,
+        dataset,
         batch_size=batch_size,
     )
-    # get the sorted data_source
-    all_f = sampler.data_source
-    data_loader = torch.utils.data.DataLoader(
-        all_f,
-        batch_sampler=sampler,
-        collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches),
-        num_workers=0,
-    )
-
-    return data_loader
+    return sampler
 
 def replace_capturing_group(input, re_pattern, replacement):
     # replace first captured group in the input with replacement using regex re_pattern

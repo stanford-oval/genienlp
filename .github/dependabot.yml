@@ -6,11 +6,3 @@ updates:
     interval: weekly
     time: "13:00"
   open-pull-requests-limit: 10
-  ignore:
-  - dependency-name: tqdm
-    versions:
-    - 4.60.0
-  - dependency-name: transformers
-    versions:
-    - 4.4.2
-    - 4.5.0

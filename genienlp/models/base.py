@@ -62,13 +62,7 @@ class ValidationOutput(object):
         self.contexts = contexts
 
 
-class TransformerSeq2Seq:
-
-    @classmethod
-    def load(cls, args):
-        model = cls(args)
-
-        return model
+class LLM:
 
     def __init__(self, args):
         self.args = args
@@ -77,21 +71,19 @@ class TransformerSeq2Seq:
     def validate(
         self,
         data_iterator,
-        task,
+        dataset_name,
         eval_dir=None,
     ):
         if self.args.e2e_dialogue_evaluation:
-            return self.validate_e2e_dialogues(data_iterator, task, eval_dir)
+            return self.validate_e2e_dialogues(data_iterator, dataset_name, eval_dir)
         else:
             return self.validate_batch(
                 data_iterator,
-                task,
             )
 
     def validate_batch(
         self,
         data_iterator,
-        task,
     ):
         """
         Outputs: (predictions, answers, contexts)
@@ -111,21 +103,13 @@ class TransformerSeq2Seq:
 
             example_ids += batch_example_ids
             batch_answer = batch.answer_string
-            batch_answer = [
-                task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))
-            ]
             answers += batch_answer
             batch_context = batch.context_string
             contexts += batch_context
 
             print(batch)
             raise NotImplementedError()  # TODO batch generate
-            partial_batch_prediction = self.generate(batch)
-
-            # post-process predictions
-            for i in range(len(partial_batch_prediction)):
-                partial_batch_prediction[i] = task.postprocess_prediction(batch_example_ids[i], partial_batch_prediction[i])
-
+            partial_batch_prediction = self._generate(batch)
             # put them into the right array
             for i in range(len(partial_batch_prediction)):
                 batch_prediction[i].append(partial_batch_prediction[i])
@@ -144,7 +128,7 @@ class TransformerSeq2Seq:
     def validate_e2e_dialogues(
         self,
         data_iterator,
-        task,
+        dataset_name,
         eval_dir=None,
     ):
         """
@@ -153,7 +137,7 @@ class TransformerSeq2Seq:
             answers
             contexts
         """
-        dataset_class = getattr(dialogues, task.dataset_name)
+        dataset_class = getattr(dialogues, dataset_name)
         dataset = dataset_class()
 
         e2e_dialogue_preds = dict()
@@ -165,6 +149,7 @@ class TransformerSeq2Seq:
         cur_dial_id = ''
 
         for turn in tqdm(data_iterator, desc='Generating'):
+            print("batch = ", turn)
             batch_size = len(turn.example_id)
             assert batch_size == 1
             batch_prediction = []
@@ -189,10 +174,6 @@ class TransformerSeq2Seq:
             batch_context = turn.context_string
             contexts += batch_context
             batch_answer = turn.answer_string
-
-            batch_answer = [
-                task.postprocess_prediction(batch_example_ids[i], batch_answer[i]) for i in range(len(batch_answer))
-            ]
             answers += batch_answer
 
             new_state_text = dataset.state2span(dialogue_state)
@@ -227,15 +208,13 @@ class TransformerSeq2Seq:
             # replace old context with updated
             contexts[-1] = input_text
 
-            partial_batch_prediction = self.generate(input_text)
+            partial_batch_prediction = self._generate(input_text)
             print(partial_batch_prediction)
 
             if train_target == 'da':
                 partial_batch_prediction = dataset.postprocess_prediction(
                     partial_batch_prediction, knowledge=knowledge, lang=self.args.language
                 )
-
-            partial_batch_prediction = task.postprocess_prediction(batch_example_ids[0], partial_batch_prediction)
 
             # put them into the right array
             batch_prediction.append([partial_batch_prediction])
@@ -304,7 +283,7 @@ class TransformerSeq2Seq:
 
         return output
 
-    def interact_e2e_dialogues(self, task, eval_dir=None):
+    def interact_e2e_dialogues(self, dataset_name, eval_dir=None):
         """
         Outputs: (predictions, answers, contexts)
             predictions: a List of Lists of strings
@@ -314,7 +293,7 @@ class TransformerSeq2Seq:
         # lazily import termcolor
         from termcolor import colored
 
-        dataset_class = getattr(dialogues, task.dataset_name)
+        dataset_class = getattr(dialogues, dataset_name)
         dataset = dataset_class()
 
         e2e_dialogue_preds = dict()
@@ -412,14 +391,12 @@ class TransformerSeq2Seq:
                 ## record model input
                 e2e_dialogue_preds[dial_id]["turns"][str(turn_id)][f"model_input_{train_target}"] = input_text
 
-                partial_batch_prediction = self.generate(input_text)
+                partial_batch_prediction = self._generate(input_text)
 
                 if train_target == 'da':
                     partial_batch_prediction = dataset.postprocess_prediction(
                         partial_batch_prediction, knowledge=knowledge, lang=self.args.language
                     )
-
-                partial_batch_prediction = task.postprocess_prediction(turn_id, partial_batch_prediction)
 
                 # put them into the right array
                 batch_prediction.append([partial_batch_prediction])
@@ -497,7 +474,7 @@ class TransformerSeq2Seq:
 
         return output
 
-    def generate(self, input_text: str):
+    def _generate(self, input_text: str):
         response = requests.get(
             f"{self.args.llm_url}/generate", json={"language": self.args.language, "task_input": input_text, "model": self.args.llm}
         )

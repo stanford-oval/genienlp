@@ -69,16 +69,7 @@ class BaseTask(object):
         :param kwargs: other arguments to pass to the Dataset
         :return: a list of text.Dataset
         """
-        return generic_dataset.JSON.splits(root=root, name=self.name, **kwargs)
-
-    def batch_postprocess_prediction_ids(self, batch_example_ids, batch_src_ids, batch_tgt_ids, **kwargs):
-        return batch_tgt_ids, None
-
-    def postprocess_prediction(self, example_id, prediction):
-        return prediction
-
-    def preprocess_field(self, sentence, field_name=None, answer=None, example_id=None):
-        return sentence
+        raise NotImplementedError()
 
     @property
     def metrics(self):
@@ -91,10 +82,3 @@ class BaseTask(object):
         :return: a list of metric names
         """
         return self._metrics
-
-    @metrics.setter
-    def metrics(self, new_metrics):
-        """
-        setter for metrics property
-        """
-        self._metrics = new_metrics
