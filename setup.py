@@ -51,7 +51,7 @@ setuptools.setup(
         'rouge_score>=0.0.4',
         'sacrebleu>=1,<3',
         # for e2e dialogues:
-        'dialogues==0.0.3',
+        'dialogues @ git+https://github.com/stanford-oval/dialogues.git',
         'termcolor'
     ],
 )
