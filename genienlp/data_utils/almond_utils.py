@@ -29,64 +29,11 @@
 
 import re
 
-from .progbar import progress_bar
-
 quoted_pattern_maybe_space = re.compile(r'\"\s?([^"]*?)\s?\"')
 quoted_pattern_with_space = re.compile(r'\"\s([^"]*?)\s\"')
 device_pattern = re.compile(r'\s@([\w\.]+)\s')
 token_type_regex = re.compile('(.*?) \( (.*?) \)')
 
-ISO_to_LANG = {
-    'en': 'English',
-    'en-US': 'English',
-    'fa': 'Persian',
-    'it': 'Italian',
-    'zh': 'Chinese',
-    'hr': 'Croatian',
-    'ja': 'Japanese',
-    'ko': 'Korean',
-    'ru': 'Russian',
-    'es': 'Spanish',
-    'sv': 'Swedish',
-    'tr': 'Turkish',
-    'hi': 'Hindi',
-    'fr': 'French',
-    'de': 'German',
-    'pl': 'Polsih',
-    'ar': 'Arabic',
-    'vi': 'Vietnamese',
-    'ji': 'Yiddish',
-    'pt': 'Portuguese',
-    'el': 'Greek',
-    'he': 'Hebrew',
-    'si': 'Sinhala',
-    'ta': 'Tamil',
-    'fi': 'Finnish',
-    'cs': 'Czech',
-    'no': 'Norwegian',
-    'tl': 'Filipino',
-    'da': 'Danish',
-}
-
-NUMBER_MAPPING = {
-    'en': ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9'),
-    'fa': ('۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'),
-}
-
-ENGLISH_MONTH_MAPPING = {
-    '1': ('Jan', 'January'),
-    '2': ('Feb', 'February'),
-    '3': ('Mar', 'March'),
-    '4': ('Apr', 'April'),
-    '5': ('May',),
-    '6': ('Jun', 'June'),
-    '7': ('Jul', 'July'),
-    '8': ('Aug', 'August'),
-    '9': ('Sep', 'September'),
-    '10': ('Oct', 'October'),
-    '11': ('Nov', 'November'),
-    '12': ('Dec', 'December'),
-}
 
 
 CJK_RANGES = [
@@ -208,7 +155,7 @@ def create_examples_from_file(args):
 
     batch = []
     last_batch = False
-    for i, line in progress_bar(enumerate(open(path, 'r', encoding='utf-8')), desc='Reading dataset'):
+    for line in open(path, 'r', encoding='utf-8'):
         parts = line.strip().split('\t')
         batch.append(parts)
         if len(chunk_examples) + example_batch_size > chunk_size:
@@ -224,7 +171,6 @@ def create_examples_from_file(args):
         batch = batch[0]
         examples = make_process_example(batch, dir_name, **kwargs)
         if isinstance(examples, list):
-            # account for extra examples created when using --translate_example_split or --translate_only_entities
             chunk_size += len(examples) - 1
             chunk_examples.extend(examples)
         else:
@@ -234,38 +180,3 @@ def create_examples_from_file(args):
             break
 
     return chunk_examples
-
-
-def inside_spans(start, spans):
-    if not spans:
-        return False
-    for span in spans:
-        if span[0] <= start < span[1]:
-            return True
-    return False
-
-
-def return_sentences(text, regex_pattern, src_char_spans, is_cjk=False):
-    sentences = []
-    cur = 0
-    for m in re.finditer(regex_pattern, text, flags=re.U):
-        if not inside_spans(m.start(0), src_char_spans):
-            sentences.append(text[cur : m.start(0) + (1 if is_cjk else 0)])
-            cur = m.end(0)
-    if cur != len(text):
-        sentences.append(text[cur:])
-    return sentences
-
-
-def split_text_into_sentences(text, lang, src_char_spans):
-    if lang in ['en']:
-        sentences = return_sentences(text, '(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=[\.!?])\s', src_char_spans)
-    elif lang in ['zh', 'ja', 'ko']:
-        sentences = return_sentences(text, u'([!！?？。])\s?', src_char_spans, is_cjk=True)
-    else:
-        import nltk
-
-        nltk.download('punkt', quiet=True)
-        sentences = nltk.sent_tokenize(text, language=ISO_to_LANG[lang])
-
-    return sentences

@@ -65,7 +65,6 @@ from transformers import (
     XLMRobertaTokenizerFast,
 )
 
-from ..util import get_devices
 from .decoder_vocab import DecoderVocabulary
 from .example import SequentialField
 
@@ -110,7 +109,7 @@ class TransformerNumericalizer(object):
     _words_to_special_token_regexes: List[Tuple[re.Pattern, str]]
 
     def __init__(
-        self, pretrained_tokenizer, args, max_generative_vocab, config, src_lang, tgt_lang, vocab_sets, tasks, save_dir=None
+        self, pretrained_tokenizer, args, max_generative_vocab, config, vocab_sets, tasks, save_dir=None
     ):
         """
         If `save_dir` is None, initializes a new Numericalizer and optionally adds new words to its vocabulary, otherwise,
@@ -118,7 +117,6 @@ class TransformerNumericalizer(object):
         """
         self._pretrained_name = pretrained_tokenizer
         self.max_generative_vocab = max_generative_vocab
-        self._cache = args.embeddings
         self._tokenizer = None
         self.config = config
 
@@ -133,9 +131,7 @@ class TransformerNumericalizer(object):
 
         self.args = args
 
-        self._init_tokenizer(save_dir, config, src_lang, tgt_lang)
-
-        self.update_language_dependent_properties(src_lang, tgt_lang)
+        self._init_tokenizer(save_dir, config)
 
         if save_dir is not None:
             logger.info(f'Loading the accompanying numericalizer from {save_dir}')
@@ -171,17 +167,14 @@ class TransformerNumericalizer(object):
             self._preprocess_special_tokens and self._pretrained_name in ALLOWED_FAST_TOKENIZERS_IF_PREPROCESSING
         )
 
-    def _init_tokenizer(self, save_dir, config, src_lang, tgt_lang):
+    def _init_tokenizer(self, save_dir, config):
         """
         Initializes the `self._tokenizer` object, but not the rest.
         """
         tokenizer_args = {
             'do_lower_case': False,
             'do_basic_tokenize': False,
-            'cache_dir': self._cache,
             'use_fast': self._use_fast(),
-            'src_lang': src_lang,
-            'tgt_lang': tgt_lang,
         }
         if save_dir is not None:
             tokenizer_args.update({'pretrained_model_name_or_path': save_dir, 'config': config})
@@ -223,25 +216,6 @@ class TransformerNumericalizer(object):
         # make sure we assigned is_piece_fn
         assert self._tokenizer.is_piece_fn
 
-    def update_language_dependent_properties(self, src_lang, tgt_lang):
-        # some tokenizers like Mbart do not set src_lang and tgt_lan when initialized; take care of it here
-        self._tokenizer.src_lang = src_lang
-        self._tokenizer.tgt_lang = tgt_lang
-
-        # define input prefix to add before every input text
-        input_prefix = ''
-        if isinstance(self.config, MarianConfig) and tgt_lang:
-            input_prefix = f'>>{tgt_lang}<< '
-        # only older T5 models need task-specific input prefix
-        elif self._pretrained_name in T5_PRETRAINED_CONFIG_ARCHIVE_MAP.keys():
-            assert src_lang == 'en'
-            if tgt_lang == 'en':
-                t5_task = 'summarization'
-            else:
-                t5_task = f'translation_en_to_{tgt_lang}'
-            input_prefix = self.config.task_specific_params[t5_task]['prefix']
-
-        self.input_prefix = input_prefix
 
     def load_extras(self, save_dir):
         if self.max_generative_vocab is not None:
@@ -577,11 +551,11 @@ class TransformerNumericalizer(object):
         batch_size = len(sentences)
 
         if field_name != 'answer':
-            sentences = [self.input_prefix + sent for sent in sentences]
+            sentences = [sent for sent in sentences]
 
         if self._preprocess_special_tokens:
             if len(sentences) > MULTIPROCESSING_THRESHOLD:
-                multiprocessing_factor = multiprocessing.cpu_count() // len(get_devices(self.args.devices))
+                multiprocessing_factor = 1
                 logger.info('multiprocessing factor for special token preprocessing is %d', multiprocessing_factor)
                 with multiprocessing.Pool(multiprocessing_factor) as p:
                     sentences, index2expansions = list(

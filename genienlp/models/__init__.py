@@ -30,7 +30,3 @@
 import logging
 
 from .transformer_seq2seq import TransformerSeq2Seq  # noqa
-from .transformer_sequence_classification import TransformerForSequenceClassification  # noqa
-from .transformer_token_classification import TransformerForTokenClassification  # noqa
-
-logging.getLogger("filelock").setLevel(logging.WARNING)

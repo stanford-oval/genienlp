@@ -12,25 +12,6 @@
 </p>
 
 
-GenieNLP is suitable for all NLP tasks, including text generation (e.g. translation, paraphasing), token classification (e.g. named entity recognition) and sequence classification (e.g. NLI, sentiment analysis).
-
-
-This library contains the code to run NLP models for the [Genie Toolkit](https://github.com/stanford-oval/genie-toolkit) and the [Genie Virtual Assistant](https://genie.stanford.edu/).
-Genie primarily uses this library for semantic parsing, paraphrasing, translation, and dialogue state tracking. Therefore, GenieNLP has a lot of extra features for these tasks.
-
-Works with [🤗 models](https://huggingface.co/models) and [🤗 Datasets](https://huggingface.co/datasets).
-
-## Table of Contents <!-- omit in TOC -->
-
-- [Installation](#installation)
-- [Usage](#usage)
-  - [Training a semantic parser](#training-a-semantic-parser)
-  - [Inference on a semantic parser](#inference-on-a-semantic-parser)
-  - [Calibrating a trained model](#calibrating-a-trained-model)
-  - [Paraphrasing](#paraphrasing)
-  - [Translation](#translation)
-- [Citation](#citation)
-
 
 ## Installation
 
@@ -59,28 +40,6 @@ python -m spacy download en_core_web_sm
 
 ## Usage
 
-### Training a semantic parser
-
-The general form is:
-
-```bash
-genienlp train --train_tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> <flags>
-```
-
-The `<datadir>` should contain a single folder called "almond" (the name of the task). That folder should
-contain the files "train.tsv" and "eval.tsv" for train and dev set respectively.
-
-
-To train a BART or other Seq2Seq model, use:
-
-```bash
-genienlp train --train_tasks almond --train_iterations 50000 --data <datadir> --save <model_dir> \
-  --model TransformerSeq2Seq --pretrained_model facebook/bart-large --gradient_accumulation_steps 20
-```
-
-The default batch sizes are tuned for training on a single V100 GPU. Use `--train_batch_tokens` and `--val_batch_size`
-to control the batch sizes. See `genienlp train --help` for the full list of options.
-
 ### Inference on a semantic parser
 
 In batch mode:
@@ -92,47 +51,6 @@ genienlp predict --tasks almond --data <datadir> --path <model_dir> --eval_dir <
 The `<datadir>` should contain a single folder called "almond" (the name of the task). That folder should
 contain the files "train.tsv" and "eval.tsv" for train and dev set respectively. The result of batch prediction
 will be saved in `<output>/almond/valid.tsv`, as a TSV file containing ID and prediction.
-
-In interactive mode:
-
-```bash
-genienlp server --path <model_dir>
-```
-
-Opens a TCP server that listens to requests, formatted as JSON objects containing `id` (the ID of the request),
-`task` (the name of the task), `context`, and `question`. The server writes out JSON objects containing `id` and
-`answer`. The server listens to port 8401 by default. Use `--port` to specify a different port or `--stdin` to
-use standard input/output instead of TCP.
-
-
-Generate paraphrases:
-
-```bash
-genienlp run-paraphrase --model_name_or_path <model_dir> --temperature 0.3 --repetition_penalty 1.0 --num_samples 4 --batch_size 32 --input_file <input_tsv_file> --input_column 1
-```
-
-### Translation
-
-Use the following command for training/ finetuning an NMT model:
-
-```bash
-genienlp train --train_tasks almond_translate --data <data_directory> --train_languages <src_lang> --eval_languages <tgt_lang> --no_commit --train_iterations <iterations> --preserve_case --save <save_dir> --exist_ok  --model TransformerSeq2Seq --pretrained_model <hf_model_name>
-```
-
-We currently support MarianMT, MBART, MT5, and M2M100 models.<br>
-To save a pretrained model in genienlp format without any finetuning, set train_iterations to 0. You can then use this model to do inference.
-
-To produce translations for an eval/ test set run the following command:
-
-```bash
-genienlp predict --tasks almond_translate --data <data_directory> --pred_languages <src_lang> --pred_tgt_languages <tgt_lang> --path <path_to_saved_model> --eval_dir <eval_dir>  --val_batch_size 4000 --evaluate <valid/test>  --overwrite --silent
-```
-
-If your dataset is a document or contains long examples, pass `--translate_example_split` to break the examples down into individual sentences before translation for better results. <br>
-To use [alignment](https://aclanthology.org/2020.emnlp-main.481.pdf), pass `--do_alignment` which ensures the tokens between quotations marks in the sentence are preserved during translation.
-
-
-See `genienlp --help` and `genienlp <command> --help` for more details about each argument.
 
 
 ## Citation

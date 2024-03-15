@@ -77,11 +77,8 @@ def register_task(name):
     return decorator
 
 
-def get_tasks(names, args, available_tasks=None):
+def get_tasks(names, args):
     tasks = dict()
     for name in names:
-        if available_tasks and name in available_tasks:
-            tasks[name] = available_tasks[name]
-        else:
-            tasks[name] = _registry[task_name_to_cls_name(name)](name, args)
+        tasks[name] = _registry[task_name_to_cls_name(name)](name, args)
     return tasks

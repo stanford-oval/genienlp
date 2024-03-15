@@ -178,7 +178,7 @@ def computeNMTBLEU(outputs, targets):
     return bleu_metric.compute(predictions=outputs, references=targets)['bleu'] * 100
 
 
-def compute_e2e_dialogue_score(greedy, answer, tgt_lang, args, example_ids, contexts):
+def compute_e2e_dialogue_score(greedy, answer, args, example_ids, contexts):
     num_examples = len(answer)
     subtask_metrics_dict = OrderedDict()
 
@@ -202,7 +202,7 @@ def compute_e2e_dialogue_score(greedy, answer, tgt_lang, args, example_ids, cont
 
         if golds:
             metrics_to_compute = args.e2e_dialogue_valid_submetrics[k]
-            sub_metrics = compute_metrics(preds, golds, [metrics_to_compute], tgt_lang, args, ids, inputs)
+            sub_metrics = compute_metrics(preds, golds, [metrics_to_compute], args, ids, inputs)
             subtask_metrics_dict[subtask] = (
                 sub_metrics[metrics_to_compute],
                 len(golds),
@@ -291,37 +291,10 @@ def computeDST_EM(greedy, answer, tasks):
     return dataset.compute_dst_em(greedy, answer)
 
 
-def convert_IOB2_to_IOB1(labels):
-    cur_category = None
-    for n, label in enumerate(labels):
-        if label[0] == "B" and label[2:] != cur_category:
-            labels[n] = "I" + label[1:]
-        cur_category = label[2:]
-
-
-def compute_ner_f1(predictions, answers, schema='IOB2'):
-    predictions_processed = [pred.split() for pred in predictions]
-    answers_processed = [ans[0].split() for ans in answers]
-    f1 = 0.0
-
-    if schema == 'IOB1':
-        convert_IOB2_to_IOB1(predictions_processed)
-        convert_IOB2_to_IOB1(answers_processed)
-        f1 = (
-            seq_metrics.f1_score(y_pred=predictions_processed, y_true=answers_processed, mode='strict', scheme=seq_scheme.IOB1)
-            * 100
-        )
-    elif schema == 'IOB2':
-        f1 = seq_metrics.f1_score(y_pred=predictions_processed, y_true=answers_processed) * 100
-
-    return f1
-
-
 def compute_metrics(
     predictions: List[str],
     answers: Union[List[str], List[List[str]]],
     requested_metrics: List,
-    lang: str,
     args,
     example_ids: List[str] = None,
     contexts: List[str] = None,
@@ -351,7 +324,7 @@ def compute_metrics(
         requested_metrics += [
             a.upper() + '_' + b for (a, b) in zip(args.e2e_dialogue_valid_subtasks, args.e2e_dialogue_valid_submetrics)
         ]
-        results = compute_e2e_dialogue_score(predictions, answers, lang, args, example_ids, contexts)
+        results = compute_e2e_dialogue_score(predictions, answers, args, example_ids, contexts)
         metric_keys += results.keys()
         metric_values += results.values()
     if 'jga' in requested_metrics:
@@ -378,18 +351,6 @@ def compute_metrics(
         pem = computePartialEM(predictions, answers)
         metric_keys.append('pem')
         metric_values.append(pem)
-    if 'sm' in requested_metrics:
-        sm = computeSM(predictions, answers)
-        metric_keys.append('sm')
-        metric_values.append(sm)
-    if 'ter' in requested_metrics:
-        ter = computeTER(predictions, answers)
-        metric_keys.append('ter')
-        metric_values.append(ter)
-    if 'bertscore' in requested_metrics:
-        bertscore = computeBERTScore(predictions, answers, lang)
-        metric_keys.append('bertscore')
-        metric_values.append(bertscore)
     if 'casedbleu' in requested_metrics:
         casedbleu = computeCasedBLEU(predictions, answers)
         metric_keys.append('casedbleu')
@@ -398,14 +359,6 @@ def compute_metrics(
         bleu = computeBLEU(predictions, answers)
         metric_keys.append('bleu')
         metric_values.append(bleu)
-    if 't5_bleu' in requested_metrics:
-        t5_bleu = computeT5BLEU(predictions, answers)
-        metric_keys.append('t5_bleu')
-        metric_values.append(t5_bleu)
-    if 'nmt_bleu' in requested_metrics:
-        nmt_bleu = computeNMTBLEU(predictions, answers)
-        metric_keys.append('nmt_bleu')
-        metric_values.append(nmt_bleu)
     if 'sc_precision' in requested_metrics:
         precision = computeSequenceClassificationPrecision(predictions, answers, tasks)
         metric_keys.append('sc_precision')
@@ -422,14 +375,6 @@ def compute_metrics(
         f1 = computeF1(predictions, answers)
         metric_keys.append('f1')
         metric_values.append(f1)
-    if 'ner_f1_IOB1' in requested_metrics:
-        ner_f1_iob1 = compute_ner_f1(predictions, answers, schema='IOB1')
-        metric_keys.append('ner_f1_IOB1')
-        metric_values.append(ner_f1_iob1)
-    if 'ner_f1' in requested_metrics:
-        ner_f1 = compute_ner_f1(predictions, answers)
-        metric_keys.append('ner_f1')
-        metric_values.append(ner_f1)
     for m in ['rouge1', 'rouge2', 'rougeL']:
         if m in requested_metrics:
             rouge = computeROUGE(predictions, answers, rouge_types=[m])[m]
@@ -443,7 +388,7 @@ def compute_metrics(
     return metric_dict
 
 
-def calculate_and_reduce_metrics(args, validation_output, metrics_to_compute, lang):
+def calculate_and_reduce_metrics(args, validation_output, metrics_to_compute):
     metrics = OrderedDict()
     example_ids = validation_output.example_ids
     predictions = validation_output.predictions
@@ -453,7 +398,7 @@ def calculate_and_reduce_metrics(args, validation_output, metrics_to_compute, la
     if args.reduce_metrics == 'max':
         for i in range(len(predictions[0])):  # for each output (in case of multiple outputs)
             partial_metrics = compute_metrics(
-                [p[i] for p in predictions], answers, metrics_to_compute, lang, args, example_ids, contexts
+                [p[i] for p in predictions], answers, metrics_to_compute, args, example_ids, contexts
             )  # calculate the metric on all first outputs, all second outputs, etc.
             for k, v in partial_metrics.items():
                 metrics[k] = max(metrics.get(k, 0), v)
@@ -467,7 +412,7 @@ def calculate_and_reduce_metrics(args, validation_output, metrics_to_compute, la
             example_metrics = OrderedDict()  # keep track of metrics for one input and all of its outputs
             for j in range(len(predictions[i])):  # for each output (in case of multiple outputs)
                 partial_metrics = compute_metrics(
-                    [predictions[i][j]], [answers[i]], metrics_to_compute, lang, args, example_ids, contexts
+                    [predictions[i][j]], [answers[i]], metrics_to_compute, args, example_ids, contexts
                 )  # calculate the metric on the j-th output of the i-th input
                 for k, v in partial_metrics.items():
                     example_metrics[k] = max(example_metrics.get(k, 0), v)

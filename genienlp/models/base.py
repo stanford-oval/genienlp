@@ -38,12 +38,12 @@ import torch
 import ujson
 from dateparser.languages import default_loader
 import requests
-from transformers import AutoConfig, BartForConditionalGeneration, MarianTokenizer, PreTrainedModel
+from transformers import MarianTokenizer, PreTrainedModel
+from tqdm import tqdm
 
 from ..data_utils.example import NumericalizedExamples, SequentialField
 from ..data_utils.numericalizer import TransformerNumericalizer
-from ..data_utils.progbar import progress_bar
-from ..util import adjust_language_code, merge_translated_sentences, replace_capturing_group
+from ..util import replace_capturing_group
 
 logger = logging.getLogger(__name__)
 
@@ -65,11 +65,7 @@ class GenieModel(PreTrainedModel):
         model = cls(args=args, tasks=tasks, vocab_sets=vocab_sets, save_directory=save_directory, *model_args, **kwargs)
         
 
-        return model, 100
-
-    def update_language_dependent_configs(self, tgt_lang):
-        # we override this method for TransformerSeq2Seq models; otherwise it's a no-op
-        pass
+        return model
 
 
 class ValidationOutput(object):
@@ -96,7 +92,7 @@ class ValidationOutput(object):
 
 # TransformerSeq2Seq inherits from this model
 class GenieModelForGeneration(GenieModel):
-    def numericalize_example(self, input_text, turn_id, device):
+    def numericalize_example(self, input_text, turn_id):
         if isinstance(input_text, str):
             input_text = [input_text]
         tokenized_contexts = self.numericalizer.encode_batch(input_text, field_name='context', features=None)[0]
@@ -104,9 +100,9 @@ class GenieModelForGeneration(GenieModel):
         numericalized_turn = NumericalizedExamples(
             example_id=[str(turn_id)],
             context=SequentialField(
-                value=torch.tensor([tokenized_contexts.value], device=device),
-                length=torch.tensor([tokenized_contexts.length], device=device),
-                limited=torch.tensor([tokenized_contexts.limited], device=device),
+                value=torch.tensor([tokenized_contexts.value]),
+                length=torch.tensor([tokenized_contexts.length]),
+                limited=torch.tensor([tokenized_contexts.limited]),
                 feature=None,
             ),
             answer=SequentialField(value=None, length=None, limited=None, feature=None),
@@ -126,7 +122,7 @@ class GenieModelForGeneration(GenieModel):
     ):
         if self.args.e2e_dialogue_evaluation:
             return self.validate_e2e_dialogues(
-                data_iterator, task, eval_dir, output_predictions_only, original_order, disable_progbar
+                data_iterator, task, eval_dir, output_predictions_only, original_order
             )
         else:
             return self.validate_batch(
@@ -161,21 +157,7 @@ class GenieModelForGeneration(GenieModel):
         answers = []
         contexts = []
 
-        if self.numericalizer._tokenizer.tgt_lang:
-            tgt_lang = self.numericalizer._tokenizer.tgt_lang
-        else:
-            tgt_lang = self.orig_tgt_lang
-
-        if self.numericalizer._tokenizer.src_lang:
-            src_lang = self.numericalizer._tokenizer.src_lang
-        else:
-            src_lang = self.orig_src_lang
-
-        date_parser = default_loader.get_locale(src_lang[:2])
-
-        translate_return_raw_outputs = getattr(self.args, 'translate_return_raw_outputs', False)
-
-        for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
+        for batch in tqdm(data_iterator, desc='Generating'):
             batch_size = len(batch.example_id)
             batch_prediction = [[] for _ in range(batch_size)]
             batch_raw_prediction = [[] for _ in range(batch_size)]
@@ -234,12 +216,7 @@ class GenieModelForGeneration(GenieModel):
                     kwargs = {
                         'numericalizer': self.numericalizer,
                         'cross_attentions': cross_attentions,
-                        'tgt_lang': tgt_lang,
-                        'date_parser': date_parser,
                     }
-
-                    if translate_return_raw_outputs:
-                        partial_batch_raw_prediction_ids = partial_batch_prediction_ids
 
                     partial_batch_prediction_ids, partial_batch_words = task.batch_postprocess_prediction_ids(
                         batch_example_ids, batch.context.value.data, partial_batch_prediction_ids, **kwargs
@@ -257,15 +234,6 @@ class GenieModelForGeneration(GenieModel):
 
                 def get_example_index(i):
                     return (i // self.args.num_outputs[hyperparameter_idx]) % batch_size
-
-                if translate_return_raw_outputs:
-                    partial_batch_raw_prediction = self.numericalizer.reverse(partial_batch_raw_prediction_ids, 'answer')
-                    for i in range(len(partial_batch_prediction)):
-                        partial_batch_raw_prediction[i] = task.postprocess_prediction(
-                            batch_example_ids[get_example_index(i)], partial_batch_raw_prediction[i]
-                        )
-                    for i in range(len(partial_batch_prediction)):
-                        batch_raw_prediction[get_example_index(i)].append(partial_batch_raw_prediction[i])
 
                 # post-process predictions
                 for i in range(len(partial_batch_prediction)):
@@ -305,30 +273,7 @@ class GenieModelForGeneration(GenieModel):
                 )
             ]
 
-        if getattr(self.args, 'translate_example_split', False):
-            # stitch sentences back together
-            example_ids, predictions, raw_predictions, answers, contexts = merge_translated_sentences(
-                example_ids,
-                predictions,
-                raw_predictions,
-                answers,
-                contexts,
-                self.numericalizer._tokenizer.src_lang,
-                self.numericalizer._tokenizer.tgt_lang,
-            )
 
-        if getattr(self.args, 'translate_only_entities', False):
-            # stitch entities back together
-            example_ids, predictions, raw_predictions, answers, contexts = merge_translated_sentences(
-                example_ids,
-                predictions,
-                raw_predictions,
-                answers,
-                contexts,
-                self.numericalizer._tokenizer.src_lang,
-                self.numericalizer._tokenizer.tgt_lang,
-                is_entities=True,
-            )
 
         output = ValidationOutput(loss=total_loss)
 
@@ -341,13 +286,10 @@ class GenieModelForGeneration(GenieModel):
                 answers,
                 contexts,
             )
-        if translate_return_raw_outputs:
-            output.raw_predictions = raw_predictions
-
         return output
 
     def validate_e2e_dialogues(
-        self, data_iterator, task, eval_dir=None, output_predictions_only=False, original_order=None, disable_progbar=True
+        self, data_iterator, task, eval_dir=None, output_predictions_only=False, original_order=None
     ):
         """
         Inputs:
@@ -361,17 +303,6 @@ class GenieModelForGeneration(GenieModel):
         dataset_class = getattr(dialogues, task.dataset_name)
         dataset = dataset_class()
 
-        # TODO: handle multiple responses
-        hyperparameter_idx = 0
-
-        device = self.device
-        args = self.args
-
-        if self.numericalizer._tokenizer.src_lang:
-            src_lang = self.numericalizer._tokenizer.src_lang
-        else:
-            src_lang = self.orig_src_lang
-
         special_tokens = self.numericalizer._tokenizer.all_special_tokens
 
         e2e_dialogue_preds = dict()
@@ -382,7 +313,7 @@ class GenieModelForGeneration(GenieModel):
 
         cur_dial_id = ''
 
-        for k, turn in enumerate(progress_bar(data_iterator, desc='Generating', disable=disable_progbar)):
+        for turn in tqdm(data_iterator, desc='Generating'):
             batch_size = len(turn.example_id)
             assert batch_size == 1
             batch_prediction = []
@@ -467,7 +398,7 @@ class GenieModelForGeneration(GenieModel):
 
             if train_target == 'da':
                 partial_batch_prediction = dataset.postprocess_prediction(
-                    partial_batch_prediction, knowledge=knowledge, lang=src_lang[:2]
+                    partial_batch_prediction, knowledge=knowledge, lang=self.args.language
                 )
 
             partial_batch_prediction = task.postprocess_prediction(batch_example_ids[0], partial_batch_prediction)
@@ -495,7 +426,7 @@ class GenieModelForGeneration(GenieModel):
                     if state_update:
                         api_names = list(state_update.keys())
                     new_knowledge_text, constraints = dataset.make_api_call(
-                        dialogue_state, knowledge, api_names, src_lang, dial_id, turn_id
+                        dialogue_state, knowledge, api_names, self.args.language, dial_id, turn_id
                     )
                     #### save latest api constraints
                     e2e_dialogue_preds[dial_id]["API"] = copy.deepcopy(constraints)
@@ -573,16 +504,9 @@ class GenieModelForGeneration(GenieModel):
         answers = []
         contexts = []
 
-        # TODO: handle multiple responses
         hyperparameter_idx = 0
 
-        device = self.device
         args = self.args
-
-        if self.numericalizer._tokenizer.src_lang:
-            src_lang = self.numericalizer._tokenizer.src_lang
-        else:
-            src_lang = self.orig_src_lang
 
         NEXT_TARGET = {'dst': 'api', 'api': 'da', 'da': 'rg', 'rg': 'dst'}
 
@@ -615,7 +539,7 @@ class GenieModelForGeneration(GenieModel):
                     if system_history:
                         print(colored('SYSTEM: ' + f'{predictions[-1][0]}', 'red', attrs=['bold']))
                     else:
-                        print(colored('SYSTEM: ' + f'{INIT_SYS_MESSAGE[src_lang[:2]]}', 'red', attrs=['bold']))
+                        print(colored('SYSTEM: ' + f'{INIT_SYS_MESSAGE[self.args.language]}', 'red', attrs=['bold']))
 
                     # construct new input
                     raw_user_input = input(colored('USER: ', 'green', attrs=['bold'])).strip()
@@ -694,7 +618,7 @@ class GenieModelForGeneration(GenieModel):
 
                 if train_target == 'da':
                     partial_batch_prediction = dataset.postprocess_prediction(
-                        partial_batch_prediction, knowledge=knowledge, lang=src_lang[:2]
+                        partial_batch_prediction, knowledge=knowledge, lang=self.args.language
                     )
 
                 partial_batch_prediction = task.postprocess_prediction(turn_id, partial_batch_prediction)
@@ -784,117 +708,5 @@ class GenieModelForGeneration(GenieModel):
                 answers,
                 contexts,
             )
-
-        return output
-
-
-# TransformerForSequenceClassification and TransformerForTokenClassification will inherit from this model
-class GenieModelForClassification(GenieModel):
-    def _init_common(self, args, tasks, **kwargs):
-        self.args = args
-        num_labels = 0
-        if args.num_labels is not None:
-            num_labels = args.num_labels
-        else:
-            for task in tasks:
-                # if having multiple tasks choose max num_labels
-                if hasattr(task, 'num_labels'):
-                    num_labels = max(num_labels, task.num_labels)
-
-        config = AutoConfig.from_pretrained(
-            args.pretrained_model, cache_dir=args.embeddings, num_labels=num_labels, finetuning_task='ned'
-        )
-        super().__init__(config)
-
-        if hasattr(config, 'd_model'):
-            args.dimension = config.d_model
-        else:
-            args.dimension = config.hidden_size
-
-        self.src_lang, self.tgt_lang = adjust_language_code(
-            config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
-        )
-
-    def forward(self, *input, **kwargs):
-        if self.training:
-            batch = input[0]
-            outputs = self.model(
-                batch.context.value,
-                labels=batch.answer.value,
-                attention_mask=(batch.context.value != self.numericalizer.pad_id),
-            )
-            return outputs
-        else:
-            return self.model(**kwargs)
-
-    def validate(self, data_iterator, task, original_order=None, disable_progbar=True, **kwargs):
-        total_loss = 0.0
-        all_example_ids = []
-        all_answers = []
-        all_contexts = []
-        all_predictions = []
-
-        for batch in progress_bar(data_iterator, desc='Generating', disable=disable_progbar):
-            batch_example_ids = batch.example_id
-
-            batch_context = self.numericalizer.reverse(batch.context.value.data, 'context')
-
-            all_example_ids += batch_example_ids
-
-            # pass labels to get loss
-            output = self.forward(
-                input_ids=batch.context.value,
-                attention_mask=(batch.context.value != self.numericalizer.pad_id),
-                labels=batch.answer.value,
-            )
-
-            labels = batch.answer.value.tolist()
-
-            logits = output.logits
-            predictions = torch.argmax(logits, dim=-1).tolist()
-
-            # logits for sequence classification is 2 dimensional
-            if logits.dim() == 2:
-                predictions = [[p] for p in predictions]
-
-            # Remove ignored index (special tokens)
-            processed_preds = []
-            processed_labels = []
-            for pred, label in zip(predictions, labels):
-                preds_list = []
-                labels_list = []
-                for p_, l_ in zip(pred, label):
-                    if l_ == self.numericalizer.answer_pad_id:
-                        continue
-                    preds_list.append(task.id2label[p_])
-                    labels_list.append(task.id2label[l_])
-
-                processed_preds.append([" ".join(preds_list)])
-                processed_labels.append(" ".join(labels_list))
-
-            all_contexts += batch_context
-            all_answers += processed_labels
-            all_predictions += processed_preds
-
-            total_loss += output.loss
-
-        total_loss /= len(all_example_ids)
-
-        if original_order is not None:
-            # sort back to the original order
-            original_order, all_example_ids, all_predictions, all_answers, all_contexts = [
-                list(a)
-                for a in tuple(
-                    zip(*sorted(list(zip(original_order, all_example_ids, all_predictions, all_answers, all_contexts))))
-                )
-            ]
-
-        output = ValidationOutput(
-            loss=total_loss,
-            example_ids=all_example_ids,
-            contexts=all_contexts,
-            answers=all_answers,
-            predictions=all_predictions,
-        )
 
         return output

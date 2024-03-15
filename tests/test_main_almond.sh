@@ -26,10 +26,8 @@ do
     --tasks almond \
     --evaluate test \
     --path $workdir/model_$i \
-    --overwrite \
     --eval_dir $workdir/model_$i/eval_results/ \
     --data $SRCDIR/dataset/ \
-    --embeddings $EMBEDDING_DIR
 
   # check if result file exists
   if test ! -f $workdir/model_$i/eval_results/test/almond.tsv ; then

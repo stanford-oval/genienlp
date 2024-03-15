@@ -33,22 +33,13 @@ import logging
 import os
 import random
 import re
-import shutil
 import sys
-import time
-from json.decoder import JSONDecodeError
 
 import numpy as np
 import torch
-import ujson
-from transformers import MarianConfig, MBartConfig
-from transformers.models.mbart50.tokenization_mbart50 import FAIRSEQ_LANGUAGE_CODES as MBART50_FAIRSEQ_LANGUAGE_CODES
-from transformers.models.nllb.tokenization_nllb import FAIRSEQ_LANGUAGE_CODES as NLLB_FAIRSEQ_LANGUAGE_CODES
 
-from .data_utils.almond_utils import token_type_regex
 from .data_utils.example import NumericalizedExamples
 from .data_utils.iterator import LengthSortedIterator
-from .model_utils.transformers_utils import MARIAN_GROUP_MEMBERS
 from .tasks.generic_dataset import all_tokens_fn, input_tokens_fn
 
 logger = logging.getLogger(__name__)
@@ -88,14 +79,6 @@ def find_span(haystack, needle):
     return None
 
 
-def get_devices(devices=None):
-    if not torch.cuda.is_available():
-        return [torch.device('cpu')]
-    if not devices:
-        return [torch.device('cuda:' + str(i)) for i in range(torch.cuda.device_count())]
-    return [torch.device(ordinal) for ordinal in devices]
-
-
 def set_seed(args):
     np.random.seed(args.seed)
     random.seed(args.seed)
@@ -104,23 +87,13 @@ def set_seed(args):
 
 
 def make_data_loader(
-    dataset, numericalizer, batch_size, device=None, train=False, return_original_order=False, batching_algorithm='sample'
+    dataset, numericalizer, batch_size, train=False, return_original_order=False, batching_algorithm='sample'
 ):
     args = numericalizer.args
     all_features = NumericalizedExamples.from_examples(dataset, numericalizer)
 
     context_lengths = [ex.context.length for ex in all_features]
     answer_lengths = [ex.answer.length for ex in all_features]
-
-    topN = args.log_n_longest
-    logger.info(
-        f'context lengths (min, mean, max, top{topN}): {np.min(context_lengths)}, {int(np.mean(context_lengths))},'
-        f' {np.max(context_lengths)}, {np.sort(context_lengths)[-topN:][::-1]}'
-    )
-    logger.info(
-        f'answer lengths (min, mean, max, top{topN}): {np.min(answer_lengths)}, {int(np.mean(answer_lengths))},'
-        f' {np.max(answer_lengths)}, {np.sort(answer_lengths)[-topN:][::-1]}'
-    )
 
     if train:
         sort_key_fn = dataset.sort_key_fn
@@ -195,7 +168,7 @@ def make_data_loader(
     data_loader = torch.utils.data.DataLoader(
         all_f,
         batch_sampler=sampler,
-        collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer, device),
+        collate_fn=lambda batches: NumericalizedExamples.collate_batches(batches, numericalizer),
         num_workers=0,
     )
 
@@ -205,174 +178,9 @@ def make_data_loader(
         return data_loader
 
 
-def merge_translated_sentences(
-    example_ids, predictions, raw_predictions, answers, contexts, src_lang, tgt_lang, is_entities=False
-):
-    new_example_ids, new_predictions, new_raw_predictions, new_answers, new_contexts = (
-        [],
-        [],
-        [],
-        [],
-        [],
-    )
-    cur_raw_pred, cur_context, cur_answer = [], [], []
-    if is_entities:
-        cur_pred = {}
-        split_token = '#'
-    else:
-        cur_pred = []
-        split_token = '@'
-
-    i = 0
-    src_concat_token = '' if src_lang in ['zh', 'ja', 'ko'] else ' '
-    tgt_concat_token = '' if tgt_lang in ['zh', 'ja', 'ko'] else ' '
-    while i < len(predictions):
-        ex_id, pred, raw_pred, ans, ctxt = (
-            example_ids[i],
-            predictions[i],
-            raw_predictions[i],
-            answers[i],
-            contexts[i],
-        )
-        if split_token in ex_id:
-            id_, split_id = ex_id.rsplit(split_token, 1)
-            cur_id = id_
-            while id_ == cur_id:
-                if is_entities:
-                    cur_pred[ctxt] = list(set(pred))
-                else:
-                    cur_pred.append(pred)
-                cur_raw_pred.append(raw_pred)
-                cur_context.append(ctxt)
-                cur_answer.append(ans)
-                i += 1
-                if i < len(predictions):
-                    ex_id, pred, raw_pred, ans, ctxt = (
-                        example_ids[i],
-                        predictions[i],
-                        raw_predictions[i],
-                        answers[i],
-                        contexts[i],
-                    )
-                    if split_token in ex_id:
-                        id_, split_id = ex_id.rsplit(split_token, 1)
-                    else:
-                        id_ = ex_id
-                else:
-                    break
-
-            new_example_ids.append(cur_id)
-            if is_entities:
-                new_predictions.append([json.dumps(cur_pred, ensure_ascii=False)])
-                new_raw_predictions.append([json.dumps(cur_pred, ensure_ascii=False)])
-            else:
-                new_predictions.append(
-                    [tgt_concat_token.join([cur_pred[j][0] for j in range(len(cur_pred))]) for i in range(len(cur_pred[0]))]
-                )
-                new_raw_predictions.append(
-                    [
-                        tgt_concat_token.join([cur_raw_pred[j][0] for j in range(len(cur_raw_pred))])
-                        for i in range(len(cur_raw_pred[0]))
-                    ]
-                )
-
-            new_contexts.append(src_concat_token.join(cur_context))
-            new_answers.append(src_concat_token.join(cur_answer))
-
-            # reset block
-            cur_raw_pred, cur_context, cur_answer = [], [], []
-            if is_entities:
-                cur_pred = {}
-            else:
-                cur_pred = []
-
-        else:
-            new_example_ids.append(ex_id)
-            if is_entities:
-                new_predictions.append([json.dumps({ctxt: list(set(pred))}, ensure_ascii=False)])
-                new_raw_predictions.append([json.dumps({ctxt: list(set(pred))}, ensure_ascii=False)])
-            else:
-                new_predictions.append(pred)
-                new_raw_predictions.append(raw_pred)
-            new_contexts.append(ctxt)
-            new_answers.append(ans)
-            i += 1
-
-    return new_example_ids, new_predictions, new_raw_predictions, new_answers, new_contexts
-
-
-def get_model_lang(orig_lang, mapping):
-    for lang in mapping:
-        if lang.startswith(orig_lang):
-            return lang
-
-
-def adjust_language_code(config, pretrained_model, src_lang, tgt_lang):
-
-    # adjust src and tgt languages for Marian models
-    model_is_marian = isinstance(config, MarianConfig)
-
-    if model_is_marian and pretrained_model.rsplit('-', 2)[1] in MARIAN_GROUP_MEMBERS:
-        if src_lang not in MARIAN_GROUP_MEMBERS[pretrained_model.rsplit('-', 2)[1]]:
-            if src_lang == 'pl':
-                src_lang = 'pol'
-            elif src_lang == 'fa':
-                src_lang = 'pes'
-            else:
-                raise ValueError(
-                    f'Source language "{src_lang}" is not in this Marian model group languages, please specify the correct source language.'
-                )
-
-    if model_is_marian and pretrained_model.rsplit('-', 1)[1] in MARIAN_GROUP_MEMBERS:
-        if tgt_lang not in MARIAN_GROUP_MEMBERS[pretrained_model.rsplit('-', 1)[1]]:
-            if tgt_lang == 'pl':
-                tgt_lang = 'pol'
-            elif tgt_lang == 'fa':
-                tgt_lang = 'pes'
-            else:
-                raise ValueError(
-                    f'Target language "{tgt_lang}" is not in this Marian model group languages, please specify the correct target language.'
-                )
-
-    if model_is_marian and pretrained_model.rsplit('-', 2)[1] not in MARIAN_GROUP_MEMBERS:
-        # Source language should not be provided when using marian models with single language pairs
-        # otherwise the translation outputs will be incorrect; hence we ignore the source language
-        src_lang = None
-
-    if model_is_marian and pretrained_model.rsplit('-', 1)[1] not in MARIAN_GROUP_MEMBERS:
-        # Target language should not be provided when using marian models with single language pairs
-        # otherwise the translation outputs will be incorrect; hence we ignore the target language
-        tgt_lang = None
-
-    # adjust src and tgt languages for different models
-    if isinstance(config, MBartConfig):
-        src_lang = get_model_lang(src_lang, MBART50_FAIRSEQ_LANGUAGE_CODES)
-        tgt_lang = get_model_lang(tgt_lang, MBART50_FAIRSEQ_LANGUAGE_CODES)
-    # Nllb subclasses M2M100 config so we should check tokenizer_class directly
-    elif getattr(config, 'tokenizer_class', '') == 'NllbTokenizer':
-        src_lang = get_model_lang(src_lang, NLLB_FAIRSEQ_LANGUAGE_CODES)
-        tgt_lang = get_model_lang(tgt_lang, NLLB_FAIRSEQ_LANGUAGE_CODES)
-
-    return src_lang, tgt_lang
-
-
-def have_multilingual(task_names):
-    return any(['multilingual' in name for name in task_names])
-
-
 def load_config_file_to_args(args):
-    if not hasattr(args, 'is_hf_model'):
-        # --is_hf_model might not exist if this function is called by anything other than predict.py
-        setattr(args, 'is_hf_model', False)
-
-    if args.is_hf_model:
-        # no config file found, treat `args.path` as a model name on HuggingFace model hub
-        args.pretrained_model = args.path
-        args.override_question = ""  # because HF models are trained without a separate question
-        config = vars(args).copy()
-    else:
-        with open(os.path.join(args.path, 'config.json')) as config_file:
-            config = json.load(config_file)
+    with open(os.path.join(args.path, 'config.json')) as config_file:
+        config = json.load(config_file)
 
     retrieve = [
         'model',
@@ -386,7 +194,6 @@ def load_config_file_to_args(args):
         'almond_detokenize_sentence',
         'preprocess_special_tokens',
         'label_smoothing',
-        'use_encoder_loss',
         'num_workers',
         'no_fast_tokenizer',
         'force_fast_tokenizer',
@@ -400,9 +207,6 @@ def load_config_file_to_args(args):
         'num_labels',
         'crossner_domains',
         'override_valid_metrics',
-        'eval_src_languages',
-        'eval_tgt_languages',
-        'log_n_longest',
     ]
 
     # train and predict scripts have these arguments in common. We use the values from train only if they are not provided in predict.
@@ -453,7 +257,6 @@ def load_config_file_to_args(args):
             'do_alignment',
             'align_preserve_input_quotation',
             'align_remove_output_quotation',
-            'use_encoder_loss',
             'almond_has_multiple_programs',
             'almond_lang_as_question',
             'preprocess_special_tokens',
@@ -470,8 +273,6 @@ def load_config_file_to_args(args):
         elif r in ['override_valid_metrics']:
             setattr(args, r, [])
         elif r == 'align_span_symbol':
-            setattr(args, r, '"')
-        elif r == 'log_n_longest':
             setattr(args, r, 3)
         elif r == 'database_type':
             setattr(args, r, 'json')

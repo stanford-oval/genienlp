@@ -29,11 +29,6 @@ jobs:
       script:
         - bash ./tests/test_main_almond.sh
     -
-      name: "Paraphrasing tests"
-      stage: test
-      script:
-        - bash ./tests/test_paraphrasing.sh
-    -
       name: "Translation tests"
       stage: test
       script:
@@ -43,17 +38,6 @@ jobs:
       stage: test
       script:
         - bash ./tests/test_e2e_dialogues.sh
-    -
-      name: "Token Classification tests"
-      stage: test
-      script:
-        - bash ./tests/test_token_classification.sh
-    -
-      name: "Sequence Classification tests"
-      stage: test
-      script:
-        - bash ./tests/test_sequence_classification.sh
-    -
     -
       name: "Docker build"
       stage: deploy

@@ -34,9 +34,7 @@ import logging
 import os
 import subprocess
 
-from .model_utils.transformers_utils import MODEL_PARALLEL_SUPPORTED_MODELS
 from .tasks.registry import get_tasks
-from .util import have_multilingual
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +49,8 @@ def get_commit():
     )
 
 
-def save_args(args, force_overwrite=False):
-    os.makedirs(args.log_dir, exist_ok=args.exist_ok or force_overwrite)
+def save_args(args):
+    os.makedirs(args.log_dir, exist_ok=True)
     variables = vars(args).copy()
     # remove the task objects before saving the configuration to the JSON file,
     # because tasks are not JSON serializable.
@@ -63,93 +61,12 @@ def save_args(args, force_overwrite=False):
 
 
 def parse_argv(parser):
-    parser.add_argument('--root', default='.', type=str, help='root directory for data, results, embeddings, code, etc.')
+    parser.add_argument('--root', default='.', type=str, help='root directory for data, results, code, etc.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
     parser.add_argument('--save', required=True, type=str, help='where to save results.')
-    parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to save embeddings.')
-
-    parser.add_argument(
-        '--train_languages',
-        type=str,
-        default='en',
-        dest='train_src_languages',
-        help='Specify dataset source languages used during training for multilingual tasks'
-        'multiple languages for each task should be concatenated with +',
-    )
-    parser.add_argument(
-        '--eval_languages',
-        type=str,
-        default='en',
-        dest='eval_src_languages',
-        help='Specify dataset source languages used during validation for multilingual tasks'
-        'multiple languages for each task should be concatenated with +',
-    )
-
-    parser.add_argument(
-        '--train_tgt_languages',
-        type=str,
-        default='en',
-        help='Specify dataset target languages used during training for multilingual tasks'
-        'multiple languages for each task should be concatenated with +',
-    )
-    parser.add_argument(
-        '--eval_tgt_languages',
-        type=str,
-        default='en',
-        help='Specify dataset target languages used during validation for multilingual tasks'
-        'multiple languages for each task should be concatenated with +',
-    )
-
-    parser.add_argument(
-        '--train_tasks', nargs='+', type=str, dest='train_task_names', help='tasks to use for training', required=True
-    )
-    parser.add_argument('--train_iterations', nargs='+', type=int, help='number of iterations to focus on each task')
-    # TODO rename to train_batch_size; keeping it for now for backward compatibility
-    parser.add_argument(
-        '--train_batch_tokens',
-        nargs='+',
-        default=[2000],
-        type=int,
-        help='Number of tokens to use for dynamic batching, corresponding to tasks in train tasks.'
-        'If sentence_batching is used, this will be interpreted as number of examples.',
-    )
-    parser.add_argument('--jump_start', default=0, type=int, help='number of iterations to give jump started tasks')
-    parser.add_argument('--n_jump_start', default=0, type=int, help='how many tasks to jump start (presented in order)')
-    parser.add_argument(
-        '--num_print', default=10, type=int, help='how many validation examples with greedy output to print to std out'
-    )
-    parser.add_argument(
-        '--log_n_longest', default=3, type=int, help='Log the length of N longest examples (as well as min, max, and mean)'
-    )
-
-    parser.add_argument(
-        '--override_valid_metrics',
-        nargs='+',
-        action='append',
-        type=str,
-        help='if specified, will override metrics provided by the task (format is a list of lists)',
-    )
-
-    parser.add_argument(
-        '--print_train_examples_too',
-        action='store_true',
-        help='Whether to print some train examples along with eval examples during validation',
-    )
-
-    parser.add_argument('--no_tensorboard', action='store_false', dest='tensorboard', help='Turn off tensorboard logging')
-    parser.add_argument(
-        '--tensorboard_dir', default=None, help='Directory where to save Tensorboard logs (defaults to --save)'
-    )
-    parser.add_argument('--max_to_keep', default=1, type=int, help='number of checkpoints to keep')
-    parser.add_argument('--log_every', default=100, type=int, help='how often to log results in # of iterations')
-    parser.add_argument('--save_every', default=1000, type=int, help='how often to save a checkpoint in # of iterations')
 
     parser.add_argument(
         '--val_tasks', nargs='+', type=str, dest='val_task_names', help='tasks to collect evaluation metrics for'
-    )
-    parser.add_argument('--val_every', default=1000, type=int, help='how often to run validation in # of iterations')
-    parser.add_argument(
-        '--val_after', default=0, type=int, help='start validating model (at or) after certain # of iterations'
     )
 
     parser.add_argument(
@@ -160,37 +77,6 @@ def parse_argv(parser):
         help='Number of tokens in each batch for validation, corresponding to tasks in --val_tasks',
     )
 
-    parser.add_argument(
-        '--sentence_batching', action='store_true', help='Batch same sentences together (used for multilingual tasks)'
-    )
-    parser.add_argument(
-        '--train_batching_algorithm',
-        type=str,
-        default='sample',
-        choices=['sample', 'epoch'],
-        help='`sample` will sample batches from the training set but shorter examples will have a higher probability of being selected, `epoch` will sample but ensure that each training example is seen exactly N times before any example is seen N+1 times.',
-    )
-    parser.add_argument(
-        '--use_encoder_loss',
-        action='store_true',
-        help='Force encoded values for sentences in different languages to be the same',
-    )
-    parser.add_argument(
-        '--encoder_loss_type',
-        type=str,
-        default='mean',
-        choices=['mean', 'sum'],
-        help='Function to calculate encoder_loss from the context hidden states',
-    )
-    parser.add_argument(
-        '--encoder_loss_weight',
-        type=float,
-        default=0.1,
-        help='multiplicative constant choosing the weight of encoder_loss in total loss',
-    )
-    parser.add_argument('--train_set_name', type=str, default='train', help='Training dataset name to use during training')
-    parser.add_argument('--eval_set_name', type=str, help='Evaluation dataset name to use during training')
-
     parser.add_argument('--max_output_length', default=150, type=int, help='maximum output length for generation')
     parser.add_argument(
         '--min_output_length',
@@ -200,10 +86,6 @@ def parse_argv(parser):
         'default is 3 for most multilingual models: BOS, language code, and one token. otherwise it is 2',
     )
     parser.add_argument('--max_generative_vocab', default=50000, type=int, help='max vocabulary for the generative softmax')
-    parser.add_argument('--subsample', default=20000000, type=int, help='subsample the datasets')
-    parser.add_argument(
-        '--allow_OOM', action='store_true', help='Issue a warning for OOM errors during training instead of crashing'
-    )
     parser.add_argument(
         '--filter_long_inputs',
         action='store_true',
@@ -244,17 +126,6 @@ def parse_argv(parser):
     )
 
     parser.add_argument(
-        '--model',
-        type=str,
-        choices=[
-            'TransformerSeq2Seq',
-            'TransformerForTokenClassification',
-            'TransformerForSequenceClassification',
-        ],
-        default='TransformerSeq2Seq',
-        help='which model to import',
-    )
-    parser.add_argument(
         '--pretrained_model',
         default=None,
         help='which pretrained model to use on the encoder side; choose a name from Huggingface models',
@@ -285,96 +156,18 @@ def parse_argv(parser):
     parser.add_argument('--preprocess_special_tokens', action='store_true', help='convert special ThingTalk tokens to words')
 
     parser.add_argument(
-        '--model_parallel',
-        action='store_true',
-        help='Use model parallelization by spliting model weights across available gpus',
-    )
-    parser.add_argument(
-        '--mp_device_ratio',
-        default=None,
-        nargs='+',
-        type=int,
-        help='Provide the distribution ratio of model layers across gpus when using model_parallel'
-        'e.g. "1 2 2 2" first device recieves half number of layers compared to other devices'
-        'default is None meaning we distribute evenly on all available gpus',
-    )
-
-    parser.add_argument('--warmup', default=40, type=int, help='warmup for learning rate. setting it to 1 disables warmup.')
-    parser.add_argument('--grad_clip', default=1.0, type=float, help='gradient clipping')
-    parser.add_argument(
-        '--beta0',
-        default=0.9,
-        type=float,
-        help='alternative momentum for Adam (only when not using transformer scheduler), and RAdam',
-    )
-    parser.add_argument(
-        '--optimizer',
-        default='adam',
-        choices=['adam', 'adamw', 'adafactor', 'radam', 'sgd'],
-        type=str,
-        help='optimizer to use',
-    )
-    parser.add_argument(
-        '--lr_schedule',
-        type=str,
-        default='transformer',
-        choices=['transformer', 'constant', 'linear', 'sgd', 'cosine', 'polynomial'],
-        help='The learning rate strategy. All of them can be used with or without warmup.',
-    )
-    parser.add_argument(
-        '--lr_multiply',
-        default=0.01,
-        type=float,
-        help='Multiplier for the `transformer` learning rate scheduler, constant value for `constant` and maximum value for `linear` and `cosine` schedulers.',
-    )
-    parser.add_argument(
-        '--lr_poly_end',
-        default=1e-7,
-        type=float,
-        help='Final learning rate for polynomial learning rate scheduler',
-    )
-    parser.add_argument(
-        '--lr_poly_power',
-        default=1.0,
-        type=float,
-        help='Decay power factor for polynomial learning rate scheduler',
-    )
-    parser.add_argument('--weight_decay', default=0.0, type=float, help='weight L2 regularization')
-    parser.add_argument(
-        '-gas',
-        '--gradient_accumulation_steps',
-        default=1,
-        type=int,
-        help='Number of accumulation steps. Useful to effectively get larger batch sizes.',
-    )
-
-    # Label smoothing; see https://arxiv.org/abs/1906.02629 for detailed analysis on its effect on neural network calibration
-    parser.add_argument(
-        '--label_smoothing',
-        type=float,
-        default=0.0,
-        help='A number in [0, 1] to be used for label smoothing. 0 disables smoothing.',
-    )
-
-    parser.add_argument(
         '--load',
         default=None,
         type=str,
         help='path to checkpoint to load model from inside --args.save, usually set to best.pth',
     )
-    parser.add_argument('--resume', action='store_true', help='whether to resume training with past optimizers')
-
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    parser.add_argument('--devices', default=[0], nargs='+', type=int, help='a list of devices that can be used for training')
 
     parser.add_argument(
         '--no_commit',
         action='store_false',
         dest='commit',
         help='do not track the git commit associated with this training run',
-    )
-    parser.add_argument(
-        '--exist_ok', action='store_true', help='Ok if the save directory already exists, i.e. overwrite is ok'
     )
 
     parser.add_argument(
@@ -505,32 +298,8 @@ def check_and_update_generation_args(args):
 def post_parse_general(args):
     if args.val_task_names is None:
         args.val_task_names = []
-        for t in args.train_task_names:
-            if t not in args.val_task_names:
-                args.val_task_names.append(t)
-    if 'imdb' in args.val_task_names:
-        args.val_task_names.remove('imdb')
 
     args.timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime('%D-%H:%M:%S %Z')
-
-    # TODO relax the following assertions by dropping samples from batches in Iterator
-    if args.sentence_batching and args.train_batch_tokens[0] % len(args.train_src_languages.split('+')) != 0:
-        raise ValueError(
-            'Your train_batch_size should be divisible by number of train_src_languages when using sentence batching.'
-        )
-    if args.sentence_batching and args.val_batch_size[0] % len(args.eval_src_languages.split('+')) != 0:
-        raise ValueError(
-            'Your val_batch_size should be divisible by number of eval_src_languages when using sentence batching.'
-        )
-
-    if len(args.train_task_names) > 1:
-        if args.train_iterations is None:
-            args.train_iterations = [1]
-        if len(args.train_iterations) < len(args.train_task_names):
-            args.train_iterations = len(args.train_task_names) * args.train_iterations
-        if len(args.train_batch_tokens) < len(args.train_task_names):
-
-            args.train_batch_tokens = len(args.train_task_names) * args.train_batch_tokens
 
     # postprocess arguments
     if args.commit:
@@ -538,8 +307,6 @@ def post_parse_general(args):
     else:
         args.commit = ''
 
-    if have_multilingual(args.train_task_names) and (args.train_src_languages is None or args.eval_src_languages is None):
-        raise ValueError('You have to define training and evaluation languages when you have a multilingual task')
 
     args.log_dir = args.save
     args.dist_sync_file = os.path.join(args.log_dir, 'distributed_sync_file')
@@ -548,9 +315,7 @@ def post_parse_general(args):
         setattr(args, x, os.path.join(args.root, getattr(args, x)))
 
     # tasks with the same name share the same task object
-    train_tasks_dict = get_tasks(args.train_task_names, args)
-    args.train_tasks = list(train_tasks_dict.values())
-    val_task_dict = get_tasks(args.val_task_names, args, available_tasks=train_tasks_dict)
+    val_task_dict = get_tasks(args.val_task_names, args)
     args.val_tasks = list(val_task_dict.values())
 
     save_args(args)
@@ -579,28 +344,6 @@ def post_parse_train_specific(args):
     if args.no_fast_tokenizer and args.force_fast_tokenizer:
         raise ValueError('Both no_fast_tokenizer and force_fast_tokenizer flags are on')
 
-    # TODO relax this assertion by allowing training on multiple languages
-    if 'mbart' in args.pretrained_model:
-        if len(args.train_src_languages.split('+')) != 1 or set(args.train_src_languages.split('+')) != set(
-            args.eval_src_languages.split('+')
-        ):
-            raise ValueError('For now we only support single language training and evaluation with mbart models')
-
-    if args.model_parallel:
-        if args.model == 'TransformerSeq2Seq' and args.pretrained_model not in MODEL_PARALLEL_SUPPORTED_MODELS:
-            raise ValueError('Only the following models have model_parallel support: ', MODEL_PARALLEL_SUPPORTED_MODELS)
-
-    if args.mp_device_ratio is not None:
-        if len(args.mp_device_ratio) != len(args.devices):
-            raise ValueError('When using model_parallel number of provided devices must match the number of mp_device_ratio')
-
-    if args.warmup < 1:
-        raise ValueError('Warmup should be a positive integer.')
-
-    if args.use_encoder_loss and not (args.sentence_batching and len(args.train_src_languages.split('+')) > 1):
-        raise ValueError('To use encoder loss you must use sentence batching and use more than one language during training.')
-
-
     if args.override_valid_metrics:
         assert len(args.override_valid_metrics) == len(args.train_tasks) == len(args.val_tasks)
         for train_task, val_task, metrics in zip(args.train_tasks, args.val_tasks, args.override_valid_metrics):
@@ -611,10 +354,7 @@ def post_parse_train_specific(args):
     if args.tensorboard_dir is None:
         args.tensorboard_dir = args.log_dir
 
-    for x in ['embeddings']:
-        setattr(args, x, os.path.join(args.root, getattr(args, x)))
-
-    save_args(args, force_overwrite=True)
+    save_args(args)
 
     args = check_and_update_generation_args(args)
     return args

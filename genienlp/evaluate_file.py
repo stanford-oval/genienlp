@@ -50,26 +50,9 @@ def parse_argv(parser):
     )
     parser.add_argument('--tasks', dest='task_names', nargs='+', required=True, help='task names for prediction')
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
-    parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the prediction file')
 
     parser.add_argument('--eval_dir', type=str, required=False, help='use this directory to store eval results')
-
-    parser.add_argument(
-        '--pred_languages',
-        type=str,
-        nargs='+',
-        dest='pred_src_languages',
-        default=['en'],
-        help='Specify dataset source languages used during prediction for multilingual tasks',
-    )
-    parser.add_argument(
-        '--pred_tgt_languages',
-        type=str,
-        nargs='+',
-        default=['en'],
-        help='Specify dataset target languages used during prediction for multilingual tasks',
-    )
 
     parser.add_argument(
         '--main_metric_only', action='store_true', help='If True, we only calculate the deca score metric for each task.'
@@ -108,7 +91,7 @@ def parse_argv(parser):
     )
 
 
-def compute_metrics_on_file(pred_file, results_file_name, task, args, tgt_lang):
+def compute_metrics_on_file(pred_file, results_file_name, task, args):
     ids, contexts, preds, targets = [], [], [], []
     count = 0
     with open(pred_file) as fin:
@@ -133,10 +116,9 @@ def compute_metrics_on_file(pred_file, results_file_name, task, args, tgt_lang):
         args,
         validation_output,
         metrics_to_compute,
-        tgt_lang,
     )
 
-    with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
+    with open(results_file_name, 'w') as results_file:
         results_file.write(json.dumps(metrics) + '\n')
 
     logger.info(metrics)
@@ -163,8 +145,7 @@ def main(args):
     else:
         eval_dir = args.eval_dir
     os.makedirs(eval_dir, exist_ok=True)
-    tgt_lang = args.pred_tgt_languages[0]
 
     for task in args.tasks:
         results_file_name = os.path.join(eval_dir, task.name + '.results.json')
-        compute_metrics_on_file(args.pred_file, results_file_name, task, args, tgt_lang)
+        compute_metrics_on_file(args.pred_file, results_file_name, task, args)

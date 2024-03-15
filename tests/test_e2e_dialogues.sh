@@ -34,10 +34,8 @@ do
     --tasks ${tasks[i]} \
     --evaluate test \
     --path $workdir/model_$i \
-    --overwrite \
     --eval_dir $workdir/model_$i/eval_results/ \
     --data $SRCDIR/dataset/bitod \
-    --embeddings $EMBEDDING_DIR \
     --extra_metrics e2e_dialogue_score
 
   # e2e prediction
@@ -45,10 +43,8 @@ do
     --tasks ${tasks[i]} \
     --evaluate test \
     --path $workdir/model_$i \
-    --overwrite \
     --eval_dir $workdir/model_$i/e2e_eval_results/ \
     --data $SRCDIR/dataset/bitod \
-    --embeddings $EMBEDDING_DIR \
     --extra_metrics e2e_dialogue_score \
     --e2e_dialogue_evaluation
 

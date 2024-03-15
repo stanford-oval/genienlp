@@ -158,7 +158,7 @@ class NumericalizedExamples(NamedTuple):
         return numericalized_examples
 
     @staticmethod
-    def collate_batches(batches: Iterable['NumericalizedExamples'], numericalizer, device):
+    def collate_batches(batches: Iterable['NumericalizedExamples'], numericalizer):
         example_id = []
 
         context_values, context_lengths, context_limiteds, context_features = [], [], [], []
@@ -166,15 +166,15 @@ class NumericalizedExamples(NamedTuple):
 
         for batch in batches:
             example_id.append(batch.example_id[0])
-            context_values.append(torch.tensor(batch.context.value, device=device))
-            context_lengths.append(torch.tensor(batch.context.length, device=device))
-            context_limiteds.append(torch.tensor(batch.context.limited, device=device))
+            context_values.append(torch.tensor(batch.context.value))
+            context_lengths.append(torch.tensor(batch.context.length))
+            context_limiteds.append(torch.tensor(batch.context.limited))
             if batch.context.feature:
-                context_features.append(torch.tensor(batch.context.feature, device=device))
+                context_features.append(torch.tensor(batch.context.feature))
 
-            answer_values.append(torch.tensor(batch.answer.value, device=device))
-            answer_lengths.append(torch.tensor(batch.answer.length, device=device))
-            answer_limiteds.append(torch.tensor(batch.answer.limited, device=device))
+            answer_values.append(torch.tensor(batch.answer.value))
+            answer_lengths.append(torch.tensor(batch.answer.length))
+            answer_limiteds.append(torch.tensor(batch.answer.limited))
 
         context_values = numericalizer.pad(context_values, pad_id=numericalizer.pad_id)
         context_limiteds = numericalizer.pad(context_limiteds, pad_id=numericalizer.decoder_pad_id)

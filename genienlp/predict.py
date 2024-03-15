@@ -36,12 +36,12 @@ from pprint import pformat
 
 import torch
 
-from . import models
+from genienlp.models.transformer_seq2seq import TransformerSeq2Seq
+
 from .arguments import check_and_update_generation_args
 from .metrics import calculate_and_reduce_metrics
 from .tasks.registry import get_tasks
 from .util import (
-    get_devices,
     load_config_file_to_args,
     make_data_loader,
     set_seed,
@@ -51,22 +51,6 @@ logger = logging.getLogger(__name__)
 
 
 def parse_argv(parser):
-    parser.add_argument(
-        '--is_hf_model',
-        action='store_true',
-        help='Whether the model should be directly loaded from HuggingFace model hub. If True, `--path` is the full model name.',
-    )
-    parser.add_argument(
-        '--model',
-        type=str,
-        choices=[
-            'TransformerSeq2Seq',
-            'TransformerForTokenClassification',
-            'TransformerForSequenceClassification',
-        ],
-        default=None,
-        help='which model to import',
-    )
     parser.add_argument('--path', '--model_name_or_path', type=str, required=True, help='Folder to load the model from')
     parser.add_argument(
         '--evaluate',
@@ -83,42 +67,16 @@ def parse_argv(parser):
     )
     parser.add_argument('--tasks', dest='task_names', nargs='+', help='task names for prediction')
     parser.add_argument('--extra_metrics', nargs='+', default=[], help='include these additional metrics in reported results')
-    parser.add_argument(
-        '--devices',
-        default=None,
-        nargs='+',
-        type=int,
-        help='a list of devices that can be used for prediction. By default, all devices will be used.',
-    )
     parser.add_argument('--seed', default=123, type=int, help='Random seed.')
     parser.add_argument('--data', default='.data/', type=str, help='where to load data from.')
-    parser.add_argument('--embeddings', default='.embeddings/', type=str, help='where to save embeddings.')
     parser.add_argument(
         '--checkpoint_name', default='best.pth', help='Checkpoint file to use (relative to --path, defaults to best.pth)'
     )
-    parser.add_argument('--overwrite', action='store_true', help='whether to overwrite previously written predictions')
     parser.add_argument('--silent', action='store_true', help='whether to print predictions to stdout')
-
-    parser.add_argument(
-        '--log_n_longest', default=3, type=int, help='print length of the top K longest examples as well as min, max, and mean'
-    )
+    parser.add_argument('--language', type=str, required=True, help='The language of the output, used for postprocessing.')
 
     parser.add_argument('--eval_dir', type=str, required=True, help='use this directory to store eval results')
     parser.add_argument('--subsample', default=20000000, type=int, help='subsample the eval/test datasets')
-
-    parser.add_argument(
-        '--pred_languages',
-        type=str,
-        nargs='+',
-        dest='pred_src_languages',
-        help='Specify dataset source languages used during prediction for multilingual tasks',
-    )
-    parser.add_argument(
-        '--pred_tgt_languages',
-        type=str,
-        nargs='+',
-        help='Specify dataset target languages used during prediction for multilingual tasks',
-    )
 
     parser.add_argument(
         '--main_metric_only', action='store_true', help='If True, we only calculate the deca score metric for each task.'
@@ -185,29 +143,6 @@ def parse_argv(parser):
         '--one_output_per_line',
         action='store_true',
         help='If true, each of the `num_outputs` output will be written to a separate line, while other columns are duplicated to fill these extra lines.',
-    )
-
-    # TODO Update other tasks to use this argument too; so we can use predict for pure text generation (i.e. without reporting accuracy metrics)
-    parser.add_argument(
-        '--translate_no_answer',
-        action='store_true',
-        help='if true the provided dataset would not contain the answer (translated sentence)',
-    )
-    parser.add_argument(
-        '--translate_example_split',
-        action='store_true',
-        help='split examples with multiple sentences into individual examples',
-    )
-    parser.add_argument(
-        '--translate_only_entities',
-        action='store_true',
-        help='translate entities and use them for alignment',
-    )
-
-    parser.add_argument(
-        '--translate_return_raw_outputs',
-        action='store_true',
-        help='return raw translation as well as ones post-processed with alignment. this is useful for STS filtering.',
     )
 
     parser.add_argument(
@@ -279,46 +214,14 @@ def set_default_values(args):
 
 
 def check_args(args):
-    if not args.pred_src_languages:
-        setattr(args, 'pred_src_languages', [args.eval_src_languages])
-    if not args.pred_tgt_languages:
-        setattr(args, 'pred_tgt_languages', [args.eval_tgt_languages])
-
-    if args.is_hf_model and (
-        not args.pred_src_languages
-        or not args.model
-        or not args.min_output_length
-        or not args.max_output_length
-        or not args.val_batch_size
-    ):
-        # because in for HF models we are not getting these values from genienlp's training script
-        raise ValueError(
-            'You need to specify --pred_languages, --model, --min_output_length, --max_output_length and --val_batch_size when directly loading a HuggingFace model.'
-        )
-
-    if len(args.task_names) != len(args.pred_src_languages):
-        raise ValueError('You have to define prediction languages for each task in the same order you provided the tasks.')
-
-    if args.translate_example_split and not args.translate_no_answer:
-        raise ValueError(
-            'Currently example splitting can only be used in pure generation mode. Please use --translate_no_answer and --translate_example_split flags together'
-        )
-
-    if args.translate_return_raw_outputs and not args.do_alignment:
-        raise ValueError('If not using alignment, you need not to pass --translate_return_raw_outputs')
-
     if args.main_metric_only and args.extra_metrics:
         raise ValueError('Please remove --main_metric_only from your arguments so the requested extra metrics can be shown.')
 
 
 def prepare_data(args):
-    # TODO handle multiple languages
-    src_lang = args.pred_src_languages[0]
 
     datasets = []
     paths = []
-    if len(args.pred_src_languages) == 1 and len(args.tasks) > 1:
-        args.pred_src_languages *= len(args.tasks)
     for i, task in enumerate(args.tasks):
         logger.info(f'Loading {task}')
         kwargs = {'train': None, 'validation': None, 'test': None}
@@ -335,8 +238,6 @@ def prepare_data(args):
             {
                 'subsample': args.subsample,
                 'num_workers': args.num_workers,
-                'src_lang': src_lang,
-                'crossner_domains': args.crossner_domains,
             }
         )
 
@@ -359,14 +260,14 @@ def prepare_data(args):
     return datasets
 
 
-def prepare_data_iterators(args, val_sets, numericalizer, device):
+def prepare_data_iterators(args, val_sets, numericalizer):
     logger.info('Preparing data iterators')
     if len(args.val_batch_size) == 1 and len(val_sets) > 1:
         args.val_batch_size *= len(val_sets)
     iters = []
     for task, bs, val_set in zip(args.tasks, args.val_batch_size, val_sets):
         task_iter = []
-        loader, original_order = make_data_loader(val_set, numericalizer, bs, device, train=False, return_original_order=True)
+        loader, original_order = make_data_loader(val_set, numericalizer, bs, train=False, return_original_order=True)
         task_iter.append((task, loader, original_order))
 
         iters.extend(task_iter)
@@ -374,11 +275,8 @@ def prepare_data_iterators(args, val_sets, numericalizer, device):
     return iters
 
 
-def create_output_lines(args, index, validation_output, raw_outputs=False):
-    if raw_outputs and args.translate_return_raw_outputs:
-        predictions = validation_output.raw_predictions
-    else:
-        predictions = validation_output.predictions
+def create_output_lines(args, index, validation_output):
+    predictions = validation_output.predictions
 
     if args.one_output_per_line:
         lines = [
@@ -415,53 +313,25 @@ def get_metrics_to_compute(args, task):
     return metrics_to_compute
 
 
-def run(args, device):
-    print(args.model)
-    model_class = getattr(models, args.model)
-    if args.is_hf_model:
-        logger.info(f'Loading model {args.path} from HuggingFace model hub')
-        model = model_class(
-            args=args,
-            vocab_sets=None,
-            tasks=args.tasks,
-            src_lang=args.pred_src_languages[0],
-            tgt_lang=args.pred_tgt_languages[0],
-        )
-    else:
-        # TODO handle multiple languages
-        model, _ = model_class.load(
-            args.path,
-            model_checkpoint_file=args.checkpoint_name,
-            args=args,
-            device=device,
-            tasks=args.tasks,
-            src_lang=args.pred_src_languages[0],
-            tgt_lang=args.pred_tgt_languages[0],
-        )
-
+def run(args):
+    model = TransformerSeq2Seq.load(
+        args.path,
+        model_checkpoint_file=args.checkpoint_name,
+        args=args,
+        tasks=args.tasks,
+    )
     val_sets = prepare_data(args)
-
-    iters = prepare_data_iterators(args, val_sets, model.numericalizer, device)
-
+    iters = prepare_data_iterators(args, val_sets, model.numericalizer)
 
     task_scores = defaultdict(list)
 
     eval_dir = os.path.join(args.eval_dir, args.evaluate)
     os.makedirs(eval_dir, exist_ok=True)
 
-    for index, (task, it, original_order) in enumerate(iters):
+    for (task, it, original_order) in iters:
         logger.info(task.name)
-        tgt_lang = args.pred_tgt_languages[index]
         prediction_file_name = os.path.join(eval_dir, task.name + '.tsv')
-        raw_prediction_file_name = os.path.join(eval_dir, task.name + '.raw.tsv')
         results_file_name = os.path.join(eval_dir, task.name + '.results.json')
-
-        for fname in [prediction_file_name, raw_prediction_file_name, results_file_name]:
-            if os.path.exists(fname):
-                if args.overwrite:
-                    logger.warning(f'{fname} already exists -- overwriting **')
-                else:
-                    raise OSError(f'{fname} already exists')
 
         with torch.no_grad(), torch.cuda.amp.autocast(enabled=args.mixed_precision):
             validation_output = model.validate(
@@ -473,22 +343,16 @@ def run(args, device):
             )
 
         # write into file
-        with open(prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
+        with open(prediction_file_name, 'w') as prediction_file:
             for i in range(len(validation_output.example_ids)):
                 lines = create_output_lines(args, i, validation_output)
                 prediction_file.write('\n'.join(lines) + '\n')
 
-        if args.translate_return_raw_outputs:
-            with open(raw_prediction_file_name, 'w' + ('' if args.overwrite else '+')) as prediction_file:
-                for i in range(len(validation_output.example_ids)):
-                    lines = create_output_lines(args, i, validation_output, raw_outputs=True)
-                    prediction_file.write('\n'.join(lines) + '\n')
-
         if len(validation_output.answers) > 0:
             metrics_to_compute = get_metrics_to_compute(args, task)
-            metrics = calculate_and_reduce_metrics(args, validation_output, metrics_to_compute, tgt_lang)
+            metrics = calculate_and_reduce_metrics(args, validation_output, metrics_to_compute)
 
-            with open(results_file_name, 'w' + ('' if args.overwrite else '+')) as results_file:
+            with open(results_file_name, 'w') as results_file:
                 results_file.write(json.dumps(metrics) + '\n')
 
             if not args.silent:
@@ -547,7 +411,5 @@ def main(args):
 
     logger.info(f'Arguments:\n{pformat(vars(args))}')
     logger.info(f'Loading from {args.best_checkpoint}')
-    devices = get_devices(args.devices)
 
-    logger.info(f'Single device generation on: {devices[0]}')
-    run(args, devices[0])
+    run(args)

@@ -27,16 +27,12 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import logging
-from typing import List
 
 import torch
 from transformers import AutoConfig, AutoModelForSeq2SeqLM, MBartTokenizer, MBartTokenizerFast
 
 from ..data_utils.numericalizer import TransformerNumericalizer
-from ..model_utils.transformers_utils import MULTILINGUAL_TOKENIZERS
-from ..util import adjust_language_code
 from .base import GenieModelForGeneration
-from .common import LabelSmoothingCrossEntropy
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +42,7 @@ class TransformerSeq2Seq(GenieModelForGeneration):
         """
         If `save_directory` is None, will initialize a new model and numericalizer, otherwise, will load them from `save_directory`
         """
-        config = AutoConfig.from_pretrained(args.pretrained_model, cache_dir=args.embeddings)
+        config = AutoConfig.from_pretrained(args.pretrained_model)
         super().__init__(config)
         self.args = args
         args.dimension = self.config.d_model
@@ -55,16 +51,10 @@ class TransformerSeq2Seq(GenieModelForGeneration):
         # tasks is not passed during initialization only in server mode
         # call this function after task is recognized
 
-        # only used for Marian models. adjusted language codes passed to numericalizer will be None for models trained on single langauge pairs
-        self.orig_src_lang, self.orig_tgt_lang = kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
-        self.src_lang, self.tgt_lang = adjust_language_code(
-            self.config, args.pretrained_model, kwargs.get('src_lang', 'en'), kwargs.get('tgt_lang', 'en')
-        )
-
         if save_directory is not None:
             self.model = AutoModelForSeq2SeqLM.from_config(self.config)
         else:
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model, cache_dir=self.args.embeddings)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.args.pretrained_model)
 
         self.numericalizer = TransformerNumericalizer(
             self.args.pretrained_model,
@@ -72,38 +62,12 @@ class TransformerSeq2Seq(GenieModelForGeneration):
             max_generative_vocab=None,
             save_dir=save_directory,
             config=self.config,
-            src_lang=self.src_lang,
-            tgt_lang=self.tgt_lang,
             vocab_sets=vocab_sets,
             tasks=tasks,
         )
 
-        self.update_language_dependent_configs(self.tgt_lang)
         self.model.resize_token_embeddings(self.numericalizer.num_tokens)
 
-        self.criterion = LabelSmoothingCrossEntropy(args.label_smoothing)
-
-    def update_language_dependent_configs(self, tgt_lang):
-        # set decoder_start_token_id for mbart
-        if self.config.decoder_start_token_id is None and isinstance(
-            self.numericalizer._tokenizer, (MBartTokenizer, MBartTokenizerFast)
-        ):
-            if isinstance(self.numericalizer._tokenizer, MBartTokenizer):
-                self.config.decoder_start_token_id = self.numericalizer._tokenizer.lang_code_to_id[tgt_lang]
-            else:
-                self.config.decoder_start_token_id = self.numericalizer._tokenizer.convert_tokens_to_ids(tgt_lang)
-
-        # check decoder_start_token_id is set
-        if self.config.decoder_start_token_id is None:
-            raise ValueError("Make sure that decoder_start_token_id for the model is defined")
-
-        # set forced_bos_token_id for certain multilingual models
-        if isinstance(self.numericalizer._tokenizer, MULTILINGUAL_TOKENIZERS):
-            forced_bos_token_id = self.numericalizer._tokenizer.lang_code_to_id[tgt_lang]
-            self.config.forced_bos_token_id = forced_bos_token_id
-
-        if self._is_bart_large:
-            self.config.forced_bos_token_id = None
 
     def forward(self, *input, **kwargs):
         if self.training or kwargs.get('train', False):
@@ -125,11 +89,6 @@ class TransformerSeq2Seq(GenieModelForGeneration):
                 answer = answer[:, 1:].contiguous()
                 answer_length = answer_length - 1
 
-            # this has several differences compared to what `transformers` Seq2Seq models do:
-            # (1) pad tokens are ignored in all loss calculations
-            # (2) loss is averaged over sequence lengths first, then over the batch size. This way,
-            # longer sequences in the batch do not drown shorter sequences.
-            # (3) if `args.label_smoothing > 0.0`, will add label smoothing term to loss
             outputs = self.model(
                 batch.context.value,
                 labels=answer,
@@ -138,14 +97,7 @@ class TransformerSeq2Seq(GenieModelForGeneration):
                 output_hidden_states=False,
                 return_dict=True,
             )
-            batch_size, vocab_size = outputs.logits.shape[0], outputs.logits.shape[2]
-            loss = self.criterion(
-                outputs.logits.view(-1, vocab_size), target=answer.view(-1), ignore_index=self.numericalizer.pad_id
-            )
-            loss = loss.view(batch_size, -1)  # (batch_size, sequence_length)
-            loss = loss.sum(dim=1) / answer_length  # accounts for the case where BOS is removed
-            loss = loss.mean()  # average over the batch size
-            outputs.loss = loss  # replace the loss calculated by `transformers` with the new loss
+            outputs.loss = 0 
             return outputs
         else:
             return self.model(**kwargs)
@@ -204,7 +156,7 @@ class TransformerSeq2Seq(GenieModelForGeneration):
         prediction = torch.cat(
             [
                 prediction,
-                torch.ones((prediction.shape[0], 1), dtype=torch.long, device=prediction.device) * self.numericalizer.eos_id,
+                torch.ones((prediction.shape[0], 1), dtype=torch.long) * self.numericalizer.eos_id,
             ],
             dim=1,
         )
