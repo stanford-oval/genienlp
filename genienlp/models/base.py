@@ -113,7 +113,6 @@ class LLM:
 
             predictions += batch_prediction
 
-        print("predictions = ", predictions)
         output = ValidationOutput()
         output.example_ids, output.predictions, output.answers, output.contexts = (
             example_ids,
