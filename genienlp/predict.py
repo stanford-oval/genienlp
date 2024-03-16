@@ -39,6 +39,7 @@ from .metrics import calculate_metrics
 from .tasks.registry import get_task
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 def parse_argv(parser):
