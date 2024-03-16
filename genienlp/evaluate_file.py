@@ -59,7 +59,7 @@ def parse_argv(parser):
         nargs='+',
         type=str,
         default=['dst', 'api', 'da', 'rg'],
-        help='Evaluate only on these subtasks when calculating e2e_dialogue_score; rg is not included by default',
+        help='Evaluate only on these subtasks when calculating e2e_dialogue_score',
     )
     parser.add_argument(
         '--e2e_dialogue_valid_submetrics',

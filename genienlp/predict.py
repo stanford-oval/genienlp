@@ -38,8 +38,8 @@ from genienlp.models import LLM
 from .metrics import calculate_metrics
 from .tasks.registry import get_task
 
-logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def parse_argv(parser):
@@ -90,14 +90,14 @@ def parse_argv(parser):
         '--e2e_dialogue_valid_subtasks',
         nargs='+',
         type=str,
-        default=['dst', 'api', 'da'],
-        help='Evaluate only on these subtasks when calculating e2e_dialogue_score; rg is not included by default',
+        default=['dst', 'api', 'da', 'rg'],
+        help='Evaluate only on these subtasks when calculating e2e_dialogue_score',
     )
     parser.add_argument(
         '--e2e_dialogue_valid_submetrics',
         nargs='+',
         type=str,
-        default=['dst_em', 'em', 'da_em'],
+        default=['dst_em', 'em', 'da_em', 'casedbleu'],
         help='Specify metrics to use for each of subtasks in e2e_dialogue_valid_subtasks.',
     )
 
